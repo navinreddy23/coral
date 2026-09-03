@@ -189,6 +189,50 @@ list half a pixel off the grid.
 Actions run one at a time. Two mutations at once contend for `index.lock`, and the second fails
 with a message about a lock file that says nothing about what the user did.
 
+## Hosting
+
+The remote URL identifies the host; the origin is where its API is served, which is not the
+remote's scheme — a repository cloned over ssh has no API at `ssh://`. github.com serves its
+API from another origin while an Enterprise instance serves it from `/api/v3` on itself.
+
+Two providers behind one client, dispatched on the host rather than a trait: they are a closed
+set and every difference is one match arm wide. GitHub reports a merged request and a rejected
+one both as `closed` and separates them only by `merged_at`; GitLab numbers by the per-project
+`iid`, addresses a project by its percent-encoded full path, and has spelled "draft" three ways
+over the years. GitLab also refuses a bearer token and wants its own header, which fails as a
+well-formed 401 pointing at nothing.
+
+Tokens live in the OS keyring keyed by origin, so github.com and a company instance can both be
+signed in at once. Nothing here is on the graph's critical path: the status read is not awaited
+when a repository opens, and a repository with no recognised host shows no section.
+
+## Credentials
+
+Coral is git's credential helper for network commands, and only for those — a read that asked
+for a credential would be answered by a helper the user never saw a prompt from. The nonce goes
+on the command line, where git appends the action after it, and is compared against the
+environment that git children inherit and unrelated processes do not. It comes from the OS
+random source or the helper stays off: anything derived from the clock or the pid is guessable
+by exactly the local process this keeps out.
+
+A request that carries no username — which is what a token push sends, because the remote URL
+has none — is answered from the name last stored for that host. Both front ends serve the
+protocol themselves; git spawns the binary that spawned it, and a packaged build cannot assume
+the CLI is installed.
+
+## Interactive rebase
+
+The todo is built by reading the range, not by starting a rebase and reading what git writes,
+so backing out of the picker leaves nothing to abort. It is installed through
+`GIT_SEQUENCE_EDITOR` rather than `sequence.editor`: the process runner pins both editor
+variables to a no-op so nothing can hang waiting for one, and an environment variable beats
+`-c`, so config here is silently ignored and git replays its own unedited list.
+
+Reword runs as an `edit` and is amended in a loop. git records the commit it stopped on, so the
+right message reaches the right commit after everything above it has been rewritten — which
+git's own `reword` cannot do, since it opens an editor with no way to say which commit it is
+asking about. A stop with no message waiting is one the user asked for.
+
 ## Contracts
 
 - **CLI envelope** — `{"schema":1,"ok":true,"result":{…}}` or `{"schema":1,"ok":false,"error":{…}}`.
