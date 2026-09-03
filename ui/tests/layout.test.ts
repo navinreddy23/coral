@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_METRICS, laneColour, laneX, rowY, visibleRows } from '../src/graph/layout';
+import {
+  DEFAULT_METRICS,
+  firstRowFor,
+  isCompressed,
+  laneColour,
+  laneX,
+  MAX_SPACER_PX,
+  rowY,
+  spacerHeight,
+  visibleRows,
+} from '../src/graph/layout';
 
 describe('graph layout', () => {
   it('places lanes at a fixed stride from the origin', () => {
@@ -51,5 +61,54 @@ describe('graph layout', () => {
 
   it('falls back to a colour rather than undefined when none are configured', () => {
     expect(laneColour(0, [])).toBe('#3fa9f5');
+  });
+});
+
+describe('very tall graphs', () => {
+  const m = DEFAULT_METRICS;
+
+  it('scrolls one pixel per pixel while it can', () => {
+    expect(isCompressed(1000, m)).toBe(false);
+    expect(spacerHeight(1000, m)).toBe(1000 * m.rowHeight);
+    expect(firstRowFor(28 * 40, 600, 1000, m)).toBe(40);
+  });
+
+  /* 1.48M kernel rows would need 41.5M px, past the point WebKit rescales a layer — which
+     shows up as blurry, misaligned content rather than as an error. */
+  it('caps the scrollable height for a graph that would exceed the layer limit', () => {
+    const kernel = 1_481_528;
+    expect(isCompressed(kernel, m)).toBe(true);
+    expect(spacerHeight(kernel, m)).toBe(MAX_SPACER_PX);
+    expect(spacerHeight(kernel, m)).toBeLessThan(kernel * m.rowHeight);
+  });
+
+  it('maps the whole row range onto the capped scrollbar', () => {
+    const kernel = 1_481_528;
+    const viewport = 800;
+
+    expect(firstRowFor(0, viewport, kernel, m)).toBe(0);
+
+    const bottom = firstRowFor(MAX_SPACER_PX - viewport, viewport, kernel, m);
+    const lastTop = kernel - Math.floor(viewport / m.rowHeight);
+    expect(bottom).toBe(lastTop);
+
+    const middle = firstRowFor((MAX_SPACER_PX - viewport) / 2, viewport, kernel, m);
+    expect(middle).toBeCloseTo(lastTop / 2, -2);
+  });
+
+  it('never reports a row outside the graph', () => {
+    const kernel = 1_481_528;
+    for (const top of [-100, 0, 1, MAX_SPACER_PX, MAX_SPACER_PX * 2]) {
+      const row = firstRowFor(top, 800, kernel, m);
+      expect(row).toBeGreaterThanOrEqual(0);
+      expect(row).toBeLessThan(kernel);
+    }
+  });
+
+  it('leaves the visible window consistent when compressed', () => {
+    const kernel = 1_481_528;
+    const w = visibleRows(MAX_SPACER_PX / 2, 800, kernel, m);
+    expect(w.first).toBeLessThanOrEqual(w.last);
+    expect(w.last).toBeLessThan(kernel);
   });
 });

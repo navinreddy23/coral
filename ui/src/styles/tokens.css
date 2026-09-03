@@ -8,27 +8,32 @@
   color-scheme: light;
 
   --bg-0: #ffffff;
-  --bg-1: #f5f6f8;
-  --bg-2: #eceef2;
-  --bg-3: #e0e4ea;
-  --border: #d3d8e0;
+  --bg-1: #f2f4f7;
+  --bg-2: #e7eaef;
+  --bg-3: #d9dee6;
+  --border: #b4bcca;
 
   --fg-0: #1b2028;
   --fg-1: #4b5566;
-  --fg-2: #7b8595;
+  --fg-2: #6b7586;
 
   --accent: #0f7a70;
-  --danger: #c0392b;
+  --danger: #b3261e;
 
-  /* Darkened against the dark-theme set so lanes stay legible on white. */
-  --lane-1: #1a7fd4;
-  --lane-2: #c0397f;
-  --lane-3: #b8791a;
-  --lane-4: #2f8f45;
-  --lane-5: #6f4fd0;
-  --lane-6: #d1601f;
-  --lane-7: #0e93a8;
-  --lane-8: #7f8c1f;
+  /*
+   * Not the dark set nudged darker. Each is computed to reach 5.5:1 against white, because a
+   * 1.5px lane stroke needs more contrast than body text, not less. The first attempt averaged
+   * 4.2:1 where the dark theme averages 7.7:1, which reads as blur rather than as low
+   * contrast.
+   */
+  --lane-1: #096cb3;
+  --lane-2: #bf2681;
+  --lane-3: #8d6005;
+  --lane-4: #2b7737;
+  --lane-5: #7245ef;
+  --lane-6: #b94000;
+  --lane-7: #16737f;
+  --lane-8: #686d1c;
 
   --row-h: 28px;
   --row-h-compact: 22px;

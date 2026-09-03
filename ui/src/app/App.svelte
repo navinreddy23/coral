@@ -1,7 +1,7 @@
 <script lang="ts">
   import { hasFlag, oidOf, RowFlag, type Frame } from '../graph/frame';
   import GraphCanvas from '../graph/GraphCanvas.svelte';
-  import { DEFAULT_METRICS } from '../graph/layout';
+  import { DEFAULT_METRICS, firstRowFor, spacerHeight } from '../graph/layout';
   import { initialRepo, open } from '../ipc/commands';
   import { GraphState } from '../state/graph.svelte';
   import { RefsState } from '../state/refs.svelte';
@@ -46,7 +46,14 @@
 
   /** Scrolls a row into view, used when a ref is picked in the sidebar. */
   function reveal(row: number) {
-    scroller?.scrollTo({ top: Math.max(0, (row - 3) * DEFAULT_METRICS.rowHeight) });
+    if (!graph.frame || !scroller) return;
+    // Above the height cap a row is a fraction of a pixel, so the target is the fraction of
+    // the scrollable range rather than the row's pixel offset.
+    const total = graph.frame.rowCount;
+    const height = spacerHeight(total, DEFAULT_METRICS);
+    const lastTop = Math.max(1, total - Math.floor(viewport / DEFAULT_METRICS.rowHeight));
+    const fraction = Math.max(0, row - 3) / lastTop;
+    scroller.scrollTo({ top: Math.min(height - viewport, fraction * (height - viewport)) });
   }
 
   async function load(path: string) {
@@ -67,14 +74,17 @@
   function windowRows(frame: Frame | null): number[] {
     if (!frame) return [];
     const perScreen = Math.ceil(viewport / DEFAULT_METRICS.rowHeight);
-    const first = Math.max(0, Math.floor(scrollTop / DEFAULT_METRICS.rowHeight));
+    const first = firstRowFor(scrollTop, viewport, frame.rowCount, DEFAULT_METRICS);
     const last = Math.min(frame.rowCount - 1, first + perScreen + 2);
     const out: number[] = [];
     for (let r = first; r <= last; r++) out.push(r);
     return out;
   }
 
+
   const rows = $derived(windowRows(graph.frame));
+  /** Where the drawn rows sit, given the scroll position they were chosen for. */
+  const windowTop = $derived(rows.length > 0 ? scrollTop : 0);
 
   // Only rows that are on screen are worth an object read.
   $effect(() => {
@@ -135,7 +145,10 @@
           <span class="wip-count">{wipCount} file{wipCount === 1 ? '' : 's'}</span>
         </button>
       {/if}
-      <div class="spacer" style:height="{graph.frame.rowCount * DEFAULT_METRICS.rowHeight}px">
+      <div
+        class="spacer"
+        style:height="{spacerHeight(graph.frame.rowCount, DEFAULT_METRICS)}px"
+      >
         <div class="lanes" style:top="{0}px">
           <GraphCanvas frame={graph.frame} {scrollTop} height={viewport} />
         </div>
@@ -143,7 +156,7 @@
           {#each rows as row (row)}
             <li
               class="row"
-              style:top="{row * DEFAULT_METRICS.rowHeight}px"
+              style:top="{windowTop + (row - (rows[0] ?? 0)) * DEFAULT_METRICS.rowHeight}px"
               class:merge={hasFlag(graph.frame.rowFlags[row] ?? 0, RowFlag.Merge)}
               class:selected={selection.row === row}
             >
