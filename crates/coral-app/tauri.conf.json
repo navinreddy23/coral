@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "dev.coral.app",
   "build": {
-    "beforeDevCommand": { "script": "npm run dev", "cwd": "../../ui", "wait": true },
+    "beforeDevCommand": { "script": "npm run dev", "cwd": "../../ui" },
     "beforeBuildCommand": { "script": "npm run build", "cwd": "../../ui" },
     "devUrl": "http://localhost:5173",
     "frontendDist": "../../ui/dist"
