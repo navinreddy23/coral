@@ -269,9 +269,11 @@ impl crate::repo::RepoLocation {
 
     /// The files one commit changed, against its first parent.
     ///
-    /// `-m --first-parent` is needed for both shapes: without `-m` a merge reports nothing at
-    /// all, and `--first-parent` is what makes that report the mainline change rather than one
-    /// entry per parent. `--root` covers the initial commit, which has no parent to diff.
+    /// Without a merge flag a merge commit reports no files at all. `--diff-merges=first-parent`
+    /// is the one that means what it says: `-m --first-parent` emits a diff against every
+    /// parent in turn, because on `diff-tree` `--first-parent` is a revision-walking option and
+    /// does not narrow `-m` — a merge then listed the union of both sides. `--root` covers the
+    /// initial commit, which has no parent to diff.
     async fn changed_files(
         &self,
         runner: &crate::process::GitRunner,
@@ -288,7 +290,7 @@ impl crate::repo::RepoLocation {
                         "-M",
                         "--no-commit-id",
                     ])
-                    .args(["-m", "--first-parent", "--root"])
+                    .args(["--diff-merges=first-parent", "--root"])
                     .arg(rev),
             )
             .await?;

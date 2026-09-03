@@ -21,6 +21,14 @@
   /* The selected row, tinted rather than filled so the text on it keeps its contrast. */
   --accent-soft: #d3ebe8;
   --danger: #b3261e;
+  --ok: #1a7f37;
+
+  /*
+   * Diff line tints. Pale enough that the code on them keeps its contrast — the colour marks
+   * which side a line belongs to, it is not the thing being read.
+   */
+  --add-bg: #e3f6e8;
+  --remove-bg: #fceaea;
 
   /*
    * Not the dark set nudged darker. Each is computed to reach 5.5:1 against white, because a
@@ -66,6 +74,9 @@
   --accent: #179287;
   --accent-soft: #1d3b3a;
   --danger: #d95c5c;
+  --ok: #4fbf6d;
+  --add-bg: #1b2f21;
+  --remove-bg: #3a2224;
 
   --lane-1: #3fa9f5;
   --lane-2: #e26fb3;

@@ -43,6 +43,7 @@ fn main() {
             graph::repo_refs,
             graph::repo_submodules,
             graph::commit_detail,
+            graph::file_diff,
             tabs::session_get,
             tabs::tab_open,
             tabs::tab_close,

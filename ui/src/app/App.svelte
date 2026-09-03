@@ -4,6 +4,8 @@
   import { initialsOf } from '../graph/initials';
   import Splitter from './Splitter.svelte';
   import { PANE_LIMITS, PanesState } from '../state/panes.svelte';
+  import DiffView from './DiffView.svelte';
+  import { DiffState } from '../state/diff.svelte';
   import {
     DEFAULT_METRICS,
     firstRowFor,
@@ -104,6 +106,7 @@
   let scrollTop = $state(0);
   let viewport = $state(600);
   const panes = new PanesState();
+  const diff = new DiffState();
   let scroller = $state<HTMLDivElement | null>(null);
 
   const headName = $derived(
@@ -115,6 +118,13 @@
     if (local === null || !graph.frame || !info) return;
     showWip = false;
     void selection.select(info.path, row, oidOf(graph.frame, local));
+  }
+
+  /** Opens one of the selected commit's files in the diff viewer. */
+  function openFile(file: string) {
+    const rev = selection.detail?.commit.oid;
+    if (!info || rev === undefined) return;
+    void diff.open(info.path, rev, file);
   }
 
   function pickWip() {
@@ -333,8 +343,12 @@
         onreset={() => panes.reset()}
       />
     {/if}
+    {#if diff.path !== null}
+      <DiffView {diff} onClose={() => diff.close()} />
+    {/if}
     <div
       class="graph"
+      class:hidden={diff.path !== null}
       bind:this={scroller}
       onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}
       bind:clientHeight={viewport}
@@ -435,7 +449,13 @@
       {#if showWip}
         <aside class="wip-panel"><Staging {worktree} /></aside>
       {:else}
-        <Details detail={selection.detail} loading={selection.loading} error={selection.error} />
+        <Details
+          detail={selection.detail}
+          loading={selection.loading}
+          error={selection.error}
+          openPath={diff.path}
+          onOpenFile={openFile}
+        />
       {/if}
     {/if}
     </div>
@@ -473,6 +493,9 @@
 
   .body { display: flex; flex: 1; min-height: 0; }
   .graph { flex: 1; overflow-y: auto; position: relative; background: var(--bg-0); }
+  /* Hidden rather than unmounted: remounting would refetch the frame and lose the scroll
+     position every time a file is opened and closed. */
+  .graph.hidden { display: none; }
 
   /* Column headers, matching the row grid below so the two cannot drift apart. */
   .columns, .row, .wip {

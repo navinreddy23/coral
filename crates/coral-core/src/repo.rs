@@ -293,6 +293,53 @@ impl RepoLocation {
         Ok(files)
     }
 
+    /// Diffs one commit against its first parent, optionally limited to `paths`.
+    ///
+    /// Same three invocations and the same reasoning as [`RepoLocation::diff`], against
+    /// `diff-tree` rather than the worktree. `--root` is what makes the initial commit show
+    /// its contents instead of nothing.
+    ///
+    /// The merge flag is `--diff-merges=first-parent`, not `-m --first-parent`: on `diff-tree`
+    /// the latter emits a diff against *every* parent one after another, so a merge listed the
+    /// union of both sides — every file the branch touched plus every file the mainline
+    /// touched since it forked. `--first-parent` is a revision-walking option there and does
+    /// not narrow `-m`.
+    ///
+    /// # Errors
+    /// Propagates git failures and [`CoralError::Protocol`] if the output does not parse.
+    pub async fn commit_diff(
+        &self,
+        runner: &GitRunner,
+        rev: &str,
+        paths: &[&str],
+    ) -> Result<Vec<crate::diff::FileDiff>, CoralError> {
+        let base = |args: &[&str]| {
+            let c = GitCommand::read("diff-tree", self.display_path())
+                .args(["diff-tree", "-r", "-M", "--no-commit-id"])
+                .args(["--diff-merges=first-parent", "--root"])
+                .args(args)
+                .arg(rev);
+            if paths.is_empty() {
+                c
+            } else {
+                c.arg("--").args(paths)
+            }
+        };
+
+        let numstat = runner.output(base(&["-z", "--numstat"])).await?;
+        let mut files = crate::diff::parse_numstat(&numstat.stdout)?;
+        if files.is_empty() {
+            return Ok(files);
+        }
+
+        let names = runner.output(base(&["-z", "--name-status"])).await?;
+        crate::diff::apply_name_status(&mut files, &names.stdout)?;
+
+        let patch = runner.output(base(&["--no-color", "-p", "-U3"])).await?;
+        crate::diff::apply_patch(&mut files, &patch.stdout)?;
+        Ok(files)
+    }
+
     /// Reads commit history, optionally narrowed by [`crate::history::LogQuery`].
     ///
     /// # Errors

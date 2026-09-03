@@ -196,3 +196,23 @@ pub async fn repo_submodules(
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
     Ok(loc.submodules(&runner).await?)
 }
+
+/// The hunks for one file in one commit.
+///
+/// Fetched per file rather than with the commit: a kernel merge touches thousands of files,
+/// and their patches together are far larger than anything the panel can show at once.
+///
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn file_diff(
+    path: String,
+    rev: String,
+    file: String,
+) -> Result<Option<coral_core::diff::FileDiff>, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    let files = loc.commit_diff(&runner, &rev, &[file.as_str()]).await?;
+    Ok(files.into_iter().next())
+}

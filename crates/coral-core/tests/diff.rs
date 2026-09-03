@@ -245,3 +245,75 @@ async fn every_hunk_agrees_with_its_header() {
         }
     }
 }
+
+#[test]
+fn a_commit_diff_carries_hunks_for_one_file() {
+    let repo = TestRepo::new()
+        .write("a.txt", "one\ntwo\nthree\n")
+        .write("b.txt", "keep\n")
+        .commit("first")
+        .write("a.txt", "one\nTWO\nthree\n")
+        .commit("second");
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+        let files = loc.commit_diff(&runner, "HEAD", &["a.txt"]).await.unwrap();
+        assert_eq!(files.len(), 1, "narrowed to the one path asked for");
+        let f = &files[0];
+        assert_eq!(f.path, "a.txt");
+        assert_eq!((f.added, f.removed), (Some(1), Some(1)));
+
+        let lines = &f.hunks[0].lines;
+        let added: Vec<_> = lines
+            .iter()
+            .filter(|l| l.kind == LineKind::Add)
+            .map(|l| l.text.to_string())
+            .collect();
+        assert_eq!(added, ["TWO"]);
+        // Old and new numbering is what a side-by-side view lays its two columns out from.
+        let two = lines.iter().find(|l| l.text == "TWO").unwrap();
+        assert_eq!((two.old_no, two.new_no), (None, Some(2)));
+        let one = lines.iter().find(|l| l.text == "one").unwrap();
+        assert_eq!((one.old_no, one.new_no), (Some(1), Some(1)));
+    });
+}
+
+#[test]
+fn the_first_commit_shows_its_contents_rather_than_nothing() {
+    // Without --root a root commit diffs against nothing and the panel would look empty.
+    let repo = TestRepo::new().write("a.txt", "hello\n").commit("first");
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+        let files = loc.commit_diff(&runner, "HEAD", &[]).await.unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].change, FileChange::Added);
+        assert_eq!(files[0].hunks[0].lines[0].text, "hello");
+    });
+}
+
+#[test]
+fn a_merge_diffs_against_its_first_parent() {
+    let repo = TestRepo::new().write("base.txt", "base\n").commit("root");
+    repo.git(["checkout", "-q", "-b", "side"]);
+    let repo = repo.write("side.txt", "side\n").commit("on side");
+    repo.git(["checkout", "-q", "-"]);
+    let repo = repo.write("main.txt", "main\n").commit("on main");
+    repo.git(["merge", "--no-ff", "-m", "merge side", "side"]);
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+        let files = loc.commit_diff(&runner, "HEAD", &[]).await.unwrap();
+        // What the merge brought in relative to the branch it was merged into, which is the
+        // only reading a patch parser can represent.
+        let paths: Vec<_> = files.iter().map(|f| f.path.to_string()).collect();
+        assert_eq!(paths, ["side.txt"]);
+    });
+}

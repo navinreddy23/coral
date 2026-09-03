@@ -1,10 +1,15 @@
 <script lang="ts">
+  import FileTree from './FileTree.svelte';
+  import { buildTree } from '../diff/tree';
   import type { CommitDetail } from '../ipc/types';
 
-  const { detail, loading, error }: {
+  const { detail, loading, error, openPath, onOpenFile }: {
     detail: CommitDetail | null;
     loading: boolean;
     error: string | null;
+    /** Path whose diff is on screen, so the list can mark it. */
+    openPath: string | null;
+    onOpenFile: (path: string) => void;
   } = $props();
 
   function absolute(seconds: number): string {
@@ -27,6 +32,7 @@
 
   const files = $derived(detail?.files ?? []);
   const shown = $derived(showAll ? files : files.slice(0, LIMIT));
+  const tree = $derived(buildTree(shown));
 
   /** In tree mode the directory is a heading and only the file name repeats. */
   function split(path: string): { dir: string; name: string } {
@@ -99,26 +105,31 @@
         View all files
       </label>
     </div>
+    {#if grouping === 'tree'}
+      <FileTree nodes={tree} {openPath} {onOpenFile} />
+    {:else}
     <ul class="files">
       {#each shown as file (file.path)}
         <li>
-          <span class="mark {file.change}">{mark[file.change] ?? '?'}</span>
-          {#if grouping === 'path'}
-            <span class="path" title={file.path}>
+          <button
+            class="file"
+            class:open={file.path === openPath}
+            onclick={() => onOpenFile(file.path)}
+            title={file.oldPath ? `${file.path}\nfrom ${file.oldPath}` : file.path}
+          >
+            <span class="mark {file.change}">{mark[file.change] ?? '?'}</span>
+            <span class="path">
               <span class="dir">{split(file.path).dir}</span
               ><span class="name">{split(file.path).name}</span>
             </span>
-          {:else}
-            <span class="path" title={file.path}>{split(file.path).name}</span>
-            <span class="from">{split(file.path).dir || './'}</span>
-          {/if}
-          {#if file.oldPath}<span class="from">from {file.oldPath}</span>{/if}
+          </button>
         </li>
       {/each}
       {#if !showAll && files.length > LIMIT}
         <li class="muted">…and {files.length - LIMIT} more; tick “View all files” to list them</li>
       {/if}
     </ul>
+    {/if}
   {/if}
 </aside>
 

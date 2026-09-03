@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import type { GitRef, Submodule, RepoInfo } from './types';
+import type { FileDiff, GitRef, Submodule, RepoInfo } from './types';
 
 /**
  * The only module that calls `invoke`. Types come from `types.ts`, which Rust generates via
@@ -44,4 +44,14 @@ export function repoRefs(path: string): Promise<PlacedRef[]> {
 /** The repository's submodules. Empty for a repository that declares none. */
 export function repoSubmodules(path: string): Promise<Submodule[]> {
   return invoke<Submodule[]>('repo_submodules', { path });
+}
+
+/**
+ * Hunks for one file in one commit, or null when the commit did not touch it.
+ *
+ * One file at a time: a large merge touches thousands, and their patches together are far
+ * more than the panel can show or the webview should hold.
+ */
+export function fileDiff(path: string, rev: string, file: string): Promise<FileDiff | null> {
+  return invoke<FileDiff | null>('file_diff', { path, rev, file });
 }
