@@ -51,7 +51,7 @@
     const at = selection.row ?? -1;
     const next = Math.min(graph.frame.rowCount - 1, Math.max(0, at + delta));
     pick(next);
-    reveal(next);
+    scrollToRow(next);
   }
 
   function onKey(event: KeyboardEvent) {
@@ -126,7 +126,19 @@
   const wipCount = $derived(worktree.status?.entries.length ?? 0);
 
   /** Scrolls a row into view, used when a ref is picked in the sidebar. */
+  /**
+   * Scrolls a row into view and selects it.
+   *
+   * Following a branch in the sidebar should land on that commit, not merely somewhere near
+   * it: without the selection the detail panel still describes whatever was picked last, and
+   * nothing on the row that was scrolled to says it is the one that was asked for.
+   */
   function reveal(row: number) {
+    pick(row);
+    scrollToRow(row);
+  }
+
+  function scrollToRow(row: number) {
     if (!graph.frame || !scroller) return;
     // Above the height cap a row is a fraction of a pixel, so the target is the fraction of
     // the scrollable range rather than the row's pixel offset.
