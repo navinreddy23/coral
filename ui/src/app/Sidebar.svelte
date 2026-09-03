@@ -220,35 +220,55 @@
   }
   .viewing {
     margin: var(--space-1) var(--space-1) var(--space-2);
-    font-size: 12px; color: var(--fg-2);
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-2);
   }
-  .viewing strong { color: var(--fg-0); font-weight: 600; }
-  .icon { width: 1.1em; }
+  .viewing strong { color: var(--fg-0); font-weight: 700; font-size: 12px; }
+  .icon { width: 1.1em; color: var(--fg-2); }
   .filter {
     width: 100%; box-sizing: border-box; font: inherit; font-size: 12px;
-    padding: var(--space-1) var(--space-2); margin-bottom: var(--space-2);
-    border: 1px solid var(--border); border-radius: 3px;
+    padding: 3px var(--space-2); margin-bottom: var(--space-2);
+    border: 1px solid var(--border); border-radius: var(--radius-1);
     background: var(--bg-0); color: var(--fg-0);
   }
+  .filter::placeholder { color: var(--fg-2); }
+  .filter:focus { border-color: var(--accent); }
+
+  section + section { border-top: 1px solid var(--border); }
   .head {
     display: flex; align-items: center; gap: var(--space-2);
-    width: 100%; font: inherit; font-size: 11px; text-transform: uppercase;
-    letter-spacing: 0.04em; color: var(--fg-2);
+    width: 100%; font: inherit; font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.07em; color: var(--fg-2);
     background: none; border: 0; padding: var(--space-2) var(--space-1); cursor: pointer;
+    border-radius: var(--radius-1);
   }
-  .count { margin-left: auto; color: var(--fg-2); }
-  .caret { width: 1em; }
+  .head:hover { color: var(--fg-1); }
+  /* A pill rather than a bare number: a count is a different kind of thing from the name
+     beside it, and at this size only shape says so. */
+  .count {
+    margin-left: auto; color: var(--fg-2); font-size: 10px; font-weight: 600;
+    background: var(--bg-2); border-radius: 999px; padding: 0 6px; min-width: 18px;
+    text-align: center;
+  }
+  .caret { width: 1em; color: var(--fg-2); }
   ul { list-style: none; margin: 0 0 var(--space-2); padding: 0; }
   .ref {
     display: flex; align-items: center; gap: var(--space-2);
     width: 100%; text-align: left; font: inherit; font-size: 12px;
     padding: 3px var(--space-2) 3px var(--space-4);
-    background: none; border: 0; border-radius: 3px; cursor: pointer;
+    background: none; border: 0; border-radius: var(--radius-1); cursor: pointer;
     color: var(--fg-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .ref:hover:not(:disabled) { background: var(--bg-3); }
+  .ref:hover:not(:disabled) { background: var(--bg-2); color: var(--fg-0); }
   .ref:disabled { color: var(--fg-2); cursor: default; }
-  .ref.current { color: var(--fg-0); font-weight: 600; background: var(--accent-soft); }
+  /*
+   * The checked-out branch, marked by a bar down its leading edge as well as a tint. The tint
+   * alone is easy to lose against a hover, and this is the one row in the panel that has to
+   * be findable at a glance.
+   */
+  .ref.current {
+    color: var(--fg-0); font-weight: 600; background: var(--accent-soft);
+    box-shadow: inset 2px 0 0 var(--accent-line);
+  }
   .ref.dragging { opacity: 0.5; }
   .pr { gap: var(--space-1); }
   .num { flex: 0 0 auto; color: var(--fg-2); font-size: 11px; }
@@ -264,7 +284,7 @@
   /* The drop target, outlined rather than filled so the branch name stays readable under it. */
   .ref.over { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 3px; }
   .tick { color: var(--accent); flex: 0 0 auto; }
-  .track { margin-left: auto; font-size: 11px; color: var(--fg-2); }
+  .track { margin-left: auto; font-size: 10px; color: var(--fg-2); flex: 0 0 auto; }
   .more {
     display: block; width: 100%; text-align: left; cursor: pointer;
     padding: 3px var(--space-4); font-size: 11px; color: var(--accent);

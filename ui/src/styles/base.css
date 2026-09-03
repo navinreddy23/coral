@@ -7,8 +7,49 @@ html, body {
   color: var(--fg-0);
   font-family: var(--font-ui);
   font-size: 13px;
+  /*
+   * Never `-webkit-font-smoothing: antialiased`. The desktop asks for subpixel antialiasing
+   * and Coral goes to some trouble to keep it; forcing grayscale here would undo that.
+   */
+  text-rendering: optimizeLegibility;
 }
 
 #app { height: 100%; }
 
 code, .mono { font-family: var(--font-mono); }
+
+/*
+ * Figures line up in a column. Object ids, ahead/behind counts and dates are all read down a
+ * list rather than across a sentence, and proportional digits make that ragged.
+ */
+.mono, .num, .count, .sha, .age, .tally { font-variant-numeric: tabular-nums; }
+
+/*
+ * A visible ring for keyboard users and nothing for the pointer. Every control in the window
+ * is a plain element, so without this a tab-through leaves no trace of where it is.
+ */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: var(--radius-1);
+}
+
+::selection { background: var(--accent-soft); color: var(--fg-0); }
+
+/*
+ * Thin, unobtrusive scrollbars. The default GTK ones are wide enough to change the layout of
+ * a 190px column when they appear.
+ */
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 5px;
+  /* Inset by a transparent border so the thumb reads as narrower than the track it needs. */
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--fg-2); background-clip: content-box; }
+::-webkit-scrollbar-corner { background: transparent; }

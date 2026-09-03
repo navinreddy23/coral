@@ -14,6 +14,7 @@
   import RebasePicker from './RebasePicker.svelte';
   import { RebaseState } from '../state/rebase.svelte';
   import Palette, { type Command } from './Palette.svelte';
+  import StatusBar from './StatusBar.svelte';
   import type { Action } from '../ipc/commands';
   import {
     DEFAULT_METRICS,
@@ -413,13 +414,12 @@
   <header>
     <h1>Coral</h1>
     {#if info}
-      <span class="path mono">{info.path}</span>
-      <span class="chip">{info.head.kind === 'detached' ? 'detached' : info.head.name}</span>
-      <span class="chip">git {info.gitVersion}</span>
-      {#if graph.frame}
-        <span class="chip">{graph.frame.totalRows.toLocaleString()} commits</span>
+      <span class="path mono" title={info.path}>{info.path}</span>
+      {#if graph.provisional}
+        <span class="chip warn" title="Commit-time order, being replaced by the topological walk">
+          provisional order
+        </span>
       {/if}
-      {#if graph.provisional}<span class="chip warn">provisional order</span>{/if}
     {/if}
     <button class="theme" onclick={() => theme.toggle()} title="Switch theme">
       {theme.current === 'light' ? 'Dark' : 'Light'}
@@ -447,7 +447,13 @@
   {/if}
 
   {#if graph.loading && !graph.frame}
-    <p class="muted">Walking the graph…</p>
+    <div class="empty">
+      <p class="lead">Walking the graph</p>
+      <p class="muted">
+        Reading every commit and assigning it a lane. A large repository takes a few seconds;
+        the first screen appears before the walk finishes.
+      </p>
+    </div>
   {:else if graph.frame}
     <div
       class="body"
@@ -554,7 +560,13 @@
               <button class="hit" onclick={() => pick(row)} aria-label="Select commit"></button>
               <span class="cell refs">
                 {#each (refs.byRow.get(row) ?? []).slice(0, 2) as label (label.name)}
-                  <span class="pill" class:head={label.short === headName}>{label.short}</span>
+                  <span
+                    class="pill {label.kind.kind}"
+                    class:head={label.short === headName}
+                    title={label.name}
+                  >
+                    <span class="pip" aria-hidden="true"></span>{label.short}
+                  </span>
                 {/each}
                 {#if (refs.byRow.get(row) ?? []).length > 2}
                   <span class="pill more">+{(refs.byRow.get(row) ?? []).length - 2}</span>
@@ -598,15 +610,21 @@
     {/if}
     </div>
   {/if}
-</main>
 
-{#if actions.report}
-  <!-- The one place an action says what happened; it clears on the next one. -->
-  <p class="status {actions.report.tone}">
-    {actions.report.text}
-    <button class="dismiss" onclick={() => actions.clear()} aria-label="Dismiss">✕</button>
-  </p>
-{/if}
+  {#if info}
+    <StatusBar
+      branch={headName}
+      head={refs.groups.local.find((r) => r.short === headName)}
+      commits={graph.totalRows}
+      changed={worktree.status?.entries.length ?? 0}
+      gitVersion={info.gitVersion}
+      host={hosting.view}
+      report={actions.report}
+      busy={actions.busy || worktree.busy || merge.busy}
+      onDismiss={() => actions.clear()}
+    />
+  {/if}
+</main>
 
 {#if rebase.open}
   <RebasePicker {rebase} onDone={reloadAll} />
@@ -628,13 +646,22 @@
     height: 44px; box-sizing: border-box; padding: 0 var(--space-4);
     border-bottom: 1px solid var(--border); background: var(--bg-1);
   }
-  h1 { font-size: 15px; font-weight: 600; margin: 0; color: var(--accent); }
-  .path { color: var(--fg-1); font-size: 12px; }
-  .chip {
-    font-size: 11px; padding: 2px var(--space-2); border-radius: 3px;
-    background: var(--bg-2); color: var(--fg-1);
+  h1 {
+    font-size: 14px; font-weight: 700; margin: 0; color: var(--accent);
+    letter-spacing: 0.01em;
   }
-  .chip.warn { background: var(--lane-3); color: var(--bg-0); }
+  /* The path shrinks from the left, so the directory that identifies the repository — the
+     last segment — is the part that survives a narrow window. */
+  .path {
+    flex: 1; min-width: 0; color: var(--fg-2); font-size: 12px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl;
+    text-align: left;
+  }
+  .chip {
+    font-size: 11px; padding: 1px var(--space-2); border-radius: 999px;
+    background: var(--bg-2); color: var(--fg-1); flex: 0 0 auto;
+  }
+  .chip.warn { background: var(--warn-soft); color: var(--warn); }
   .theme {
     margin-left: auto; font: inherit; font-size: 11px; cursor: pointer;
     padding: 2px var(--space-2); border-radius: 3px;
@@ -643,21 +670,19 @@
   .theme:hover { background: var(--bg-3); }
   .banner { margin: 0; padding: var(--space-2) var(--space-4); background: var(--bg-2); color: var(--fg-1); font-size: 12px; }
   .banner.error { color: var(--danger); }
-  .muted { padding: var(--space-4); color: var(--fg-2); }
+  .muted { color: var(--fg-2); }
+  /*
+   * A first screen with something to read on it. What is happening and roughly how long it
+   * takes, because on a repository the size of the kernel this is several seconds of nothing.
+   */
+  .empty {
+    flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;
+    gap: var(--space-2); padding: var(--space-5); text-align: center;
+  }
+  .empty .lead { margin: 0; font-size: 14px; font-weight: 600; color: var(--fg-1); }
+  .empty .muted { margin: 0; max-width: 34em; line-height: 1.5; font-size: 12px; }
 
   .body { display: flex; flex: 1; min-height: 0; }
-  .status {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; margin: 0;
-    display: flex; align-items: center; gap: var(--space-2);
-    padding: 4px var(--space-3); font-size: 12px;
-    border-top: 1px solid var(--border); background: var(--bg-1); color: var(--fg-1);
-  }
-  .status.warn { color: var(--fg-0); background: var(--add-bg); }
-  .status.error { color: var(--danger); background: var(--remove-bg); }
-  .dismiss {
-    margin-left: auto; font: inherit; cursor: pointer;
-    background: none; border: 0; color: inherit;
-  }
   .graph { flex: 1; overflow-y: auto; position: relative; background: var(--bg-0); }
   /* Hidden rather than unmounted: remounting would refetch the frame and lose the scroll
      position every time a file is opened and closed. */
@@ -671,9 +696,9 @@
   }
   .columns {
     position: sticky; top: 0; z-index: 2;
-    height: 24px; padding: 0 var(--space-3);
+    height: 26px; padding: 0 var(--space-3);
     background: var(--bg-1); border-bottom: 1px solid var(--border);
-    font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
     color: var(--fg-2);
   }
   .col { overflow: hidden; position: relative; display: flex; align-items: center; }
@@ -705,7 +730,16 @@
   }
   .wip { position: sticky; top: 22px; z-index: 1; cursor: pointer; background: var(--bg-0); }
   .row:hover .cell.message, .wip:hover { background: var(--bg-1); }
-  .row.selected .cell.message, .wip.selected { background: var(--accent-soft); }
+  /*
+   * The selected commit, tinted and given a bar down its leading edge. On a screen of rows
+   * that all look alike a tint alone is easy to lose, and the bar survives a hover passing
+   * over a neighbour.
+   */
+  .row.selected .cell.message, .wip.selected {
+    background: var(--accent-soft);
+    box-shadow: inset 2px 0 0 var(--accent-line);
+  }
+  .row.selected .cell.message .summary { color: var(--fg-0); font-weight: 600; }
   /*
    * The text columns paint an opaque background of their own. Over a transparent composited
    * layer WebKit drops from subpixel to grayscale antialiasing, which reads as soft — and
@@ -714,7 +748,7 @@
    */
   .cell.message, .cell.refs { background: var(--bg-0); }
   .cell.message {
-    border-radius: 3px; padding: 0 var(--space-2);
+    border-radius: var(--radius-1); padding: 0 var(--space-2);
     /* The row's own height, so the highlight is a band rather than a floating pill. */
     height: 100%;
   }
@@ -729,14 +763,36 @@
   .cell.refs { justify-content: flex-end; padding-right: var(--space-2); overflow: hidden; }
   .cell.message { gap: var(--space-3); }
 
+  /*
+   * A pill per ref, coloured by what kind of ref it is. The dot carries the colour and the
+   * text stays near-black, because a whole pill in colour at 11px is unreadable and there can
+   * be three of them on one row.
+   */
   .pill {
-    flex: 0 1 auto; min-width: 0; font-size: 11px; line-height: 1.5; padding: 0 var(--space-2);
-    border-radius: 3px; border: 1px solid var(--border);
-    background: var(--bg-2); color: var(--fg-1);
+    display: inline-flex; align-items: center; gap: 5px;
+    flex: 0 1 auto; min-width: 0; font-size: 11px; line-height: 17px; padding: 0 7px;
+    border-radius: 9px; border: 1px solid var(--border);
+    background: var(--bg-1); color: var(--fg-1);
     max-width: 11em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .pill.head { border-color: var(--accent); color: var(--accent); font-weight: 600; }
-  .pill.more { color: var(--fg-2); }
+  .pip {
+    flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--fg-2);
+  }
+  .pill.local_branch .pip { background: var(--lane-1); }
+  .pill.remote_branch { color: var(--fg-2); }
+  .pill.remote_branch .pip { background: var(--fg-2); }
+  .pill.tag .pip { background: var(--lane-3); }
+  .pill.stash .pip { background: var(--lane-5); }
+  /* The branch you are on: filled, since it is the one fact the row column exists to show. */
+  .pill.head {
+    background: var(--accent); border-color: var(--accent);
+    color: var(--accent-fg); font-weight: 600;
+  }
+  .pill.head .pip { background: var(--accent-fg); }
+  .pill.more {
+    color: var(--fg-2); background: none; border-style: dashed; padding: 0 5px;
+  }
 
   /* The summary takes its natural width and the dimmed body absorbs what is left. Letting
      both shrink equally gave the body most of the row, so summaries were cut to a few
@@ -749,8 +805,15 @@
     flex: 1 1 0; min-width: 0; color: var(--fg-2);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .age { flex: 0 0 3.5em; color: var(--fg-2); text-align: right; }
-  .sha { flex: 0 0 6em; color: var(--fg-2); text-align: right; }
+  .age { flex: 0 0 3.5em; color: var(--fg-2); text-align: right; font-size: 11px; }
+  /*
+   * The object id, set apart rather than just dimmed: it is the one field on the row nobody
+   * reads as prose, and a tinted plate says so faster than a lighter grey does.
+   */
+  .sha {
+    flex: 0 0 auto; color: var(--fg-2); font-size: 11px; letter-spacing: -0.01em;
+    background: var(--bg-2); border-radius: var(--radius-1); padding: 0 5px; line-height: 16px;
+  }
 
   .wip-node {
     width: 10px; height: 10px; border-radius: 50%;

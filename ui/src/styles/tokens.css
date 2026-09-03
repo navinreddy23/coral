@@ -3,25 +3,45 @@
  *
  * Light is the default. Dark is opt-in with data-theme="dark" on the root element, so the
  * choice is explicit rather than inherited from the system — the theme switch sets it.
+ *
+ * Depth is built from layered surfaces and hairline borders, never shadows: GPU compositing is
+ * off so that text keeps subpixel antialiasing (see `sharpen_text`), and a shadow is exactly
+ * the kind of large soft fill that costs on the software path.
  */
 :root {
   color-scheme: light;
 
+  /*
+   * The surface ladder, lightest to deepest. `bg-0` is the page a list sits on, `bg-1` the
+   * panels either side of it, `bg-2` a control at rest, `bg-3` one under the pointer.
+   */
   --bg-0: #ffffff;
-  --bg-1: #f2f4f7;
-  --bg-2: #e7eaef;
-  --bg-3: #d9dee6;
-  --border: #b4bcca;
+  --bg-1: #f7f8fa;
+  --bg-2: #eef0f4;
+  --bg-3: #e2e6ec;
 
-  --fg-0: #1b2028;
-  --fg-1: #4b5566;
-  --fg-2: #6b7586;
+  /* Two weights: a hairline between rows, and a real edge between panels. */
+  --border: #dfe3ea;
+  --border-strong: #c3cad6;
 
-  --accent: #0f7a70;
+  --fg-0: #171a20;
+  --fg-1: #4a5364;
+  --fg-2: #737d8d;
+
+  --accent: #0d7a6f;
+  --accent-hover: #0a655c;
+  /* Text and glyphs on a filled accent. */
+  --accent-fg: #ffffff;
   /* The selected row, tinted rather than filled so the text on it keeps its contrast. */
-  --accent-soft: #d3ebe8;
+  --accent-soft: #d6ece9;
+  --accent-line: #0d7a6f;
+
   --danger: #b3261e;
+  --danger-soft: #fbe6e5;
   --ok: #1a7f37;
+  --ok-soft: #e4f5e9;
+  --warn: #8a5300;
+  --warn-soft: #fdf0dc;
 
   /*
    * Diff line tints. Pale enough that the code on them keeps its contrast — the colour marks
@@ -32,7 +52,7 @@
 
   /*
    * Not the dark set nudged darker. Each is computed to reach 5.5:1 against white, because a
-   * 1.5px lane stroke needs more contrast than body text, not less. The first attempt averaged
+   * lane stroke needs more contrast than body text, not less. The first attempt averaged
    * 4.2:1 where the dark theme averages 7.7:1, which reads as blur rather than as low
    * contrast.
    */
@@ -48,42 +68,62 @@
   --row-h: 28px;
   --row-h-compact: 22px;
 
-  --font-ui: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  /*
+   * Inter and JetBrains Mono are asked for and are usually absent; what actually renders is
+   * the system UI face. The stacks name a generic last so the monospace request survives, and
+   * `system-ui` before it so the desktop's own choice wins over anything bundled.
+   */
+  --font-ui: Inter, system-ui, -apple-system, 'Segoe UI', 'Noto Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'DejaVu Sans Mono', monospace;
 
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 24px;
+
+  /* One step for controls, one for panels that float above the window. */
+  --radius-1: 4px;
+  --radius-2: 8px;
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --bg-0: #16191e;
-  --bg-1: #1c2027;
-  --bg-2: #232830;
+  --bg-0: #15181d;
+  --bg-1: #1b1f26;
+  --bg-2: #22262f;
   --bg-3: #2b313b;
-  --border: #2f3540;
 
-  --fg-0: #e6e8eb;
-  --fg-1: #a9b0ba;
-  --fg-2: #6d7580;
+  --border: #282e37;
+  --border-strong: #3a424f;
 
-  --accent: #179287;
-  --accent-soft: #1d3b3a;
-  --danger: #d95c5c;
-  --ok: #4fbf6d;
-  --add-bg: #1b2f21;
-  --remove-bg: #3a2224;
+  --fg-0: #e8eaee;
+  --fg-1: #aab2bd;
+  --fg-2: #78818d;
 
-  --lane-1: #3fa9f5;
-  --lane-2: #e26fb3;
-  --lane-3: #f7b32b;
-  --lane-4: #59c36a;
-  --lane-5: #9c7cf4;
-  --lane-6: #ff8a4c;
-  --lane-7: #26c6da;
-  --lane-8: #c0ca33;
+  --accent: #16a094;
+  --accent-hover: #1ab5a7;
+  --accent-fg: #06201d;
+  --accent-soft: #17332f;
+  --accent-line: #22b3a5;
+
+  --danger: #e06c68;
+  --danger-soft: #35201f;
+  --ok: #56c26e;
+  --ok-soft: #16291a;
+  --warn: #d9a441;
+  --warn-soft: #2c2415;
+
+  --add-bg: #172c1d;
+  --remove-bg: #33201f;
+
+  --lane-1: #4aaef7;
+  --lane-2: #e878ba;
+  --lane-3: #f2b73c;
+  --lane-4: #5fc973;
+  --lane-5: #a288f6;
+  --lane-6: #ff9560;
+  --lane-7: #35cbdd;
+  --lane-8: #c6cf45;
 }

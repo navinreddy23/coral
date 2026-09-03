@@ -130,14 +130,19 @@ describe('the shell', () => {
     await waitFor(() => {
       if (!row.classList.contains('selected')) throw new Error('not selected yet');
     });
-    // Svelte scopes every selector, so the rules are matched by shape rather than by text:
-    // whatever paints a selected row has to reach the message cell to do it.
+    // Svelte scopes every selector, so the rules are matched by shape rather than by text.
+    // What matters is the paint: a rule may style the text of a selected row freely, but
+    // anything that fills a background has to reach the message cell to do it, or the tint
+    // covers the lanes and the ref pills too.
     const rules = [...document.styleSheets]
       .flatMap((sheet) => [...(sheet.cssRules ?? [])])
       .map((rule) => rule.cssText)
       .filter((text) => text.includes('row.selected'));
     expect(rules.length).toBeGreaterThan(0);
-    for (const rule of rules) expect(rule, rule).toContain('cell.message');
+
+    const painting = rules.filter((rule) => /background(-color)?:/u.test(rule));
+    expect(painting.length, 'something must paint the selection').toBeGreaterThan(0);
+    for (const rule of painting) expect(rule, rule).toContain('cell.message');
   });
 
   it('keeps the lanes in their own column, clear of the branch names', async () => {
