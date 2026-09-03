@@ -92,6 +92,11 @@ pub async fn row_metadata(
 ) -> Result<Vec<coral_core::commit::CommitMeta>, crate::commands::IpcError> {
     let store = cache.store(&path, false).await?;
     let end = (start_row + count).min(store.len());
+    tracing::info!(
+        start_row,
+        rows = end.saturating_sub(start_row),
+        "row_metadata"
+    );
     let oids: Vec<String> = (start_row..end)
         .filter_map(|r| store.oid(r))
         .map(|id| id.to_string())
@@ -101,6 +106,43 @@ pub async fn row_metadata(
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
     Ok(loc.commit_metadata(&runner, &oids).await?)
+}
+
+/// A ref placed on the row it belongs to.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlacedRef {
+    #[serde(flatten)]
+    pub git_ref: coral_core::refs::GitRef,
+    /// The row this ref labels, or `None` when its commit is outside the loaded graph.
+    pub row: Option<u32>,
+}
+
+/// Every ref, each resolved to the row it labels.
+///
+/// The row lookup happens here rather than in the interface: the store already holds a sorted
+/// index, so this is a binary search per ref instead of shipping 1.4M object ids to JavaScript
+/// for it to build a map.
+#[tauri::command]
+pub async fn repo_refs(
+    cache: tauri::State<'_, GraphCache>,
+    path: String,
+) -> Result<Vec<PlacedRef>, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    let refs = loc.refs(&runner).await?;
+    let store = cache.store(&path, false).await?;
+
+    Ok(refs
+        .into_iter()
+        .map(|git_ref| {
+            let row = gix::ObjectId::from_hex(git_ref.commit().as_bytes())
+                .ok()
+                .and_then(|id| store.row_of(&id));
+            PlacedRef { git_ref, row }
+        })
+        .collect())
 }
 
 /// A frame of known content, used once at startup to prove the binary path works.

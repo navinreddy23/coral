@@ -4,21 +4,35 @@
   import { DEFAULT_METRICS } from '../graph/layout';
   import { initialRepo, open } from '../ipc/commands';
   import { GraphState } from '../state/graph.svelte';
+  import { RefsState } from '../state/refs.svelte';
   import { ThemeState } from '../state/theme.svelte';
+  import Sidebar from './Sidebar.svelte';
   import type { RepoInfo } from '../ipc/types';
 
   const graph = new GraphState();
   const theme = new ThemeState();
+  const refs = new RefsState();
   let info = $state<RepoInfo | null>(null);
   let error = $state<string | null>(null);
   let scrollTop = $state(0);
   let viewport = $state(600);
+  let scroller = $state<HTMLDivElement | null>(null);
+
+  const headName = $derived(
+    info && info.head.kind !== 'detached' ? info.head.name : null,
+  );
+
+  /** Scrolls a row into view, used when a ref is picked in the sidebar. */
+  function reveal(row: number) {
+    scroller?.scrollTo({ top: Math.max(0, (row - 3) * DEFAULT_METRICS.rowHeight) });
+  }
 
   async function load(path: string) {
     error = null;
     try {
       info = await open(path);
       await graph.open(info.path);
+      await refs.load(info.path);
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
@@ -83,8 +97,11 @@
   {#if graph.loading && !graph.frame}
     <p class="muted">Walking the graph…</p>
   {:else if graph.frame}
+    <div class="body">
+    <Sidebar groups={refs.groups} head={headName} onSelect={reveal} />
     <div
       class="graph"
+      bind:this={scroller}
       onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}
       bind:clientHeight={viewport}
     >
@@ -99,6 +116,9 @@
               style:top="{row * DEFAULT_METRICS.rowHeight}px"
               class:merge={hasFlag(graph.frame.rowFlags[row] ?? 0, RowFlag.Merge)}
             >
+              {#each refs.byRow.get(row) ?? [] as label (label.name)}
+                <span class="pill" class:head={label.short === headName}>{label.short}</span>
+              {/each}
               <span class="summary">{graph.meta.get(row)?.summary ?? ''}</span>
               <span class="author">{graph.meta.get(row)?.author ?? ''}</span>
               <span class="age">{when(graph.frame.times[row] ?? 0)}</span>
@@ -107,6 +127,7 @@
           {/each}
         </ul>
       </div>
+    </div>
     </div>
   {/if}
 </main>
@@ -135,6 +156,7 @@
   .banner.error { color: var(--danger); }
   .muted { padding: var(--space-4); color: var(--fg-2); }
 
+  .body { display: flex; flex: 1; min-height: 0; }
   .graph { flex: 1; overflow-y: auto; position: relative; }
   .spacer { position: relative; }
   /* The canvas tracks the scroll position rather than being as tall as the graph: a canvas
@@ -147,6 +169,13 @@
     font-size: 12px; color: var(--fg-1);
   }
   .row.merge { color: var(--fg-0); }
+  .pill {
+    flex: 0 0 auto; font-size: 11px; padding: 1px var(--space-2);
+    border-radius: 9px; border: 1px solid var(--border);
+    background: var(--bg-2); color: var(--fg-1);
+    max-width: 14em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .pill.head { border-color: var(--accent); color: var(--accent); font-weight: 600; }
   .summary {
     flex: 1; min-width: 0; color: var(--fg-0);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
