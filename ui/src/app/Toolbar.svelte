@@ -48,7 +48,7 @@
 <style>
   .toolbar {
     display: flex; align-items: center; gap: var(--space-5);
-    padding: var(--space-1) var(--space-4);
+    height: 46px; box-sizing: border-box; padding: 0 var(--space-4);
     border-bottom: 1px solid var(--border); background: var(--bg-1);
   }
   .where { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
@@ -62,7 +62,7 @@
   .actions { display: flex; gap: var(--space-1); margin: 0 auto; }
   .action {
     display: flex; flex-direction: column; align-items: center; gap: 1px;
-    min-width: 52px; padding: 2px var(--space-2);
+    min-width: 52px; padding: 2px var(--space-2); line-height: 14px;
     font: inherit; cursor: pointer;
     background: none; border: 0; border-radius: 3px; color: var(--fg-1);
   }

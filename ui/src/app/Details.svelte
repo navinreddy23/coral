@@ -94,7 +94,8 @@
           <span class="mark {file.change}">{mark[file.change] ?? '?'}</span>
           {#if grouping === 'path'}
             <span class="path" title={file.path}>
-              <span class="dir">{split(file.path).dir}</span>{split(file.path).name}
+              <span class="dir">{split(file.path).dir}</span
+              ><span class="name">{split(file.path).name}</span>
             </span>
           {:else}
             <span class="path" title={file.path}>{split(file.path).name}</span>
@@ -125,9 +126,14 @@
     font-family: var(--font-mono); font-size: 11px;
     white-space: pre-wrap; word-break: break-word; color: var(--fg-1);
   }
-  dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px var(--space-3); margin: 0; }
+  dl {
+    display: grid; grid-template-columns: max-content minmax(0, 1fr);
+    gap: 2px var(--space-3); margin: 0;
+  }
   dt { color: var(--fg-2); }
-  dd { margin: 0; color: var(--fg-1); }
+  /* An address or an object id has no space to break at, so it would otherwise run past the
+     panel edge and be clipped rather than wrapping. */
+  dd { margin: 0; min-width: 0; color: var(--fg-1); overflow-wrap: anywhere; }
   dd.break { word-break: break-all; }
   .muted { color: var(--fg-2); }
   .error { color: var(--danger); }
@@ -142,10 +148,14 @@
   }
   .toggle button.on { background: var(--bg-3); color: var(--fg-0); }
   .all { display: flex; align-items: center; gap: var(--space-1); font-size: 11px; color: var(--fg-2); }
-  .dir { color: var(--fg-2); }
+  /* The directory gives way first; a truncated path that has lost its file name identifies
+     nothing, which is the one part that must always survive. */
+  .dir { flex: 0 1 auto; min-width: 0; color: var(--fg-2);
+         overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .name { flex: 0 0 auto; color: var(--fg-0); }
   .files { list-style: none; margin: 0; padding: 0; }
   .files li { display: flex; gap: var(--space-2); align-items: baseline; padding: 1px 0; }
-  .path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .path { flex: 1; min-width: 0; display: flex; overflow: hidden; white-space: nowrap; }
   .from { color: var(--fg-2); font-size: 11px; }
   .mark { width: 1em; flex: 0 0 auto; font-family: var(--font-mono); }
   .mark.added { color: var(--lane-4); }

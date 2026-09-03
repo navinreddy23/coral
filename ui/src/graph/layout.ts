@@ -77,15 +77,15 @@ export function firstRowFor(
 }
 
 /**
- * Where a row sits, in whole pixels.
+ * Where the row list sits, in whole pixels.
  *
  * A scroll container reports a fractional `scrollTop` under trackpad and smooth scrolling, and
- * text laid out on a half-pixel is rendered blurry — noticeably so at 12px. Rows are the only
- * thing positioned from the scroll offset, which is why the graph looked soft while the panels
- * beside it stayed sharp.
+ * text laid out on a half-pixel is rendered blurry — noticeably so at 12px. The list is placed
+ * once at this offset and its rows stack inside it, so this is the only value that has to be
+ * snapped.
  */
-export function rowTop(scrollTop: number, row: number, firstRow: number, m: Metrics): number {
-  return Math.round(scrollTop) + (row - firstRow) * m.rowHeight;
+export function listTop(scrollTop: number): number {
+  return Math.round(scrollTop);
 }
 
 /** Which rows are visible, plus a screen of overscan on each side. */

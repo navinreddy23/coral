@@ -7,7 +7,7 @@ import {
   laneColour,
   laneX,
   MAX_SPACER_PX,
-  rowTop,
+  listTop,
   rowY,
   spacerHeight,
   visibleRows,
@@ -115,26 +115,17 @@ describe('very tall graphs', () => {
 });
 
 describe('row placement', () => {
-  const m = DEFAULT_METRICS;
-
   /* A scroll container reports a fractional scrollTop under trackpad scrolling, and text laid
-     out on a half-pixel renders blurry. Rows are the only thing positioned from it. */
-  it('places rows on whole pixels even when the scroll offset is fractional', () => {
+     out on a half-pixel renders blurry. The list is placed once at a snapped offset. */
+  it('places the list on a whole pixel however fractional the scroll offset', () => {
     for (const scroll of [0, 0.5, 12.3333, 411.75, 9999.999]) {
-      for (const row of [0, 1, 7]) {
-        const top = rowTop(scroll, row, 0, m);
-        expect(Number.isInteger(top), `scroll ${scroll} row ${row} gave ${top}`).toBe(true);
-      }
+      expect(Number.isInteger(listTop(scroll)), `scroll ${scroll}`).toBe(true);
     }
   });
 
-  it('keeps rows one row-height apart', () => {
-    const a = rowTop(100.4, 5, 5, m);
-    const b = rowTop(100.4, 6, 5, m);
-    expect(b - a).toBe(m.rowHeight);
-  });
-
-  it('anchors the first drawn row to the scroll offset', () => {
-    expect(rowTop(280, 10, 10, m)).toBe(280);
+  it('does not drift from the scroll offset by more than half a pixel', () => {
+    for (const scroll of [0.5, 12.3333, 411.75]) {
+      expect(Math.abs(listTop(scroll) - scroll)).toBeLessThanOrEqual(0.5);
+    }
   });
 });

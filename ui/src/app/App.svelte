@@ -5,7 +5,7 @@
     DEFAULT_METRICS,
     firstRowFor,
     GRAPH_COLUMN_PX,
-    rowTop,
+    listTop,
     REFS_COLUMN_PX,
     spacerHeight,
   } from '../graph/layout';
@@ -289,14 +289,13 @@
         class="spacer"
         style:height="{spacerHeight(graph.frame.rowCount, DEFAULT_METRICS)}px"
       >
-        <div class="lanes" style:top="{Math.round(scrollTop)}px">
+        <div class="lanes" style:top="{listTop(scrollTop)}px">
           <GraphCanvas frame={graph.frame} firstRow={rows[0] ?? 0} height={viewport} />
         </div>
-        <ul class="rows">
+        <ul class="rows" style:top="{listTop(scrollTop)}px">
           {#each rows as row (row)}
             <li
               class="row"
-              style:top="{rowTop(scrollTop, row, rows[0] ?? 0, DEFAULT_METRICS)}px"
               class:merge={hasFlag(graph.frame.rowFlags[row] ?? 0, RowFlag.Merge)}
               class:selected={selection.row === row}
             >
@@ -341,7 +340,7 @@
   main { display: flex; flex-direction: column; height: 100%; }
   header {
     display: flex; align-items: center; gap: var(--space-3);
-    padding: var(--space-3) var(--space-4);
+    height: 44px; box-sizing: border-box; padding: 0 var(--space-4);
     border-bottom: 1px solid var(--border); background: var(--bg-1);
   }
   h1 { font-size: 15px; font-weight: 600; margin: 0; color: var(--accent); }
@@ -389,10 +388,13 @@
     position: absolute; left: calc(var(--refs-col) + var(--space-3));
     height: 0; pointer-events: none;
   }
-  .rows { list-style: none; margin: 0; padding: 0; }
+  /* The list is positioned once and the rows stack inside it in normal flow. Positioning each
+     row individually put every one of them at its own computed offset; laying them out
+     normally means only one element can be off, and it is snapped. */
+  .rows { list-style: none; margin: 0; padding: 0; position: absolute; left: 0; right: 0; }
 
   .row, .wip {
-    position: absolute; left: 0; right: 0; height: var(--row-h);
+    position: relative; height: var(--row-h);
     padding: 0 var(--space-3);
     font-size: 12px; color: var(--fg-1);
     border: 0; background: none; font-family: inherit; text-align: left;
