@@ -247,9 +247,20 @@ pub fn respond(
 
     match action {
         Action::Get => {
-            // Without a username there is no account to look up; git will ask for one.
-            let Some(username) = credential.username().map(str::to_owned) else {
-                return Ok(String::new());
+            // A token push sends only the protocol and host: the remote URL carries no
+            // username, so git has none to offer. Answering nothing there sends git off to
+            // ask for one on a terminal it has been told it cannot use, and the push fails
+            // with a prompt nobody sees. The name last stored for the host stands in.
+            let username = match credential.username().map(str::to_owned) {
+                Some(name) => name,
+                None => match store.get(&remembered_user_key(&key), REMEMBERED_USER)? {
+                    Some(name) => {
+                        let name = name.expose_secret().to_owned();
+                        credential.set("username", &name);
+                        name
+                    }
+                    None => return Ok(String::new()),
+                },
             };
             match store.get(&key, &username)? {
                 Some(secret) => {
@@ -265,16 +276,38 @@ pub fn respond(
                 credential.password(),
             ) {
                 store.set(&key, &username, password)?;
+                // So a later request that carries no username can still be answered.
+                store.set(
+                    &remembered_user_key(&key),
+                    REMEMBERED_USER,
+                    &SecretString::from(username),
+                )?;
             }
             Ok(String::new())
         }
         Action::Erase => {
+            // Forget the remembered name too, or the next request answers with a user whose
+            // password has just been deleted and git reports a wrong password rather than a
+            // missing one.
+            store.delete(&remembered_user_key(&key), REMEMBERED_USER)?;
             if let Some(username) = credential.username() {
                 store.delete(&key, username)?;
             }
             Ok(String::new())
         }
     }
+}
+
+/// The account name the last-used username is filed under.
+const REMEMBERED_USER: &str = "username";
+
+/// Where that name lives.
+///
+/// A separate storage key rather than a reserved account under the real one: a git username
+/// can be almost any string, and there is no account name that is safely not one. U+0001 is
+/// not a character a URL can contain, so this key cannot collide with a host's own.
+fn remembered_user_key(key: &str) -> String {
+    format!("{key}\u{1}user")
 }
 
 /// The arguments that make git use coral as its only credential helper.

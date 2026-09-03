@@ -151,7 +151,9 @@ fn store_then_get_then_erase_round_trips() {
     let request = format!("{REQUEST}password=secret123\n");
 
     respond(&store, Action::Store, &request, true).unwrap();
-    assert_eq!(store.len(), 1);
+    // Two entries: the credential, and the username filed against the host so a later request
+    // that carries none can still be answered.
+    assert_eq!(store.len(), 2);
 
     let got = respond(&store, Action::Get, REQUEST, true).unwrap();
     assert!(got.contains("password=secret123"));
@@ -290,4 +292,125 @@ fn a_network_command_carries_the_helper_and_its_nonce() {
     let read = GitCommand::read("rev-list", "/tmp").args(["rev-list", "HEAD"]);
     let read_argv = read.redacted_argv(std::path::Path::new("git")).join(" ");
     assert!(!read_argv.contains("credential.helper"), "{read_argv}");
+}
+
+#[test]
+fn a_request_with_no_username_is_answered_from_the_one_last_stored() {
+    // A token push sends only the protocol and host, because the remote URL carries no
+    // username. Answering nothing there sends git to ask for one on a terminal it has been
+    // told it cannot use, and the push fails against a prompt nobody sees.
+    let store = Memory::default();
+    respond(
+        &store,
+        Action::Store,
+        "protocol=https\nhost=github.com\nusername=alice\npassword=ghp_token\n\n",
+        true,
+    )
+    .unwrap();
+
+    let answer = respond(
+        &store,
+        Action::Get,
+        "protocol=https\nhost=github.com\n\n",
+        true,
+    )
+    .unwrap();
+
+    assert!(answer.contains("username=alice"), "{answer}");
+    assert!(answer.contains("password=ghp_token"), "{answer}");
+}
+
+#[test]
+fn a_username_in_the_request_still_wins_over_the_remembered_one() {
+    let store = Memory::default();
+    for (user, secret) in [("alice", "one"), ("bob", "two")] {
+        respond(
+            &store,
+            Action::Store,
+            &format!("protocol=https\nhost=github.com\nusername={user}\npassword={secret}\n\n"),
+            true,
+        )
+        .unwrap();
+    }
+    // bob was stored last and is what a bare request would get; asking for alice must not.
+    let answer = respond(
+        &store,
+        Action::Get,
+        "protocol=https\nhost=github.com\nusername=alice\n\n",
+        true,
+    )
+    .unwrap();
+    assert!(answer.contains("password=one"), "{answer}");
+}
+
+#[test]
+fn erasing_forgets_the_remembered_name_as_well() {
+    // Otherwise the next bare request answers with a user whose password has just been
+    // deleted, and git reports a wrong password rather than a missing one.
+    let store = Memory::default();
+    respond(
+        &store,
+        Action::Store,
+        "protocol=https\nhost=github.com\nusername=alice\npassword=ghp_token\n\n",
+        true,
+    )
+    .unwrap();
+    respond(
+        &store,
+        Action::Erase,
+        "protocol=https\nhost=github.com\nusername=alice\n\n",
+        true,
+    )
+    .unwrap();
+
+    let answer = respond(
+        &store,
+        Action::Get,
+        "protocol=https\nhost=github.com\n\n",
+        true,
+    )
+    .unwrap();
+    assert_eq!(answer, "");
+}
+
+#[test]
+fn the_remembered_name_is_kept_per_host() {
+    let store = Memory::default();
+    for (host, user) in [("github.com", "alice"), ("gitlab.com", "bob")] {
+        respond(
+            &store,
+            Action::Store,
+            &format!("protocol=https\nhost={host}\nusername={user}\npassword=x\n\n"),
+            true,
+        )
+        .unwrap();
+    }
+    let answer = respond(
+        &store,
+        Action::Get,
+        "protocol=https\nhost=github.com\n\n",
+        true,
+    )
+    .unwrap();
+    assert!(answer.contains("username=alice"), "{answer}");
+}
+
+#[test]
+fn an_unauthorised_caller_gets_nothing_even_when_a_name_is_remembered() {
+    let store = Memory::default();
+    respond(
+        &store,
+        Action::Store,
+        "protocol=https\nhost=github.com\nusername=alice\npassword=ghp_token\n\n",
+        true,
+    )
+    .unwrap();
+    let answer = respond(
+        &store,
+        Action::Get,
+        "protocol=https\nhost=github.com\n\n",
+        false,
+    )
+    .unwrap();
+    assert_eq!(answer, "", "the nonce check must come before the lookup");
 }
