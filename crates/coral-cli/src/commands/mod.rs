@@ -1,10 +1,12 @@
 pub mod blame;
 pub mod conflicts;
+pub mod credential;
 pub mod diff;
 pub mod graph;
 pub mod log;
 pub mod open;
 pub mod refs;
+pub mod remote;
 pub mod stage;
 pub mod status;
 pub mod version;

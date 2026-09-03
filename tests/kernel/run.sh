@@ -238,7 +238,44 @@ scenario_branching() {
     fi
     git -C "$REPO" branch -D bench/doomed >/dev/null 2>&1 || true
 }
-scenario_remotes()     { echo "7. remotes";             miss "needs coral fetch/push (M4)"; }
+# Scenario 7 — remotes, against a bare clone on disk rather than the network, so the run is
+# deterministic and does not depend on kernel.org being reachable.
+scenario_remotes() {
+    echo "7. remotes"
+    local bare="${TMPDIR:-/tmp}/coral-bench-bare.git"
+    rm -rf "$bare"
+    git init -q --bare "$bare"
+    git -C "$bare" symbolic-ref HEAD refs/heads/master
+
+    "$CORAL" --repo "$REPO" --json remote add bench "$bare" >/dev/null 2>&1
+    local n; n=$("$CORAL" --repo "$REPO" --json remotes | jq -r '[.result.remotes[] | select(.name == "bench")] | length')
+    [ "$n" = "1" ] && ok "remote added and listed once" || bad "remote listing reported $n entries"
+
+    # Pushing the kernel's own master is the real object-transfer path, at real scale.
+    local start elapsed out flag
+    start=$(date +%s%N)
+    out=$("$CORAL" --repo "$REPO" --json push bench master 2>/dev/null)
+    elapsed=$(( ($(date +%s%N) - start) / 1000000 ))
+    flag=$(jq -r '.result.results[0].flag // "none"' <<<"$out")
+    [ "$flag" = "new" ] && ok "pushed master as a new branch in ${elapsed}ms" || bad "push reported flag $flag"
+
+    local phases; phases=$(jq -r '.result.phases | length' <<<"$out")
+    [ "$phases" -ge 1 ] && ok "reported $phases transfer phase(s)" || bad "no progress phases reported"
+
+    [ -n "$(git -C "$bare" rev-parse --verify master 2>/dev/null)" ] \
+        && ok "the branch exists on the other side" || bad "nothing arrived at the bare repo"
+
+    # A second push has nothing to do and must say so rather than fail.
+    out=$("$CORAL" --repo "$REPO" --json push bench master 2>/dev/null)
+    flag=$(jq -r '.result.results[0].flag // "none"' <<<"$out")
+    [ "$flag" = "up_to_date" ] && ok "a repeat push reports up to date" || bad "repeat push reported $flag"
+
+    "$CORAL" --repo "$REPO" --json fetch bench --prune >/dev/null 2>&1 \
+        && ok "fetched back from it" || bad "fetch failed"
+
+    "$CORAL" --repo "$REPO" --json remote remove bench >/dev/null 2>&1
+    rm -rf "$bare"
+}
 # Scenario 8 — the conflict engine on a real kernel conflict, then abort.
 scenario_abort() {
     echo "8. conflict engine and abort"

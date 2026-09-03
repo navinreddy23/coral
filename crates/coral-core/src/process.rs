@@ -438,6 +438,100 @@ impl GitRunner {
     }
     /// Builds the fully configured child process. `tokio::process::Command` wraps this, so the
     /// async and blocking paths cannot drift in their arguments or environment.
+    /// Streams stderr, splitting on carriage returns as well as newlines.
+    ///
+    /// `--progress` rewrites a single line with CR rather than emitting one line per update,
+    /// so splitting only on newlines would deliver one enormous record at the end instead of
+    /// live progress.
+    ///
+    /// # Errors
+    /// As [`GitRunner::output`].
+    pub async fn stream_err<F>(&self, cmd: GitCommand, sink: F) -> Result<(), CoralError>
+    where
+        F: FnMut(&[u8]) -> Result<Sink, CoralError>,
+    {
+        self.stream_both(cmd, |_| Ok(Sink::Continue), sink).await
+    }
+
+    /// Streams stdout by line and stderr by progress record at the same time.
+    ///
+    /// Both must be drained concurrently: a child that fills one pipe's buffer blocks, so
+    /// reading stdout to completion before touching stderr deadlocks on any command that
+    /// produces a lot of both — which is exactly what `push --porcelain --progress` does.
+    ///
+    /// # Errors
+    /// As [`GitRunner::output`].
+    pub async fn stream_both<O, E>(
+        &self,
+        cmd: GitCommand,
+        mut on_stdout: O,
+        mut on_stderr: E,
+    ) -> Result<(), CoralError>
+    where
+        O: FnMut(&[u8]) -> Result<Sink, CoralError>,
+        E: FnMut(&[u8]) -> Result<Sink, CoralError>,
+    {
+        use tokio::io::AsyncReadExt;
+
+        let argv = cmd.redacted_argv(&self.git);
+        let mut child = self.spawn(&cmd, &argv)?;
+        let (Some(mut out), Some(mut err)) = (child.stdout.take(), child.stderr.take()) else {
+            return Err(CoralError::Protocol {
+                label: cmd.label,
+                detail: "stdout or stderr was not piped".to_owned(),
+            });
+        };
+
+        let mut out_buf = vec![0_u8; 32 * 1024];
+        let mut err_buf = vec![0_u8; 32 * 1024];
+        let mut out_pending: Vec<u8> = Vec::new();
+        let mut err_pending: Vec<u8> = Vec::new();
+        let (mut out_open, mut err_open) = (true, true);
+        let mut tail = String::new();
+
+        while out_open || err_open {
+            tokio::select! {
+                r = out.read(&mut out_buf), if out_open => match r? {
+                    0 => out_open = false,
+                    n => feed(&out_buf[..n], &mut out_pending, b"\n", &mut on_stdout)?,
+                },
+                r = err.read(&mut err_buf), if err_open => match r? {
+                    0 => err_open = false,
+                    n => {
+                        // Keep the last of stderr for the error message if this fails.
+                        tail.push_str(&String::from_utf8_lossy(&err_buf[..n]));
+                        let keep = tail.len().saturating_sub(4096);
+                        tail.drain(..keep);
+                        feed(&err_buf[..n], &mut err_pending, b"\n\r", &mut on_stderr)?;
+                    }
+                },
+            }
+        }
+        if !out_pending.is_empty() {
+            on_stdout(&out_pending)?;
+        }
+        if !err_pending.is_empty() {
+            on_stderr(&err_pending)?;
+        }
+
+        let status = child.wait().await?;
+        if status.success() {
+            return Ok(());
+        }
+        Err(match status.code() {
+            Some(code) => CoralError::GitExit {
+                label: cmd.label,
+                code,
+                argv,
+                stderr: tail.trim().to_owned(),
+            },
+            None => CoralError::GitSignal {
+                label: cmd.label,
+                signal: signal_of(status),
+                argv,
+            },
+        })
+    }
     fn std_command(&self, cmd: &GitCommand) -> std::process::Command {
         let mut c = std::process::Command::new(&self.git);
         c.args(cmd.base_args())
@@ -592,6 +686,34 @@ impl GitRunner {
             },
         }
     }
+}
+
+/// Splits `chunk` on any of `delims`, carrying an incomplete trailing record in `pending`.
+fn feed<F>(
+    chunk: &[u8],
+    pending: &mut Vec<u8>,
+    delims: &[u8],
+    sink: &mut F,
+) -> Result<(), CoralError>
+where
+    F: FnMut(&[u8]) -> Result<Sink, CoralError>,
+{
+    let mut rest = chunk;
+    while let Some(i) = rest.iter().position(|b| delims.contains(b)) {
+        let (head, tail) = rest.split_at(i);
+        rest = &tail[1..];
+        if pending.is_empty() {
+            if !head.is_empty() {
+                sink(head)?;
+            }
+        } else {
+            pending.extend_from_slice(head);
+            sink(pending)?;
+            pending.clear();
+        }
+    }
+    pending.extend_from_slice(rest);
+    Ok(())
 }
 
 async fn read_stderr(child: &mut tokio::process::Child) -> String {

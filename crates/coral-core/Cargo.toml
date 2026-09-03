@@ -16,11 +16,22 @@ smallvec  = { workspace = true }
 serde     = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+secrecy   = { workspace = true }
 tracing   = { workspace = true }
 gix       = { workspace = true, features = ["max-performance"] }
 notify    = { workspace = true }
 tempfile  = { workspace = true }
 ts-rs     = { workspace = true, optional = true }
+
+# One keyring backend per platform, rather than every backend on every platform.
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { workspace = true, features = ["zbus-secret-service-keyring-store"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { workspace = true, features = ["apple-native-keyring-store"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { workspace = true, features = ["windows-native-keyring-store"] }
 
 [dev-dependencies]
 tokio    = { workspace = true, features = ["rt-multi-thread", "macros"] }

@@ -14,7 +14,19 @@ async fn main() -> ExitCode {
     let argv: Vec<std::ffi::OsString> = std::env::args_os().collect();
     let json = argv.iter().any(|a| a == "--json");
 
+    let helper = argv.iter().any(|a| a == "credential-helper");
     let rendered = coral_cli::run(argv).await;
+
+    // git reads this output as the credential protocol; an extra newline after an empty
+    // response is not what "I have nothing" looks like.
+    if helper {
+        let mut out = std::io::stdout().lock();
+        let _ = out
+            .write_all(rendered.text.as_bytes())
+            .and_then(|()| out.flush());
+        return rendered.code;
+    }
+
     let text = if json {
         serde_json::to_string_pretty(&rendered.json).unwrap_or_default()
     } else {

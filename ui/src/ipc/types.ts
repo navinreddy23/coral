@@ -182,9 +182,29 @@ interactive: boolean, };
 export type Progress = { current: number, total: number, };
 
 /**
+ * What happened to one ref during a push.
+ */
+export type PushFlag = "ok" | "forced" | "deleted" | "new" | "rejected" | "up_to_date";
+
+export type PushResult = { flag: PushFlag, local: string, remote: string, 
+/**
+ * git's own words, e.g. "[new branch]" or the reason for a rejection.
+ */
+summary: string, };
+
+/**
  * What kind of thing a ref names.
  */
 export type RefKind = { "kind": "local_branch" } | { "kind": "remote_branch", remote: string, } | { "kind": "tag", annotated: boolean, } | { "kind": "stash" } | { "kind": "other" };
+
+/**
+ * A configured remote.
+ */
+export type Remote = { name: string, fetchUrl: string, 
+/**
+ * Differs from `fetch_url` when the user configured a separate push URL.
+ */
+pushUrl: string, };
 
 /**
  * What changed since the last notification. Never "nothing": an empty set is not emitted.

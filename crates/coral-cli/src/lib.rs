@@ -130,6 +130,53 @@ pub enum Command {
         #[arg(long)]
         include_untracked: bool,
     },
+    /// List configured remotes.
+    Remotes,
+    /// Add, remove, rename, re-point or prune a remote.
+    Remote {
+        /// One of: add, remove, rename, set-url, prune.
+        action: String,
+        name: String,
+        /// The URL for add and set-url, or the new name for rename.
+        value: Option<String>,
+    },
+    /// Fetch from a remote, or from all of them.
+    Fetch {
+        remote: Option<String>,
+        /// Drop tracking branches whose remote counterparts are gone.
+        #[arg(long)]
+        prune: bool,
+    },
+    /// Push to a remote.
+    Push {
+        remote: Option<String>,
+        refspec: Option<String>,
+        #[arg(long)]
+        set_upstream: bool,
+        /// Overwrite the remote branch, but only if it is where we last saw it. There is no
+        /// bare --force: it silently destroys work pushed by someone else.
+        #[arg(long)]
+        force_with_lease: bool,
+        #[arg(long)]
+        tags: bool,
+        /// Delete the remote branch rather than updating it.
+        #[arg(long)]
+        delete: bool,
+    },
+    /// Fetch and integrate.
+    Pull {
+        remote: Option<String>,
+        #[arg(long, value_enum, default_value_t = commands::remote::Mode::FfOnly)]
+        mode: commands::remote::Mode,
+    },
+    /// Answer a `git credential` request. Git runs this; people do not.
+    CredentialHelper {
+        /// One of: get, store, erase.
+        action: String,
+        /// The nonce the running application shares with the git children it spawns.
+        #[arg(long)]
+        session: Option<String>,
+    },
     /// List the files still needing a decision.
     Conflicts,
     /// Show one file's conflict blocks, rebuilt from the index stages.
@@ -264,6 +311,28 @@ pub async fn run(argv: Vec<OsString>) -> output::Rendered {
         }
     };
 
+    // The credential helper answers git, not a person: its output is the protocol itself, so
+    // it must not be wrapped in the JSON envelope.
+    if let Command::CredentialHelper { action, session } = &cli.command {
+        return match commands::credential::serve(action, session.as_deref()) {
+            Ok(response) => output::Rendered {
+                json: serde_json::Value::Null,
+                text: response,
+                code: ExitCode::SUCCESS,
+            },
+            // A helper that fails aborts the whole git operation, so even an error answers
+            // empty; the message goes to stderr for a human reading the logs.
+            Err(e) => {
+                eprintln!("coral credential-helper: {e}");
+                output::Rendered {
+                    json: serde_json::Value::Null,
+                    text: String::new(),
+                    code: ExitCode::SUCCESS,
+                }
+            }
+        };
+    }
+
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let repo = cli.repo.unwrap_or(cwd);
     dispatch(cli.command, &repo).await
@@ -308,6 +377,46 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
         } => output::render(&commands::graph::run(repo, limit, from, first_paint).await),
         Command::Version => output::render(&commands::version::run().await),
         other => dispatch_write(other, repo).await,
+    }
+}
+
+/// Remote-facing commands, split out so each dispatcher stays readable.
+async fn dispatch_remote(command: Command, repo: &std::path::Path) -> output::Rendered {
+    match command {
+        Command::Remotes => output::render(&commands::remote::list(repo).await),
+        Command::Remote {
+            action,
+            name,
+            value,
+        } => {
+            output::render(&commands::remote::manage(repo, &action, &name, value.as_deref()).await)
+        }
+        Command::Fetch { remote, prune } => {
+            output::render(&commands::remote::fetch(repo, remote, prune).await)
+        }
+        Command::Push {
+            remote,
+            refspec,
+            set_upstream,
+            force_with_lease,
+            tags,
+            delete,
+        } => {
+            let opts = coral_core::remote::PushOpts {
+                remote,
+                refspec,
+                set_upstream,
+                force_with_lease,
+                tags,
+                delete,
+            };
+            output::render(&commands::remote::push(repo, opts).await)
+        }
+        Command::Pull { remote, mode } => {
+            output::render_op(&commands::remote::pull(repo, remote, mode).await)
+        }
+        // Every other variant is handled before reaching here.
+        _ => unreachable!("non-remote command routed to the remote dispatcher"),
     }
 }
 
@@ -390,6 +499,11 @@ async fn dispatch_write(command: Command, repo: &std::path::Path) -> output::Ren
             lines,
         } => output::render(&stage_or_unstage(repo, paths, hunk, file, lines, D::Unstage).await),
         Command::Discard { paths } => output::render(&commands::stage::discard(repo, &paths).await),
+        Command::Remotes
+        | Command::Remote { .. }
+        | Command::Fetch { .. }
+        | Command::Push { .. }
+        | Command::Pull { .. } => dispatch_remote(command, repo).await,
         // Every read variant is handled by `dispatch` before reaching here.
         _ => unreachable!("read command routed to the write dispatcher"),
     }
