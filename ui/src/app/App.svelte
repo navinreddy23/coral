@@ -196,6 +196,18 @@
     if (rows.length > 0) void graph.loadMetadata(rows[0] ?? 0, rows.length);
   });
 
+  /**
+   * The body as one dimmed line after the summary, as the reference shows it. Newlines become
+   * a separator rather than being dropped, so a bullet list still reads as several points.
+   */
+  function flatten(body: string): string {
+    return body
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0)
+      .join(' | ');
+  }
+
   function when(seconds: number): string {
     const delta = Date.now() / 1000 - seconds;
     const hours = delta / 3600;
@@ -300,7 +312,7 @@
               <span class="cell graph-col"></span>
               <span class="cell message">
                 <span class="summary">{graph.meta.get(row)?.summary ?? ''}</span>
-                <span class="detail">{graph.meta.get(row)?.author ?? ''}</span>
+                <span class="detail">{flatten(graph.meta.get(row)?.body ?? '')}</span>
                 <span class="age">{when(graph.frame.times[row] ?? 0)}</span>
                 <span class="sha mono">{oidOf(graph.frame, row).slice(0, 8)}</span>
               </span>

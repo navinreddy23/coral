@@ -12,6 +12,11 @@
   // in the reference; local branches are what people look at.
   let collapsed = $state<Record<string, boolean>>({ remote: true, tags: true });
 
+  /** Exact counts stop being useful past a point; the reference caps them at 99+. */
+  function cap(n: number): string {
+    return n > 99 ? '99+' : String(n);
+  }
+
   function shown(refs: PlacedRef[]): PlacedRef[] {
     const q = filter.trim().toLowerCase();
     return q ? refs.filter((r) => r.short.toLowerCase().includes(q)) : refs;
@@ -53,9 +58,10 @@
                 onclick={() => r.row !== null && onSelect(r.row)}
                 title={r.row === null ? 'not in the loaded graph' : r.name}
               >
+                {#if r.short === head}<span class="tick" aria-hidden="true">✓</span>{/if}
                 {r.short}
                 {#if r.ahead > 0 || r.behind > 0}
-                  <span class="track">+{r.ahead} −{r.behind}</span>
+                  <span class="track">{cap(r.ahead)}↑ {cap(r.behind)}↓</span>
                 {/if}
               </button>
             </li>
@@ -105,7 +111,8 @@
   }
   .ref:hover:not(:disabled) { background: var(--bg-3); }
   .ref:disabled { color: var(--fg-2); cursor: default; }
-  .ref.current { color: var(--fg-0); font-weight: 600; }
+  .ref.current { color: var(--fg-0); font-weight: 600; background: var(--accent-soft); }
+  .tick { color: var(--accent); flex: 0 0 auto; }
   .track { margin-left: auto; font-size: 11px; color: var(--fg-2); }
   .more { padding: 3px var(--space-4); font-size: 11px; color: var(--fg-2); }
 </style>

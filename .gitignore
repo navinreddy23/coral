@@ -13,3 +13,6 @@
 # IDE: share run configurations, keep everything else local.
 /.idea/*
 !/.idea/runConfigurations/
+
+# Design references the owner supplied. Third-party screenshots: never committed.
+/.reference

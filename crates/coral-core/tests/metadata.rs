@@ -286,3 +286,59 @@ async fn an_unknown_revision_is_refused() {
             .is_err()
     );
 }
+
+/// The graph shows the body dimmed after the summary, so a window carries a preview of it.
+#[tokio::test]
+async fn the_body_preview_follows_the_summary() {
+    let repo = TestRepo::new().write("a.txt", "1\n");
+    repo.git(["add", "--all"]);
+    repo.git([
+        "commit",
+        "--quiet",
+        "-m",
+        "the subject",
+        "-m",
+        "first line\nsecond line",
+    ]);
+
+    let head = repo.git(["rev-parse", "HEAD"]);
+    let (runner, loc) = open(&repo).await;
+    let meta = loc.commit_metadata(&runner, &[head]).await.unwrap();
+
+    assert_eq!(meta[0].summary, "the subject");
+    assert!(meta[0].body.to_string().contains("first line"));
+    assert!(meta[0].body.to_string().contains("second line"));
+}
+
+#[tokio::test]
+async fn a_commit_with_no_body_previews_nothing() {
+    let repo = TestRepo::new()
+        .write("a.txt", "1\n")
+        .commit("just a subject");
+    let head = repo.git(["rev-parse", "HEAD"]);
+    let (runner, loc) = open(&repo).await;
+
+    let meta = loc.commit_metadata(&runner, &[head]).await.unwrap();
+    assert_eq!(meta[0].summary, "just a subject");
+    assert!(meta[0].body.to_string().trim().is_empty());
+}
+
+/// A long body is truncated, and never in the middle of a character — a split multi-byte
+/// character renders as a replacement glyph in the row.
+#[tokio::test]
+async fn a_long_body_is_cut_on_a_character_boundary() {
+    let long = "é".repeat(400);
+    let repo = TestRepo::new().write("a.txt", "1\n");
+    repo.git(["add", "--all"]);
+    repo.git(["commit", "--quiet", "-m", "subject", "-m", &long]);
+
+    let head = repo.git(["rev-parse", "HEAD"]);
+    let (runner, loc) = open(&repo).await;
+    let meta = loc.commit_metadata(&runner, &[head]).await.unwrap();
+
+    assert!(meta[0].body.len() <= 300, "the preview is bounded");
+    assert!(
+        std::str::from_utf8(&meta[0].body).is_ok(),
+        "and is still valid UTF-8, so it renders as text rather than as U+FFFD"
+    );
+}

@@ -66,7 +66,15 @@ pub struct CommitMeta {
     #[serde(serialize_with = "crate::bytes::as_str")]
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub summary: BString,
+    /// The start of the message body, for the dimmed continuation the graph shows after the
+    /// summary. Truncated because a screenful of full bodies is far more than the row needs.
+    #[serde(serialize_with = "crate::bytes::as_str")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub body: BString,
 }
+
+/// How much of a body is worth sending for a row that will show one line of it.
+const BODY_PREVIEW_BYTES: usize = 300;
 
 impl crate::repo::RepoLocation {
     /// Reads author and summary for a window of commits.
@@ -146,6 +154,7 @@ fn parse_commit_object(oid: String, body: &[u8]) -> CommitMeta {
     let mut email = String::new();
     let mut time = 0_i64;
     let mut summary = BString::from(Vec::new());
+    let mut preview = BString::from(Vec::new());
 
     let mut lines = body.split(|b| *b == b'\n');
     for line in lines.by_ref() {
@@ -163,6 +172,12 @@ fn parse_commit_object(oid: String, body: &[u8]) -> CommitMeta {
     }
     if let Some(first) = lines.next() {
         summary = BString::from(first);
+
+        // Truncated on a character boundary, so a preview cannot split a multi-byte character
+        // and render as a replacement glyph.
+        let remainder: Vec<u8> = lines.collect::<Vec<_>>().join(&b'\n');
+        let cut = floor_char_boundary(&remainder, BODY_PREVIEW_BYTES);
+        preview = BString::from(&remainder[..cut]);
     }
     CommitMeta {
         oid,
@@ -170,6 +185,7 @@ fn parse_commit_object(oid: String, body: &[u8]) -> CommitMeta {
         email,
         time,
         summary,
+        body: preview,
     }
 }
 
@@ -314,4 +330,17 @@ fn parse_name_status(input: &[u8]) -> Vec<ChangedFile> {
         });
     }
     out
+}
+
+/// The largest index at or below `at` that does not split a UTF-8 character.
+fn floor_char_boundary(bytes: &[u8], at: usize) -> usize {
+    if at >= bytes.len() {
+        return bytes.len();
+    }
+    let mut i = at;
+    // Continuation bytes are 0b10xxxxxx; step back over them to the leading byte.
+    while i > 0 && (bytes[i] & 0xC0) == 0x80 {
+        i -= 1;
+    }
+    i
 }

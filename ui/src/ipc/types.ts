@@ -73,7 +73,12 @@ export type CommitDetail = { commit: Commit, files: Array<ChangedFile>, };
  * Deliberately smaller than [`Commit`]. The graph needs this for a screenful of rows at a
  * time; carrying full parent lists and bodies would undo the row store's compactness.
  */
-export type CommitMeta = { oid: string, author: string, email: string, time: number, summary: string, };
+export type CommitMeta = { oid: string, author: string, email: string, time: number, summary: string, 
+/**
+ * The start of the message body, for the dimmed continuation the graph shows after the
+ * summary. Truncated because a screenful of full bodies is far more than the row needs.
+ */
+body: string, };
 
 /**
  * Which side of a conflict did what. Taken from the XY of a `u` entry, whose codes mean
