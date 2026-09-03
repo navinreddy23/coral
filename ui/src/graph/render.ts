@@ -20,7 +20,9 @@ export function drawLanes(
   background: string,
 ): void {
   ctx.clearRect(0, 0, width, height);
-  ctx.lineWidth = 1.5;
+  // An even width centred on an integer coordinate covers whole pixels; 1.5px straddles two
+  // and is rendered as two half-lit ones, which reads as a soft line rather than a thin one.
+  ctx.lineWidth = 2;
   ctx.lineCap = 'round';
 
   const first = window.first;
@@ -82,9 +84,7 @@ export function drawLanes(
       ctx.fillStyle = background;
       ctx.fill();
       ctx.strokeStyle = colour;
-      ctx.lineWidth = 2;
       ctx.stroke();
-      ctx.lineWidth = 1.5;
     }
   }
 }

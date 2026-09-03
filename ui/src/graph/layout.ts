@@ -37,8 +37,13 @@ export function rowY(row: number, first: number, m: Metrics): number {
  * WebKit clamps or rescales a layer past roughly 2^25 px, which makes everything inside it
  * blurry and misaligned. The kernel at 1,481,528 rows would need 41.5M px, so past this the
  * scroll position is mapped onto the row range instead of standing for it directly.
+ *
+ * Set well below the limit rather than just under it: engines rasterise very tall layers at
+ * reduced resolution, and since the mapping is proportional a smaller scrollable area costs
+ * nothing but a coarser scrollbar. At this height one pixel of the kernel's scrollbar is
+ * roughly three quarters of a row.
  */
-export const MAX_SPACER_PX = 20_000_000;
+export const MAX_SPACER_PX = 2_000_000;
 
 /** How tall the scrollable area should be for a graph of `totalRows`. */
 export function spacerHeight(totalRows: number, m: Metrics): number {
@@ -69,6 +74,18 @@ export function firstRowFor(
   const lastTop = Math.max(0, totalRows - Math.floor(viewportHeight / m.rowHeight));
   const fraction = Math.min(1, Math.max(0, scrollTop / maxScroll));
   return Math.round(fraction * lastTop);
+}
+
+/**
+ * Where a row sits, in whole pixels.
+ *
+ * A scroll container reports a fractional `scrollTop` under trackpad and smooth scrolling, and
+ * text laid out on a half-pixel is rendered blurry — noticeably so at 12px. Rows are the only
+ * thing positioned from the scroll offset, which is why the graph looked soft while the panels
+ * beside it stayed sharp.
+ */
+export function rowTop(scrollTop: number, row: number, firstRow: number, m: Metrics): number {
+  return Math.round(scrollTop) + (row - firstRow) * m.rowHeight;
 }
 
 /** Which rows are visible, plus a screen of overscan on each side. */

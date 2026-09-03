@@ -5,6 +5,7 @@
     DEFAULT_METRICS,
     firstRowFor,
     GRAPH_COLUMN_PX,
+    rowTop,
     REFS_COLUMN_PX,
     spacerHeight,
   } from '../graph/layout';
@@ -188,8 +189,7 @@
 
 
   const rows = $derived(windowRows(graph.frame));
-  /** Where the drawn rows sit, given the scroll position they were chosen for. */
-  const windowTop = $derived(rows.length > 0 ? scrollTop : 0);
+
 
   // Only rows that are on screen are worth an object read.
   $effect(() => {
@@ -296,7 +296,7 @@
           {#each rows as row (row)}
             <li
               class="row"
-              style:top="{windowTop + (row - (rows[0] ?? 0)) * DEFAULT_METRICS.rowHeight}px"
+              style:top="{rowTop(scrollTop, row, rows[0] ?? 0, DEFAULT_METRICS)}px"
               class:merge={hasFlag(graph.frame.rowFlags[row] ?? 0, RowFlag.Merge)}
               class:selected={selection.row === row}
             >
