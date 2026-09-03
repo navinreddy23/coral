@@ -1,0 +1,8 @@
+---
+source: crates/coral-core/tests/lanes.rs
+expression: "render(dag, &[\"a\", \"root-1\", \"b (orphan)\", \"root-2\"])"
+---
+*   a            lane 0  -> [0]
+*   root-1       lane 0  -> []
+*   b (orphan)   lane 0  -> [0]
+*   root-2       lane 0  -> []

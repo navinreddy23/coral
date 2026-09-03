@@ -1,0 +1,7 @@
+---
+source: crates/coral-core/tests/lanes.rs
+expression: "render(dag, &[\"child-1\", \"child-2\", \"shared parent\"])"
+---
+*     child-1      lane 0  -> [0]
+| *   child-2      lane 1  -> [0]
+*     shared parent lane 0  -> []

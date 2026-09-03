@@ -1,6 +1,6 @@
 //! Times both `CommitStream` implementations against the budgets in docs/ARCHITECTURE.md.
 //!
-//! cargo run --release -p coral-core --example bench_graph -- <repo>
+//! `cargo run --release -p coral-core --example bench_graph -- <repo>`
 
 use std::time::Instant;
 
@@ -21,10 +21,7 @@ fn time(stream: &dyn CommitStream, label: &str, opts: &StreamOpts) {
         })
         .expect("walk");
     let ms = t.elapsed().as_millis();
-    println!(
-        "  {:<28} {commits:>9} commits {edges:>9} edges  {ms:>6} ms",
-        label
-    );
+    println!("  {label:<28} {commits:>9} commits {edges:>9} edges  {ms:>6} ms");
 }
 
 #[tokio::main(flavor = "multi_thread")]

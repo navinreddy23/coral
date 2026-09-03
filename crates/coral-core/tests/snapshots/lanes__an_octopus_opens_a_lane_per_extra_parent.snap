@@ -1,0 +1,10 @@
+---
+source: crates/coral-core/tests/lanes.rs
+expression: "render(dag, &[\"octopus\", \"a\", \"b\", \"c\", \"d\", \"r (root)\"])"
+---
+*         octopus      lane 0  -> [0,1,2,3]
+* | | |   a            lane 0  -> [0]
+| * | |   b            lane 1  -> [0]
+|   * |   c            lane 2  -> [0]
+|     *   d            lane 3  -> [0]
+*         r (root)     lane 0  -> []

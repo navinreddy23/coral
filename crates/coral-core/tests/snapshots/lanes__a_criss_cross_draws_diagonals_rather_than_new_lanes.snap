@@ -1,0 +1,9 @@
+---
+source: crates/coral-core/tests/lanes.rs
+expression: "render(dag, &[\"merge-x\", \"merge-y\", \"a\", \"b\", \"r (root)\"])"
+---
+*       merge-x      lane 0  -> [0,1]
+| | *   merge-y      lane 2  -> [0,1]
+* |     a            lane 0  -> [0]
+| *     b            lane 1  -> [0]
+*       r (root)     lane 0  -> []
