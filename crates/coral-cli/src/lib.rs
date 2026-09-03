@@ -30,6 +30,8 @@ pub struct Cli {
 pub enum Command {
     /// Validate a repository and report git version, HEAD, operation state and commit-graph.
     Open,
+    /// Report the working tree state.
+    Status,
     /// Report the git binary coral will drive.
     Version,
 }
@@ -64,6 +66,7 @@ pub async fn run(argv: Vec<OsString>) -> output::Rendered {
 
     match cli.command {
         Command::Open => output::render(&commands::open::run(&repo).await),
+        Command::Status => output::render(&commands::status::run(&repo).await),
         Command::Version => output::render(&commands::version::run().await),
     }
 }

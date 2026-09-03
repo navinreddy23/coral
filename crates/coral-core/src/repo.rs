@@ -214,6 +214,23 @@ impl RepoLocation {
         }
     }
 
+    /// Reads the working tree state.
+    ///
+    /// # Errors
+    /// Propagates git failures and [`CoralError::Protocol`] if the output does not parse.
+    pub async fn status(&self, runner: &GitRunner) -> Result<crate::status::Status, CoralError> {
+        let out = runner
+            .output(GitCommand::status("status", self.display_path()).args([
+                "status",
+                "--porcelain=v2",
+                "-z",
+                "--branch",
+                "--show-stash",
+            ]))
+            .await?;
+        crate::status::Status::parse(&out.stdout)
+    }
+
     /// Gathers everything `coral open` reports.
     ///
     /// # Errors

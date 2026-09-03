@@ -17,8 +17,9 @@ impl TestRepo {
     /// condition callers can handle.
     #[must_use]
     pub fn new() -> Self {
-        let dir = tempfile::tempdir().expect("temp dir");
-        let repo = Self { dir };
+        let repo = Self {
+            dir: tempfile::tempdir().expect("temp dir"),
+        };
         repo.git(["init", "--initial-branch=main", "--quiet"]);
         repo.git(["config", "user.name", "Coral Fixture"]);
         repo.git(["config", "user.email", "fixture@coral.test"]);
@@ -57,7 +58,7 @@ impl TestRepo {
         self
     }
 
-    /// Runs git in the fixture with a hermetic environment.
+    /// Runs git and returns trimmed stdout.
     ///
     /// # Panics
     /// If the command cannot be spawned or exits non-zero.
@@ -66,11 +67,39 @@ impl TestRepo {
         I: IntoIterator<Item = S>,
         S: AsRef<std::ffi::OsStr>,
     {
-        let out = Command::new("git")
-            .current_dir(self.dir.path())
+        String::from_utf8_lossy(&self.git_bytes(args))
+            .trim()
+            .to_owned()
+    }
+
+    /// Raw stdout, for NUL-delimited output that must not be trimmed or lossily decoded.
+    ///
+    /// # Panics
+    /// If the command cannot be spawned or exits non-zero.
+    pub fn git_bytes<I, S>(&self, args: I) -> Vec<u8>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<std::ffi::OsStr>,
+    {
+        let out = self.command(args).output().expect("spawn git");
+        assert!(
+            out.status.success(),
+            "git failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        out.stdout
+    }
+
+    /// One hermetic git invocation. Unlike the engine's runner, a fixture ignores the
+    /// developer's global and system config entirely and pins both identities and dates.
+    fn command<I, S>(&self, args: I) -> Command
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<std::ffi::OsStr>,
+    {
+        let mut c = Command::new("git");
+        c.current_dir(self.dir.path())
             .args(args)
-            // Deliberately hermetic: unlike the engine's runner, a fixture must ignore the
-            // developer's global config entirely.
             .env("GIT_CONFIG_GLOBAL", "/dev/null")
             .env("GIT_CONFIG_SYSTEM", "/dev/null")
             .env("GIT_CONFIG_NOSYSTEM", "1")
@@ -80,16 +109,8 @@ impl TestRepo {
             .env("GIT_COMMITTER_NAME", "Coral Fixture")
             .env("GIT_COMMITTER_EMAIL", "fixture@coral.test")
             .env("GIT_COMMITTER_DATE", EPOCH)
-            .env("LC_ALL", "C")
-            .output()
-            .expect("spawn git");
-        assert!(
-            out.status.success(),
-            "git {:?} failed: {}",
-            out.status,
-            String::from_utf8_lossy(&out.stderr)
-        );
-        String::from_utf8_lossy(&out.stdout).trim().to_owned()
+            .env("LC_ALL", "C");
+        c
     }
 }
 

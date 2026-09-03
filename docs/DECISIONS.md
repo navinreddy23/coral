@@ -46,10 +46,19 @@ green.
 
 ## Engine
 
-**`--no-optional-locks` on `Read` but not on `Status`.** With that flag git cannot write the
-refreshed index back, so the stat cache stays cold and every subsequent status re-hashes
-racily-clean files. On an 80k-file worktree that costs more than the lock contention it avoids,
-and the engine serializes writes anyway.
+**`--no-optional-locks` on `Read` but not on `Status`, measured.** With that flag git cannot
+write the refreshed index back, so the stat cache never persists. On the kernel worktree, after
+touching 25,000 files so their mtimes change but their contents do not:
+
+| Status after a stale-mtime event | run 1 | run 2 | run 3 |
+|---|---|---|---|
+| `--no-optional-locks` | 2265 ms | 886 ms | 861 ms |
+| default | 884 ms | **83 ms** | **84 ms** |
+
+Every refresh would sit near the 1 s budget ceiling permanently instead of dropping to 83 ms.
+The lock contention that flag avoids does not arise anyway, because the engine serializes
+writes. `Read` keeps the flag: those commands never refresh the index, so they have nothing to
+write back and should not fight the user's own terminal for `index.lock`.
 
 **Minimum git 2.40**, per the design document. Ubuntu 22.04 ships 2.34, so that distribution
 needs a backport; the floor is enforced at startup with a clear message rather than a parse

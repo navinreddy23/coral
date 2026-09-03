@@ -32,7 +32,8 @@ built out at once.
 
 `GitClass` (Read / Status / Write / Network) drives timeouts and lock flags. `Read` gets
 `--no-optional-locks`; `Status` deliberately does not, because without it git cannot write the
-refreshed index back and every later status re-hashes racily-clean files.
+refreshed index back and every later status re-hashes racily-clean files — measured at 861 ms
+against 83 ms on the kernel. See `docs/DECISIONS.md`.
 
 ## Performance budgets
 
