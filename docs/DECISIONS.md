@@ -109,6 +109,32 @@ orders all 945 tips before it emits anything. Both agree exactly on the full gra
 to be swapped out, first paint needs its own strategy — first-parent from HEAD alone — rather
 than the same query with a row limit.
 
+**The row store costs 60.7 bytes per row; the build peak is what threatens the budget.**
+Building the whole kernel graph — walk, lane assignment, parent resolution, lookup index —
+takes 4.2 s consistently against the 5 s budget, so roughly 1.5 s on top of the raw walk. The
+resulting store is 85.8 MB for 1,481,528 rows and 1,601,455 edges, at a maximum width of 214
+lanes.
+
+| | |
+|---|---|
+| Peak RSS during the build | 554 MB |
+| RSS once the walk state is dropped | 248 MB |
+| The store itself | 85.8 MB |
+
+Most of the 248 MB that remains is the commit-graph and pack indexes, which are file-backed and
+reclaimable, so the anonymous figure is far lower — this is why the budget has to be stated as
+anonymous RSS to mean anything. The problem is the 554 MB *peak*: add WebKit's roughly 250 MB
+and a first graph build transiently exceeds the 600 MB budget even for a single repository. The
+walk state is transient, so steady state is comfortable; M5 has to decide whether to accept the
+spike, build before the webview is heavy, or shrink the walk state.
+
+**Parents are stored CSR, not per-row.** `SmallVec<[u32; 2]>` is 24 bytes on x86-64, so 1.48M
+of them would cost 35 MB and scatter across the heap; the CSR offset/flat pair costs 12 MB and
+scans linearly. `SmallVec` stays where it belongs, as the transient per-node parent list during
+the walk. Object ids are stored packed at `hash_len` bytes each rather than as a fixed 20, so
+SHA-256 repositories work without a second code path, and row lookup is a binary search over a
+sorted index (6 MB) rather than a `HashMap<ObjectId, u32>` (about 60 MB).
+
 **The 437 MB peak is the binding memory constraint.** That is the walk's own transient state
 (indegree and flag maps plus the priority queues), not the row store, and it is freed when the
 walk ends. Against a 600 MB total budget it means graph builds must be serialized across tabs:

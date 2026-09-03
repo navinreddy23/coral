@@ -50,6 +50,19 @@ including reclaimable file-backed mappings.
 | Graph scrolling | 60 fps |
 | Resident memory with the kernel graph loaded | < 600 MB |
 
+## Graph pipeline
+
+`CommitStream` (gix, or `git rev-list` as oracle and fallback) emits `CommitNode`s in
+topological or commit-time order. `RowStoreBuilder` assigns each to a lane and accumulates a
+struct of arrays; `RowStore` is the frozen result the UI scrolls through.
+
+Parent *rows* cannot be known during the walk — topological order puts a parent after its
+child, so the child is written first. Parent object ids are buffered and resolved in one pass
+at the end, against a sorted lookup index built at the same time.
+
+Measured on the kernel: 1,481,528 rows and 1,601,455 edges build in 4.2 s into 85.8 MB, at
+60.7 bytes per row and a maximum width of 214 lanes.
+
 ## Contracts
 
 - **CLI envelope** — `{"schema":1,"ok":true,"result":{…}}` or `{"schema":1,"ok":false,"error":{…}}`.

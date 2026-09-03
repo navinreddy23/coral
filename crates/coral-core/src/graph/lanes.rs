@@ -28,26 +28,28 @@ pub struct RowTopology {
 ///
 /// Requires that children are emitted before their parents, which is what
 /// [`super::Order::Topological`] guarantees.
-pub struct LaneAssigner {
-    /// Lane -> the commit index it is reserved for, or `usize::MAX` when free.
-    lanes: Vec<usize>,
-    /// Commit index -> the lane reserved for it.
-    reserved: std::collections::HashMap<usize, u16>,
+/// Keyed by whatever identifies a commit to the caller: an object id in the engine, a plain
+/// index in the tests. A parent's row number is not known when its child is emitted, so the
+/// key cannot be the row.
+pub struct LaneAssigner<K> {
+    /// Lane -> the commit it is reserved for, or `None` when free.
+    lanes: Vec<Option<K>>,
+    /// Reservations still outstanding. Bounded by the graph's width, not its length: an entry
+    /// lives only from the child that claims a lane until the parent that consumes it.
+    reserved: std::collections::HashMap<K, u16>,
     /// Lanes freed on the current row; never reused until the next one, so a lane does not
     /// appear to teleport across a single row.
     freed_this_row: SmallVec<[u16; 4]>,
     max_width: u16,
 }
 
-const FREE: usize = usize::MAX;
-
-impl Default for LaneAssigner {
+impl<K: Eq + std::hash::Hash + Clone> Default for LaneAssigner<K> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl LaneAssigner {
+impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -68,13 +70,13 @@ impl LaneAssigner {
     ///
     /// `index` identifies this commit and `parents` are the indices its parents will be given.
     /// Indices rather than object ids keep the assigner independent of the hash length.
-    pub fn push(&mut self, index: usize, parents: &[usize]) -> RowTopology {
+    pub fn push(&mut self, key: &K, parents: &[K]) -> RowTopology {
         self.freed_this_row.clear();
 
         // A child may already have reserved a lane for me; otherwise I am a branch tip.
-        let lane = match self.reserved.remove(&index) {
+        let lane = match self.reserved.remove(key) {
             Some(l) => {
-                self.lanes[l as usize] = FREE;
+                self.lanes[l as usize] = None;
                 l
             }
             None => self.alloc(),
@@ -82,8 +84,8 @@ impl LaneAssigner {
 
         let mut parent_lanes = SmallVec::new();
         let mut kept_my_lane = false;
-        for (i, &p) in parents.iter().enumerate() {
-            if let Some(&existing) = self.reserved.get(&p) {
+        for (i, p) in parents.iter().enumerate() {
+            if let Some(&existing) = self.reserved.get(p) {
                 // Another child already claimed this parent: a fork joining back, or one side
                 // of a criss-cross. Draw a diagonal into that lane rather than opening one.
                 parent_lanes.push(existing);
@@ -95,13 +97,17 @@ impl LaneAssigner {
             } else {
                 self.alloc()
             };
-            self.lanes[pl as usize] = p;
-            self.reserved.insert(p, pl);
+            self.lanes[pl as usize] = Some(p.clone());
+            self.reserved.insert(p.clone(), pl);
             parent_lanes.push(pl);
         }
 
         // A root, or a first parent that was already reserved elsewhere: my lane dies here.
-        if !kept_my_lane {
+        //
+        // Unless a later parent was allocated into it. Claiming my lane above left its slot
+        // free, so `alloc` is entitled to hand it straight back out; freeing it then would
+        // destroy a live reservation and leave the map pointing at a trimmed-away slot.
+        if !kept_my_lane && !parent_lanes.contains(&lane) {
             self.free(lane);
         }
         self.trim();
@@ -123,24 +129,24 @@ impl LaneAssigner {
     fn alloc(&mut self) -> u16 {
         for (i, slot) in self.lanes.iter().enumerate() {
             let lane = u16::try_from(i).unwrap_or(u16::MAX);
-            if *slot == FREE && !self.freed_this_row.contains(&lane) {
+            if slot.is_none() && !self.freed_this_row.contains(&lane) {
                 return lane;
             }
         }
-        self.lanes.push(FREE);
+        self.lanes.push(None);
         u16::try_from(self.lanes.len() - 1).unwrap_or(u16::MAX)
     }
 
     fn free(&mut self, lane: u16) {
         if let Some(slot) = self.lanes.get_mut(lane as usize) {
-            *slot = FREE;
+            *slot = None;
         }
         self.freed_this_row.push(lane);
     }
 
     /// Drops trailing free lanes so `width` reflects the live graph.
     fn trim(&mut self) {
-        while self.lanes.last().is_some_and(|s| *s == FREE) {
+        while self.lanes.last().is_some_and(Option::is_none) {
             self.lanes.pop();
         }
     }

@@ -10,11 +10,11 @@ use coral_core::graph::LaneAssigner;
 /// Renders a DAG as lane art. `dag[i]` is the list of parent indices for commit `i`, and
 /// commits are listed children-first as a topological walk would emit them.
 fn render(dag: &[&[usize]], labels: &[&str]) -> String {
-    let mut assigner = LaneAssigner::new();
+    let mut assigner = LaneAssigner::<usize>::new();
     let rows: Vec<_> = dag
         .iter()
         .enumerate()
-        .map(|(i, p)| assigner.push(i, p))
+        .map(|(i, p)| assigner.push(&i, p))
         .collect();
     let width = usize::from(assigner.max_width()).max(1);
 
@@ -92,9 +92,9 @@ fn a_second_root_gets_its_own_lane() {
 #[test]
 fn width_never_exceeds_the_number_of_live_branches() {
     let dag: &[&[usize]] = &[&[1, 2], &[3], &[3], &[]];
-    let mut a = LaneAssigner::new();
+    let mut a = LaneAssigner::<usize>::new();
     for (i, p) in dag.iter().enumerate() {
-        a.push(i, p);
+        a.push(&i, p);
     }
     assert_eq!(
         a.max_width(),
@@ -107,8 +107,8 @@ fn width_never_exceeds_the_number_of_live_branches() {
 #[test]
 fn every_reserved_lane_is_eventually_occupied() {
     let dag: &[&[usize]] = &[&[1, 2, 3, 4], &[5], &[5], &[5], &[5], &[]];
-    let mut a = LaneAssigner::new();
-    let rows: Vec<_> = dag.iter().enumerate().map(|(i, p)| a.push(i, p)).collect();
+    let mut a = LaneAssigner::<usize>::new();
+    let rows: Vec<_> = dag.iter().enumerate().map(|(i, p)| a.push(&i, p)).collect();
 
     for (i, row) in rows.iter().enumerate() {
         for (k, lane) in row.parent_lanes.iter().enumerate() {
@@ -116,6 +116,28 @@ fn every_reserved_lane_is_eventually_occupied() {
             assert_eq!(
                 rows[parent].lane, *lane,
                 "row {i} parent {parent} lane mismatch"
+            );
+        }
+    }
+}
+
+/// Regression: a row whose first parent is already reserved does not keep its own lane, but
+/// `alloc` may hand that same lane to a *later* parent. Freeing it afterwards destroyed the
+/// slot while the reservation was still live, and the assigner then indexed past the end when
+/// that parent was finally emitted. Only reproduced on the kernel, at 382 lanes.
+#[test]
+fn a_lane_handed_to_a_later_parent_is_not_freed_from_under_it() {
+    let dag: &[&[usize]] = &[&[2, 3], &[2, 4], &[], &[], &[]];
+    let mut a = LaneAssigner::<usize>::new();
+    let rows: Vec<_> = dag.iter().enumerate().map(|(i, p)| a.push(&i, p)).collect();
+
+    for (i, row) in rows.iter().enumerate() {
+        for (k, lane) in row.parent_lanes.iter().enumerate() {
+            let parent = dag[i][k];
+            assert_eq!(
+                rows[parent].lane, *lane,
+                "row {i} reserved lane {lane} for parent {parent}, which was drawn in {}",
+                rows[parent].lane
             );
         }
     }
