@@ -7,6 +7,7 @@ fn item(step: Step, oid: &str, summary: &str) -> TodoItem {
         step,
         oid: oid.to_owned(),
         summary: summary.into(),
+        message: None,
     }
 }
 

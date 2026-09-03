@@ -4,14 +4,9 @@
 
   const { rebase, onDone }: { rebase: RebaseState; onDone: () => void } = $props();
 
-  /**
-   * Reword is absent deliberately.
-   *
-   * It needs a new message per commit, which means an editor git opens mid-rebase and nothing
-   * here can answer. Editing a message is `edit`, which stops for it, or an amend afterwards.
-   */
   const steps: { step: Step; hint: string }[] = [
     { step: 'pick', hint: 'Keep the commit as it is' },
+    { step: 'reword', hint: 'Keep the change, give it a new message' },
     { step: 'edit', hint: 'Stop here so the commit can be changed' },
     { step: 'squash', hint: 'Fold into the one above, keeping both messages' },
     { step: 'fixup', hint: 'Fold into the one above, discarding this message' },
@@ -67,7 +62,17 @@
               {/each}
             </select>
             <span class="sha mono">{item.oid.slice(0, 8)}</span>
-            <span class="summary">{item.summary}</span>
+            {#if item.step === 'reword'}
+              <!-- Seeded with the message it has, since a reword is usually an edit of it. -->
+              <input
+                class="message"
+                value={item.message ?? item.summary}
+                aria-label="New message for {item.oid.slice(0, 8)}"
+                oninput={(e) => rebase.setMessage(i, e.currentTarget.value)}
+              />
+            {:else}
+              <span class="summary">{item.summary}</span>
+            {/if}
           </li>
         {/each}
       </ul>
@@ -123,6 +128,12 @@
   }
   .sha { color: var(--fg-2); flex: 0 0 auto; }
   .summary { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .message {
+    flex: 1; min-width: 0; font: inherit; font-size: 12px;
+    padding: 1px var(--space-2);
+    border: 1px solid var(--accent); border-radius: var(--radius-1);
+    background: var(--bg-0); color: var(--fg-0);
+  }
   footer {
     display: flex; align-items: center; gap: var(--space-2);
     padding: var(--space-2) var(--space-3);

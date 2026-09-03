@@ -20,10 +20,11 @@ export class RebaseState {
 
   open = $derived(this.onto !== null);
 
-  /** True when the list would be refused: nothing to fold the first commit into. */
+  /** True when the list would be refused, or has a reword with nothing to say. */
   invalid = $derived(
-    this.items.length > 0 &&
-      (this.items[0]?.step === 'squash' || this.items[0]?.step === 'fixup'),
+    (this.items.length > 0 &&
+      (this.items[0]?.step === 'squash' || this.items[0]?.step === 'fixup')) ||
+      this.items.some((i) => i.step === 'reword' && (i.message ?? '').trim() === ''),
   );
 
   /** Commits that will survive, for the summary line. */
@@ -53,7 +54,19 @@ export class RebaseState {
   }
 
   setStep(index: number, step: Step): void {
-    this.items = this.items.map((item, i) => (i === index ? { ...item, step } : item));
+    this.items = this.items.map((item, i) => {
+      if (i !== index) return item;
+      // A reword starts from the message it has, since it is usually an edit of it rather
+      // than a replacement; anything else has no message to carry.
+      const message =
+        step === 'reword' ? (item.message ?? item.summary) : null;
+      return { ...item, step, message };
+    });
+  }
+
+  /** The replacement message for a reworded commit. */
+  setMessage(index: number, message: string): void {
+    this.items = this.items.map((item, i) => (i === index ? { ...item, message } : item));
   }
 
   /** Moves one commit, keeping the rest in order. */

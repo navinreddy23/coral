@@ -57,6 +57,9 @@ pub struct TodoItem {
     #[serde(serialize_with = "crate::bytes::as_str")]
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub summary: BString,
+    /// The replacement message for a [`Step::Reword`]. Never written to the todo file.
+    #[serde(default)]
+    pub message: Option<String>,
 }
 
 /// A rebase todo list, in the order the commits will be replayed.
@@ -96,6 +99,8 @@ impl Todo {
                 step,
                 oid: oid.to_str_lossy().into_owned(),
                 summary: BString::from(parts.next().unwrap_or_default()),
+                // The todo file has no field for it; a parsed list is one git wrote.
+                message: None,
             });
         }
         Ok(Self { items })
@@ -186,6 +191,7 @@ impl crate::repo::RepoLocation {
                 step: Step::Pick,
                 oid: oid.to_owned(),
                 summary: BString::from(summary),
+                message: None,
             });
         }
         Ok(Todo { items })
@@ -198,9 +204,12 @@ impl crate::repo::RepoLocation {
     /// copies it into place — the same self-invocation the credential helper uses, and for the
     /// same reason: no shell quoting and nothing interactive on the path.
     ///
-    /// `core.editor` is stubbed too. A squash or fixup opens an editor on the combined message
-    /// that nobody is there to answer; `true` accepts what git prepared, which is the message
-    /// the user was shown.
+    /// A reword is run as an `edit` and amended here rather than through git's own `reword`,
+    /// which opens an editor on the message with no way to say which commit is being asked
+    /// about. Stopping instead gives an exact answer: git records the commit it stopped on, so
+    /// the right message goes to the right commit even after everything above it has been
+    /// rewritten. A stop with no message waiting is a stop the user asked for, and is handed
+    /// back to them.
     ///
     /// # Errors
     /// Propagates git failures. A rebase that stops on a conflict or an `edit` is reported
@@ -220,8 +229,24 @@ impl crate::repo::RepoLocation {
             });
         }
 
+        // Reword becomes edit, and the message is kept against the commit it belongs to.
+        let mut messages: std::collections::BTreeMap<String, String> =
+            std::collections::BTreeMap::new();
+        let mut plan = todo.clone();
+        for item in &mut plan.items {
+            if item.step == Step::Reword {
+                if let Some(message) = item.message.clone() {
+                    messages.insert(item.oid.clone(), message);
+                    item.step = Step::Edit;
+                } else {
+                    // Nothing to reword it to; leaving it as a reword would open an editor.
+                    item.step = Step::Pick;
+                }
+            }
+        }
+
         let path = self.git_path("coral-rebase-todo");
-        std::fs::write(&path, todo.render()).map_err(|e| CoralError::Protocol {
+        std::fs::write(&path, plan.render()).map_err(|e| CoralError::Protocol {
             label: "rebase",
             detail: format!("could not write the todo list: {e}"),
         })?;
@@ -254,21 +279,55 @@ impl crate::repo::RepoLocation {
         // rebase in progress by anything looking at the git dir.
         let _ = std::fs::remove_file(&path);
 
-        match result {
+        let mut outcome = match result {
             Ok(out) => {
                 let msg = String::from_utf8_lossy(&out.stdout).trim().to_owned();
-                self.op_outcome(runner, msg).await
+                self.op_outcome(runner, msg).await?
             }
             Err(e) => {
-                let outcome = self
+                let stopped = self
                     .op_outcome(runner, e.stderr().unwrap_or_default().to_owned())
                     .await?;
-                if outcome.completed {
-                    Err(e)
-                } else {
-                    Ok(outcome)
+                if stopped.completed {
+                    return Err(e);
                 }
+                stopped
             }
+        };
+
+        // Each pass either amends one commit and carries on, or hands back. Bounded by the
+        // list, because a rebase cannot stop more times than it has steps and a misread stop
+        // must not be able to spin.
+        for _ in 0..=plan.items.len() {
+            if outcome.completed || !outcome.conflicts.is_empty() {
+                return Ok(outcome);
+            }
+            let stopped = self.operation(runner).await?.stopped_at;
+            let Some(message) = stopped.as_deref().and_then(|oid| messages.get(oid)) else {
+                // A stop the user asked for, or one nothing here can answer.
+                return Ok(outcome);
+            };
+            self.amend_message(runner, message).await?;
+            outcome = self.op(runner, crate::ops::OpAction::Continue).await?;
         }
+        Ok(outcome)
+    }
+
+    /// Replaces the message of the commit a rebase has stopped on.
+    async fn amend_message(
+        &self,
+        runner: &crate::process::GitRunner,
+        message: &str,
+    ) -> Result<(), CoralError> {
+        // `--no-verify`, because a rebase replays commits that were accepted once already and
+        // a hook rejecting one halfway through leaves the rebase stopped with nothing to say.
+        runner
+            .output(
+                crate::process::GitCommand::write("commit", self.display_path())
+                    .args(["commit", "--amend", "--no-verify", "--allow-empty", "-m"])
+                    .arg(message),
+            )
+            .await
+            .map(|_| ())
     }
 }

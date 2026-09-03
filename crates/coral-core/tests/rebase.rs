@@ -188,3 +188,134 @@ fn the_todo_file_is_not_left_behind() {
         assert!(!loc.git_path("coral-rebase-todo").exists());
     });
 }
+
+#[test]
+fn a_reword_replaces_only_that_commit_message() {
+    let repo = stack();
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+        let mut todo = loc.rebase_todo(&runner, "HEAD~3").await.unwrap();
+        todo.items[1].step = Step::Reword;
+        todo.items[1].message = Some("commit b, said better".to_owned());
+
+        let out = loc
+            .rebase_interactive(&runner, "HEAD~3", &todo, &coral_binary())
+            .await
+            .unwrap();
+        assert!(
+            out.completed,
+            "it must not be left stopped: {}",
+            out.message
+        );
+    });
+
+    assert_eq!(
+        summaries(&repo),
+        ["commit c", "commit b, said better", "commit a", "base"]
+    );
+    assert_eq!(repo.git(["status", "--porcelain"]).trim(), "");
+}
+
+#[test]
+fn several_rewords_each_get_their_own_message() {
+    // git's own `reword` opens an editor with no way to say which commit it is asking about.
+    // Stopping on each and amending is what makes more than one of them possible at all.
+    let repo = stack();
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+        let mut todo = loc.rebase_todo(&runner, "HEAD~3").await.unwrap();
+        for (i, text) in [(0, "first, renamed"), (2, "third, renamed")] {
+            todo.items[i].step = Step::Reword;
+            todo.items[i].message = Some(text.to_owned());
+        }
+        let out = loc
+            .rebase_interactive(&runner, "HEAD~3", &todo, &coral_binary())
+            .await
+            .unwrap();
+        assert!(out.completed, "{}", out.message);
+    });
+
+    assert_eq!(
+        summaries(&repo),
+        ["third, renamed", "commit b", "first, renamed", "base"]
+    );
+}
+
+#[test]
+fn a_reword_survives_the_commits_above_it_being_rewritten() {
+    // The message has to reach the right commit after everything above it has a new object
+    // id, which is why the stop is matched on the id git records rather than on position.
+    let repo = stack();
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+        let mut todo = loc.rebase_todo(&runner, "HEAD~3").await.unwrap();
+        todo.reorder(2, 0).unwrap();
+        todo.items[2].step = Step::Reword;
+        let renamed = todo.items[2].summary.to_string();
+        todo.items[2].message = Some(format!("{renamed}, renamed"));
+
+        let out = loc
+            .rebase_interactive(&runner, "HEAD~3", &todo, &coral_binary())
+            .await
+            .unwrap();
+        assert!(out.completed, "{}", out.message);
+    });
+
+    assert_eq!(
+        summaries(&repo),
+        ["commit b, renamed", "commit a", "commit c", "base"]
+    );
+}
+
+#[test]
+fn a_reword_with_no_message_leaves_the_commit_alone() {
+    // Better than opening an editor nobody can answer, which would hang the rebase.
+    let repo = stack();
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+        let mut todo = loc.rebase_todo(&runner, "HEAD~3").await.unwrap();
+        todo.items[1].step = Step::Reword;
+        let out = loc
+            .rebase_interactive(&runner, "HEAD~3", &todo, &coral_binary())
+            .await
+            .unwrap();
+        assert!(out.completed, "{}", out.message);
+    });
+    assert_eq!(
+        summaries(&repo),
+        ["commit c", "commit b", "commit a", "base"]
+    );
+}
+
+#[test]
+fn an_edit_the_user_asked_for_still_stops() {
+    // The rebase drives itself through its own rewords and hands back on anything else.
+    let repo = stack();
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+        let mut todo = loc.rebase_todo(&runner, "HEAD~3").await.unwrap();
+        todo.items[0].step = Step::Reword;
+        todo.items[0].message = Some("first, renamed".to_owned());
+        todo.items[2].step = Step::Edit;
+
+        let out = loc
+            .rebase_interactive(&runner, "HEAD~3", &todo, &coral_binary())
+            .await
+            .unwrap();
+        assert!(!out.completed, "it must stop where the user asked it to");
+    });
+
+    // The reword before it went through; the rebase is waiting at the edit.
+    assert!(repo.git(["log", "--format=%s"]).contains("first, renamed"));
+    repo.git(["rebase", "--abort"]);
+}

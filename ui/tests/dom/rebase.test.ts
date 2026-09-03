@@ -12,7 +12,7 @@ import { RebaseState } from '../../src/state/rebase.svelte';
 import type { TodoItem } from '../../src/ipc/types';
 
 function item(oid: string, summary: string): TodoItem {
-  return { step: 'pick', oid: oid.padEnd(40, '0'), summary };
+  return { step: 'pick', oid: oid.padEnd(40, '0'), summary, message: null };
 }
 
 function picker(items: TodoItem[]) {
@@ -59,12 +59,36 @@ describe('the interactive rebase picker', () => {
     expect(container.querySelector('.warn')?.textContent).toContain('nothing above it');
   });
 
-  it('does not offer reword, which needs an editor nothing here can answer', () => {
-    const { container } = picker(three());
-    const options = [...container.querySelectorAll('option')].map((o) => o.textContent);
-    expect(options).toContain('pick');
-    expect(options).toContain('fixup');
-    expect(options).not.toContain('reword');
+  it('offers a message field for a reword, seeded with the message it has', async () => {
+    const { rebase, container } = picker(three());
+    rebase.setStep(1, 'reword');
+    await Promise.resolve();
+    const field = container.querySelector('input.message') as HTMLInputElement;
+    expect(field).not.toBeNull();
+    // Usually an edit of the message rather than a replacement, so it starts from it.
+    expect(field.value).toBe('commit b');
+  });
+
+  it('will not start a reword with nothing to say', async () => {
+    const { rebase, container } = picker(three());
+    rebase.setStep(1, 'reword');
+    rebase.setMessage(1, '   ');
+    expect(rebase.invalid).toBe(true);
+    await Promise.resolve();
+    const start = [...container.querySelectorAll('footer button')].find((b) =>
+      b.textContent?.includes('Start'),
+    ) as HTMLButtonElement;
+    expect(start.disabled).toBe(true);
+  });
+
+  it('forgets the message when the step stops being a reword', () => {
+    const rebase = new RebaseState();
+    rebase.items = three();
+    rebase.setStep(0, 'reword');
+    rebase.setMessage(0, 'a new message');
+    rebase.setStep(0, 'pick');
+    // A message left on a picked commit would be sent and quietly ignored.
+    expect(rebase.items[0]?.message).toBeNull();
   });
 });
 
