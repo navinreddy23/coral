@@ -12,6 +12,13 @@ pub struct RowTopology {
     pub parent_lanes: SmallVec<[u16; 2]>,
     /// Lanes occupied after this row, i.e. the graph's width here.
     pub width: u16,
+    /// Bit `n` set when lane `n` has an edge entering this row from above.
+    ///
+    /// A renderer that only ever sees a window of rows cannot derive this: an edge spanning a
+    /// million rows is owned by a child far off the top of the screen, and without this mask
+    /// the lane simply is not drawn for the whole span between its endpoints. Lanes past 31
+    /// are omitted; the graph column cannot show them.
+    pub open: u32,
 }
 
 /// Assigns commits to vertical lanes as the walk emits them.
@@ -72,6 +79,7 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
     /// Indices rather than object ids keep the assigner independent of the hash length.
     pub fn push(&mut self, key: &K, parents: &[K]) -> RowTopology {
         self.freed_this_row.clear();
+        let open = self.open_mask();
 
         // A child may already have reserved a lane for me; otherwise I am a branch tip.
         let lane = match self.reserved.remove(key) {
@@ -122,7 +130,19 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
             lane,
             parent_lanes,
             width,
+            open,
         }
+    }
+
+    /// Lanes holding a live reservation, as a bitmask over lanes 0..32.
+    fn open_mask(&self) -> u32 {
+        let mut mask = 0_u32;
+        for (i, slot) in self.lanes.iter().take(32).enumerate() {
+            if slot.is_some() {
+                mask |= 1 << i;
+            }
+        }
+        mask
     }
 
     /// Leftmost free lane, skipping any freed on this row.

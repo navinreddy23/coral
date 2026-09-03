@@ -22,6 +22,7 @@ gix        = { workspace = true }
 # Deliberately no "tracing" feature: Tauri's IPC spans serialize raw request and response
 # bodies, which would turn every binary graph chunk into a multi-megabyte debug string.
 tauri      = { workspace = true }
+tauri-plugin-dialog = { workspace = true }
 serde      = { workspace = true }
 serde_json = { workspace = true }
 tokio      = { workspace = true, features = ["rt-multi-thread", "macros"] }

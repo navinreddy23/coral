@@ -14,6 +14,7 @@ fn main() {
     tracing::info!("coral-app starting");
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(graph::GraphCache::default())
         .setup(|app| {
             use tauri::Manager as _;

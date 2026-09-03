@@ -15,6 +15,7 @@ export const Section = {
   ParentStart: 4,
   ParentLane: 5,
   Oid: 6,
+  Open: 7,
 } as const;
 
 /** Per-row flags, matching `graph::store::flags` in Rust. */
@@ -43,6 +44,14 @@ export interface Frame {
   parentStart: Uint32Array;
   parentLanes: Uint16Array;
   oids: Uint8Array;
+  /**
+   * Per row, a bitmask of the lanes carrying an edge into it from above.
+   *
+   * The renderer only ever holds a window of rows, so it cannot see the commit that opened a
+   * long-running lane. Without this the lane goes undrawn for its whole span and the graph
+   * appears to break apart between merges.
+   */
+  open: Uint32Array;
 }
 
 /** magic(4) version(2) sections(2) start(4) rows(4) total(4) flags(1) hashLen(1) + 2 pad. */
@@ -77,6 +86,7 @@ export function decodeFrame(buffer: ArrayBuffer): Frame {
     parentStart: new Uint32Array(0),
     parentLanes: new Uint16Array(0),
     oids: new Uint8Array(0),
+    open: new Uint32Array(0),
   };
 
   for (let i = 0; i < sectionCount; i++) {
@@ -114,6 +124,9 @@ export function decodeFrame(buffer: ArrayBuffer): Frame {
       case Section.Oid:
         frame.oids = new Uint8Array(buffer, offset, byteLen);
         break;
+      case Section.Open:
+        frame.open = new Uint32Array(buffer, offset, elements);
+        break;
       default:
         throw new FrameError(`unknown section ${kind}`);
     }
@@ -140,4 +153,11 @@ export function oidOf(frame: Frame, row: number): string {
 
 export function hasFlag(value: number, flag: number): boolean {
   return (value & flag) !== 0;
+}
+
+/** Whether lane `lane` carries an edge into `row` from the rows above it. */
+export function laneOpenAt(frame: Frame, row: number, lane: number): boolean {
+  if (lane >= 32) return false;
+  const mask = frame.open[row];
+  return mask !== undefined && (mask & (1 << lane)) !== 0;
 }

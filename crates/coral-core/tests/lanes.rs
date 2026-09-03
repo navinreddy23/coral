@@ -142,3 +142,74 @@ fn a_lane_handed_to_a_later_parent_is_not_freed_from_under_it() {
         }
     }
 }
+
+/// True when `lane` holds a reservation made above row `i` that row `i` has not yet consumed.
+///
+/// The definition the wire format's open mask must satisfy, derived here by scanning the whole
+/// history so it cannot share a bug with the incremental version the assigner keeps.
+fn reserved_entering(rows: &[coral_core::graph::RowTopology], i: usize, lane: u16) -> bool {
+    rows[..i].iter().enumerate().any(|(j, r)| {
+        r.parent_lanes.contains(&lane) && rows[j + 1..i].iter().all(|k| k.lane != lane)
+    })
+}
+
+#[test]
+fn the_open_mask_names_every_lane_entering_a_row() {
+    // A renderer holding only a window of rows relies on this mask alone to know a lane is
+    // live, so it has to agree with a full scan for every shape the assigner can produce.
+    let dags: &[&[&[usize]]] = &[
+        &[&[1], &[2], &[3], &[]],
+        &[&[1, 2], &[3], &[3], &[]],
+        &[&[2], &[2], &[]],
+        &[&[1, 2, 3, 4], &[5], &[5], &[5], &[5], &[]],
+        &[&[2, 3], &[2, 3], &[4], &[4], &[]],
+    ];
+
+    for (d, dag) in dags.iter().enumerate() {
+        let mut assigner = LaneAssigner::<usize>::new();
+        let rows: Vec<_> = dag
+            .iter()
+            .enumerate()
+            .map(|(i, p)| assigner.push(&i, p))
+            .collect();
+
+        for (i, row) in rows.iter().enumerate() {
+            for lane in 0..assigner.max_width() {
+                let expected = reserved_entering(&rows, i, lane);
+                let actual = row.open & (1 << lane) != 0;
+                assert_eq!(
+                    actual, expected,
+                    "dag {d}, row {i}, lane {lane}: open mask disagrees with a full scan"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn a_lane_stays_open_across_a_long_run() {
+    // The kernel's first-parent chain runs for hundreds of thousands of rows between merges.
+    // Every row in between must report the lane as open, or the renderer draws nothing for it.
+    let mut dag: Vec<Vec<usize>> = vec![vec![1, 2]];
+    for i in 1..200 {
+        dag.push(vec![i + 1]);
+    }
+    dag.push(vec![]);
+    let refs: Vec<&[usize]> = dag.iter().map(Vec::as_slice).collect();
+
+    let mut assigner = LaneAssigner::<usize>::new();
+    let rows: Vec<_> = refs
+        .iter()
+        .enumerate()
+        .map(|(i, p)| assigner.push(&i, p))
+        .collect();
+
+    // Row 0's second parent is the final root, so its lane is held open the whole way down.
+    let held = rows[0].parent_lanes[1];
+    for (i, row) in rows.iter().enumerate().skip(1) {
+        assert!(
+            row.open & (1 << held) != 0,
+            "row {i} lost the lane reserved at row 0"
+        );
+    }
+}

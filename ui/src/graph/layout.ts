@@ -18,7 +18,7 @@ export const DEFAULT_METRICS: Metrics = {
 };
 
 /** Width of the branch and tag column, which sits left of the lanes. */
-export const REFS_COLUMN_PX = 150;
+export const REFS_COLUMN_PX = 190;
 
 /** Width of the lane column. Wider graphs scroll within it rather than pushing the message. */
 export const GRAPH_COLUMN_PX = 120;

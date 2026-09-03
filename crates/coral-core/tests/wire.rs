@@ -87,8 +87,8 @@ fn the_header_identifies_itself() {
     assert_eq!(u16::from_le_bytes(bytes[4..6].try_into().unwrap()), VERSION);
     assert_eq!(
         u16::from_le_bytes(bytes[6..8].try_into().unwrap()),
-        6,
-        "six sections"
+        7,
+        "seven sections"
     );
 }
 

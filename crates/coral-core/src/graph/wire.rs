@@ -24,6 +24,8 @@ pub mod section {
     pub const PARENT_LANE: u32 = 5;
     /// Object ids packed end to end, `hash_len` bytes each.
     pub const OID: u32 = 6;
+    /// Per-row bitmask of lanes running through the row; see [`super::lanes::RowTopology::open`].
+    pub const OPEN: u32 = 7;
 }
 
 /// Frame-level flags.
@@ -58,10 +60,12 @@ pub fn encode(store: &RowStore, start: u32, hash_len: usize) -> Vec<u8> {
 
     let mut edges: u32 = 0;
     parent_start.extend_from_slice(&edges.to_le_bytes());
+    let mut open = Vec::with_capacity(rows as usize * 4);
     let mut provisional = rows > 0;
 
     for row in start..end {
         lane.extend_from_slice(&store.lane(row).unwrap_or_default().to_le_bytes());
+        open.extend_from_slice(&store.open(row).to_le_bytes());
         let f = store.flags(row);
         row_flags.push(f);
         provisional &= f & flags::PROVISIONAL != 0;
@@ -91,6 +95,7 @@ pub fn encode(store: &RowStore, start: u32, hash_len: usize) -> Vec<u8> {
         (section::PARENT_START, parent_start, rows + 1),
         (section::PARENT_LANE, parent_lane, edges),
         (section::OID, oids, rows),
+        (section::OPEN, open, rows),
     ];
 
     let mut header_flags = 0_u8;
@@ -161,6 +166,7 @@ pub struct Frame {
     pub parent_start: Vec<u32>,
     pub parent_lanes: Vec<u16>,
     pub oids: Vec<u8>,
+    pub open: Vec<u32>,
 }
 
 /// Decodes a frame, mirroring the TypeScript reader exactly.
@@ -193,6 +199,7 @@ pub fn decode(buf: &[u8]) -> Result<Frame, String> {
         parent_start: Vec::new(),
         parent_lanes: Vec::new(),
         oids: Vec::new(),
+        open: Vec::new(),
     };
 
     for i in 0..section_count {
@@ -245,6 +252,14 @@ pub fn decode(buf: &[u8]) -> Result<Frame, String> {
                     .collect();
             }
             section::OID => frame.oids = payload.to_vec(),
+            section::OPEN => {
+                frame.open = payload
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|c| u32::from_le_bytes(*c))
+                    .collect();
+            }
             other => return Err(format!("unknown section {other}")),
         }
     }

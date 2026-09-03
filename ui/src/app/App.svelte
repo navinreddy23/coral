@@ -9,7 +9,7 @@
     REFS_COLUMN_PX,
     spacerHeight,
   } from '../graph/layout';
-  import { initialRepo, open } from '../ipc/commands';
+  import { initialRepo, open, pickRepository } from '../ipc/commands';
   import { GraphState } from '../state/graph.svelte';
   import { RefsState } from '../state/refs.svelte';
   import { ThemeState } from '../state/theme.svelte';
@@ -172,7 +172,7 @@
   });
 
   async function openAnother() {
-    const path = window.prompt('Repository path');
+    const path = await pickRepository();
     if (path) await tabs.open(path);
   }
 
@@ -336,7 +336,7 @@
 {/if}
 
 <style>
-  :root { --refs-col: 150px; --graph-col: 120px; }
+  :root { --refs-col: 190px; --graph-col: 120px; }
   main { display: flex; flex-direction: column; height: 100%; }
   header {
     display: flex; align-items: center; gap: var(--space-3);
@@ -361,7 +361,7 @@
   .muted { padding: var(--space-4); color: var(--fg-2); }
 
   .body { display: flex; flex: 1; min-height: 0; }
-  .graph { flex: 1; overflow-y: auto; position: relative; }
+  .graph { flex: 1; overflow-y: auto; position: relative; background: var(--bg-0); }
 
   /* Column headers, matching the row grid below so the two cannot drift apart. */
   .columns, .row, .wip {
@@ -400,8 +400,20 @@
     border: 0; background: none; font-family: inherit; text-align: left;
   }
   .wip { position: sticky; top: 22px; z-index: 1; cursor: pointer; background: var(--bg-0); }
-  .row:hover, .wip:hover { background: var(--bg-1); }
-  .row.selected, .wip.selected { background: var(--accent-soft); }
+  .row:hover .cell.message, .wip:hover { background: var(--bg-1); }
+  .row.selected .cell.message, .wip.selected { background: var(--accent-soft); }
+  /*
+   * The text columns paint an opaque background of their own. Over a transparent composited
+   * layer WebKit drops from subpixel to grayscale antialiasing, which reads as soft — and
+   * these rows sit above a canvas, which is what promotes the layer. The lane column stays
+   * transparent so the canvas shows through it.
+   */
+  .cell.message, .cell.refs { background: var(--bg-0); }
+  .cell.message {
+    border-radius: 3px; padding: 0 var(--space-2);
+    /* The row's own height, so the highlight is a band rather than a floating pill. */
+    height: 100%;
+  }
   /* The whole row is the target; a button laid over it keeps that keyboard-reachable without
      nesting interactive elements inside one another. */
   .hit {
@@ -409,14 +421,15 @@
     background: none; border: 0; padding: 0; margin: 0; cursor: pointer;
   }
   .cell { min-width: 0; display: flex; align-items: center; gap: var(--space-2); }
-  .cell.refs { justify-content: flex-end; padding-right: var(--space-2); }
+  /* Pills are clipped to their own column rather than spilling over the lanes. */
+  .cell.refs { justify-content: flex-end; padding-right: var(--space-2); overflow: hidden; }
   .cell.message { gap: var(--space-3); }
 
   .pill {
-    flex: 0 0 auto; font-size: 11px; line-height: 1.5; padding: 0 var(--space-2);
+    flex: 0 1 auto; min-width: 0; font-size: 11px; line-height: 1.5; padding: 0 var(--space-2);
     border-radius: 3px; border: 1px solid var(--border);
     background: var(--bg-2); color: var(--fg-1);
-    max-width: 9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 11em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .pill.head { border-color: var(--accent); color: var(--accent); font-weight: 600; }
   .pill.more { color: var(--fg-2); }

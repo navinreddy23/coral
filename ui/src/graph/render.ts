@@ -90,10 +90,15 @@ export function drawLanes(
 }
 
 /**
+ * Vertical runs for lanes crossing the window.
+ *
  * A lane reserved for a parent stays occupied from the child's row until the parent's own, and
- * exactly one commit is drawn in it over that span. So a vertical run ends at precisely the
- * row whose own lane matches, which the client derives by scanning forward — which is why the
- * frame carries no "lanes ending here" list.
+ * on a repository the size of the kernel that span is routinely hundreds of thousands of rows.
+ * The child that opened it is almost never on screen, so the run cannot be discovered by
+ * scanning the window: it is seeded from the frame's per-row open mask, which says exactly
+ * which lanes carry an edge into the first visible row. Scanning alone drew a lane only
+ * between two commits that happened to be visible together, which broke the graph into
+ * disconnected fragments wherever a branch ran longer than the viewport.
  */
 function drawThroughLanes(
   ctx: CanvasRenderingContext2D,
@@ -103,44 +108,59 @@ function drawThroughLanes(
   colours: string[],
   first: number,
 ): void {
-  const open = new Map<number, number>(); // lane -> row where the run started
+  const half = metrics.rowHeight / 2;
+  const topY = rowY(window.first, first, metrics) - half;
+  const bottomY = rowY(window.last, first, metrics) + half;
 
-  for (let row = window.first; row <= window.last + 1; row++) {
+  // lane -> the y it has been running from. Lanes already open above the window start at its
+  // top edge, since their opening commit is off screen.
+  const open = new Map<number, number>();
+  const entering = frame.open[window.first - frame.startRow] ?? 0;
+  for (let lane = 0; lane < 32; lane++) {
+    if ((entering & (1 << lane)) !== 0) open.set(lane, topY);
+  }
+
+  for (let row = window.first; row <= window.last; row++) {
     const local = row - frame.startRow;
     if (local < 0 || local >= frame.rowCount) continue;
 
+    // A run ends at precisely the row drawn in its lane.
     const lane = frame.lanes[local];
-    if (lane !== undefined && open.has(lane)) {
-      const from = open.get(lane) ?? row;
-      strokeVertical(ctx, lane, from, row, metrics, colours, first);
-      open.delete(lane);
+    const nodeY = rowY(row, first, metrics);
+    if (lane !== undefined) {
+      const from = open.get(lane);
+      if (from !== undefined) {
+        strokeVertical(ctx, lane, from, nodeY, metrics, colours);
+        open.delete(lane);
+      }
     }
+    // The edge pass has already drawn this row's own descent into each parent lane, so the
+    // run picks up from the next row's centre. A lane already open is one an earlier child
+    // reserved; its run is continuous and must keep its original start.
     for (const parentLane of parentLanesOf(frame, local)) {
-      if (!open.has(parentLane)) open.set(parentLane, row);
+      if (!open.has(parentLane)) open.set(parentLane, rowY(row + 1, first, metrics));
     }
   }
 
-  // Runs that leave the bottom of the window continue past it.
   for (const [lane, from] of open) {
-    strokeVertical(ctx, lane, from, window.last + 1, metrics, colours, first);
+    strokeVertical(ctx, lane, from, bottomY, metrics, colours);
   }
 }
 
 function strokeVertical(
   ctx: CanvasRenderingContext2D,
   lane: number,
-  fromRow: number,
-  toRow: number,
+  fromY: number,
+  toY: number,
   metrics: Metrics,
   colours: string[],
-  first: number,
 ): void {
-  if (toRow <= fromRow + 1) return;
+  if (toY <= fromY) return;
   const x = laneX(lane, metrics);
   ctx.strokeStyle = laneColour(lane, colours);
   ctx.beginPath();
-  ctx.moveTo(x, rowY(fromRow + 1, first, metrics));
-  ctx.lineTo(x, rowY(toRow, first, metrics));
+  ctx.moveTo(x, fromY);
+  ctx.lineTo(x, toY);
   ctx.stroke();
 }
 
