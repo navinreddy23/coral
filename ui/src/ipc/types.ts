@@ -328,6 +328,27 @@ modeChanged: boolean, };
 export type Step = "pick" | "reword" | "edit" | "squash" | "fixup" | "drop";
 
 /**
+ * A submodule declared in `.gitmodules`.
+ */
+export type Submodule = { 
+/**
+ * The `.gitmodules` subsection name, which need not match the path.
+ */
+name: string, 
+/**
+ * Slash-separated and relative to the worktree root, as git records it.
+ */
+path: string, url: string, 
+/**
+ * The commit the superproject pins, absent when the path is not a gitlink in the index.
+ */
+pinned: string | null, 
+/**
+ * True once the submodule has been cloned; only then can it be opened.
+ */
+initialised: boolean, };
+
+/**
  * A rebase todo list, in the order the commits will be replayed.
  *
  * Note that this is the reverse of how the graph shows them: git replays oldest first, while

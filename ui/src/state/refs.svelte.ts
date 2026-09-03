@@ -1,10 +1,7 @@
-import { invoke } from '@tauri-apps/api/core';
+import { repoRefs, repoSubmodules, type PlacedRef } from '../ipc/commands';
+import type { Submodule } from '../ipc/types';
 
-import type { GitRef } from '../ipc/types';
-
-export interface PlacedRef extends GitRef {
-  row: number | null;
-}
+export type { PlacedRef };
 
 /** Refs grouped the way the sidebar shows them. */
 export interface RefGroups {
@@ -22,6 +19,7 @@ export interface RefGroups {
  */
 export class RefsState {
   all = $state<PlacedRef[]>([]);
+  submodules = $state<Submodule[]>([]);
   error = $state<string | null>(null);
 
   groups = $derived<RefGroups>({
@@ -46,10 +44,17 @@ export class RefsState {
   async load(path: string): Promise<void> {
     this.error = null;
     try {
-      this.all = await invoke<PlacedRef[]>('repo_refs', { path });
+      this.all = await repoRefs(path);
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
       this.all = [];
+    }
+    // Submodules are a separate read and a separate failure: a repository whose .gitmodules
+    // is unreadable should still show its branches.
+    try {
+      this.submodules = await repoSubmodules(path);
+    } catch {
+      this.submodules = [];
     }
   }
 }

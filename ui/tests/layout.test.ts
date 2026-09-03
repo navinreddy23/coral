@@ -115,17 +115,25 @@ describe('very tall graphs', () => {
 });
 
 describe('row placement', () => {
-  /* A scroll container reports a fractional scrollTop under trackpad scrolling, and text laid
-     out on a half-pixel renders blurry. The list is placed once at a snapped offset. */
-  it('places the list on a whole pixel however fractional the scroll offset', () => {
-    for (const scroll of [0, 0.5, 12.3333, 411.75, 9999.999]) {
-      expect(Number.isInteger(listTop(scroll)), `scroll ${scroll}`).toBe(true);
+  /* The list is absolutely positioned inside the scroller, so what reaches the screen is
+     `listTop(scrollTop) - scrollTop`. A scroll container reports a fractional scrollTop under
+     trackpad and fractional display scaling, and text laid out on a half pixel renders
+     blurry — so that difference has to be zero, not merely small. */
+  const fractional = [0, 0.5, 12.3333, 411.75, 9999.999, 1e6 + 0.4];
+
+  it('puts the list exactly on the top of the viewport', () => {
+    for (const scroll of fractional) {
+      expect(listTop(scroll) - scroll, `scroll ${scroll}`).toBe(0);
     }
   });
 
-  it('does not drift from the scroll offset by more than half a pixel', () => {
-    for (const scroll of [0.5, 12.3333, 411.75]) {
-      expect(Math.abs(listTop(scroll) - scroll)).toBeLessThanOrEqual(0.5);
+  it('lands every row on a whole multiple of the row height', () => {
+    const { rowHeight } = DEFAULT_METRICS;
+    for (const scroll of fractional) {
+      for (const index of [0, 1, 17, 500]) {
+        const onScreen = listTop(scroll) - scroll + index * rowHeight;
+        expect(onScreen % 1, `scroll ${scroll}, row ${index}`).toBe(0);
+      }
     }
   });
 });

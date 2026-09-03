@@ -12,16 +12,16 @@ export interface Metrics {
 
 export const DEFAULT_METRICS: Metrics = {
   rowHeight: 28,
-  laneWidth: 14,
-  laneOrigin: 12,
-  nodeRadius: 5,
+  laneWidth: 20,
+  laneOrigin: 15,
+  nodeRadius: 8,
 };
 
 /** Width of the branch and tag column, which sits left of the lanes. */
 export const REFS_COLUMN_PX = 190;
 
 /** Width of the lane column. Wider graphs scroll within it rather than pushing the message. */
-export const GRAPH_COLUMN_PX = 120;
+export const GRAPH_COLUMN_PX = 170;
 
 export function laneX(lane: number, m: Metrics): number {
   return m.laneOrigin + lane * m.laneWidth;
@@ -77,15 +77,19 @@ export function firstRowFor(
 }
 
 /**
- * Where the row list sits, in whole pixels.
+ * Where the row list sits inside the scroller.
  *
- * A scroll container reports a fractional `scrollTop` under trackpad and smooth scrolling, and
- * text laid out on a half-pixel is rendered blurry — noticeably so at 12px. The list is placed
- * once at this offset and its rows stack inside it, so this is the only value that has to be
- * snapped.
+ * Exactly `scrollTop`, and deliberately not rounded. The list is absolutely positioned in the
+ * scrolling content, so what reaches the screen is `top - scrollTop`: pinning it to the raw
+ * offset puts it at exactly zero, and every row below it on a whole multiple of the row
+ * height. Rounding here is what *causes* blurred text — a scroll container reports a
+ * fractional `scrollTop` under trackpad and fractional display scaling, and `round(scrollTop)
+ * - scrollTop` then lands the whole list, text and all, up to half a pixel off the grid.
+ *
+ * Which rows to draw comes from `firstRowFor`, so nothing here changes what is on screen.
  */
 export function listTop(scrollTop: number): number {
-  return Math.round(scrollTop);
+  return scrollTop;
 }
 
 /** Which rows are visible, plus a screen of overscan on each side. */

@@ -1,10 +1,14 @@
 <script lang="ts">
+  import type { Submodule } from '../ipc/types';
   import type { PlacedRef, RefGroups } from '../state/refs.svelte';
 
-  const { groups, head, onSelect }: {
+  const { groups, head, submodules, onSelect, onOpenSubmodule }: {
     groups: RefGroups;
     head: string | null;
+    submodules: Submodule[];
     onSelect: (row: number) => void;
+    /** Opens a submodule's working copy in its own tab. */
+    onOpenSubmodule: (path: string) => void;
   } = $props();
 
   let filter = $state('');
@@ -22,8 +26,13 @@
     return q ? refs.filter((r) => r.short.toLowerCase().includes(q)) : refs;
   }
 
+  const matchingSubmodules = $derived.by(() => {
+    const q = filter.trim().toLowerCase();
+    return q ? submodules.filter((s) => s.path.toLowerCase().includes(q)) : submodules;
+  });
+
   // Section order follows the reference's left panel: Local, Remote, Stashes, then Tags.
-  // Gitflow, pull requests, issues, submodules and actions come with their milestones.
+  // Gitflow, pull requests, issues and actions come with their milestones.
   const sections = $derived([
     { key: 'local', title: 'Local', icon: '🖿', refs: shown(groups.local) },
     { key: 'remote', title: 'Remote', icon: '☁', refs: shown(groups.remote) },
@@ -73,6 +82,36 @@
       {/if}
     </section>
   {/each}
+
+  {#if submodules.length > 0}
+    <section>
+      <button class="head" onclick={() => (collapsed['submodules'] = !collapsed['submodules'])}>
+        <span class="caret">{collapsed['submodules'] ? '›' : '⌄'}</span>
+        <span class="icon" aria-hidden="true">◱</span>
+        Submodules
+        <span class="count">{matchingSubmodules.length}</span>
+      </button>
+      {#if !collapsed['submodules']}
+        <ul>
+          {#each matchingSubmodules as sub (sub.path)}
+            <li>
+              <button
+                class="ref"
+                disabled={!sub.initialised}
+                onclick={() => onOpenSubmodule(sub.path)}
+                title={sub.initialised
+                  ? `${sub.url || sub.name}\nOpen in a new tab`
+                  : `${sub.url || sub.name}\nNot initialised — run git submodule update --init`}
+              >
+                <span class="tick" aria-hidden="true">{sub.initialised ? '✓' : '·'}</span>
+                {sub.path}
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
+  {/if}
 </aside>
 
 <style>

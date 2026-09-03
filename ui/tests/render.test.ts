@@ -40,6 +40,18 @@ function recorder(): { ctx: CanvasRenderingContext2D; segments: Segment[] } {
     bezierCurveTo() {
       pending = null;
     },
+    /**
+     * The rounded corner an edge turns through when it changes lane. The arc ends on the
+     * segment towards the second point, `radius` away from the corner, which is where the
+     * straight run that follows it starts.
+     */
+    arcTo(cx: number, cy: number, x: number, y: number, radius: number) {
+      const dx = x - cx;
+      const dy = y - cy;
+      const len = Math.hypot(dx, dy) || 1;
+      at = { x: cx + (dx / len) * radius, y: cy + (dy / len) * radius };
+      pending = null;
+    },
     arc() {
       pending = null;
     },

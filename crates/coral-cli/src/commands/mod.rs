@@ -9,5 +9,6 @@ pub mod refs;
 pub mod remote;
 pub mod stage;
 pub mod status;
+pub mod submodule;
 pub mod version;
 pub mod write;

@@ -36,6 +36,7 @@ fn main() {
             graph::graph_frame,
             graph::row_metadata,
             graph::repo_refs,
+            graph::repo_submodules,
             graph::commit_detail,
             tabs::session_get,
             tabs::tab_open,

@@ -58,22 +58,33 @@
       <pre class="body">{detail.commit.body}</pre>
     {/if}
 
+    <!--
+      Exactly one dd per dt. The grid places items in order, so a second dd for the same term
+      flows back into the label column and its content — an unbreakable object id — sets that
+      column's width, leaving nothing for the values.
+    -->
     <dl>
       <dt>Author</dt>
-      <dd>{detail.commit.author.name} &lt;{detail.commit.author.email}&gt;</dd>
-      <dd class="muted">{absolute(detail.commit.author.time)}</dd>
+      <dd>
+        {detail.commit.author.name} &lt;{detail.commit.author.email}&gt;
+        <span class="when">{absolute(detail.commit.author.time)}</span>
+      </dd>
       {#if rewritten}
         <dt>Committer</dt>
-        <dd>{detail.commit.committer.name} &lt;{detail.commit.committer.email}&gt;</dd>
-        <dd class="muted">{absolute(detail.commit.committer.time)}</dd>
+        <dd>
+          {detail.commit.committer.name} &lt;{detail.commit.committer.email}&gt;
+          <span class="when">{absolute(detail.commit.committer.time)}</span>
+        </dd>
       {/if}
       <dt>Commit</dt>
       <dd class="mono break">{detail.commit.oid}</dd>
       {#if detail.commit.parents.length > 0}
         <dt>{detail.commit.parents.length > 1 ? 'Parents' : 'Parent'}</dt>
-        {#each detail.commit.parents as parent (parent)}
-          <dd class="mono">{parent.slice(0, 12)}</dd>
-        {/each}
+        <dd class="mono">
+          {#each detail.commit.parents as parent (parent)}
+            <span class="parent">{parent.slice(0, 12)}</span>
+          {/each}
+        </dd>
       {/if}
     </dl>
 
@@ -127,14 +138,19 @@
     white-space: pre-wrap; word-break: break-word; color: var(--fg-1);
   }
   dl {
-    display: grid; grid-template-columns: max-content minmax(0, 1fr);
-    gap: 2px var(--space-3); margin: 0;
+    display: grid;
+    /* Capped rather than max-content: the label column must never be able to squeeze the
+       values out, however long a term the panel is asked to show. */
+    grid-template-columns: fit-content(35%) minmax(0, 1fr);
+    gap: var(--space-2) var(--space-3); margin: 0;
   }
   dt { color: var(--fg-2); }
   /* An address or an object id has no space to break at, so it would otherwise run past the
      panel edge and be clipped rather than wrapping. */
   dd { margin: 0; min-width: 0; color: var(--fg-1); overflow-wrap: anywhere; }
   dd.break { word-break: break-all; }
+  .when { display: block; color: var(--fg-2); }
+  .parent { display: block; }
   .muted { color: var(--fg-2); }
   .error { color: var(--danger); }
   .filebar {

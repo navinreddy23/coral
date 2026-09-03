@@ -10,10 +10,12 @@
    * origin rather than deriving its own, so a lane node cannot sit a row away from the text it
    * belongs to.
    */
-  const { frame, firstRow = 0, height = 400 }: {
+  const { frame, firstRow = 0, height = 400, initials = () => null }: {
     frame: Frame | null;
     firstRow?: number;
     height?: number;
+    /** Author initials for a row, or null while its metadata is still loading. */
+    initials?: (row: number) => string | null;
   } = $props();
 
   let canvas: HTMLCanvasElement;
@@ -52,13 +54,14 @@
       first: firstRow,
       last: Math.min(frame.rowCount - 1, firstRow + perScreen + 2),
     };
-    drawLanes(ctx, frame, win, metrics, colours, width, height, background);
+    drawLanes(ctx, frame, win, metrics, colours, width, height, background, initials);
   }
 
   $effect(() => {
     // Reading these registers the dependency, so any change repaints.
     void frame;
     void firstRow;
+    void initials;
     void height;
     void colours;
     void background;

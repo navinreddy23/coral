@@ -268,6 +268,8 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t = commands::refs::Kind::All)]
         kind: commands::refs::Kind,
     },
+    /// List submodules.
+    Submodules,
     /// Walk the commit graph and report rows with their lanes.
     Graph {
         /// Stop after this many commits. Note that this does not make a topological walk
@@ -370,6 +372,7 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
             output::render(&commands::blame::run(repo, &rev, &file).await)
         }
         Command::Refs { kind } => output::render(&commands::refs::run(repo, kind).await),
+        Command::Submodules => output::render(&commands::submodule::run(repo).await),
         Command::Graph {
             limit,
             from,

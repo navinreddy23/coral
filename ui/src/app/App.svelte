@@ -1,6 +1,7 @@
 <script lang="ts">
   import { hasFlag, oidOf, RowFlag, type Frame } from '../graph/frame';
   import GraphCanvas from '../graph/GraphCanvas.svelte';
+  import { initialsOf } from '../graph/initials';
   import {
     DEFAULT_METRICS,
     firstRowFor,
@@ -176,6 +177,18 @@
     if (path) await tabs.open(path);
   }
 
+  /**
+   * Opens a submodule in its own tab.
+   *
+   * A submodule is a repository in its own right, so it gets a tab rather than a mode of this
+   * one; joining with the parent's path keeps it working when the parent was opened relatively.
+   */
+  async function openSubmodule(relative: string) {
+    const parent = tabs.active?.path;
+    if (!parent) return;
+    await tabs.open(`${parent.replace(/\/+$/u, '')}/${relative}`);
+  }
+
   /** Rows currently worth putting in the DOM. Never the whole graph. */
   function windowRows(frame: Frame | null): number[] {
     if (!frame) return [];
@@ -189,6 +202,19 @@
 
 
   const rows = $derived(windowRows(graph.frame));
+
+  /**
+   * Reading `graph.meta` here rather than inside the canvas keeps the redraw reactive: the
+   * identity of this function changes whenever a metadata block lands, which is the signal the
+   * canvas repaints on.
+   */
+  const nodeInitials = $derived.by(() => {
+    const meta = graph.meta;
+    return (row: number) => {
+      const author = meta.get(row)?.author;
+      return author === undefined ? null : initialsOf(author);
+    };
+  });
 
 
   // Only rows that are on screen are worth an object read.
@@ -262,7 +288,13 @@
   {:else if graph.frame}
     <div class="body">
     {#if showSidebar}
-      <Sidebar groups={refs.groups} head={headName} onSelect={reveal} />
+      <Sidebar
+        groups={refs.groups}
+        head={headName}
+        submodules={refs.submodules}
+        onSelect={reveal}
+        onOpenSubmodule={openSubmodule}
+      />
     {/if}
     <div
       class="graph"
@@ -290,7 +322,12 @@
         style:height="{spacerHeight(graph.frame.rowCount, DEFAULT_METRICS)}px"
       >
         <div class="lanes" style:top="{listTop(scrollTop)}px">
-          <GraphCanvas frame={graph.frame} firstRow={rows[0] ?? 0} height={viewport} />
+          <GraphCanvas
+            frame={graph.frame}
+            firstRow={rows[0] ?? 0}
+            height={viewport}
+            initials={nodeInitials}
+          />
         </div>
         <ul class="rows" style:top="{listTop(scrollTop)}px">
           {#each rows as row (row)}
@@ -336,7 +373,7 @@
 {/if}
 
 <style>
-  :root { --refs-col: 190px; --graph-col: 120px; }
+  :root { --refs-col: 190px; --graph-col: 170px; }
   main { display: flex; flex-direction: column; height: 100%; }
   header {
     display: flex; align-items: center; gap: var(--space-3);

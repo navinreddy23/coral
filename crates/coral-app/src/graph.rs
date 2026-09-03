@@ -181,3 +181,18 @@ pub fn binary_self_test() -> tauri::ipc::Response {
         .collect();
     tauri::ipc::Response::new(bytes)
 }
+
+/// The repository's submodules, for the sidebar.
+///
+/// # Errors
+/// Propagates git failures. A repository without a `.gitmodules` yields an empty list rather
+/// than an error.
+#[tauri::command]
+pub async fn repo_submodules(
+    path: String,
+) -> Result<Vec<coral_core::submodule::Submodule>, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc.submodules(&runner).await?)
+}

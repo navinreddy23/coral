@@ -1,4 +1,4 @@
-import { hasFlag, parentLanesOf, RowFlag, type Frame } from './frame';
+import { parentLanesOf, type Frame } from './frame';
 import { laneColour, laneX, rowY, type Metrics, type Window } from './layout';
 
 /**
@@ -18,6 +18,7 @@ export function drawLanes(
   width: number,
   height: number,
   background: string,
+  initials: (row: number) => string | null = () => null,
 ): void {
   ctx.clearRect(0, 0, width, height);
   // An even width centred on an integer coordinate covers whole pixels; 1.5px straddles two
@@ -49,10 +50,12 @@ export function drawLanes(
         // covers the rest of it.
         ctx.lineTo(x1, y1);
       } else {
-        // An immediate join: leave this lane at this row and arrive in the parent's by the
-        // next, then run straight down.
-        const midY = (y0 + y1) / 2;
-        ctx.bezierCurveTo(x0, midY, x1, midY, x1, y1);
+        // A right-angled elbow with a rounded corner, as the reference draws it: the edge
+        // leaves the node horizontally on the node's own row, turns through a short arc, and
+        // runs straight down the parent's lane. A bezier spread over the row instead reads as
+        // a lazy diagonal and makes it hard to tell which lane a line ended up in.
+        ctx.arcTo(x1, y0, x1, y1, cornerRadius(metrics));
+        ctx.lineTo(x1, y1);
       }
       ctx.stroke();
     }
@@ -61,32 +64,47 @@ export function drawLanes(
   // Vertical runs for lanes that pass through a row without a node in it.
   drawThroughLanes(ctx, frame, window, metrics, colours, first);
 
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `600 ${metrics.nodeRadius}px system-ui, sans-serif`;
+
   for (let row = window.first; row <= window.last; row++) {
     const local = rowOf(row);
     if (local < 0 || local >= frame.rowCount) continue;
 
     const lane = frame.lanes[local];
-    const flags = frame.rowFlags[local];
-    if (lane === undefined || flags === undefined) continue;
+    if (lane === undefined) continue;
 
     const x = laneX(lane, metrics);
     const y = rowY(row, first, metrics);
-    const colour = laneColour(lane, colours);
 
-    // An ordinary commit is a ring and a merge is filled, which is how the reference
-    // distinguishes them at a glance without needing a legend.
+    // The node is the author's badge: a disc in the lane's colour carrying their initials. It
+    // is drawn at full size whether or not the row's metadata has arrived, so a node does not
+    // change size under the pointer as a scroll settles. Merges are left unmarked — the two
+    // edges leaving the node already say it, and a second ring only crowds the letters.
     ctx.beginPath();
     ctx.arc(x, y, metrics.nodeRadius, 0, Math.PI * 2);
-    if (hasFlag(flags, RowFlag.Merge)) {
-      ctx.fillStyle = colour;
-      ctx.fill();
-    } else {
+    ctx.fillStyle = laneColour(lane, colours);
+    ctx.fill();
+
+    const label = initials(row);
+    if (label !== null) {
+      // Lane colours are tuned to 5.5:1 against the page, and contrast is symmetric, so the
+      // page colour reads back on top of them.
       ctx.fillStyle = background;
-      ctx.fill();
-      ctx.strokeStyle = colour;
-      ctx.stroke();
+      ctx.fillText(label, x, y + 0.5);
     }
   }
+}
+
+/**
+ * Radius of the turn where an edge changes lane.
+ *
+ * A third of the lane pitch, matching the reference: large enough to read as a curve rather
+ * than a mitre, small enough that the horizontal and vertical runs either side stay obvious.
+ */
+function cornerRadius(m: Metrics): number {
+  return Math.min(m.laneWidth, m.rowHeight) / 3;
 }
 
 /**

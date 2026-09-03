@@ -16,6 +16,7 @@ pub mod remote;
 pub mod repo;
 pub mod sequence;
 pub mod status;
+pub mod submodule;
 pub mod undo;
 pub mod watch;
 

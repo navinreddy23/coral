@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import type { RepoInfo } from './types';
+import type { GitRef, Submodule, RepoInfo } from './types';
 
 /**
  * The only module that calls `invoke`. Types come from `types.ts`, which Rust generates via
@@ -29,4 +29,19 @@ export async function pickRepository(): Promise<string | null> {
     title: 'Open a repository',
   });
   return typeof chosen === 'string' ? chosen : null;
+}
+
+/** A ref together with the graph row it labels, or null when that commit is not in the walk. */
+export interface PlacedRef extends GitRef {
+  row: number | null;
+}
+
+/** Every ref, each already resolved to the graph row it labels. */
+export function repoRefs(path: string): Promise<PlacedRef[]> {
+  return invoke<PlacedRef[]>('repo_refs', { path });
+}
+
+/** The repository's submodules. Empty for a repository that declares none. */
+export function repoSubmodules(path: string): Promise<Submodule[]> {
+  return invoke<Submodule[]>('repo_submodules', { path });
 }
