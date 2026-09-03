@@ -39,6 +39,8 @@ ts-rs     = "12.0.1"
 tauri     = "2.11.5"
 tauri-build = "2.6.3"
 tauri-plugin-dialog = "2.7.3"
+# Matches the version tauri 2.11 hands back from `PlatformWebview::inner`.
+webkit2gtk = "2.0.2"
 libc      = "0.2"
 tempfile  = "3"
 
