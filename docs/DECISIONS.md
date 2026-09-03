@@ -179,3 +179,12 @@ debug string.
 JS sets `customProtocolIpcFailed` permanently and falls back to `postMessage`, which serializes
 `Vec<u8>` as a JSON array of numbers. That degradation is silent and roughly 100× slower, so
 M5 must assert a known-size binary round trip at startup and fail loudly.
+
+## The release binary comes from `cargo tauri build`, never `cargo build --release`
+
+The frontend is embedded by the Tauri CLI's build step. A plain `cargo build --release -p
+coral-app` compiles without complaint and produces a binary that starts, opens its window, and
+never loads a page — no IPC call is ever made, so there is nothing in the log to explain it.
+
+Verified both ways against the same freshly built `ui/dist`, so it is the command and not a
+stale embed. `just build` is the sanctioned path.

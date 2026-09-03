@@ -70,6 +70,8 @@ function answers(over: Record<string, unknown> = {}): Record<string, unknown> {
       interactive: false,
     },
     repo_conflicts: [],
+    hosting_status: { host: null, detail: 'no remotes', signedIn: false },
+    hosting_pull_requests: [],
     session_get: { tabs: [{ id: 1, path: REPO, group: null }], active: 1, groups: [] },
     tab_open: { tabs: [{ id: 1, path: REPO, group: null }], active: 1, groups: [] },
     tab_activate: { tabs: [{ id: 1, path: REPO, group: null }], active: 1, groups: [] },
@@ -160,6 +162,16 @@ describe('the shell', () => {
     });
     await waitFor(() => {
       if (container.querySelector('.panel input')) throw new Error('palette still open');
+    });
+  });
+
+  it('asks about the host when a repository opens', async () => {
+    // Not awaited during open — a slow or unreachable host must not hold up the window — so
+    // the only thing that says it happened is that the call was made at all.
+    await shell();
+    await waitFor(() => {
+      const asked = invoke.mock.calls.some(([cmd]) => cmd === 'hosting_status');
+      if (!asked) throw new Error('never asked about the host');
     });
   });
 

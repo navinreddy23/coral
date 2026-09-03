@@ -47,6 +47,10 @@ bindings-drift: test
 dev:
     cd crates/coral-app && cargo tauri dev
 
+# Builds the shippable application. Note that `cargo build --release -p coral-app` does NOT:
+# the frontend is embedded by the Tauri CLI's build step, and a plain cargo release build
+# produces a binary that starts, opens a window, and never loads a page. Verified both ways,
+# with the same freshly built ui/dist in place.
 build:
     #!/usr/bin/env bash
     set -euo pipefail

@@ -56,6 +56,7 @@ async fn host_of(path: &str) -> Result<HostView, IpcError> {
 /// Propagates git failures. An unrecognised host is reported in the result, not raised.
 #[tauri::command]
 pub async fn hosting_status(path: String) -> Result<HostView, IpcError> {
+    tracing::info!(path, "hosting_status");
     host_of(&path).await
 }
 
@@ -91,6 +92,7 @@ pub async fn hosting_logout(path: String) -> Result<HostView, IpcError> {
 /// an expired token says so rather than showing an empty list.
 #[tauri::command]
 pub async fn hosting_pull_requests(path: String) -> Result<Vec<PullRequest>, IpcError> {
+    tracing::info!(path, "hosting_pull_requests");
     let view = host_of(&path).await?;
     let host = view.host.as_ref().ok_or_else(|| no_host(&view))?;
     let secret = token::load(host).map_err(|e| refused(&e))?.ok_or_else(|| {
