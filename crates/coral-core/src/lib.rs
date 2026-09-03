@@ -11,6 +11,7 @@ pub mod ops;
 pub mod process;
 pub mod refs;
 pub mod repo;
+pub mod sequence;
 pub mod status;
 pub mod undo;
 pub mod watch;

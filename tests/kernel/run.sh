@@ -4,7 +4,12 @@
 #
 # Scenarios are added as the engine gains the operations they need; each one that is not yet
 # implemented reports SKIP rather than silently passing.
-set -euo pipefail
+set -uo pipefail
+
+# Report the command that failed instead of dying silently mid-scenario. Scenarios are
+# expected to hit non-zero exits (a conflicting merge is exit 3), so `set -e` is deliberately
+# not used; each scenario checks its own outcomes.
+trap 'printf "  \033[31mERROR\033[0m line %s exited %s\n" "$LINENO" "$?" >&2' ERR
 
 REPO="${CORAL_KERNEL_REPO:-$HOME/.cache/coral-bench/linux}"
 # CI hardware is slower than a developer laptop; budgets are multiplied by this.
@@ -182,11 +187,13 @@ scenario_cherry_pick() {
     git -C "$REPO" checkout -q -B bench/pick "$old" 2>/dev/null
     local tree_before; tree_before=$(git -C "$REPO" rev-parse "HEAD^{tree}")
 
-    # A commit that touches one file, so it applies cleanly onto the older tag.
+    # A commit that *adds* a single file. Picking one that merely modifies a file conflicts
+    # whenever an earlier commit in the range touched it too, which made this scenario flaky.
     local pick
-    pick=$(git -C "$REPO" rev-list --reverse --max-count=200 "$old..$new" -- Documentation \
+    pick=$(git -C "$REPO" rev-list --reverse --max-count=400 "$old..$new" -- Documentation \
            | while read -r c; do
-               [ "$(git -C "$REPO" diff-tree --no-commit-id --name-only -r "$c" | wc -l)" = "1" ] && echo "$c" && break
+               local changes; changes=$(git -C "$REPO" diff-tree --no-commit-id --name-status -r "$c")
+               [ "$(echo "$changes" | wc -l)" = "1" ] && [ "${changes:0:1}" = "A" ] && echo "$c" && break
              done)
     if [ -z "$pick" ]; then miss "no single-file commit found in range"; return; fi
 
@@ -269,5 +276,7 @@ scenario_branching
 scenario_remotes
 scenario_abort
 
+# The summary's own non-zero exit is the result, not an error to report.
+trap - ERR
 printf '\n%d passed, %d failed, %d not yet implemented\n' "$pass" "$fail" "$skip"
 [ "$fail" -eq 0 ]

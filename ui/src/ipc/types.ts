@@ -202,3 +202,21 @@ submodule: boolean,
  * The file's mode changed even if its content did not.
  */
 modeChanged: boolean, };
+
+/**
+ * What to do with one commit during an interactive rebase.
+ */
+export type Step = "pick" | "reword" | "edit" | "squash" | "fixup" | "drop";
+
+/**
+ * A rebase todo list, in the order the commits will be replayed.
+ *
+ * Note that this is the reverse of how the graph shows them: git replays oldest first, while
+ * the UI lists newest first. The conversion happens once, here, rather than in every caller.
+ */
+export type Todo = { items: Array<TodoItem>, };
+
+/**
+ * One line of a rebase todo list.
+ */
+export type TodoItem = { step: Step, oid: string, summary: string, };
