@@ -15,6 +15,7 @@
   import { RebaseState } from '../state/rebase.svelte';
   import Palette, { type Command } from './Palette.svelte';
   import StatusBar from './StatusBar.svelte';
+  import Ask, { type Choice } from './Ask.svelte';
   import type { Action } from '../ipc/commands';
   import {
     DEFAULT_METRICS,
@@ -125,6 +126,35 @@
   const hosting = new HostingState();
   const rebase = new RebaseState();
   let showPalette = $state(false);
+
+  /**
+   * The question on screen, if any.
+   *
+   * One at a time and answered through a callback, so the flow that asked it reads top to
+   * bottom instead of being split across a component's events.
+   */
+  let question = $state<{
+    title: string;
+    detail: string;
+    placeholder: string;
+    initial: string;
+    choices: Choice[];
+    answer: (choice: string | null, text: string) => void;
+  } | null>(null);
+
+  function ask(
+    q: Omit<typeof question & object, 'answer'>,
+  ): Promise<{ choice: string | null; text: string }> {
+    return new Promise((resolve) => {
+      question = {
+        ...q,
+        answer: (choice, text) => {
+          question = null;
+          resolve({ choice, text });
+        },
+      };
+    });
+  }
   let scroller = $state<HTMLDivElement | null>(null);
 
   const headName = $derived(
@@ -222,10 +252,22 @@
       await act({ kind: 'push', remote: null, setUpstream: true });
       return;
     }
-    const how = window.prompt(`Bring ${source} into ${target}? Type "merge" or "rebase".`, 'merge');
-    if (how === null) return;
+    const { choice } = await ask({
+      title: `Bring ${source} into ${target}?`,
+      detail:
+        target === headName
+          ? ''
+          : `${target} will be checked out first, since that is the branch the work lands on.`,
+      placeholder: '',
+      initial: '',
+      choices: [
+        { id: 'merge', label: 'Merge', primary: true },
+        { id: 'rebase', label: 'Rebase' },
+      ],
+    });
+    if (choice === null) return;
     if (target !== headName) await act({ kind: 'checkout', rev: target });
-    if (how.trim().toLowerCase() === 'rebase') await act({ kind: 'rebase', onto: source });
+    if (choice === 'rebase') await act({ kind: 'rebase', onto: source });
     else await act({ kind: 'merge', rev: source });
   }
 
@@ -243,8 +285,18 @@
       case 'stash': return void act({ kind: 'stashPush', message: null });
       case 'pop': return void act({ kind: 'stashApply', index: 0, pop: true });
       case 'branch': {
-        const name = window.prompt(`New branch from ${branch ?? 'HEAD'}`)?.trim();
-        if (name) void act({ kind: 'branchCreate', name, at: null, checkout: true });
+        void (async () => {
+          const { choice, text } = await ask({
+            title: 'New branch',
+            detail: `Created at ${branch ?? 'HEAD'} and checked out.`,
+            placeholder: 'feature/…',
+            initial: '',
+            choices: [{ id: 'create', label: 'Create branch', primary: true }],
+          });
+          if (choice !== null && text !== '') {
+            await act({ kind: 'branchCreate', name: text, at: null, checkout: true });
+          }
+        })();
         return;
       }
       default:
@@ -373,6 +425,22 @@
     return (row: number) => {
       const author = meta.get(row)?.author;
       return author === undefined ? null : initialsOf(author);
+    };
+  });
+
+  /**
+   * What fixes a node's colour.
+   *
+   * The email, not the display name: the same person commits as "Linus Torvalds" and
+   * "torvalds" over a long history, and a node that changes colour partway down the graph
+   * defeats the point of colouring it.
+   */
+  const nodeAuthor = $derived.by(() => {
+    const meta = graph.meta;
+    return (row: number) => {
+      const entry = meta.get(row);
+      if (entry === undefined) return null;
+      return entry.email.trim().toLowerCase() || entry.author;
     };
   });
 
@@ -543,6 +611,7 @@
             height={viewport}
             width={panes.widths.graph}
             initials={nodeInitials}
+            author={nodeAuthor}
           />
         </div>
         <ul class="rows" style:top="{listTop(scrollTop)}px">
@@ -625,6 +694,17 @@
     />
   {/if}
 </main>
+
+{#if question}
+  <Ask
+    title={question.title}
+    detail={question.detail}
+    placeholder={question.placeholder}
+    initial={question.initial}
+    choices={question.choices}
+    onAnswer={question.answer}
+  />
+{/if}
 
 {#if rebase.open}
   <RebasePicker {rebase} onDone={reloadAll} />

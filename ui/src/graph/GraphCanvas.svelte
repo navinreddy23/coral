@@ -10,7 +10,14 @@
    * origin rather than deriving its own, so a lane node cannot sit a row away from the text it
    * belongs to.
    */
-  const { frame, firstRow = 0, height = 400, width = GRAPH_COLUMN_PX, initials = () => null }: {
+  const {
+    frame,
+    firstRow = 0,
+    height = 400,
+    width = GRAPH_COLUMN_PX,
+    initials = () => null,
+    author = () => null,
+  }: {
     frame: Frame | null;
     firstRow?: number;
     height?: number;
@@ -18,6 +25,8 @@
     width?: number;
     /** Author initials for a row, or null while its metadata is still loading. */
     initials?: (row: number) => string | null;
+    /** The author's identity, which fixes the node's colour. Null while it is loading. */
+    author?: (row: number) => string | null;
   } = $props();
 
   let canvas: HTMLCanvasElement;
@@ -57,7 +66,7 @@
       // plus its length, not its length alone.
       last: Math.min(frame.startRow + frame.rowCount - 1, firstRow + perScreen + 2),
     };
-    drawLanes(ctx, frame, win, metrics, colours, width, height, background, initials);
+    drawLanes(ctx, frame, win, metrics, colours, width, height, background, initials, author);
   }
 
   $effect(() => {
@@ -65,6 +74,7 @@
     void frame;
     void firstRow;
     void initials;
+    void author;
     void width;
     void height;
     void colours;

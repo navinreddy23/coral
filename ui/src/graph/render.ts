@@ -1,4 +1,5 @@
 import { parentLanesOf, type Frame } from './frame';
+import { authorColourIndex } from './initials';
 import { laneColour, laneX, rowY, type Metrics, type Window } from './layout';
 
 /**
@@ -19,6 +20,7 @@ export function drawLanes(
   height: number,
   background: string,
   initials: (row: number) => string | null = () => null,
+  author: (row: number) => string | null = () => null,
 ): void {
   ctx.clearRect(0, 0, width, height);
   // An even width centred on an integer coordinate covers whole pixels; 1.5px straddles two
@@ -78,19 +80,35 @@ export function drawLanes(
     const x = laneX(lane, metrics);
     const y = rowY(row, first, metrics);
 
-    // The node is the author's badge: a disc in the lane's colour carrying their initials. It
-    // is drawn at full size whether or not the row's metadata has arrived, so a node does not
-    // change size under the pointer as a scroll settles. Merges are left unmarked — the two
-    // edges leaving the node already say it, and a second ring only crowds the letters.
+    // The node is the author's badge, ringed in its lane's colour: the ring says which line
+    // the commit is on, the fill says who wrote it. Both are drawn at full size whether or not
+    // the row's metadata has arrived, so a node does not change size under the pointer as a
+    // scroll settles. Merges are left unmarked — the two edges leaving the node already say
+    // it, and a second ring only crowds the letters.
+    const who = author(row);
+    const fill =
+      who === null
+        ? laneColour(lane, colours)
+        : colours[authorColourIndex(who, colours.length)] ?? laneColour(lane, colours);
+
     ctx.beginPath();
     ctx.arc(x, y, metrics.nodeRadius, 0, Math.PI * 2);
-    ctx.fillStyle = laneColour(lane, colours);
+    ctx.fillStyle = fill;
     ctx.fill();
+
+    if (who !== null) {
+      // Only where the fill can differ from the ring is a ring worth drawing.
+      ctx.strokeStyle = laneColour(lane, colours);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, metrics.nodeRadius - 1, 0, Math.PI * 2);
+      ctx.stroke();
+    }
 
     const label = initials(row);
     if (label !== null) {
-      // Lane colours are tuned to 5.5:1 against the page, and contrast is symmetric, so the
-      // page colour reads back on top of them.
+      // Every colour in the palette is tuned to 5.5:1 against the page, and contrast is
+      // symmetric, so the page colour reads back on top of any of them.
       ctx.fillStyle = background;
       ctx.fillText(label, x, y + 0.5);
     }
