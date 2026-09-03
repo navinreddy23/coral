@@ -127,6 +127,27 @@ Not everything is block-resolvable: add/add has no base, delete/modify offers on
 delete, and binary files offer only whole-file choices. `merge-file` exits with the *number of
 conflicts*, so a non-zero exit is the normal case.
 
+## Remotes and credentials
+
+Progress is read from stderr with **carriage returns as record separators**: `--progress`
+rewrites one line rather than emitting many, so splitting on newlines would yield a single
+record at the end. Push drains stdout and stderr **concurrently** — a child that fills one pipe
+blocks, and `push --porcelain --progress` produces plenty of both.
+
+**Forcing is always `--force-with-lease`.** There is no bare `--force` in the engine or the
+CLI. The lease refuses when the remote branch has moved since we last saw it, which is exactly
+when a plain force would destroy someone else's work. A rejected ref is reported per-ref, not
+raised as an error.
+
+**SSH is left entirely to the system** — `ssh`, `ssh-agent`, `~/.ssh/config` and
+`GIT_SSH_COMMAND` are untouched. There is no embedded SSH implementation.
+
+Coral is its own **git credential helper**, so tokens never appear in a remote URL, a config
+file, or an argument list. Any process on the machine can run the coral binary, so the helper
+answers only when the nonce in its environment matches the one the running application passes
+to the git children it spawns. That check denies when either side is missing or empty. An
+unknown host answers *empty*, never an error: a failing helper aborts the whole git operation.
+
 ## Contracts
 
 - **CLI envelope** — `{"schema":1,"ok":true,"result":{…}}` or `{"schema":1,"ok":false,"error":{…}}`.
