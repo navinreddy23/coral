@@ -63,12 +63,23 @@ at the end, against a sorted lookup index built at the same time.
 Measured on the kernel: 1,481,528 rows and 1,601,455 edges build in 4.2 s into 85.8 MB, at
 60.7 bytes per row and a maximum width of 214 lanes.
 
+Every row also carries a 32-bit mask of the lanes entering it. The renderer only ever holds a
+window, so it cannot see the commit that opened a lane running to a parent half a million rows
+below; without the mask the lane went undrawn for its whole span and the graph broke into
+fragments between merges. Lanes past 31 are omitted — the column cannot show them.
+
 First paint is two-phase and that is not optional. Topological order must prepaint indegrees
 across the entire graph before it can emit one row, so a screenful costs the same as the whole
 thing — 1.5 s against a 300 ms budget. The engine paints a commit-time walk first (96 ms) with
 every row flagged provisional, then swaps in topological rows when the full walk lands. A
 `--limit` does not avoid this, which is why `coral graph --limit N` is no faster than the full
 walk while `--first-paint` is.
+
+The window fetches frames rather than the graph. `wire::encode` caps a frame at
+`ROWS_PER_FRAME`, so on the kernel one frame is 4096 of 1.48M rows: rows are absolute
+everywhere in the UI and the frame is a window into them, refetched when the visible range
+leaves it and placed with a quarter of its length above so scrolling back does not immediately
+cost a round trip.
 
 ## Reads, watching, and scheduling
 
@@ -160,6 +171,23 @@ grouping reorders members to sit together. Ids are never reused, or a stale refe
 silently address a different repository. A repository that has gone missing keeps its tab and
 is marked, rather than disappearing — a disconnected drive should not lose a workspace. A
 corrupt or hand-edited session is repaired on load rather than refused.
+
+## The window
+
+Text is antialiased by the desktop's own setting, which on Linux is usually subpixel. WebKitGTK
+renders text with grayscale antialiasing on any composited layer, and with accelerated
+compositing on that is the whole page, so the app's text alone came out visibly softer than
+everything around it. Compositing is disabled at startup through the WebKit settings object;
+`CORAL_GPU=1` puts it back. The lane canvas is a couple of hundred pixels wide and repaints on
+a frame callback, so software rasterisation costs nothing measurable.
+
+The row list is absolutely positioned inside the scroller and pinned to the raw `scrollTop`,
+never a rounded one: what reaches the screen is `top - scrollTop`, so the raw value puts it at
+exactly zero and every row on a whole multiple of the row height. Rounding is what puts the
+list half a pixel off the grid.
+
+Actions run one at a time. Two mutations at once contend for `index.lock`, and the second fails
+with a message about a lock file that says nothing about what the user did.
 
 ## Contracts
 
