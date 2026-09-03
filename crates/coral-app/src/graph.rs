@@ -37,7 +37,7 @@ impl GraphCache {
         let store = tokio::task::spawn_blocking(move || {
             let stream = GixCommitStream::open(std::path::Path::new(&owned))?;
             let opts = if first_paint {
-                StreamOpts::first_paint(u64::from(wire::ROWS_PER_FRAME))
+                StreamOpts::first_paint(StreamOpts::FIRST_PAINT_ROWS)
             } else {
                 StreamOpts::default()
             };

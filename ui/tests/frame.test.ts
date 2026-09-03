@@ -150,10 +150,13 @@ describe('paging', () => {
   const kernel = 1_481_528;
 
   it('knows which rows a frame holds', () => {
-    const frame = frameAt(4096, ROWS_PER_FRAME, kernel);
-    expect(covers(frame, 4096, 8191)).toBe(true);
-    expect(covers(frame, 4095, 4100)).toBe(false);
-    expect(covers(frame, 8191, 8192)).toBe(false);
+    // Expressed against the constant, not a number: the frame size is a tuning decision and
+    // the boundaries have to follow it.
+    const start = ROWS_PER_FRAME;
+    const frame = frameAt(start, ROWS_PER_FRAME, kernel);
+    expect(covers(frame, start, start + ROWS_PER_FRAME - 1)).toBe(true);
+    expect(covers(frame, start - 1, start + 1)).toBe(false);
+    expect(covers(frame, start + ROWS_PER_FRAME - 1, start + ROWS_PER_FRAME)).toBe(false);
     expect(covers(null, 0, 0)).toBe(false);
   });
 
@@ -161,6 +164,13 @@ describe('paging', () => {
     const start = frameStartFor(900_000, kernel);
     expect(start).toBeLessThan(900_000);
     expect(start + ROWS_PER_FRAME).toBeGreaterThan(900_000);
+  });
+
+  it('holds an ordinary repository whole, so it never pages at all', () => {
+    // Nearly every repository is smaller than one frame; paging is the exception.
+    const modest = 40_000;
+    expect(frameStartFor(modest - 1, modest)).toBe(0);
+    expect(covers(frameAt(0, modest, modest), 0, modest - 1)).toBe(true);
   });
 
   it('never asks for rows past the end of the graph', () => {

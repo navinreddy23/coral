@@ -35,6 +35,13 @@ pub struct StreamOpts {
 }
 
 impl StreamOpts {
+    /// Rows the provisional walk stops at.
+    ///
+    /// Deliberately not [`super::wire::ROWS_PER_FRAME`], which it once shared: the frame cap
+    /// exists to save round trips and the larger it grows the better, while this is on the
+    /// 300 ms first-paint budget and every row costs. A few screenfuls is all it has to cover.
+    pub const FIRST_PAINT_ROWS: u64 = 4096;
+
     /// The provisional first screen: fast, all tips, not topologically sound.
     #[must_use]
     pub fn first_paint(rows: u64) -> Self {

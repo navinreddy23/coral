@@ -163,7 +163,7 @@ export function laneOpenAt(frame: Frame, row: number, lane: number): boolean {
 }
 
 /** How many rows a frame holds, at most. Mirrors `graph::wire::ROWS_PER_FRAME` in Rust. */
-export const ROWS_PER_FRAME = 4096;
+export const ROWS_PER_FRAME = 65_536;
 
 /** Whether `frame` holds every row in `[first, last]`. */
 export function covers(frame: Frame | null, first: number, last: number): boolean {
