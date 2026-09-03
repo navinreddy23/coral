@@ -105,6 +105,28 @@ underneath uncommitted work silently changes what that work means. Restoring ref
 the worktree explicitly: checking out the branch you are already on is a no-op, so moving its
 ref underneath would otherwise leave the index describing the old commit.
 
+## Conflicts
+
+Blocks are **rebuilt from index stages 1, 2 and 3** with an explicit
+`git merge-file -p --diff3`, never parsed out of the worktree file.
+
+The worktree file is not a reliable source. Git's default conflict style merges adjacent
+conflicts into a single region and drops the base entirely; `zdiff3` produces something
+different again. What the user sees would otherwise depend on their own `merge.conflictStyle`.
+On a two-edit file git writes one region with no base, where rebuilding gives two tight
+conflicts each carrying the base.
+
+**The sides are named after refs, never "ours" and "theirs".** During a rebase those words are
+backwards: git replays your commits onto the target, so stage 2 is the branch being rebased
+*onto* and stage 3 is your own work. `SideLabels` carries a `swapped` flag so the interface can
+state this once. For the same reason `git checkout --ours` is never used to take a side — it
+applies the opposite of what the user picked during a rebase. The stage blob is written
+directly instead.
+
+Not everything is block-resolvable: add/add has no base, delete/modify offers only keep or
+delete, and binary files offer only whole-file choices. `merge-file` exits with the *number of
+conflicts*, so a non-zero exit is the normal case.
+
 ## Contracts
 
 - **CLI envelope** — `{"schema":1,"ok":true,"result":{…}}` or `{"schema":1,"ok":false,"error":{…}}`.
