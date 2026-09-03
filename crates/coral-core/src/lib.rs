@@ -7,10 +7,12 @@ pub mod error;
 pub mod graph;
 pub mod history;
 pub mod index;
+pub mod ops;
 pub mod process;
 pub mod refs;
 pub mod repo;
 pub mod status;
+pub mod undo;
 pub mod watch;
 
 #[cfg(any(test, feature = "testutil"))]

@@ -110,6 +110,23 @@ noNewline: boolean, };
 export type LineKind = "context" | "add" | "remove";
 
 /**
+ * The result of an operation that may stop for conflicts.
+ */
+export type OpOutcome = { 
+/**
+ * True when the operation finished; false when it stopped and needs resolution.
+ */
+completed: boolean, state: OpState, 
+/**
+ * Paths left unmerged, when it stopped.
+ */
+conflicts: Array<string>, 
+/**
+ * git's own explanation, when it stopped.
+ */
+message: string, };
+
+/**
  * The multi-step operation the repository is in the middle of, detected from the files git
  * leaves in the git dir rather than from porcelain.
  */

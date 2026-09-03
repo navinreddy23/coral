@@ -33,6 +33,67 @@ pub enum Command {
     Open,
     /// Report the working tree state.
     Status,
+    /// Record a commit from the staged changes.
+    Commit {
+        #[arg(short, long)]
+        message: String,
+        /// Replace the previous commit rather than adding one.
+        #[arg(long)]
+        amend: bool,
+        /// Append a Signed-off-by trailer.
+        #[arg(long)]
+        signoff: bool,
+        /// Override the author, as "Name <email>".
+        #[arg(long)]
+        author: Option<String>,
+        /// Commit even with nothing staged.
+        #[arg(long)]
+        allow_empty: bool,
+    },
+    /// Merge a revision into the current branch.
+    Merge {
+        rev: String,
+        #[arg(long, value_enum, default_value_t = commands::write::Mode::Auto)]
+        mode: commands::write::Mode,
+        #[arg(short, long)]
+        message: Option<String>,
+    },
+    /// Replay the current branch onto another.
+    Rebase {
+        onto: String,
+        /// Move branches that point into the replayed range.
+        #[arg(long)]
+        update_refs: bool,
+    },
+    /// Apply commits onto the current branch.
+    CherryPick {
+        #[arg(required = true)]
+        revs: Vec<String>,
+    },
+    /// Record commits that undo others.
+    Revert {
+        #[arg(required = true)]
+        revs: Vec<String>,
+    },
+    /// Move the current branch, and optionally the index and worktree.
+    Reset {
+        rev: String,
+        #[arg(long, value_enum, default_value_t = commands::write::Reset::Mixed)]
+        mode: commands::write::Reset,
+    },
+    /// Switch to a revision.
+    Checkout { rev: String },
+    /// Continue, abort or skip the operation in progress.
+    Op {
+        #[arg(value_enum)]
+        action: commands::write::Action,
+    },
+    /// Reverse the most recent operation.
+    Undo,
+    /// Replay the most recently undone operation.
+    Redo,
+    /// Show the undo stack.
+    Journal,
     /// Stage changes.
     Stage {
         /// Paths to stage whole.
@@ -153,27 +214,16 @@ pub async fn run(argv: Vec<OsString>) -> output::Rendered {
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let repo = cli.repo.unwrap_or(cwd);
+    dispatch(cli.command, &repo).await
+}
 
-    match cli.command {
-        Command::Open => output::render(&commands::open::run(&repo).await),
-        Command::Status => output::render(&commands::status::run(&repo).await),
-        Command::Stage {
-            paths,
-            hunk,
-            file,
-            lines,
-        } => output::render(&stage_or_unstage(&repo, paths, hunk, file, lines, D::Stage).await),
-        Command::Unstage {
-            paths,
-            hunk,
-            file,
-            lines,
-        } => output::render(&stage_or_unstage(&repo, paths, hunk, file, lines, D::Unstage).await),
-        Command::Discard { paths } => {
-            output::render(&commands::stage::discard(&repo, &paths).await)
-        }
+/// Routes a parsed command. Split from `run` only to keep each half readable.
+async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered {
+    match command {
+        Command::Open => output::render(&commands::open::run(repo).await),
+        Command::Status => output::render(&commands::status::run(repo).await),
         Command::Diff { staged, paths } => {
-            output::render(&commands::diff::run(&repo, staged, &paths).await)
+            output::render(&commands::diff::run(repo, staged, &paths).await)
         }
         Command::Log {
             rev,
@@ -193,18 +243,73 @@ pub async fn run(argv: Vec<OsString>) -> output::Rendered {
                 pickaxe: search,
                 limit: Some(limit),
             };
-            output::render(&commands::log::run(&repo, &q).await)
+            output::render(&commands::log::run(repo, &q).await)
         }
         Command::Blame { rev, file } => {
-            output::render(&commands::blame::run(&repo, &rev, &file).await)
+            output::render(&commands::blame::run(repo, &rev, &file).await)
         }
-        Command::Refs { kind } => output::render(&commands::refs::run(&repo, kind).await),
+        Command::Refs { kind } => output::render(&commands::refs::run(repo, kind).await),
         Command::Graph {
             limit,
             from,
             first_paint,
-        } => output::render(&commands::graph::run(&repo, limit, from, first_paint).await),
+        } => output::render(&commands::graph::run(repo, limit, from, first_paint).await),
         Command::Version => output::render(&commands::version::run().await),
+        other => dispatch_write(other, repo).await,
+    }
+}
+
+async fn dispatch_write(command: Command, repo: &std::path::Path) -> output::Rendered {
+    match command {
+        Command::Commit {
+            message,
+            amend,
+            signoff,
+            author,
+            allow_empty,
+        } => {
+            let opts = coral_core::ops::CommitOpts {
+                message,
+                amend,
+                signoff,
+                author,
+                allow_empty,
+            };
+            output::render(&commands::write::commit(repo, opts).await)
+        }
+        Command::Merge { rev, mode, message } => {
+            output::render_op(&commands::write::merge(repo, rev, mode, message).await)
+        }
+        Command::Rebase { onto, update_refs } => {
+            output::render_op(&commands::write::rebase(repo, onto, update_refs).await)
+        }
+        Command::CherryPick { revs } => {
+            output::render_op(&commands::write::cherry_pick(repo, revs).await)
+        }
+        Command::Revert { revs } => output::render_op(&commands::write::revert(repo, revs).await),
+        Command::Reset { rev, mode } => {
+            output::render(&commands::write::reset(repo, rev, mode).await)
+        }
+        Command::Checkout { rev } => output::render(&commands::write::checkout(repo, rev).await),
+        Command::Op { action } => output::render_op(&commands::write::op(repo, action).await),
+        Command::Undo => output::render(&commands::write::undo(repo).await),
+        Command::Redo => output::render(&commands::write::redo(repo).await),
+        Command::Journal => output::render(&commands::write::journal(repo).await),
+        Command::Stage {
+            paths,
+            hunk,
+            file,
+            lines,
+        } => output::render(&stage_or_unstage(repo, paths, hunk, file, lines, D::Stage).await),
+        Command::Unstage {
+            paths,
+            hunk,
+            file,
+            lines,
+        } => output::render(&stage_or_unstage(repo, paths, hunk, file, lines, D::Unstage).await),
+        Command::Discard { paths } => output::render(&commands::stage::discard(repo, &paths).await),
+        // Every read variant is handled by `dispatch` before reaching here.
+        _ => unreachable!("read command routed to the write dispatcher"),
     }
 }
 

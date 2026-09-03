@@ -13,7 +13,8 @@ workspace = true
 tokio     = { workspace = true, features = ["rt", "process", "io-util", "sync", "time", "macros", "fs"] }
 bstr      = { workspace = true }
 smallvec  = { workspace = true }
-serde     = { workspace = true }
+serde     = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing   = { workspace = true }
 gix       = { workspace = true, features = ["max-performance"] }

@@ -1,0 +1,369 @@
+//! Every mutating operation, and the stop-resolve-continue and abort paths that the conflict
+//! milestone depends on.
+
+use coral_core::ops::{CommitOpts, MergeMode, OpAction, ResetMode};
+use coral_core::process::GitRunner;
+use coral_core::repo::{Head, OpState, RepoLocation};
+use coral_core::testutil::TestRepo;
+
+async fn open(repo: &TestRepo) -> (GitRunner, RepoLocation) {
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+    (runner, loc)
+}
+
+/// Two branches that changed the same line, so merging them conflicts.
+fn conflicting() -> TestRepo {
+    let r = TestRepo::new().write("f.txt", "base\n").commit("base");
+    r.git(["checkout", "--quiet", "-b", "side"]);
+    let r = r.write("f.txt", "side\n").commit("side change");
+    r.git(["checkout", "--quiet", "main"]);
+    r.write("f.txt", "main\n").commit("main change")
+}
+
+#[tokio::test]
+async fn commits_amends_and_signs_off() {
+    let repo = TestRepo::new().write("a.txt", "1\n");
+    let (runner, loc) = open(&repo).await;
+    loc.stage(&runner, &["a.txt"]).await.unwrap();
+
+    let oid = loc
+        .commit(
+            &runner,
+            &CommitOpts {
+                message: "first".into(),
+                ..CommitOpts::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(oid.len(), 40);
+    assert_eq!(repo.git(["log", "-1", "--format=%s"]), "first");
+
+    let amended = loc
+        .commit(
+            &runner,
+            &CommitOpts {
+                message: "first, reworded".into(),
+                amend: true,
+                signoff: true,
+                ..CommitOpts::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_ne!(amended, oid, "amending replaces the commit");
+    assert_eq!(
+        repo.git(["rev-list", "--count", "HEAD"]),
+        "1",
+        "and does not add one"
+    );
+    assert!(
+        repo.git(["log", "-1", "--format=%b"])
+            .contains("Signed-off-by")
+    );
+}
+
+#[tokio::test]
+async fn commits_with_an_overridden_author() {
+    let repo = TestRepo::new().write("a.txt", "1\n");
+    let (runner, loc) = open(&repo).await;
+    loc.stage(&runner, &["a.txt"]).await.unwrap();
+
+    loc.commit(
+        &runner,
+        &CommitOpts {
+            message: "by someone else".into(),
+            author: Some("Ada Lovelace <ada@example.com>".into()),
+            ..CommitOpts::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        repo.git(["log", "-1", "--format=%an <%ae>"]),
+        "Ada Lovelace <ada@example.com>"
+    );
+    assert_eq!(
+        repo.git(["log", "-1", "--format=%cn"]),
+        "Coral Fixture",
+        "the committer is still us"
+    );
+}
+
+#[tokio::test]
+async fn creates_renames_checks_out_and_deletes_branches() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let (runner, loc) = open(&repo).await;
+
+    loc.branch_create(&runner, "feature", None, false)
+        .await
+        .unwrap();
+    assert!(
+        repo.git(["branch", "--list", "feature"])
+            .contains("feature")
+    );
+
+    loc.branch_rename(&runner, "feature", "renamed")
+        .await
+        .unwrap();
+    loc.checkout(&runner, "renamed").await.unwrap();
+    assert_eq!(
+        loc.head(&runner).await.unwrap(),
+        Head::Branch {
+            name: "renamed".into()
+        }
+    );
+
+    loc.checkout(&runner, "main").await.unwrap();
+    loc.branch_delete(&runner, "renamed", false).await.unwrap();
+    assert!(repo.git(["branch", "--list", "renamed"]).is_empty());
+}
+
+/// git refuses to delete an unmerged branch without force; that refusal must reach the caller.
+#[tokio::test]
+async fn refuses_to_delete_an_unmerged_branch_without_force() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let (runner, loc) = open(&repo).await;
+    loc.branch_create(&runner, "work", None, true)
+        .await
+        .unwrap();
+    let repo = repo.write("a.txt", "2\n").commit("unmerged work");
+    loc.checkout(&runner, "main").await.unwrap();
+
+    assert!(loc.branch_delete(&runner, "work", false).await.is_err());
+    loc.branch_delete(&runner, "work", true).await.unwrap();
+    assert!(repo.git(["branch", "--list", "work"]).is_empty());
+}
+
+#[tokio::test]
+async fn creates_lightweight_and_annotated_tags() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let (runner, loc) = open(&repo).await;
+
+    loc.tag_create(&runner, "light", None, None).await.unwrap();
+    loc.tag_create(&runner, "heavy", None, Some("a release"))
+        .await
+        .unwrap();
+
+    assert_eq!(repo.git(["cat-file", "-t", "light"]), "commit");
+    assert_eq!(
+        repo.git(["cat-file", "-t", "heavy"]),
+        "tag",
+        "a message makes it annotated"
+    );
+
+    loc.tag_delete(&runner, "light").await.unwrap();
+    assert!(repo.git(["tag", "--list", "light"]).is_empty());
+}
+
+#[tokio::test]
+async fn stashes_applies_pops_and_drops() {
+    let repo = TestRepo::new().write("a.txt", "committed\n").commit("base");
+    let repo = repo.write("a.txt", "work in progress\n");
+    let (runner, loc) = open(&repo).await;
+
+    loc.stash_push(&runner, Some("wip"), false).await.unwrap();
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("a.txt")).unwrap(),
+        "committed\n"
+    );
+    assert!(repo.git(["stash", "list"]).contains("wip"));
+
+    loc.stash_apply(&runner, 0, false).await.unwrap();
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("a.txt")).unwrap(),
+        "work in progress\n"
+    );
+    assert!(
+        !repo.git(["stash", "list"]).is_empty(),
+        "apply keeps the entry"
+    );
+
+    loc.stash_drop(&runner, 0).await.unwrap();
+    assert!(repo.git(["stash", "list"]).is_empty());
+}
+
+#[tokio::test]
+async fn stashes_untracked_files_only_when_asked() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let repo = repo.write("untracked.txt", "u\n");
+    let (runner, loc) = open(&repo).await;
+
+    loc.stash_push(&runner, None, false).await.unwrap();
+    assert!(
+        repo.path().join("untracked.txt").exists(),
+        "left alone by default"
+    );
+
+    loc.stash_push(&runner, None, true).await.unwrap();
+    assert!(
+        !repo.path().join("untracked.txt").exists(),
+        "taken with --include-untracked"
+    );
+}
+
+#[tokio::test]
+async fn resets_soft_mixed_and_hard() {
+    let repo = TestRepo::new().write("a.txt", "one\n").commit("first");
+    let repo = repo.write("a.txt", "two\n").commit("second");
+    let (runner, loc) = open(&repo).await;
+
+    loc.reset(&runner, "HEAD~1", ResetMode::Soft).await.unwrap();
+    assert_eq!(repo.git(["rev-list", "--count", "HEAD"]), "1");
+    assert_eq!(repo.git(["show", ":a.txt"]), "two", "soft keeps the index");
+
+    loc.reset(&runner, "HEAD", ResetMode::Mixed).await.unwrap();
+    assert_eq!(
+        repo.git(["show", ":a.txt"]),
+        "one",
+        "mixed resets the index"
+    );
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("a.txt")).unwrap(),
+        "two\n",
+        "but not the worktree"
+    );
+
+    loc.reset(&runner, "HEAD", ResetMode::Hard).await.unwrap();
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("a.txt")).unwrap(),
+        "one\n"
+    );
+}
+
+#[tokio::test]
+async fn merges_cleanly_and_records_a_merge_commit() {
+    let repo = TestRepo::new().write("shared.txt", "base\n").commit("base");
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo.write("side.txt", "s\n").commit("side");
+    repo.git(["checkout", "--quiet", "main"]);
+    let repo = repo.write("main.txt", "m\n").commit("main");
+
+    let (runner, loc) = open(&repo).await;
+    let outcome = loc
+        .merge(&runner, "side", MergeMode::NoFf, Some("merge side"))
+        .await
+        .unwrap();
+
+    assert!(outcome.completed);
+    assert!(outcome.conflicts.is_empty());
+    assert_eq!(loc.op_state(), OpState::Clean);
+    assert_eq!(repo.git(["rev-list", "--count", "--merges", "HEAD"]), "1");
+}
+
+/// A merge that conflicts is an outcome, not an error: git exits non-zero for both a conflict
+/// and a genuine failure, so only the repository's own state tells them apart.
+#[tokio::test]
+async fn a_conflicting_merge_reports_conflicts_rather_than_failing() {
+    let repo = conflicting();
+    let (runner, loc) = open(&repo).await;
+
+    let outcome = loc
+        .merge(&runner, "side", MergeMode::Auto, None)
+        .await
+        .unwrap();
+
+    assert!(!outcome.completed);
+    assert_eq!(outcome.conflicts, vec!["f.txt"]);
+    assert_eq!(outcome.state, OpState::Merge);
+}
+
+#[tokio::test]
+async fn resolves_a_conflict_and_continues() {
+    let repo = conflicting();
+    let (runner, loc) = open(&repo).await;
+    let stopped = loc
+        .merge(&runner, "side", MergeMode::Auto, None)
+        .await
+        .unwrap();
+    assert!(!stopped.completed);
+
+    std::fs::write(repo.path().join("f.txt"), "resolved\n").unwrap();
+    loc.stage(&runner, &["f.txt"]).await.unwrap();
+    let done = loc.op(&runner, OpAction::Continue).await.unwrap();
+
+    assert!(done.completed, "continue should finish the merge");
+    assert_eq!(loc.op_state(), OpState::Clean);
+    assert_eq!(repo.git(["rev-list", "--count", "--merges", "HEAD"]), "1");
+}
+
+#[tokio::test]
+async fn aborts_a_conflicting_merge_back_to_the_branch_tip() {
+    let repo = conflicting();
+    let before = repo.git(["rev-parse", "HEAD"]);
+    let (runner, loc) = open(&repo).await;
+
+    loc.merge(&runner, "side", MergeMode::Auto, None)
+        .await
+        .unwrap();
+    let aborted = loc.op(&runner, OpAction::Abort).await.unwrap();
+
+    assert!(aborted.completed);
+    assert_eq!(loc.op_state(), OpState::Clean);
+    assert_eq!(repo.git(["rev-parse", "HEAD"]), before);
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("f.txt")).unwrap(),
+        "main\n"
+    );
+}
+
+#[tokio::test]
+async fn a_fast_forward_only_merge_refuses_to_diverge() {
+    let repo = conflicting();
+    let (runner, loc) = open(&repo).await;
+
+    assert!(
+        loc.merge(&runner, "side", MergeMode::FfOnly, None)
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        loc.op_state(),
+        OpState::Clean,
+        "a refused merge leaves nothing behind"
+    );
+}
+
+#[tokio::test]
+async fn rebases_and_stops_on_conflict() {
+    let repo = conflicting();
+    let (runner, loc) = open(&repo).await;
+
+    let outcome = loc.rebase(&runner, "side", false).await.unwrap();
+    assert!(!outcome.completed);
+    assert_eq!(outcome.state, OpState::Rebase);
+    assert_eq!(outcome.conflicts, vec!["f.txt"]);
+
+    let aborted = loc.op(&runner, OpAction::Abort).await.unwrap();
+    assert!(aborted.completed);
+    assert_eq!(loc.op_state(), OpState::Clean);
+}
+
+#[tokio::test]
+async fn cherry_picks_and_reverts() {
+    let repo = TestRepo::new().write("a.txt", "base\n").commit("base");
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo.write("b.txt", "from side\n").commit("side work");
+    let picked = repo.git(["rev-parse", "HEAD"]);
+    repo.git(["checkout", "--quiet", "main"]);
+
+    let (runner, loc) = open(&repo).await;
+    let out = loc.cherry_pick(&runner, &[&picked]).await.unwrap();
+    assert!(out.completed);
+    assert!(repo.path().join("b.txt").exists());
+
+    let out = loc.revert(&runner, &["HEAD"]).await.unwrap();
+    assert!(out.completed);
+    assert!(!repo.path().join("b.txt").exists(), "the revert undid it");
+}
+
+#[tokio::test]
+async fn continuing_with_nothing_in_progress_is_an_error() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let (runner, loc) = open(&repo).await;
+
+    let err = loc.op(&runner, OpAction::Continue).await.unwrap_err();
+    assert_eq!(err.code(), "refused");
+}

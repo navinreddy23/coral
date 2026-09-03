@@ -67,10 +67,25 @@ pub trait Human {
     fn human(&self) -> String;
 }
 
+/// Renders an operation that may legitimately stop for conflicts.
+///
+/// Stopping is a success as far as the command is concerned, but it leaves work for the user,
+/// and callers — including the kernel scenarios — branch on the exit code to tell the two
+/// apart. This is the only place [`exit::CONFLICTS`] is produced.
+#[must_use]
+pub fn render_op(result: &Result<coral_core::ops::OpOutcome, CoralError>) -> Rendered {
+    let mut rendered = render(result);
+    if result.as_ref().is_ok_and(|o| !o.completed) {
+        rendered.code = ExitCode::from(exit::CONFLICTS);
+    }
+    rendered
+}
+
 /// Renders a result as the envelope and returns the matching exit code.
 ///
 /// Both the JSON and the human rendering go through here so the two can never disagree about
 /// whether the command succeeded.
+#[must_use]
 pub fn render<T: Serialize + Human>(result: &Result<T, CoralError>) -> Rendered {
     let (json, code) = envelope(result);
     let text = match result {

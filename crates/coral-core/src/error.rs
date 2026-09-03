@@ -47,6 +47,12 @@ pub enum CoralError {
     #[error("malformed git {label} output: {detail}")]
     Protocol { label: &'static str, detail: String },
 
+    /// The request is well-formed but cannot be carried out safely right now — undoing over a
+    /// dirty worktree, continuing when nothing is in progress. Distinct from a protocol error,
+    /// which means we failed to understand git.
+    #[error("cannot {label}: {detail}")]
+    Refused { label: &'static str, detail: String },
+
     #[error("io error")]
     Io(#[from] std::io::Error),
 }
@@ -64,6 +70,7 @@ impl CoralError {
             Self::GitSpawn { .. } => "git_spawn_failed",
             Self::NotARepository(_) => "not_a_repository",
             Self::Protocol { .. } => "protocol_error",
+            Self::Refused { .. } => "refused",
             Self::Io(_) => "io_error",
         }
     }
