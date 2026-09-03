@@ -48,7 +48,12 @@ dev:
     cd crates/coral-app && cargo tauri dev
 
 build:
-    cd ui && npm ci && npm run build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export PATH="$HOME/.cargo/bin:$PATH"
+    cd ui && npm ci && cd ..
+    # The CLI ships beside the application, so it has to exist before the bundle is assembled.
+    cargo build --release -p coral-cli
     cd crates/coral-app && cargo tauri build
 
 cli *ARGS:
