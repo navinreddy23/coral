@@ -66,6 +66,39 @@ prepends it; CI and any script must do the same.
 
 ## Known, deferred
 
+## Graph architecture, measured
+
+Benchmarked on the 1,481,528-commit kernel clone with a commit-graph present (945 commit
+tips), release build, this machine.
+
+| Walk | Rows | Wall | Peak RSS |
+|---|---|---|---|
+| gix topo, all tips | 1,481,528 commits / 1,601,455 edges | **2,685 ms** | 437 MB |
+| `git rev-list --topo-order --parents --all` | same | **2,860 ms** | 698 MB (its own process) |
+| gix first-parent from HEAD | 4,096 | **4 ms** | — |
+| gix commit-time, all tips | 4,096 | **6 ms** | — |
+| gix topo, all tips | 4,096 | **1,489 ms** | — |
+
+**gix wins the full walk and is kept as the default `CommitStream`.** It is marginally faster
+than the subprocess and avoids a spawn plus a parse on the hottest path. The subprocess reader
+stays implemented as the oracle the differential tests compare against, and as the fallback.
+
+**Two-phase first paint is mandatory, not optional.** The design document listed it as something
+to do only if the 300 ms budget was missed. It is missed, by 5×: topological order must
+prepaint indegrees across the whole graph before it can emit its first row, so the first 4,096
+rows cost the same 1.5 s as the first million. The engine therefore paints a commit-time walk
+first (6 ms for a screenful across all tips) and swaps in the topological rows when the full
+walk lands ~2.7 s later. Commit-time order can misorder a child before its parent under clock
+skew; the swap is what makes it correct, so the first paint must be visibly provisional in the
+row store rather than treated as final.
+
+**The 437 MB peak is the binding memory constraint.** That is the walk's own transient state
+(indegree and flag maps plus the priority queues), not the row store, and it is freed when the
+walk ends. Against a 600 MB total budget it means graph builds must be serialized across tabs:
+two concurrent kernel-sized topo walks would alone exceed the budget. The tab-group requirement
+that three kernel repos stay within three times the budget therefore constrains *concurrent
+builds*, not open tabs.
+
 **`gix` cannot write a commit-graph** (gitoxide `crate-status.md` lists graph writing as
 unimplemented), and it has no reachability bitmap support. Repo-open therefore shells out to
 `git commit-graph write --reachable` in the background when the graph is missing. The topo walk
