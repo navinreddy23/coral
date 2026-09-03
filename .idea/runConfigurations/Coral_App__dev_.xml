@@ -1,0 +1,17 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Coral App (dev)" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+    <option name="command" value="tauri dev" />
+    <option name="workingDirectory" value="file://$PROJECT_DIR$/crates/coral-app" />
+    <option name="channel" value="DEFAULT" />
+    <option name="requiredFeatures" value="true" />
+    <option name="allFeatures" value="false" />
+    <option name="emulateTerminal" value="true" />
+    <option name="withSudo" value="false" />
+    <option name="buildTarget" value="REMOTE" />
+    <option name="backtrace" value="SHORT" />
+    <envs>
+      <env name="CORAL_LOG" value="info" />
+    </envs>
+    <method v="2" />
+  </configuration>
+</component>

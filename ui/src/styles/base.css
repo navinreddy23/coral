@@ -1,0 +1,14 @@
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg-0);
+  color: var(--fg-0);
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+
+#app { height: 100%; }
+
+code, .mono { font-family: var(--font-mono); }

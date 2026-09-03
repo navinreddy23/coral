@@ -1,0 +1,21 @@
+---
+source: crates/coral-cli/tests/envelope.rs
+expression: out.json
+---
+{
+  "schema": 1,
+  "ok": true,
+  "result": {
+    "path": "[path]",
+    "gitDir": "[gitdir]",
+    "commonDir": "[commondir]",
+    "isBare": false,
+    "gitVersion": "[gitversion]",
+    "head": {
+      "kind": "unborn",
+      "name": "main"
+    },
+    "state": "clean",
+    "commitGraph": false
+  }
+}

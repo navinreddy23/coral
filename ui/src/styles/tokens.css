@@ -1,0 +1,36 @@
+/* The only place colour, spacing and type live. Components reference these, never hex. */
+:root {
+  --bg-0: #16191e;
+  --bg-1: #1c2027;
+  --bg-2: #232830;
+  --bg-3: #2b313b;
+  --border: #2f3540;
+
+  --fg-0: #e6e8eb;
+  --fg-1: #a9b0ba;
+  --fg-2: #6d7580;
+
+  --accent: #179287;
+  --danger: #d95c5c;
+
+  --lane-1: #3fa9f5;
+  --lane-2: #e26fb3;
+  --lane-3: #f7b32b;
+  --lane-4: #59c36a;
+  --lane-5: #9c7cf4;
+  --lane-6: #ff8a4c;
+  --lane-7: #26c6da;
+  --lane-8: #c0ca33;
+
+  --row-h: 28px;
+  --row-h-compact: 22px;
+
+  --font-ui: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+}

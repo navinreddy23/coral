@@ -1,0 +1,29 @@
+name: Kernel scenarios
+
+# The kernel clone is ~6 GB and the scenarios take minutes, so this runs nightly and on
+# demand rather than on every push.
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  kernel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/coral-bench/linux
+          key: kernel-clone-v1
+
+      - uses: extractions/setup-just@v2
+      # CI hardware is slower than a developer laptop; the scenarios read these to relax the
+      # budget assertions rather than fail spuriously.
+      - run: just kernel-test
+        env:
+          CORAL_BUDGET_SCALE: '3'

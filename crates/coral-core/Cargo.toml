@@ -1,0 +1,32 @@
+[package]
+name = "coral-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+tokio     = { workspace = true, features = ["rt", "process", "io-util", "sync", "time", "macros", "fs"] }
+bstr      = { workspace = true }
+smallvec  = { workspace = true }
+serde     = { workspace = true }
+thiserror = { workspace = true }
+tracing   = { workspace = true }
+tempfile  = { workspace = true, optional = true }
+ts-rs     = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio    = { workspace = true, features = ["rt-multi-thread", "macros"] }
+insta    = { workspace = true }
+tempfile = { workspace = true }
+
+[features]
+# Lets coral-cli's snapshot tests build fixture repos with the same hermetic builder.
+testutil = ["dep:tempfile"]
+# Emits ui/src/ipc/types.ts during `cargo test`. Lives here rather than in coral-app so the
+# bindings can be generated without the Tauri crate's system dependencies.
+ts = ["dep:ts-rs"]

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Coral",
+  "version": "0.1.0",
+  "identifier": "dev.coral.app",
+  "build": {
+    "beforeDevCommand": { "script": "npm run dev", "cwd": "../../ui", "wait": true },
+    "beforeBuildCommand": { "script": "npm run build", "cwd": "../../ui" },
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../../ui/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Coral",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true
+      }
+    ],
+    "security": { "csp": null }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["deb", "appimage", "dmg", "nsis"],
+    "icon": ["icons/icon.png"]
+  }
+}

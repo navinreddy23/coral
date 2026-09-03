@@ -1,0 +1,31 @@
+[advisories]
+yanked = "deny"
+# Vulnerabilities always fail. Unmaintained crates fail only when they are our own direct
+# dependencies: every current instance is transitive from Tauri's Linux stack (the gtk-rs GTK3
+# bindings, proc-macro-error, and the unic-* crates reached via tauri-utils -> urlpattern).
+# Tauri 2 targets GTK3 by design, so those are not actionable here.
+unmaintained = "workspace"
+
+[licenses]
+# The dependency tree is overwhelmingly MIT/Apache-2.0. Anything outside this list is a
+# deliberate decision, not a default.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "MPL-2.0",
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

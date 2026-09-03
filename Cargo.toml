@@ -1,0 +1,69 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/coral-core",
+    "crates/coral-hosting",
+    "crates/coral-cli",
+    "crates/coral-app",
+]
+
+[workspace.package]
+version      = "0.1.0"
+edition      = "2024"
+rust-version = "1.88"
+license      = "MIT"
+repository   = "https://github.com/navin/coral"
+
+[workspace.dependencies]
+coral-core    = { path = "crates/coral-core" }
+coral-hosting = { path = "crates/coral-hosting" }
+
+gix       = "0.87.1"
+tokio     = { version = "1.53.1", default-features = false }
+notify    = "8.2.0"
+serde     = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+thiserror = "2.0.20"
+clap      = { version = "4.6.6", features = ["derive", "env", "wrap_help"] }
+bstr      = { version = "1.13.1", features = ["serde"] }
+smallvec  = { version = "1.16.0", features = ["union", "const_generics"] }
+similar   = "3.2.0"
+tracing   = "0.1.44"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+insta     = { version = "1.48.0", features = ["json", "redactions", "filters"] }
+keyring   = "4.2.0"
+secrecy   = { version = "0.10.3", features = ["serde"] }
+reqwest   = { version = "0.13.4", default-features = false, features = ["json", "rustls-tls", "gzip"] }
+url       = "2"
+ts-rs     = "12.0.1"
+tauri     = "2.11.5"
+tauri-build = "2.6.3"
+libc      = "0.2"
+tempfile  = "3"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Engine types cross the serde boundary; module-name repetition reads better than terse names.
+module_name_repetitions = "allow"
+# Errors are returned by value into the CLI envelope and Tauri IPC; boxing buys nothing.
+result_large_err = "allow"
+
+[profile.dev]
+opt-level = 1
+debug = 1
+
+# gix and zlib are unusable at -O0 on kernel-sized repos.
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+[profile.profiling]
+inherits = "release"
+debug = 2
+strip = "none"

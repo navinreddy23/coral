@@ -1,0 +1,12 @@
+---
+source: crates/coral-cli/tests/envelope.rs
+expression: out.json
+---
+{
+  "schema": 1,
+  "ok": false,
+  "error": {
+    "code": "not_a_repository",
+    "message": "[message]"
+  }
+}
