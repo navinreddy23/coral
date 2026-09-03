@@ -9,7 +9,7 @@ kernel := env_var_or_default("CORAL_KERNEL_REPO", env_var("HOME") + "/.cache/cor
 default: check
 
 # The gate. Everything must be green before a commit.
-check: fmt-check lint test ui-check
+check: fmt-check lint test ui-check licenses-drift
 
 fmt:
     cargo fmt --all
@@ -68,11 +68,14 @@ kernel-test: kernel-clone
 open-kernel:
     cargo run --release -p coral-cli -- --repo '{{kernel}}' --json open
 
-bench: kernel-clone
-    CORAL_KERNEL_REPO='{{kernel}}' cargo run --release -p coral-cli -- bench all
-
 licenses:
     cargo about generate about.hbs > THIRD_PARTY_LICENSES.md
+
+# Fails if a dependency was added without regenerating the licence file. Part of the gate
+# because it needs no network and this drifted unnoticed for a whole milestone: `licenses` and
+# `deny` both failed on a dependency's licence and nothing ran either of them.
+licenses-drift: licenses
+    git diff --exit-code -- THIRD_PARTY_LICENSES.md
 
 deny:
     cargo deny check

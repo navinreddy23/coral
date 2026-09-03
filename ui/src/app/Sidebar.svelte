@@ -1,16 +1,32 @@
 <script lang="ts">
+  import type { PullRequest } from '../ipc/commands';
   import type { Submodule } from '../ipc/types';
   import type { PlacedRef, RefGroups } from '../state/refs.svelte';
 
-  const { groups, head, submodules, onSelect, onOpenSubmodule, onDropRef }: {
+  const {
+    groups,
+    head,
+    submodules,
+    pullRequests,
+    pullRequestLabel,
+    onSelect,
+    onOpenSubmodule,
+    onDropRef,
+    onOpenPullRequest,
+  }: {
     groups: RefGroups;
     head: string | null;
     submodules: Submodule[];
+    /** Empty when the remote is not a recognised host, or no token is stored for it. */
+    pullRequests: PullRequest[];
+    /** What the host calls them: GitHub says pull, GitLab says merge. */
+    pullRequestLabel: string;
     onSelect: (row: number) => void;
     /** Opens a submodule's working copy in its own tab. */
     onOpenSubmodule: (path: string) => void;
     /** `source` was dragged onto `target`; the shell decides what that means. */
     onDropRef: (source: string, target: string) => void;
+    onOpenPullRequest: (pr: PullRequest) => void;
   } = $props();
 
   /** Ref being dragged, and the one under the pointer, so both can be marked. */
@@ -137,6 +153,34 @@
     </section>
   {/each}
 
+  {#if pullRequests.length > 0}
+    <section>
+      <button class="head" onclick={() => (collapsed['prs'] = !collapsed['prs'])}>
+        <span class="caret">{collapsed['prs'] ? '›' : '⌄'}</span>
+        <span class="icon" aria-hidden="true">⇄</span>
+        {pullRequestLabel}
+        <span class="count">{pullRequests.length}</span>
+      </button>
+      {#if !collapsed['prs']}
+        <ul>
+          {#each pullRequests as pr (pr.number)}
+            <li>
+              <button
+                class="ref pr"
+                onclick={() => onOpenPullRequest(pr)}
+                title={`${pr.title}\n${pr.author}: ${pr.sourceBranch} → ${pr.targetBranch}\n${pr.webUrl}`}
+              >
+                <span class="state {pr.state}">{pr.state[0]?.toUpperCase()}</span>
+                <span class="num">#{pr.number}</span>
+                <span class="title">{pr.title}</span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
+  {/if}
+
   {#if submodules.length > 0}
     <section>
       <button class="head" onclick={() => (collapsed['submodules'] = !collapsed['submodules'])}>
@@ -206,6 +250,17 @@
   .ref:disabled { color: var(--fg-2); cursor: default; }
   .ref.current { color: var(--fg-0); font-weight: 600; background: var(--accent-soft); }
   .ref.dragging { opacity: 0.5; }
+  .pr { gap: var(--space-1); }
+  .num { flex: 0 0 auto; color: var(--fg-2); font-size: 11px; }
+  .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .state {
+    flex: 0 0 auto; width: 13px; height: 13px; line-height: 13px; text-align: center;
+    border-radius: 50%; font-size: 9px; font-weight: 700; color: #fff;
+  }
+  .state.open { background: var(--ok); }
+  .state.draft { background: var(--fg-2); }
+  .state.merged { background: var(--accent); }
+  .state.closed { background: var(--danger); }
   /* The drop target, outlined rather than filled so the branch name stays readable under it. */
   .ref.over { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 3px; }
   .tick { color: var(--accent); flex: 0 0 auto; }

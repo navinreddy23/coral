@@ -1,7 +1,7 @@
 // The desktop build must not open a console window on Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use coral_app_lib::{actions, commands, conflicts, graph, tabs};
+use coral_app_lib::{actions, commands, conflicts, graph, hosting, tabs};
 
 fn main() {
     tracing_subscriber::fmt()
@@ -15,6 +15,7 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(graph::GraphCache::default())
         .setup(|app| {
             use tauri::Manager as _;
@@ -50,6 +51,11 @@ fn main() {
             conflicts::conflict_blocks,
             conflicts::resolve_conflict,
             conflicts::operation_step,
+            hosting::hosting_status,
+            hosting::hosting_login,
+            hosting::hosting_logout,
+            hosting::hosting_pull_requests,
+            hosting::hosting_create,
             tabs::session_get,
             tabs::tab_open,
             tabs::tab_close,

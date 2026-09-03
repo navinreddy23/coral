@@ -9,4 +9,6 @@ accepted = [
     "Zlib",
     "MPL-2.0",
     "CDLA-Permissive-2.0",
+    # See deny.toml for why CC0 is listed by name.
+    "CC0-1.0",
 ]

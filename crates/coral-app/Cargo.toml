@@ -17,12 +17,15 @@ workspace = true
 tauri-build = { workspace = true }
 
 [dependencies]
-coral-core = { workspace = true }
+coral-core    = { workspace = true }
+coral-hosting = { workspace = true }
+secrecy       = { workspace = true }
 gix        = { workspace = true }
 # Deliberately no "tracing" feature: Tauri's IPC spans serialize raw request and response
 # bodies, which would turn every binary graph chunk into a multi-megabyte debug string.
 tauri      = { workspace = true }
 tauri-plugin-dialog = { workspace = true }
+tauri-plugin-opener = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = { workspace = true }

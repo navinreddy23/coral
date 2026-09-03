@@ -14,8 +14,10 @@ name = "coral"
 path = "src/main.rs"
 
 [dependencies]
-coral-core = { workspace = true }
+coral-core    = { workspace = true }
+coral-hosting = { workspace = true }
 clap       = { workspace = true }
+secrecy    = { workspace = true }
 serde      = { workspace = true }
 serde_json = { workspace = true }
 thiserror  = { workspace = true }

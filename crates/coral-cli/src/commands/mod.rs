@@ -3,6 +3,7 @@ pub mod conflicts;
 pub mod credential;
 pub mod diff;
 pub mod graph;
+pub mod hosting;
 pub mod log;
 pub mod open;
 pub mod refs;

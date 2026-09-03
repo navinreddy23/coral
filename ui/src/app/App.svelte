@@ -6,6 +6,8 @@
   import { PANE_LIMITS, PanesState } from '../state/panes.svelte';
   import DiffView from './DiffView.svelte';
   import { DiffState } from '../state/diff.svelte';
+  import { HostingState } from '../state/hosting.svelte';
+  import { openInBrowser, type PullRequest } from '../ipc/commands';
   import { ActionsState } from '../state/actions.svelte';
   import MergeTool from './MergeTool.svelte';
   import { MergeState } from '../state/merge.svelte';
@@ -117,6 +119,7 @@
   const diff = new DiffState();
   const actions = new ActionsState();
   const merge = new MergeState();
+  const hosting = new HostingState();
   let showPalette = $state(false);
   let scroller = $state<HTMLDivElement | null>(null);
 
@@ -290,6 +293,9 @@
       // A repository can be opened mid-merge, so the tool has to be there on arrival rather
       // than only after an action of ours stopped.
       await merge.load(info.path);
+      // Deliberately not awaited: a host that is slow or unreachable must not hold up the
+      // window, and the section simply appears when the answer arrives.
+      void hosting.load(info.path);
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
@@ -454,6 +460,9 @@
         onSelect={reveal}
         onOpenSubmodule={openSubmodule}
         onDropRef={dropRef}
+        pullRequests={hosting.pullRequests}
+        pullRequestLabel={hosting.view?.host?.kind === 'gitlab' ? 'Merge requests' : 'Pull requests'}
+        onOpenPullRequest={(pr: PullRequest) => void openInBrowser(pr.webUrl)}
       />
       <Splitter
         label="Resize the sidebar"

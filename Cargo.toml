@@ -33,12 +33,13 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 insta     = { version = "1.48.0", features = ["json", "redactions", "filters"] }
 keyring   = "4.2.0"
 secrecy   = { version = "0.10.3", features = ["serde"] }
-reqwest   = { version = "0.13.4", default-features = false, features = ["json", "rustls-tls", "gzip"] }
+reqwest   = { version = "0.13.4", default-features = false, features = ["json", "rustls", "gzip", "http2"] }
 url       = "2"
 ts-rs     = "12.0.1"
 tauri     = "2.11.5"
 tauri-build = "2.6.3"
 tauri-plugin-dialog = "2.7.3"
+tauri-plugin-opener = "2.5.5"
 # Matches the version tauri 2.11 hands back from `PlatformWebview::inner`.
 webkit2gtk = "2.0.2"
 libc      = "0.2"

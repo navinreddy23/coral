@@ -1,9 +1,11 @@
 use url::Url;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
 pub enum HostKind {
+    // Named rather than derived: snake_case would spell these `git_hub` and `git_lab`.
+    #[serde(rename = "github")]
     GitHub,
+    #[serde(rename = "gitlab")]
     GitLab,
 }
 
@@ -23,6 +25,12 @@ pub enum HostingError {
     Unrecognised(String),
     #[error("remote URL could not be parsed: {0}")]
     Malformed(String),
+    #[error("could not reach the host: {0}")]
+    Transport(String),
+    #[error("the host refused the request ({status}): {detail}")]
+    Api { status: u16, detail: String },
+    #[error("no token is stored for this host")]
+    NoToken,
 }
 
 impl Host {
@@ -59,9 +67,17 @@ impl Host {
             return Err(HostingError::Malformed(remote.to_owned()));
         }
 
+        // The web and API origin, which is not the remote's scheme: a repository cloned over
+        // ssh has no API at `ssh://`, and `git://` has none either. Only an explicit http or
+        // https remote says anything about how the instance is served.
+        let scheme = match url.scheme() {
+            "http" => "http",
+            _ => "https",
+        };
+
         Ok(Self {
             kind,
-            origin: format!("{}://{host}", url.scheme()),
+            origin: format!("{scheme}://{host}"),
             owner,
             repo,
         })
@@ -101,6 +117,30 @@ mod tests {
             "GitLab subgroups are part of the owner path"
         );
         assert_eq!(h.repo, "proj");
+    }
+
+    #[test]
+    fn the_origin_is_where_the_api_is_served_not_how_the_remote_was_cloned() {
+        // Cloning over ssh says nothing about the API, which is served over https either way;
+        // an `ssh://` origin would build request URLs nothing answers.
+        for remote in [
+            "git@gitlab.com:group/proj.git",
+            "ssh://git@gitlab.com/group/proj.git",
+            "https://gitlab.com/group/proj.git",
+        ] {
+            assert_eq!(
+                Host::detect(remote).unwrap().origin,
+                "https://gitlab.com",
+                "{remote}"
+            );
+        }
+        // An instance explicitly served over plain http keeps it.
+        assert_eq!(
+            Host::detect("http://gitlab.internal/t/a.git")
+                .unwrap()
+                .origin,
+            "http://gitlab.internal"
+        );
     }
 
     #[test]

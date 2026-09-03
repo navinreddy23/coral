@@ -10,6 +10,7 @@ import Sidebar from '../../src/app/Sidebar.svelte';
 import FileTree from '../../src/app/FileTree.svelte';
 import { buildTree } from '../../src/diff/tree';
 import type { PlacedRef } from '../../src/ipc/commands';
+import type { PullRequest } from '../../src/ipc/commands';
 import type { ChangedFile, Submodule } from '../../src/ipc/types';
 
 function ref(short: string, row: number | null = 0): PlacedRef {
@@ -36,9 +37,12 @@ function mount(over: Record<string, unknown> = {}) {
       groups: { local: [ref('master')], remote: [], tags: [], stashes: [] },
       head: 'master',
       submodules: [],
+      pullRequests: [],
+      pullRequestLabel: 'Pull requests',
       onSelect: () => {},
       onOpenSubmodule: () => {},
       onDropRef: () => {},
+      onOpenPullRequest: () => {},
       ...over,
     },
   });
@@ -81,6 +85,39 @@ describe('the sidebar', () => {
     expect(rows[1]?.disabled).toBe(true);
     await fireEvent.click(rows[0] as HTMLButtonElement);
     expect(opened).toEqual(['external/dev-scripts']);
+  });
+
+  it('shows proposals only when the host gave some, and opens one', async () => {
+    expect(mount().container.textContent).not.toContain('Pull requests');
+
+    const opened: PullRequest[] = [];
+    const pullRequests: PullRequest[] = [
+      {
+        number: 42,
+        title: 'Add a thing',
+        state: 'draft',
+        author: 'alice',
+        sourceBranch: 'feature/x',
+        targetBranch: 'main',
+        webUrl: 'https://gitlab.com/g/p/-/merge_requests/42',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ];
+    const { container } = mount({
+      pullRequests,
+      pullRequestLabel: 'Merge requests',
+      onOpenPullRequest: (pr: PullRequest) => opened.push(pr),
+    });
+
+    const section = [...container.querySelectorAll('section')].find((s) =>
+      s.textContent?.includes('Merge requests'),
+    );
+    expect(section).toBeDefined();
+    const row = section?.querySelector('button.pr') as HTMLButtonElement;
+    expect(row.textContent).toContain('#42');
+    expect(row.querySelector('.state')?.className).toContain('draft');
+    await fireEvent.click(row);
+    expect(opened[0]?.number).toBe(42);
   });
 
   it('reports a branch dropped onto another', async () => {

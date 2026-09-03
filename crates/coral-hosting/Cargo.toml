@@ -10,6 +10,10 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-serde     = { workspace = true }
-thiserror = { workspace = true }
-url       = { workspace = true }
+keyring    = { workspace = true }
+reqwest    = { workspace = true }
+secrecy    = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+thiserror  = { workspace = true }
+url        = { workspace = true }

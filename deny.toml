@@ -20,6 +20,11 @@ allow = [
     "Zlib",
     "MPL-2.0",
     "CDLA-Permissive-2.0",
+    # notify, the file watcher, is dedicated to the public domain under CC0. It imposes no
+    # conditions on use or redistribution. It is listed explicitly rather than by a permissive
+    # catch-all because CC0 differs from the rest in one way worth knowing: it grants no patent
+    # licence, expressly reserving them.
+    "CC0-1.0",
 ]
 confidence-threshold = 0.9
 

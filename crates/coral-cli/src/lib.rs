@@ -270,6 +270,14 @@ pub enum Command {
     },
     /// List submodules.
     Submodules,
+    /// Report the hosting provider behind the repository's remote.
+    Host,
+    /// Store an API token for the repository's host, read from stdin.
+    HostLogin,
+    /// Forget the stored API token for the repository's host.
+    HostLogout,
+    /// List the repository's pull or merge requests.
+    PullRequests,
     /// Walk the commit graph and report rows with their lanes.
     Graph {
         /// Stop after this many commits. Note that this does not make a topological walk
@@ -373,6 +381,24 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
         }
         Command::Refs { kind } => output::render(&commands::refs::run(repo, kind).await),
         Command::Submodules => output::render(&commands::submodule::run(repo).await),
+        Command::Host => output::render(&commands::hosting::detect(repo).await),
+        Command::HostLogin => {
+            // Read from stdin rather than an argument: a token on a command line is in the
+            // shell history and in every `ps` listing until the process exits.
+            let mut token = String::new();
+            if let Err(e) = std::io::Read::read_to_string(&mut std::io::stdin(), &mut token) {
+                return output::render::<commands::hosting::Done>(&Err(
+                    coral_core::CoralError::Protocol {
+                        label: "stdin",
+                        detail: e.to_string(),
+                    },
+                ));
+            }
+            let secret = secrecy::SecretString::from(token.trim().to_owned());
+            output::render(&commands::hosting::login(repo, secret).await)
+        }
+        Command::HostLogout => output::render(&commands::hosting::logout(repo).await),
+        Command::PullRequests => output::render(&commands::hosting::list(repo).await),
         Command::Graph {
             limit,
             from,

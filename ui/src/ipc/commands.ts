@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import type {
   Blocks,
   ConflictedFile,
@@ -132,4 +133,59 @@ export function operationStep(
   step: 'continue' | 'abort' | 'skip',
 ): Promise<OpOutcome> {
   return invoke<OpOutcome>('operation_step', { path, step });
+}
+
+/** GitHub or GitLab, as identified from the remote URL. */
+export interface Host {
+  kind: 'github' | 'gitlab';
+  origin: string;
+  owner: string;
+  repo: string;
+}
+
+export interface HostView {
+  host: Host | null;
+  /** Why no host was identified. Not an error: plain git still works without one. */
+  detail: string | null;
+  signedIn: boolean;
+}
+
+export type PrState = 'open' | 'draft' | 'merged' | 'closed';
+
+/** A pull request on GitHub, or a merge request on GitLab. */
+export interface PullRequest {
+  number: number;
+  title: string;
+  state: PrState;
+  author: string;
+  sourceBranch: string;
+  targetBranch: string;
+  webUrl: string;
+  updatedAt: string;
+}
+
+export function hostingStatus(path: string): Promise<HostView> {
+  return invoke<HostView>('hosting_status', { path });
+}
+
+export function hostingLogin(path: string, tokenValue: string): Promise<HostView> {
+  return invoke<HostView>('hosting_login', { path, tokenValue });
+}
+
+export function hostingLogout(path: string): Promise<HostView> {
+  return invoke<HostView>('hosting_logout', { path });
+}
+
+export function hostingPullRequests(path: string): Promise<PullRequest[]> {
+  return invoke<PullRequest[]>('hosting_pull_requests', { path });
+}
+
+/**
+ * Opens a link in the user's browser.
+ *
+ * The webview must not navigate there itself: a pull request page would replace the whole
+ * window, and there is no way back from it.
+ */
+export function openInBrowser(url: string): Promise<void> {
+  return openUrl(url);
 }
