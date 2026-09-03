@@ -181,13 +181,17 @@ impl RepoLocation {
                         "--name-only",
                         "--refs=refs/heads/*",
                         "--refs=refs/remotes/*",
+                        // Merging a release tag should say "v7.2", not an object id.
+                        "--refs=refs/tags/*",
                     ])
                     .arg(rev),
             )
             .await
             .ok()
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
-            .filter(|n| !n.is_empty() && n != "undefined");
+            .filter(|n| !n.is_empty() && n != "undefined")
+            // name-rev qualifies tags as "tags/v7.2"; the bare name is what people call it.
+            .map(|n| n.strip_prefix("tags/").unwrap_or(&n).to_owned());
 
         named.unwrap_or_else(|| rev.chars().take(8).collect())
     }

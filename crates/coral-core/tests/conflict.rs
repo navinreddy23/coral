@@ -363,3 +363,29 @@ fn an_empty_file_has_no_blocks() {
     assert!(Blocks::parse(b"").unwrap().blocks.is_empty());
     assert!(Blocks::parse(b"\n").unwrap().blocks.is_empty());
 }
+
+/// Merging a release tag must name it. Kernel releases have no branch pointing at them, so
+/// excluding tags from ref resolution left the user staring at an abbreviated object id.
+#[tokio::test]
+async fn a_tag_being_merged_is_named_not_abbreviated() {
+    let repo = TestRepo::new().write("f.txt", "base\n").commit("base");
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo.write("f.txt", "side\n").commit("side");
+    repo.git(["tag", "v2.0"]);
+    repo.git(["checkout", "--quiet", "main"]);
+    let repo = repo.write("f.txt", "main\n").commit("main");
+    // Leave only the tag, as a kernel release does.
+    repo.git(["branch", "-D", "side"]);
+
+    let (runner, loc) = open(&repo).await;
+    loc.merge(&runner, "v2.0", coral_core::ops::MergeMode::Auto, None)
+        .await
+        .unwrap();
+
+    let op = loc.operation(&runner).await.unwrap();
+    assert_eq!(
+        op.labels.theirs, "v2.0",
+        "the bare tag name, not tags/v2.0 or an object id"
+    );
+    assert_eq!(op.labels.ours, "main");
+}
