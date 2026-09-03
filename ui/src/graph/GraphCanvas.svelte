@@ -2,7 +2,13 @@
   import { onMount } from 'svelte';
 
   import type { Frame } from './frame';
-  import { DEFAULT_METRICS, GRAPH_COLUMN_PX, laneColours, visibleRows } from './layout';
+  import {
+    backgroundColour,
+    DEFAULT_METRICS,
+    GRAPH_COLUMN_PX,
+    laneColours,
+    visibleRows,
+  } from './layout';
   import { drawLanes, resizeCanvas } from './render';
 
   const { frame, scrollTop = 0, height = 400 }: {
@@ -13,10 +19,12 @@
 
   let canvas: HTMLCanvasElement;
   let colours: string[] = $state([]);
+  let background = $state('#ffffff');
   let pending = false;
 
   onMount(() => {
     colours = laneColours(document.documentElement);
+    background = backgroundColour(document.documentElement);
   });
 
   /**
@@ -40,7 +48,7 @@
     if (!ctx) return;
 
     const win = visibleRows(scrollTop, height, frame.totalRows, metrics);
-    drawLanes(ctx, frame, win, metrics, colours, width, height);
+    drawLanes(ctx, frame, win, metrics, colours, width, height, background);
   }
 
   $effect(() => {
@@ -49,6 +57,7 @@
     void scrollTop;
     void height;
     void colours;
+    void background;
     schedule();
   });
 </script>

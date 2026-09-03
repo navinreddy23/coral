@@ -17,6 +17,7 @@ export function drawLanes(
   colours: string[],
   width: number,
   height: number,
+  background: string,
 ): void {
   ctx.clearRect(0, 0, width, height);
   ctx.lineWidth = 1.5;
@@ -68,10 +69,23 @@ export function drawLanes(
 
     const x = laneX(lane, metrics);
     const y = rowY(row, first, metrics);
-    ctx.fillStyle = laneColour(lane, colours);
+    const colour = laneColour(lane, colours);
+
+    // An ordinary commit is a ring and a merge is filled, which is how the reference
+    // distinguishes them at a glance without needing a legend.
     ctx.beginPath();
-    ctx.arc(x, y, hasFlag(flags, RowFlag.Merge) ? metrics.nodeRadius + 1 : metrics.nodeRadius, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.arc(x, y, metrics.nodeRadius, 0, Math.PI * 2);
+    if (hasFlag(flags, RowFlag.Merge)) {
+      ctx.fillStyle = colour;
+      ctx.fill();
+    } else {
+      ctx.fillStyle = background;
+      ctx.fill();
+      ctx.strokeStyle = colour;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.lineWidth = 1.5;
+    }
   }
 }
 

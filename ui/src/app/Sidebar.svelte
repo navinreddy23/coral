@@ -17,6 +17,8 @@
     return q ? refs.filter((r) => r.short.toLowerCase().includes(q)) : refs;
   }
 
+  // Section order follows the reference's left panel: Local, Remote, Stashes, then Tags.
+  // Gitflow, pull requests, issues, submodules and actions come with their milestones.
   const sections = $derived([
     { key: 'local', title: 'Local', icon: '🖿', refs: shown(groups.local) },
     { key: 'remote', title: 'Remote', icon: '☁', refs: shown(groups.remote) },

@@ -102,6 +102,12 @@ export function laneColours(root: HTMLElement): string[] {
   return colours.length > 0 ? colours : ['#3fa9f5'];
 }
 
+/** The page background, so a commit ring can be drawn hollow rather than transparent. */
+export function backgroundColour(root: HTMLElement): string {
+  const value = getComputedStyle(root).getPropertyValue('--bg-0').trim();
+  return value.length > 0 ? value : '#ffffff';
+}
+
 export function laneColour(lane: number, colours: string[]): string {
   return colours[lane % colours.length] ?? '#3fa9f5';
 }

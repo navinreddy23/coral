@@ -18,6 +18,8 @@
   import Details from './Details.svelte';
   import Sidebar from './Sidebar.svelte';
   import { TabsState } from '../state/tabs.svelte';
+  import { isTextTarget, resolve, tabJump } from '../state/shortcuts';
+  import Shortcuts from './Shortcuts.svelte';
   import TabBar from './TabBar.svelte';
   import Toolbar from './Toolbar.svelte';
   import type { RepoInfo } from '../ipc/types';
@@ -29,6 +31,70 @@
   const worktree = new WorktreeState();
   let showWip = $state(false);
   const tabs = new TabsState();
+  let showHelp = $state(false);
+  let showSidebar = $state(true);
+  let showDetails = $state(true);
+
+  /** Which shortcuts actually do something today; the help overlay dims the rest. */
+  const LIVE = new Set([
+    'select.next', 'select.previous', 'select.first', 'select.last',
+    'stage.all', 'unstage.all', 'tab.new', 'tab.close', 'tab.next', 'tab.previous',
+    'panel.left', 'panel.detail', 'help',
+  ]);
+
+  function move(delta: number) {
+    if (!graph.frame) return;
+    const at = selection.row ?? -1;
+    const next = Math.min(graph.frame.rowCount - 1, Math.max(0, at + delta));
+    pick(next);
+    reveal(next);
+  }
+
+  function onKey(event: KeyboardEvent) {
+    const e = {
+      key: event.key,
+      ctrl: event.ctrlKey,
+      shift: event.shiftKey,
+      alt: event.altKey,
+      meta: event.metaKey,
+    };
+    const jump = tabJump(e);
+    if (jump !== null) {
+      const target = tabs.session.tabs[jump - 1];
+      if (target) void tabs.activate(target.id);
+      event.preventDefault();
+      return;
+    }
+
+    const binding = resolve(e, isTextTarget(event.target) ? 'message' : 'global');
+    if (!binding || !LIVE.has(binding.id)) return;
+    event.preventDefault();
+
+    switch (binding.id) {
+      case 'select.next': move(1); break;
+      case 'select.previous': move(-1); break;
+      case 'select.first': move(-Number.MAX_SAFE_INTEGER); break;
+      case 'select.last': move(Number.MAX_SAFE_INTEGER); break;
+      case 'stage.all': void worktree.stage(worktree.unstaged.map((f) => f.path), true); break;
+      case 'unstage.all': void worktree.stage(worktree.staged.map((f) => f.path), false); break;
+      case 'tab.new': void openAnother(); break;
+      case 'tab.close': if (tabs.active) void tabs.close(tabs.active.id); break;
+      case 'tab.next': cycleTab(1); break;
+      case 'tab.previous': cycleTab(-1); break;
+      case 'panel.left': showSidebar = !showSidebar; break;
+      case 'panel.detail': showDetails = !showDetails; break;
+      case 'help': showHelp = !showHelp; break;
+      default: break;
+    }
+  }
+
+  function cycleTab(delta: number) {
+    const list = tabs.session.tabs;
+    if (list.length === 0) return;
+    const at = list.findIndex((t) => t.id === tabs.session.active);
+    const next = list[(at + delta + list.length) % list.length];
+    if (next) void tabs.activate(next.id);
+  }
   let info = $state<RepoInfo | null>(null);
   let error = $state<string | null>(null);
   let scrollTop = $state(0);
@@ -140,6 +206,8 @@
   }
 </script>
 
+<svelte:window onkeydown={onKey} />
+
 <main>
   <header>
     <h1>Coral</h1>
@@ -181,7 +249,9 @@
     <p class="muted">Walking the graph…</p>
   {:else if graph.frame}
     <div class="body">
-    <Sidebar groups={refs.groups} head={headName} onSelect={reveal} />
+    {#if showSidebar}
+      <Sidebar groups={refs.groups} head={headName} onSelect={reveal} />
+    {/if}
     <div
       class="graph"
       bind:this={scroller}
@@ -239,14 +309,20 @@
         </ul>
       </div>
     </div>
-    {#if showWip}
-      <aside class="wip-panel"><Staging {worktree} /></aside>
-    {:else}
-      <Details detail={selection.detail} loading={selection.loading} error={selection.error} />
+    {#if showDetails}
+      {#if showWip}
+        <aside class="wip-panel"><Staging {worktree} /></aside>
+      {:else}
+        <Details detail={selection.detail} loading={selection.loading} error={selection.error} />
+      {/if}
     {/if}
     </div>
   {/if}
 </main>
+
+{#if showHelp}
+  <Shortcuts live={LIVE} onClose={() => (showHelp = false)} />
+{/if}
 
 <style>
   :root { --refs-col: 150px; --graph-col: 120px; }
