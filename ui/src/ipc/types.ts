@@ -30,6 +30,16 @@ export type BlameCommit = { oid: string, author: Signature, summary: string,
 filename: string, };
 
 /**
+ * One region of a conflicted file.
+ */
+export type Block = { "kind": "common", lines: string[], } | { "kind": "conflict", base: string[], ours: string[], theirs: string[], };
+
+/**
+ * A conflicted file broken into blocks.
+ */
+export type Blocks = { blocks: Array<Block>, };
+
+/**
  * How one side of the index/worktree pair changed.
  */
 export type Change = "unmodified" | "modified" | "added" | "deleted" | "renamed" | "copied" | "type_changed" | "untracked" | "ignored";
@@ -52,6 +62,19 @@ body: string, };
  * something different from an ordinary entry's.
  */
 export type ConflictKind = "both_modified" | "both_added" | "both_deleted" | "added_by_us" | "added_by_them" | "deleted_by_us" | "deleted_by_them";
+
+/**
+ * One file needing a decision.
+ */
+export type ConflictedFile = { path: string, kind: ConflictKind, 
+/**
+ * Binary files offer only whole-file choices; there are no blocks to pick between.
+ */
+binary: boolean, 
+/**
+ * One side deleted the file, so keeping or deleting is the only meaningful choice.
+ */
+deleteModify: boolean, };
 
 /**
  * What happened to a file between two trees.
@@ -133,6 +156,32 @@ message: string, };
 export type OpState = "clean" | "merge" | "rebase" | "cherry_pick" | "revert" | "bisect";
 
 /**
+ * Everything known about the operation in progress.
+ */
+export type Operation = { state: OpState, labels: SideLabels, 
+/**
+ * Present for a rebase, which replays many commits.
+ */
+progress: Progress | null, 
+/**
+ * The branch being rebased, as a short name.
+ */
+headName: string | null, 
+/**
+ * The commit the operation stopped on.
+ */
+stoppedAt: string | null, 
+/**
+ * True for `rebase -i`.
+ */
+interactive: boolean, };
+
+/**
+ * How far through a multi-step operation git has got.
+ */
+export type Progress = { current: number, total: number, };
+
+/**
  * What kind of thing a ref names.
  */
 export type RefKind = { "kind": "local_branch" } | { "kind": "remote_branch", remote: string, } | { "kind": "tag", annotated: boolean, } | { "kind": "stash" } | { "kind": "other" };
@@ -172,6 +221,29 @@ export type RepoInfo = { path: string, gitDir: string, commonDir: string, isBare
  * slow first paint on a large repository.
  */
 commitGraph: boolean, };
+
+/**
+ * What the two sides of a conflict should be called in the interface.
+ *
+ * Never "ours" and "theirs". During a rebase those words are actively misleading: git replays
+ * your commits on top of the target, so stage 2 ("ours") is the branch you are rebasing
+ * *onto* and stage 3 ("theirs") is your own work. Presenting the raw words is how every git
+ * client confuses its users.
+ */
+export type SideLabels = { 
+/**
+ * What stage 2 is.
+ */
+ours: string, 
+/**
+ * What stage 3 is.
+ */
+theirs: string, 
+/**
+ * True during a rebase, where the sides read backwards from what a user expects. The UI
+ * states this once rather than leaving people to work it out.
+ */
+swapped: boolean, };
 
 /**
  * A person and when they acted. Author and committer are shown separately in the UI, because

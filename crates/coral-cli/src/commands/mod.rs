@@ -1,4 +1,5 @@
 pub mod blame;
+pub mod conflicts;
 pub mod diff;
 pub mod graph;
 pub mod log;

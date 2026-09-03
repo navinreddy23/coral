@@ -19,7 +19,7 @@ thiserror = { workspace = true }
 tracing   = { workspace = true }
 gix       = { workspace = true, features = ["max-performance"] }
 notify    = { workspace = true }
-tempfile  = { workspace = true, optional = true }
+tempfile  = { workspace = true }
 ts-rs     = { workspace = true, optional = true }
 
 [dev-dependencies]
@@ -29,7 +29,7 @@ tempfile = { workspace = true }
 
 [features]
 # Lets coral-cli's snapshot tests build fixture repos with the same hermetic builder.
-testutil = ["dep:tempfile"]
+testutil = []
 # Emits ui/src/ipc/types.ts during `cargo test`. Lives here rather than in coral-app so the
 # bindings can be generated without the Tauri crate's system dependencies.
 ts = ["dep:ts-rs"]

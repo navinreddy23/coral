@@ -175,7 +175,7 @@ impl RepoLocation {
         match symbolic {
             Ok(out) => {
                 let name = String::from_utf8_lossy(&out.stdout).trim().to_owned();
-                if self.resolve(runner, "HEAD").await?.is_some() {
+                if self.resolve_rev(runner, "HEAD").await?.is_some() {
                     Ok(Head::Branch { name })
                 } else {
                     Ok(Head::Unborn { name })
@@ -183,13 +183,12 @@ impl RepoLocation {
             }
             // Exit 1 from symbolic-ref means HEAD is not symbolic, i.e. detached.
             Err(CoralError::GitExit { code: 1, .. }) => {
-                let oid =
-                    self.resolve(runner, "HEAD")
-                        .await?
-                        .ok_or_else(|| CoralError::Protocol {
-                            label: "symbolic-ref",
-                            detail: "HEAD is neither symbolic nor resolvable".to_owned(),
-                        })?;
+                let oid = self.resolve_rev(runner, "HEAD").await?.ok_or_else(|| {
+                    CoralError::Protocol {
+                        label: "symbolic-ref",
+                        detail: "HEAD is neither symbolic nor resolvable".to_owned(),
+                    }
+                })?;
                 Ok(Head::Detached { oid })
             }
             Err(other) => Err(other),
@@ -197,7 +196,11 @@ impl RepoLocation {
     }
 
     /// Resolves a revision to a full oid, or `None` when it does not exist.
-    async fn resolve(&self, runner: &GitRunner, rev: &str) -> Result<Option<String>, CoralError> {
+    async fn resolve_rev(
+        &self,
+        runner: &GitRunner,
+        rev: &str,
+    ) -> Result<Option<String>, CoralError> {
         let out = runner
             .output(GitCommand::read("rev-parse", self.display_path()).args([
                 "rev-parse",

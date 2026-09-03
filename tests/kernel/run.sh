@@ -239,7 +239,41 @@ scenario_branching() {
     git -C "$REPO" branch -D bench/doomed >/dev/null 2>&1 || true
 }
 scenario_remotes()     { echo "7. remotes";             miss "needs coral fetch/push (M4)"; }
-scenario_abort()       { echo "8. abort paths";         miss "needs coral op abort (M3)"; }
+# Scenario 8 — the conflict engine on a real kernel conflict, then abort.
+scenario_abort() {
+    echo "8. conflict engine and abort"
+    local new old; new=$(release_tags | head -1); old=$(release_tags | tail -1)
+    git -C "$REPO" checkout -q -B bench/abort "$old" 2>/dev/null
+    sed -i '1,8s/^SUBLEVEL = .*/SUBLEVEL = 997/' "$REPO/Makefile"
+    git -C "$REPO" commit -q -am "bench: conflicting bump" 2>/dev/null
+    local before; before=$(git -C "$REPO" rev-parse HEAD)
+
+    "$CORAL" --repo "$REPO" --json merge "$new" >/dev/null 2>&1
+    [ $? -eq 3 ] && ok "merge stopped" || bad "merge did not stop"
+
+    # The sides must be named after refs, never "ours" and "theirs".
+    local out; out=$("$CORAL" --repo "$REPO" --json conflicts)
+    local ours theirs
+    ours=$(jq -r .result.operation.labels.ours <<<"$out")
+    theirs=$(jq -r .result.operation.labels.theirs <<<"$out")
+    if [ "$ours" != "ours" ] && [ "$theirs" != "theirs" ] && [ -n "$ours" ]; then
+        ok "sides named by ref: $ours vs $theirs"
+    else
+        bad "sides not named by ref: $ours vs $theirs"
+    fi
+
+    # Blocks are rebuilt from the index stages, so a real base is present.
+    local blocks; blocks=$("$CORAL" --repo "$REPO" --json conflict-show Makefile)
+    local n; n=$(jq -r '[.result.blocks[] | select(.kind == "conflict")] | length' <<<"$blocks")
+    [ "$n" -ge 1 ] && ok "rebuilt $n conflict block(s) for Makefile" || bad "no blocks rebuilt"
+
+    local based; based=$(jq -r '[.result.blocks[] | select(.kind == "conflict") | select(.base | length > 0)] | length' <<<"$blocks")
+    [ "$based" -ge 1 ] && ok "a block carries the base version" || bad "no base in any block"
+
+    "$CORAL" --repo "$REPO" --json op abort >/dev/null 2>&1
+    [ "$(git -C "$REPO" rev-parse HEAD)" = "$before" ] && ok "abort restored the tip" || bad "abort moved HEAD"
+    [ -z "$(git -C "$REPO" status --porcelain)" ] && ok "worktree clean after abort" || bad "worktree dirty"
+}
 
 # Whatever the clone was on before the scenarios ran, so they can put it back.
 ORIGINAL_HEAD=""

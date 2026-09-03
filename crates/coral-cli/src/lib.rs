@@ -130,6 +130,16 @@ pub enum Command {
         #[arg(long)]
         include_untracked: bool,
     },
+    /// List the files still needing a decision.
+    Conflicts,
+    /// Show one file's conflict blocks, rebuilt from the index stages.
+    ConflictShow { file: String },
+    /// Resolve one conflicted file.
+    ConflictResolve {
+        file: String,
+        #[arg(long, value_enum)]
+        how: commands::conflicts::How,
+    },
     /// Reverse the most recent operation.
     Undo,
     /// Replay the most recently undone operation.
@@ -357,6 +367,13 @@ async fn dispatch_write(command: Command, repo: &std::path::Path) -> output::Ren
         } => output::render(
             &commands::write::stash(repo, action, index, message, include_untracked).await,
         ),
+        Command::Conflicts => output::render(&commands::conflicts::list(repo).await),
+        Command::ConflictShow { file } => {
+            output::render(&commands::conflicts::show(repo, &file).await)
+        }
+        Command::ConflictResolve { file, how } => {
+            output::render(&commands::conflicts::resolve(repo, &file, how).await)
+        }
         Command::Undo => output::render(&commands::write::undo(repo).await),
         Command::Redo => output::render(&commands::write::redo(repo).await),
         Command::Journal => output::render(&commands::write::journal(repo).await),

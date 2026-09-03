@@ -1,6 +1,7 @@
 pub mod blame;
 pub mod bytes;
 pub mod commit;
+pub mod conflict;
 pub mod diff;
 pub mod engine;
 pub mod error;
