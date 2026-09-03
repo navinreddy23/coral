@@ -63,6 +63,8 @@ impl GraphCache {
 ///
 /// The response is raw bytes rather than JSON: a million rows as JSON objects would cost
 /// hundreds of megabytes in the webview and seconds of parsing.
+/// # Errors
+/// Propagates walk failures.
 #[tauri::command]
 pub async fn graph_frame(
     cache: tauri::State<'_, GraphCache>,
@@ -83,6 +85,8 @@ pub async fn graph_frame(
 ///
 /// Kept separate from the frame because the commit-graph carries neither, so these cost an
 /// object read each. Fetching them only for rows on screen is what keeps scrolling cheap.
+/// # Errors
+/// Propagates git failures.
 #[tauri::command]
 pub async fn row_metadata(
     cache: tauri::State<'_, GraphCache>,
@@ -109,6 +113,8 @@ pub async fn row_metadata(
 }
 
 /// Everything the details panel shows for one commit.
+/// # Errors
+/// [`coral_core::CoralError::Refused`] for an unknown revision.
 #[tauri::command]
 pub async fn commit_detail(
     path: String,
@@ -135,6 +141,8 @@ pub struct PlacedRef {
 /// The row lookup happens here rather than in the interface: the store already holds a sorted
 /// index, so this is a binary search per ref instead of shipping 1.4M object ids to JavaScript
 /// for it to build a map.
+/// # Errors
+/// Propagates git failures.
 #[tauri::command]
 pub async fn repo_refs(
     cache: tauri::State<'_, GraphCache>,
@@ -164,6 +172,7 @@ pub async fn repo_refs(
 /// a hundred times slower, with no error anywhere. The UI checks this response's size and
 /// contents at startup so the degradation is loud rather than silent.
 #[tauri::command]
+#[must_use]
 pub fn binary_self_test() -> tauri::ipc::Response {
     tracing::info!("binary_self_test");
     // A recognisable pattern, long enough that a JSON-array fallback is obvious.

@@ -7,6 +7,8 @@
   import { RefsState } from '../state/refs.svelte';
   import { ThemeState } from '../state/theme.svelte';
   import { SelectionState } from '../state/selection.svelte';
+  import { WorktreeState } from '../state/worktree.svelte';
+  import Staging from './Staging.svelte';
   import Details from './Details.svelte';
   import Sidebar from './Sidebar.svelte';
   import type { RepoInfo } from '../ipc/types';
@@ -15,6 +17,8 @@
   const theme = new ThemeState();
   const refs = new RefsState();
   const selection = new SelectionState();
+  const worktree = new WorktreeState();
+  let showWip = $state(false);
   let info = $state<RepoInfo | null>(null);
   let error = $state<string | null>(null);
   let scrollTop = $state(0);
@@ -27,8 +31,18 @@
 
   function pick(row: number) {
     if (!graph.frame || !info) return;
+    showWip = false;
     void selection.select(info.path, row, oidOf(graph.frame, row));
   }
+
+  function pickWip() {
+    showWip = true;
+    selection.clear();
+    if (info) void worktree.load(info.path);
+  }
+
+  /** What the WIP row summarises: how many files are waiting, staged or not. */
+  const wipCount = $derived(worktree.status?.entries.length ?? 0);
 
   /** Scrolls a row into view, used when a ref is picked in the sidebar. */
   function reveal(row: number) {
@@ -41,6 +55,7 @@
       info = await open(path);
       await graph.open(info.path);
       await refs.load(info.path);
+      await worktree.load(info.path);
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
@@ -113,6 +128,13 @@
       onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}
       bind:clientHeight={viewport}
     >
+      {#if worktree.dirty}
+        <button class="wip" class:selected={showWip} onclick={pickWip}>
+          <span class="wip-mark">//</span>
+          <span class="wip-text">Uncommitted changes</span>
+          <span class="wip-count">{wipCount} file{wipCount === 1 ? '' : 's'}</span>
+        </button>
+      {/if}
       <div class="spacer" style:height="{graph.frame.rowCount * DEFAULT_METRICS.rowHeight}px">
         <div class="lanes" style:top="{0}px">
           <GraphCanvas frame={graph.frame} {scrollTop} height={viewport} />
@@ -138,7 +160,11 @@
         </ul>
       </div>
     </div>
-    <Details detail={selection.detail} loading={selection.loading} error={selection.error} />
+    {#if showWip}
+      <aside class="wip-panel"><Staging {worktree} /></aside>
+    {:else}
+      <Details detail={selection.detail} loading={selection.loading} error={selection.error} />
+    {/if}
     </div>
   {/if}
 </main>
@@ -168,6 +194,22 @@
   .muted { padding: var(--space-4); color: var(--fg-2); }
 
   .body { display: flex; flex: 1; min-height: 0; }
+  .wip {
+    display: flex; align-items: center; gap: var(--space-3);
+    width: 100%; height: var(--row-h); padding: 0 var(--space-4) 0 240px;
+    font: inherit; font-size: 12px; text-align: left; cursor: pointer;
+    background: var(--bg-1); border: 0; border-bottom: 1px solid var(--border);
+    color: var(--fg-0); position: sticky; top: 0; z-index: 1;
+  }
+  .wip.selected { background: var(--bg-2); }
+  .wip-mark { color: var(--lane-3); font-family: var(--font-mono); }
+  .wip-text { flex: 1; }
+  .wip-count { color: var(--fg-2); }
+  .wip-panel {
+    width: 340px; flex: 0 0 auto; overflow-y: auto;
+    border-left: 1px solid var(--border); background: var(--bg-1);
+    padding: var(--space-3);
+  }
   .graph { flex: 1; overflow-y: auto; position: relative; }
   .spacer { position: relative; }
   /* The canvas tracks the scroll position rather than being as tall as the graph: a canvas

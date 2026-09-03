@@ -1,8 +1,7 @@
 // The desktop build must not open a console window on Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod commands;
-mod graph;
+use coral_app_lib::{commands, graph};
 
 fn main() {
     tracing_subscriber::fmt()
@@ -19,6 +18,9 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::initial_repo,
             commands::open_repo,
+            commands::repo_status,
+            commands::stage_paths,
+            commands::commit_staged,
             graph::graph_frame,
             graph::row_metadata,
             graph::repo_refs,
