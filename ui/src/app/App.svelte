@@ -289,8 +289,8 @@
         class="spacer"
         style:height="{spacerHeight(graph.frame.rowCount, DEFAULT_METRICS)}px"
       >
-        <div class="lanes">
-          <GraphCanvas frame={graph.frame} {scrollTop} height={viewport} />
+        <div class="lanes" style:top="{Math.round(scrollTop)}px">
+          <GraphCanvas frame={graph.frame} firstRow={rows[0] ?? 0} height={viewport} />
         </div>
         <ul class="rows">
           {#each rows as row (row)}
@@ -382,9 +382,12 @@
   .spacer { position: relative; }
   /* The canvas tracks the scroll position rather than being as tall as the graph: a canvas
      millions of pixels high exhausts GPU texture memory. */
+  /* Absolutely positioned at the same rounded offset the rows use, rather than sticky: one
+     fewer composited layer in the scroller, and the lanes cannot drift half a pixel from the
+     text they belong to. */
   .lanes {
-    position: sticky; top: 22px; float: left; height: 0;
-    margin-left: calc(var(--refs-col) + var(--space-3)); pointer-events: none;
+    position: absolute; left: calc(var(--refs-col) + var(--space-3));
+    height: 0; pointer-events: none;
   }
   .rows { list-style: none; margin: 0; padding: 0; }
 
@@ -416,17 +419,19 @@
   .pill.head { border-color: var(--accent); color: var(--accent); font-weight: 600; }
   .pill.more { color: var(--fg-2); }
 
+  /* The summary takes its natural width and the dimmed body absorbs what is left. Letting
+     both shrink equally gave the body most of the row, so summaries were cut to a few
+     characters while their continuation ran on — the wrong half was being kept. */
   .summary {
-    flex: 0 1 auto; min-width: 0; color: var(--fg-0);
+    flex: 0 1 auto; min-width: 4em; max-width: 62%; color: var(--fg-0);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .row.merge .summary { color: var(--fg-0); }
   .detail {
-    flex: 0 1 auto; min-width: 0; color: var(--fg-2);
+    flex: 1 1 0; min-width: 0; color: var(--fg-2);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .age { margin-left: auto; flex: 0 0 auto; color: var(--fg-2); }
-  .sha { flex: 0 0 auto; color: var(--fg-2); }
+  .age { flex: 0 0 3.5em; color: var(--fg-2); text-align: right; }
+  .sha { flex: 0 0 6em; color: var(--fg-2); text-align: right; }
 
   .wip-node {
     width: 10px; height: 10px; border-radius: 50%;

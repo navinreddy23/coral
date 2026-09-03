@@ -2,18 +2,17 @@
   import { onMount } from 'svelte';
 
   import type { Frame } from './frame';
-  import {
-    backgroundColour,
-    DEFAULT_METRICS,
-    GRAPH_COLUMN_PX,
-    laneColours,
-    visibleRows,
-  } from './layout';
+  import { backgroundColour, DEFAULT_METRICS, GRAPH_COLUMN_PX, laneColours } from './layout';
   import { drawLanes, resizeCanvas } from './render';
 
-  const { frame, scrollTop = 0, height = 400 }: {
+  /**
+   * `firstRow` is the row the caller drew at the top of its own list. The canvas shares that
+   * origin rather than deriving its own, so a lane node cannot sit a row away from the text it
+   * belongs to.
+   */
+  const { frame, firstRow = 0, height = 400 }: {
     frame: Frame | null;
-    scrollTop?: number;
+    firstRow?: number;
     height?: number;
   } = $props();
 
@@ -47,14 +46,19 @@
     const ctx = resizeCanvas(canvas, width, height, window.devicePixelRatio || 1);
     if (!ctx) return;
 
-    const win = visibleRows(scrollTop, height, frame.totalRows, metrics);
+    // A screen of rows plus overscan, anchored to the caller's first row.
+    const perScreen = Math.ceil(height / metrics.rowHeight);
+    const win = {
+      first: firstRow,
+      last: Math.min(frame.rowCount - 1, firstRow + perScreen + 2),
+    };
     drawLanes(ctx, frame, win, metrics, colours, width, height, background);
   }
 
   $effect(() => {
     // Reading these registers the dependency, so any change repaints.
     void frame;
-    void scrollTop;
+    void firstRow;
     void height;
     void colours;
     void background;
