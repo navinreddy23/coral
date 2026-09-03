@@ -191,3 +191,51 @@ async fn drives_a_real_status_read() {
     assert_eq!(status.branch.as_deref(), Some("main"));
     assert_eq!(status.entries.len(), 1);
 }
+
+/// Regression: claiming the slot used to take the lock twice — once to look, once to insert —
+/// so two callers arriving together could both find it empty and both run.
+///
+/// Deduplication covers work that is *in flight*, so the read is held open long enough for
+/// every caller to reach it. Counting arrivals from outside does not work: a caller that has
+/// started is not yet a caller that has claimed.
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn the_dedup_slot_is_claimed_atomically_under_contention() {
+    const CALLERS: usize = 32;
+
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let engine = Arc::new(engine(&repo).await);
+
+    for round in 0..10 {
+        let runs = Arc::new(AtomicUsize::new(0));
+        let mut tasks = tokio::task::JoinSet::new();
+
+        for _ in 0..CALLERS {
+            let (engine, runs) = (Arc::clone(&engine), Arc::clone(&runs));
+            tasks.spawn(async move {
+                engine
+                    .read(ReadKey::Log(format!("round {round}")), || async {
+                        runs.fetch_add(1, Ordering::SeqCst);
+                        tokio::time::sleep(Duration::from_millis(80)).await;
+                        Ok(round)
+                    })
+                    .await
+                    .map(|v| *v)
+            });
+        }
+
+        let mut answers = Vec::new();
+        while let Some(r) = tasks.join_next().await {
+            answers.push(r.unwrap().unwrap());
+        }
+        assert_eq!(answers.len(), CALLERS);
+        assert!(
+            answers.iter().all(|v| *v == round),
+            "every caller gets the same answer"
+        );
+        assert_eq!(
+            runs.load(Ordering::SeqCst),
+            1,
+            "round {round} ran the read twice"
+        );
+    }
+}

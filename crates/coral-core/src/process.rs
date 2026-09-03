@@ -324,13 +324,26 @@ impl GitRunner {
         let argv = cmd.redacted_argv(&self.git);
         let mut child = self.spawn(&cmd, &argv)?;
 
-        if let (Some(bytes), Some(mut sink)) = (&cmd.stdin, child.stdin.take()) {
-            use tokio::io::AsyncWriteExt;
-            sink.write_all(bytes).await?;
-            sink.shutdown().await?;
-        }
+        // stdin is written on its own task rather than before reading stdout. Writing it all
+        // first deadlocks as soon as the child's output fills its pipe: git stops reading our
+        // input, and we are still blocked writing it. `cat-file --batch` over a screenful of
+        // object ids hits this immediately.
+        let writer = cmd
+            .stdin
+            .clone()
+            .zip(child.stdin.take())
+            .map(|(bytes, mut sink)| {
+                tokio::spawn(async move {
+                    use tokio::io::AsyncWriteExt;
+                    let _ = sink.write_all(&bytes).await;
+                    let _ = sink.shutdown().await;
+                })
+            });
 
         let out = child.wait_with_output().await?;
+        if let Some(handle) = writer {
+            let _ = handle.await;
+        }
         if out.status.success() {
             return Ok(GitOutput {
                 stdout: out.stdout,

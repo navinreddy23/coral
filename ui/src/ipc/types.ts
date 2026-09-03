@@ -58,6 +58,14 @@ summary: string,
 body: string, };
 
 /**
+ * What the graph shows next to a row: who wrote it and its first line.
+ *
+ * Deliberately smaller than [`Commit`]. The graph needs this for a screenful of rows at a
+ * time; carrying full parent lists and bodies would undo the row store's compactness.
+ */
+export type CommitMeta = { oid: string, author: string, email: string, time: bigint, summary: string, };
+
+/**
  * Which side of a conflict did what. Taken from the XY of a `u` entry, whose codes mean
  * something different from an ordinary entry's.
  */

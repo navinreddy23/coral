@@ -79,6 +79,30 @@ pub async fn graph_frame(
     )))
 }
 
+/// Author and summary for a window of rows.
+///
+/// Kept separate from the frame because the commit-graph carries neither, so these cost an
+/// object read each. Fetching them only for rows on screen is what keeps scrolling cheap.
+#[tauri::command]
+pub async fn row_metadata(
+    cache: tauri::State<'_, GraphCache>,
+    path: String,
+    start_row: u32,
+    count: u32,
+) -> Result<Vec<coral_core::commit::CommitMeta>, crate::commands::IpcError> {
+    let store = cache.store(&path, false).await?;
+    let end = (start_row + count).min(store.len());
+    let oids: Vec<String> = (start_row..end)
+        .filter_map(|r| store.oid(r))
+        .map(|id| id.to_string())
+        .collect();
+
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc.commit_metadata(&runner, &oids).await?)
+}
+
 /// A frame of known content, used once at startup to prove the binary path works.
 ///
 /// Tauri's JavaScript falls back to `postMessage` permanently if the custom-protocol fetch

@@ -59,6 +59,12 @@ pub struct Engine {
 
 type AnyResult = Result<Arc<dyn std::any::Any + Send + Sync>, CoralError>;
 
+/// Whether this caller runs the read or waits on someone who is.
+enum Claim {
+    Join(tokio::sync::watch::Receiver<Option<AnyResult>>),
+    Run(tokio::sync::watch::Sender<Option<AnyResult>>),
+}
+
 struct Inflight {
     epoch_started: u64,
     result: tokio::sync::watch::Receiver<Option<AnyResult>>,
@@ -110,6 +116,10 @@ impl Engine {
 
     /// Runs `f`, or joins an equivalent read already in flight.
     ///
+    /// Deduplication covers work that is running, not work that has finished: results are not
+    /// memoized, so a caller arriving after completion runs again. Caching answers would mean
+    /// serving state from before a change nobody told the engine about.
+    ///
     /// # Errors
     /// Whatever `f` returns, or [`CoralError::Protocol`] if a joined result has the wrong
     /// type, which would mean two different reads share a [`ReadKey`].
@@ -119,37 +129,23 @@ impl Engine {
         F: FnOnce() -> Fut,
         Fut: Future<Output = Result<T, CoralError>>,
     {
-        if let Some(mut rx) = self.join(&key) {
-            // The sender fills the slot exactly once, so at most one wait is needed.
-            if rx.borrow().is_none() {
-                let _ = rx.changed().await;
+        let tx = match self.claim(&key) {
+            Claim::Join(mut rx) => {
+                // The sender fills the slot exactly once, so at most one wait is needed.
+                if rx.borrow().is_none() {
+                    let _ = rx.changed().await;
+                }
+                // CoralError is not Clone, so a joined result is copied through clone_result.
+                let held = rx.borrow().as_ref().map(clone_result);
+                if let Some(result) = held {
+                    return downcast(result);
+                }
+                // The runner vanished without publishing; fall through and do the work.
+                return self.run(key, f).await;
             }
-            // CoralError is not Clone, so a joined result is copied through clone_result.
-            let held = rx.borrow().as_ref().map(clone_result);
-            if let Some(result) = held {
-                return downcast(result);
-            }
-        }
-
-        let (tx, rx) = tokio::sync::watch::channel(None);
-        let started = self.epoch();
-        self.register(key.clone(), started, rx);
-
-        let outcome = {
-            let _permit = self.children.acquire().await;
-            f().await
+            Claim::Run(tx) => tx,
         };
-        self.inflight
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .remove(&key);
-
-        let shared: AnyResult = match outcome {
-            Ok(v) => Ok(Arc::new(v) as Arc<dyn std::any::Any + Send + Sync>),
-            Err(e) => Err(e),
-        };
-        let _ = tx.send(Some(clone_result(&shared)));
-        downcast(shared)
+        self.finish(key, tx, f).await
     }
 
     /// Runs a read that refreshes `.git/index` — status, diff, ls-files.
@@ -171,8 +167,8 @@ impl Engine {
 
     /// Runs a mutation, serialized against every other write and against index-touching reads.
     ///
-    /// The epoch is bumped *before* the operation as well as after: anything already in flight
-    /// is answering a question about a repository that is about to change, so it must not be
+    /// The epoch is bumped before the operation as well as after: anything already in flight is
+    /// answering a question about a repository that is about to change, so it must not be
     /// joined by a caller arriving later.
     ///
     /// # Errors
@@ -192,33 +188,73 @@ impl Engine {
         result
     }
 
-    /// An in-flight read worth joining: same question, and not started before a change we
-    /// already know about.
-    fn join(&self, key: &ReadKey) -> Option<tokio::sync::watch::Receiver<Option<AnyResult>>> {
-        let map = self
+    /// Takes the slot for `key`, or a handle to the run already occupying it.
+    ///
+    /// The lookup and the insert happen under one lock. Doing them separately lets two callers
+    /// both find the slot empty and both run, which defeats the whole point: fifty status
+    /// calls would spawn fifty git children.
+    fn claim(&self, key: &ReadKey) -> Claim {
+        let epoch = self.epoch();
+        let mut map = self
             .inflight
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let entry = map.get(key)?;
-        (entry.epoch_started >= self.epoch()).then(|| entry.result.clone())
+
+        if let Some(entry) = map.get(key)
+            && entry.epoch_started >= epoch
+        {
+            return Claim::Join(entry.result.clone());
+        }
+
+        let (tx, rx) = tokio::sync::watch::channel(None);
+        map.insert(
+            key.clone(),
+            Inflight {
+                epoch_started: epoch,
+                result: rx,
+            },
+        );
+        Claim::Run(tx)
     }
 
-    fn register(
+    /// Runs `f` without claiming a slot, for the rare case where a publisher disappeared.
+    async fn run<T, F, Fut>(&self, key: ReadKey, f: F) -> Result<Arc<T>, CoralError>
+    where
+        T: Send + Sync + 'static,
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<T, CoralError>>,
+    {
+        let (tx, _rx) = tokio::sync::watch::channel(None);
+        self.finish(key, tx, f).await
+    }
+
+    /// Executes the read and publishes its outcome to anyone who joined.
+    async fn finish<T, F, Fut>(
         &self,
         key: ReadKey,
-        epoch_started: u64,
-        result: tokio::sync::watch::Receiver<Option<AnyResult>>,
-    ) {
+        tx: tokio::sync::watch::Sender<Option<AnyResult>>,
+        f: F,
+    ) -> Result<Arc<T>, CoralError>
+    where
+        T: Send + Sync + 'static,
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<T, CoralError>>,
+    {
+        let outcome = {
+            let _permit = self.children.acquire().await;
+            f().await
+        };
         self.inflight
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(
-                key,
-                Inflight {
-                    epoch_started,
-                    result,
-                },
-            );
+            .remove(&key);
+
+        let shared: AnyResult = match outcome {
+            Ok(v) => Ok(Arc::new(v) as Arc<dyn std::any::Any + Send + Sync>),
+            Err(e) => Err(e),
+        };
+        let _ = tx.send(Some(clone_result(&shared)));
+        downcast(shared)
     }
 }
 

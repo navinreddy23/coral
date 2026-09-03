@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 
 import { decodeFrame, type Frame } from '../graph/frame';
+import type { CommitMeta } from './types';
 
 /**
  * Fetches one binary frame of graph rows.
@@ -16,6 +17,15 @@ export async function graphFrame(
 ): Promise<Frame> {
   const raw = await invoke<ArrayBuffer>('graph_frame', { path, startRow, firstPaint });
   return decodeFrame(toArrayBuffer(raw));
+}
+
+/** Author and summary for rows on screen, fetched separately from the frame. */
+export async function rowMetadata(
+  path: string,
+  startRow: number,
+  count: number,
+): Promise<CommitMeta[]> {
+  return invoke<CommitMeta[]>('row_metadata', { path, startRow, count });
 }
 
 export interface TransportCheck {

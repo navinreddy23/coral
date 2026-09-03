@@ -20,6 +20,7 @@ fn main() {
             commands::initial_repo,
             commands::open_repo,
             graph::graph_frame,
+            graph::row_metadata,
             graph::binary_self_test
         ])
         .run(tauri::generate_context!())

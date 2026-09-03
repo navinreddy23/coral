@@ -39,6 +39,11 @@
 
   const rows = $derived(windowRows(graph.frame));
 
+  // Only rows that are on screen are worth an object read.
+  $effect(() => {
+    if (rows.length > 0) void graph.loadMetadata(rows[0] ?? 0, rows.length);
+  });
+
   function when(seconds: number): string {
     const delta = Date.now() / 1000 - seconds;
     const hours = delta / 3600;
@@ -94,9 +99,10 @@
               style:top="{row * DEFAULT_METRICS.rowHeight}px"
               class:merge={hasFlag(graph.frame.rowFlags[row] ?? 0, RowFlag.Merge)}
             >
-              <span class="sha mono">{oidOf(graph.frame, row).slice(0, 8)}</span>
+              <span class="summary">{graph.meta.get(row)?.summary ?? ''}</span>
+              <span class="author">{graph.meta.get(row)?.author ?? ''}</span>
               <span class="age">{when(graph.frame.times[row] ?? 0)}</span>
-              <span class="lane">lane {graph.frame.lanes[row]}</span>
+              <span class="sha mono">{oidOf(graph.frame, row).slice(0, 8)}</span>
             </li>
           {/each}
         </ul>
@@ -141,7 +147,11 @@
     font-size: 12px; color: var(--fg-1);
   }
   .row.merge { color: var(--fg-0); }
-  .sha { color: var(--fg-2); }
-  .age { color: var(--fg-2); width: 3em; }
-  .lane { color: var(--fg-2); }
+  .summary {
+    flex: 1; min-width: 0; color: var(--fg-0);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .author { width: 12em; flex: 0 0 auto; color: var(--fg-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .age { width: 3.5em; flex: 0 0 auto; color: var(--fg-2); text-align: right; }
+  .sha { width: 6em; flex: 0 0 auto; color: var(--fg-2); text-align: right; padding-right: var(--space-4); }
 </style>
