@@ -22,6 +22,7 @@ fn main() {
             graph::graph_frame,
             graph::row_metadata,
             graph::repo_refs,
+            graph::commit_detail,
             graph::binary_self_test
         ])
         .run(tauri::generate_context!())

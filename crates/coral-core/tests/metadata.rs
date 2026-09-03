@@ -166,3 +166,123 @@ async fn a_large_window_does_not_deadlock() {
     assert_eq!(meta.len(), 300);
     assert_eq!(meta[0].summary, "commit 299");
 }
+
+#[tokio::test]
+async fn commit_detail_reports_the_message_and_the_files_it_changed() {
+    let repo = TestRepo::new()
+        .write("keep.txt", "1\n")
+        .write("gone.txt", "x\n")
+        .commit("base");
+    let repo = repo.write("keep.txt", "2\n").write("added.txt", "new\n");
+    repo.git(["rm", "--quiet", "gone.txt"]);
+    repo.git(["add", "--all"]);
+    repo.git(["commit", "--quiet", "-m", "a change", "-m", "with a body"]);
+
+    let (runner, loc) = open(&repo).await;
+    let detail = loc.commit_detail(&runner, "HEAD").await.unwrap();
+
+    assert_eq!(detail.commit.summary, "a change");
+    assert_eq!(detail.commit.body, "with a body");
+    assert_eq!(detail.commit.parents.len(), 1);
+
+    let mut paths: Vec<String> = detail.files.iter().map(|f| f.path.to_string()).collect();
+    paths.sort();
+    assert_eq!(paths, vec!["added.txt", "gone.txt", "keep.txt"]);
+
+    let find = |p: &str| detail.files.iter().find(|f| f.path == p).unwrap();
+    assert_eq!(
+        find("added.txt").change,
+        coral_core::diff::FileChange::Added
+    );
+    assert_eq!(
+        find("gone.txt").change,
+        coral_core::diff::FileChange::Deleted
+    );
+    assert_eq!(
+        find("keep.txt").change,
+        coral_core::diff::FileChange::Modified
+    );
+}
+
+/// `diff-tree` reports nothing at all for a merge without `-m`, so a merge would look like it
+/// changed no files — the most common commit in a busy repository showing an empty panel.
+#[tokio::test]
+async fn a_merge_reports_its_first_parent_changes_rather_than_nothing() {
+    let repo = TestRepo::new().write("base.txt", "base\n").commit("base");
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo.write("from-side.txt", "s\n").commit("side work");
+    repo.git(["checkout", "--quiet", "main"]);
+    let repo = repo.write("from-main.txt", "m\n").commit("main work");
+    repo.git([
+        "merge",
+        "--quiet",
+        "--no-ff",
+        "--no-edit",
+        "-m",
+        "the merge",
+        "side",
+    ]);
+
+    let (runner, loc) = open(&repo).await;
+    let detail = loc.commit_detail(&runner, "HEAD").await.unwrap();
+
+    assert_eq!(detail.commit.parents.len(), 2);
+    assert!(detail.commit.is_merge());
+    let paths: Vec<String> = detail.files.iter().map(|f| f.path.to_string()).collect();
+    assert!(paths.contains(&"from-side.txt".to_owned()), "got {paths:?}");
+}
+
+/// The initial commit has no parent to diff against, so without `--root` it reports nothing.
+#[tokio::test]
+async fn the_root_commit_lists_every_file_it_introduced() {
+    let repo = TestRepo::new()
+        .write("a.txt", "1\n")
+        .write("b.txt", "2\n")
+        .commit("first");
+
+    let (runner, loc) = open(&repo).await;
+    let detail = loc.commit_detail(&runner, "HEAD").await.unwrap();
+
+    assert!(detail.commit.parents.is_empty());
+    let mut paths: Vec<String> = detail.files.iter().map(|f| f.path.to_string()).collect();
+    paths.sort();
+    assert_eq!(paths, vec!["a.txt", "b.txt"]);
+    assert!(
+        detail
+            .files
+            .iter()
+            .all(|f| f.change == coral_core::diff::FileChange::Added)
+    );
+}
+
+#[tokio::test]
+async fn a_rename_carries_both_paths() {
+    let repo = TestRepo::new()
+        .write("old.txt", "content that stays the same\n")
+        .commit("base");
+    repo.git(["mv", "old.txt", "new.txt"]);
+    repo.git(["commit", "--quiet", "-m", "rename it"]);
+
+    let (runner, loc) = open(&repo).await;
+    let detail = loc.commit_detail(&runner, "HEAD").await.unwrap();
+
+    let f = &detail.files[0];
+    assert_eq!(f.change, coral_core::diff::FileChange::Renamed);
+    assert_eq!(f.path, "new.txt");
+    assert_eq!(
+        f.old_path.as_ref().map(ToString::to_string).as_deref(),
+        Some("old.txt")
+    );
+}
+
+#[tokio::test]
+async fn an_unknown_revision_is_refused() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let (runner, loc) = open(&repo).await;
+
+    assert!(
+        loc.commit_detail(&runner, "0000000000000000000000000000000000000000")
+            .await
+            .is_err()
+    );
+}

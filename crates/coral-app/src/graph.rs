@@ -108,6 +108,18 @@ pub async fn row_metadata(
     Ok(loc.commit_metadata(&runner, &oids).await?)
 }
 
+/// Everything the details panel shows for one commit.
+#[tauri::command]
+pub async fn commit_detail(
+    path: String,
+    rev: String,
+) -> Result<coral_core::commit::CommitDetail, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc.commit_detail(&runner, &rev).await?)
+}
+
 /// A ref placed on the row it belongs to.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]

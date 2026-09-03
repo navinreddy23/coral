@@ -9,6 +9,11 @@ pub struct Signature {
     pub name: String,
     pub email: String,
     /// Seconds since the epoch.
+    ///
+    /// Declared as a number rather than ts-rs's default `bigint` for `i64`: serde writes it as
+    /// a JSON number, so `bigint` would describe something the wire never carries. Seconds are
+    /// exact in a double until well past the year 200,000.
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub time: i64,
 }
 
@@ -56,6 +61,7 @@ pub struct CommitMeta {
     pub oid: String,
     pub author: String,
     pub email: String,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub time: i64,
     #[serde(serialize_with = "crate::bytes::as_str")]
     #[cfg_attr(feature = "ts", ts(type = "string"))]
@@ -185,4 +191,127 @@ fn parse_identity(field: &[u8]) -> (String, String, i64) {
         .and_then(|t| t.parse().ok())
         .unwrap_or(0);
     (name, email, time)
+}
+
+/// A file a commit changed.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "types.ts"))]
+#[serde(rename_all = "camelCase")]
+pub struct ChangedFile {
+    #[serde(serialize_with = "crate::bytes::as_str")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub path: BString,
+    #[serde(serialize_with = "crate::bytes::as_str_opt")]
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    pub old_path: Option<BString>,
+    pub change: crate::diff::FileChange,
+}
+
+/// Everything the details panel shows for one commit.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "types.ts"))]
+#[serde(rename_all = "camelCase")]
+pub struct CommitDetail {
+    pub commit: Commit,
+    pub files: Vec<ChangedFile>,
+}
+
+impl crate::repo::RepoLocation {
+    /// Reads one commit and the files it changed.
+    ///
+    /// # Errors
+    /// Propagates git failures, including an unknown revision.
+    pub async fn commit_detail(
+        &self,
+        runner: &crate::process::GitRunner,
+        rev: &str,
+    ) -> Result<CommitDetail, crate::error::CoralError> {
+        let commits = self
+            .log(
+                runner,
+                &crate::history::LogQuery {
+                    rev: Some(rev.to_owned()),
+                    limit: Some(1),
+                    ..crate::history::LogQuery::default()
+                },
+            )
+            .await?;
+        let commit =
+            commits
+                .into_iter()
+                .next()
+                .ok_or_else(|| crate::error::CoralError::Refused {
+                    label: "show commit",
+                    detail: format!("{rev} is not a commit"),
+                })?;
+
+        Ok(CommitDetail {
+            files: self.changed_files(runner, rev).await?,
+            commit,
+        })
+    }
+
+    /// The files one commit changed, against its first parent.
+    ///
+    /// `-m --first-parent` is needed for both shapes: without `-m` a merge reports nothing at
+    /// all, and `--first-parent` is what makes that report the mainline change rather than one
+    /// entry per parent. `--root` covers the initial commit, which has no parent to diff.
+    async fn changed_files(
+        &self,
+        runner: &crate::process::GitRunner,
+        rev: &str,
+    ) -> Result<Vec<ChangedFile>, crate::error::CoralError> {
+        let out = runner
+            .output(
+                crate::process::GitCommand::read("diff-tree", self.display_path())
+                    .args([
+                        "diff-tree",
+                        "-r",
+                        "-z",
+                        "--name-status",
+                        "-M",
+                        "--no-commit-id",
+                    ])
+                    .args(["-m", "--first-parent", "--root"])
+                    .arg(rev),
+            )
+            .await?;
+        Ok(parse_name_status(&out.stdout))
+    }
+}
+
+/// Parses `--name-status -z`: a status field, then one path, or two for a rename or copy.
+fn parse_name_status(input: &[u8]) -> Vec<ChangedFile> {
+    use crate::diff::FileChange;
+
+    let mut out = Vec::new();
+    let mut records = input.split(|b| *b == 0).filter(|r| !r.is_empty());
+
+    while let Some(status) = records.next() {
+        let Some(letter) = status.first() else {
+            continue;
+        };
+        let change = match letter {
+            b'A' => FileChange::Added,
+            b'D' => FileChange::Deleted,
+            b'M' | b'T' => FileChange::Modified,
+            b'R' => FileChange::Renamed,
+            b'C' => FileChange::Copied,
+            _ => continue,
+        };
+        let renamed = matches!(change, FileChange::Renamed | FileChange::Copied);
+        let Some(first) = records.next() else { break };
+        let (path, old_path) = if renamed {
+            let Some(new) = records.next() else { break };
+            (BString::from(new), Some(BString::from(first)))
+        } else {
+            (BString::from(first), None)
+        };
+        out.push(ChangedFile {
+            path,
+            old_path,
+            change,
+        });
+    }
+    out
 }

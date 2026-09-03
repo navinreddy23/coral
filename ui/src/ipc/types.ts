@@ -45,6 +45,11 @@ export type Blocks = { blocks: Array<Block>, };
 export type Change = "unmodified" | "modified" | "added" | "deleted" | "renamed" | "copied" | "type_changed" | "untracked" | "ignored";
 
 /**
+ * A file a commit changed.
+ */
+export type ChangedFile = { path: string, oldPath: string | null, change: FileChange, };
+
+/**
  * One commit's metadata, without its tree or diff.
  */
 export type Commit = { oid: string, parents: Array<string>, author: Signature, committer: Signature, 
@@ -58,12 +63,17 @@ summary: string,
 body: string, };
 
 /**
+ * Everything the details panel shows for one commit.
+ */
+export type CommitDetail = { commit: Commit, files: Array<ChangedFile>, };
+
+/**
  * What the graph shows next to a row: who wrote it and its first line.
  *
  * Deliberately smaller than [`Commit`]. The graph needs this for a screenful of rows at a
  * time; carrying full parent lists and bodies would undo the row store's compactness.
  */
-export type CommitMeta = { oid: string, author: string, email: string, time: bigint, summary: string, };
+export type CommitMeta = { oid: string, author: string, email: string, time: number, summary: string, };
 
 /**
  * Which side of a conflict did what. Taken from the XY of a `u` entry, whose codes mean
@@ -280,8 +290,12 @@ swapped: boolean, };
 export type Signature = { name: string, email: string, 
 /**
  * Seconds since the epoch.
+ *
+ * Declared as a number rather than ts-rs's default `bigint` for `i64`: serde writes it as
+ * a JSON number, so `bigint` would describe something the wire never carries. Seconds are
+ * exact in a double until well past the year 200,000.
  */
-time: bigint, };
+time: number, };
 
 export type Status = { branch: string | null, oid: string | null, upstream: string | null, ahead: bigint, behind: bigint, stashCount: number, entries: Array<StatusEntry>, };
 

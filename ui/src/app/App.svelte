@@ -6,12 +6,15 @@
   import { GraphState } from '../state/graph.svelte';
   import { RefsState } from '../state/refs.svelte';
   import { ThemeState } from '../state/theme.svelte';
+  import { SelectionState } from '../state/selection.svelte';
+  import Details from './Details.svelte';
   import Sidebar from './Sidebar.svelte';
   import type { RepoInfo } from '../ipc/types';
 
   const graph = new GraphState();
   const theme = new ThemeState();
   const refs = new RefsState();
+  const selection = new SelectionState();
   let info = $state<RepoInfo | null>(null);
   let error = $state<string | null>(null);
   let scrollTop = $state(0);
@@ -21,6 +24,11 @@
   const headName = $derived(
     info && info.head.kind !== 'detached' ? info.head.name : null,
   );
+
+  function pick(row: number) {
+    if (!graph.frame || !info) return;
+    void selection.select(info.path, row, oidOf(graph.frame, row));
+  }
 
   /** Scrolls a row into view, used when a ref is picked in the sidebar. */
   function reveal(row: number) {
@@ -115,7 +123,9 @@
               class="row"
               style:top="{row * DEFAULT_METRICS.rowHeight}px"
               class:merge={hasFlag(graph.frame.rowFlags[row] ?? 0, RowFlag.Merge)}
+              class:selected={selection.row === row}
             >
+              <button class="hit" onclick={() => pick(row)} aria-label="Select commit"></button>
               {#each refs.byRow.get(row) ?? [] as label (label.name)}
                 <span class="pill" class:head={label.short === headName}>{label.short}</span>
               {/each}
@@ -128,6 +138,7 @@
         </ul>
       </div>
     </div>
+    <Details detail={selection.detail} loading={selection.loading} error={selection.error} />
     </div>
   {/if}
 </main>
@@ -169,6 +180,14 @@
     font-size: 12px; color: var(--fg-1);
   }
   .row.merge { color: var(--fg-0); }
+  .row.selected { background: var(--bg-2); }
+  .row:hover { background: var(--bg-1); }
+  /* The whole row is the target; a button laid over it keeps that keyboard-reachable without
+     nesting interactive elements inside one another. */
+  .hit {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    background: none; border: 0; padding: 0; margin: 0; cursor: pointer;
+  }
   .pill {
     flex: 0 0 auto; font-size: 11px; padding: 1px var(--space-2);
     border-radius: 9px; border: 1px solid var(--border);
