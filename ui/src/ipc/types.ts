@@ -121,6 +121,32 @@ export type OpState = "clean" | "merge" | "rebase" | "cherry_pick" | "revert" | 
 export type RefKind = { "kind": "local_branch" } | { "kind": "remote_branch", remote: string, } | { "kind": "tag", annotated: boolean, } | { "kind": "stash" } | { "kind": "other" };
 
 /**
+ * What changed since the last notification. Never "nothing": an empty set is not emitted.
+ */
+export type RepoChanged = { 
+/**
+ * `refs/**`, `packed-refs`, `HEAD`, or the reflogs.
+ */
+refs: boolean, 
+/**
+ * The index file.
+ */
+index: boolean, 
+/**
+ * Anything in the worktree that is not inside the git dir.
+ */
+worktree: boolean, 
+/**
+ * A multi-step operation started, advanced, or ended.
+ */
+ops: boolean, 
+/**
+ * The commit-graph file changed, which normally means the background
+ * `git commit-graph write` finished and the walk is now worth redoing.
+ */
+graph: boolean, };
+
+/**
  * What `coral open` reports.
  */
 export type RepoInfo = { path: string, gitDir: string, commonDir: string, isBare: boolean, gitVersion: string, head: Head, state: OpState, 

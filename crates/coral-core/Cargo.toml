@@ -17,6 +17,7 @@ serde     = { workspace = true }
 thiserror = { workspace = true }
 tracing   = { workspace = true }
 gix       = { workspace = true, features = ["max-performance"] }
+notify    = { workspace = true }
 tempfile  = { workspace = true, optional = true }
 ts-rs     = { workspace = true, optional = true }
 
