@@ -17,6 +17,8 @@
   import Staging from './Staging.svelte';
   import Details from './Details.svelte';
   import Sidebar from './Sidebar.svelte';
+  import { TabsState } from '../state/tabs.svelte';
+  import TabBar from './TabBar.svelte';
   import Toolbar from './Toolbar.svelte';
   import type { RepoInfo } from '../ipc/types';
 
@@ -26,6 +28,7 @@
   const selection = new SelectionState();
   const worktree = new WorktreeState();
   let showWip = $state(false);
+  const tabs = new TabsState();
   let info = $state<RepoInfo | null>(null);
   let error = $state<string | null>(null);
   let scrollTop = $state(0);
@@ -75,7 +78,36 @@
     }
   }
 
-  void initialRepo().then(load);
+  /**
+   * Restores the session, then opens whatever it was left on.
+   *
+   * CORAL_REPO still wins when set, so the app can be pointed at a repository for
+   * benchmarking without disturbing the saved tabs.
+   */
+  async function start() {
+    await tabs.refresh();
+    const requested = await initialRepo();
+    if (requested !== '.') await tabs.open(requested);
+    else if (!tabs.active && tabs.session.tabs.length === 0) await tabs.open(requested);
+    // The effect below loads whatever ends up active; loading here as well would walk the
+    // graph twice on launch, which on a large repository is two five-second walks.
+  }
+  void start();
+
+  // Switching tabs loads that repository; nothing else in the shell needs to know.
+  let loadedPath = $state('');
+  $effect(() => {
+    const path = tabs.active?.path;
+    if (path && path !== loadedPath) {
+      loadedPath = path;
+      void load(path);
+    }
+  });
+
+  async function openAnother() {
+    const path = window.prompt('Repository path');
+    if (path) await tabs.open(path);
+  }
 
   /** Rows currently worth putting in the DOM. Never the whole graph. */
   function windowRows(frame: Frame | null): number[] {
@@ -124,6 +156,8 @@
       {theme.current === 'light' ? 'Dark' : 'Light'}
     </button>
   </header>
+
+  <TabBar {tabs} onOpen={openAnother} />
 
   {#if info}
     <Toolbar

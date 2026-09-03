@@ -148,6 +148,19 @@ answers only when the nonce in its environment matches the one the running appli
 to the git children it spawns. That check denies when either side is missing or empty. An
 unknown host answers *empty*, never an error: a failing helper aborts the whole git operation.
 
+## Tabs and session
+
+`coral-app/src/session.rs` holds open repositories as tabs and groups, persisted beside the
+app's own config. The engine knows nothing about it: `coral-core` deals in repositories, not in
+how a window chooses to show them.
+
+Every session command returns the whole session rather than nothing, so the tab bar cannot
+drift from what is on disk. A group is a coloured band around a *contiguous* run of tabs, so
+grouping reorders members to sit together. Ids are never reused, or a stale reference would
+silently address a different repository. A repository that has gone missing keeps its tab and
+is marked, rather than disappearing — a disconnected drive should not lose a workspace. A
+corrupt or hand-edited session is repaired on load rather than refused.
+
 ## Contracts
 
 - **CLI envelope** — `{"schema":1,"ok":true,"result":{…}}` or `{"schema":1,"ok":false,"error":{…}}`.

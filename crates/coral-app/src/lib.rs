@@ -3,6 +3,8 @@
 
 pub mod commands;
 pub mod graph;
+pub mod session;
+pub mod tabs;
 
 pub use commands::{commit_staged, open_repo, repo_status, stage_paths};
 pub use graph::{
