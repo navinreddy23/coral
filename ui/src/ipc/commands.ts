@@ -3,6 +3,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import type {
   Blocks,
+  Todo,
   ConflictedFile,
   FileDiff,
   GitRef,
@@ -188,4 +189,14 @@ export function hostingPullRequests(path: string): Promise<PullRequest[]> {
  */
 export function openInBrowser(url: string): Promise<void> {
   return openUrl(url);
+}
+
+/** The todo list an interactive rebase onto `onto` would start from, oldest first. */
+export function rebaseTodo(path: string, onto: string): Promise<Todo> {
+  return invoke<Todo>('rebase_todo', { path, onto });
+}
+
+/** Runs an interactive rebase against a todo the user has decided. */
+export function rebaseStart(path: string, onto: string, todo: Todo): Promise<ActionOutcome> {
+  return invoke<ActionOutcome>('rebase_start', { path, onto, todo });
 }

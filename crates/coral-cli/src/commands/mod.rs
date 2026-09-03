@@ -6,6 +6,7 @@ pub mod graph;
 pub mod hosting;
 pub mod log;
 pub mod open;
+pub mod rebase;
 pub mod refs;
 pub mod remote;
 pub mod stage;

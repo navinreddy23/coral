@@ -11,6 +11,8 @@
   import { ActionsState } from '../state/actions.svelte';
   import MergeTool from './MergeTool.svelte';
   import { MergeState } from '../state/merge.svelte';
+  import RebasePicker from './RebasePicker.svelte';
+  import { RebaseState } from '../state/rebase.svelte';
   import Palette, { type Command } from './Palette.svelte';
   import type { Action } from '../ipc/commands';
   import {
@@ -120,6 +122,7 @@
   const actions = new ActionsState();
   const merge = new MergeState();
   const hosting = new HostingState();
+  const rebase = new RebaseState();
   let showPalette = $state(false);
   let scroller = $state<HTMLDivElement | null>(null);
 
@@ -196,6 +199,7 @@
       out.push({ id: `co:${r.name}`, label: `Checkout ${r.short}`, group: 'Branch', run: () => void act({ kind: 'checkout', rev: r.short }) });
       out.push({ id: `merge:${r.name}`, label: `Merge ${r.short} into ${headName ?? 'HEAD'}`, group: 'Branch', run: () => void act({ kind: 'merge', rev: r.short }) });
       out.push({ id: `rebase:${r.name}`, label: `Rebase onto ${r.short}`, group: 'Branch', run: () => void act({ kind: 'rebase', onto: r.short }) });
+      out.push({ id: `irebase:${r.name}`, label: `Rebase onto ${r.short}, interactively`, group: 'Branch', run: () => info && void rebase.load(info.path, r.short) });
     }
     for (const r of refs.groups.tags.slice(0, 200)) {
       out.push({ id: `co:${r.name}`, label: `Checkout tag ${r.short}`, group: 'Tag', run: () => void act({ kind: 'checkout', rev: r.short }) });
@@ -602,6 +606,10 @@
     {actions.report.text}
     <button class="dismiss" onclick={() => actions.clear()} aria-label="Dismiss">✕</button>
   </p>
+{/if}
+
+{#if rebase.open}
+  <RebasePicker {rebase} onDone={reloadAll} />
 {/if}
 
 {#if showPalette}

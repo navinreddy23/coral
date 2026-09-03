@@ -270,6 +270,20 @@ pub enum Command {
     },
     /// List submodules.
     Submodules,
+    /// Show the todo list an interactive rebase onto a revision would start from.
+    RebaseTodo {
+        /// The commit to rebase onto.
+        onto: String,
+    },
+    /// Replace a rebase todo file with a prepared one. Git invokes this, not a person.
+    #[command(hide = true)]
+    RebaseEditor {
+        /// The prepared list to install.
+        #[arg(long)]
+        todo: String,
+        /// The file git wants edited.
+        file: String,
+    },
     /// Report the hosting provider behind the repository's remote.
     Host,
     /// Store an API token for the repository's host, read from stdin.
@@ -320,6 +334,24 @@ pub async fn run(argv: Vec<OsString>) -> output::Rendered {
             };
         }
     };
+
+    // The sequence editor answers git, not a person. It writes nothing at all: git reads the
+    // todo file back, so anything on stdout is noise and a JSON envelope would be read as a
+    // rebase instruction.
+    if let Command::RebaseEditor { todo, file } = &cli.command {
+        return match std::fs::copy(todo, file) {
+            Ok(_) => output::Rendered {
+                json: serde_json::Value::Null,
+                text: String::new(),
+                code: ExitCode::SUCCESS,
+            },
+            Err(e) => output::Rendered {
+                json: serde_json::Value::Null,
+                text: format!("coral rebase-editor: {e}"),
+                code: ExitCode::from(1),
+            },
+        };
+    }
 
     // The credential helper answers git, not a person: its output is the protocol itself, so
     // it must not be wrapped in the JSON envelope.
@@ -381,6 +413,7 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
         }
         Command::Refs { kind } => output::render(&commands::refs::run(repo, kind).await),
         Command::Submodules => output::render(&commands::submodule::run(repo).await),
+        Command::RebaseTodo { onto } => output::render(&commands::rebase::todo(repo, &onto).await),
         Command::Host => output::render(&commands::hosting::detect(repo).await),
         Command::HostLogin => {
             // Read from stdin rather than an argument: a token on a command line is in the

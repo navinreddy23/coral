@@ -146,3 +146,129 @@ impl Todo {
         )
     }
 }
+
+impl crate::repo::RepoLocation {
+    /// The todo list `git rebase -i <onto>` would open, without opening anything.
+    ///
+    /// Built from `rev-list` rather than by starting a rebase and reading the file git writes:
+    /// starting one leaves the repository in a rebase that has to be aborted if the user
+    /// changes their mind, and this is what the picker is populated from before they have
+    /// decided anything.
+    ///
+    /// # Errors
+    /// Propagates git failures, including an unknown revision.
+    pub async fn rebase_todo(
+        &self,
+        runner: &crate::process::GitRunner,
+        onto: &str,
+    ) -> Result<Todo, CoralError> {
+        // Oldest first, which is replay order and the order the todo file is written in.
+        let out = runner
+            .output(
+                crate::process::GitCommand::read("rev-list", self.display_path())
+                    .args(["rev-list", "--reverse", "--no-merges", "--format=%H %s"])
+                    .arg(format!("{onto}..HEAD")),
+            )
+            .await?;
+
+        let mut items = Vec::new();
+        for line in out.stdout.split(|b| *b == b'\n') {
+            // `--format` prefixes each entry with a `commit <oid>` line of its own.
+            if line.is_empty() || line.starts_with(b"commit ") {
+                continue;
+            }
+            let (oid, summary) = match line.iter().position(|b| *b == b' ') {
+                Some(at) => (&line[..at], &line[at + 1..]),
+                None => (line, &b""[..]),
+            };
+            let Ok(oid) = oid.to_str() else { continue };
+            items.push(TodoItem {
+                step: Step::Pick,
+                oid: oid.to_owned(),
+                summary: BString::from(summary),
+            });
+        }
+        Ok(Todo { items })
+    }
+
+    /// Runs an interactive rebase against a todo the caller has already decided.
+    ///
+    /// git normally opens an editor on the todo file. Rather than launch one, the prepared
+    /// list is written to a file and `sequence.editor` is pointed at Coral itself, which
+    /// copies it into place — the same self-invocation the credential helper uses, and for the
+    /// same reason: no shell quoting and nothing interactive on the path.
+    ///
+    /// `core.editor` is stubbed too. A squash or fixup opens an editor on the combined message
+    /// that nobody is there to answer; `true` accepts what git prepared, which is the message
+    /// the user was shown.
+    ///
+    /// # Errors
+    /// Propagates git failures. A rebase that stops on a conflict or an `edit` is reported
+    /// through [`crate::ops::OpOutcome`], not as an error.
+    pub async fn rebase_interactive(
+        &self,
+        runner: &crate::process::GitRunner,
+        onto: &str,
+        todo: &Todo,
+        coral_binary: &std::path::Path,
+    ) -> Result<crate::ops::OpOutcome, CoralError> {
+        if !todo.first_step_is_valid() {
+            return Err(CoralError::Refused {
+                label: "rebase",
+                detail: "the first commit cannot be squashed or fixed up into its parent"
+                    .to_owned(),
+            });
+        }
+
+        let path = self.git_path("coral-rebase-todo");
+        std::fs::write(&path, todo.render()).map_err(|e| CoralError::Protocol {
+            label: "rebase",
+            detail: format!("could not write the todo list: {e}"),
+        })?;
+
+        // Through the environment, not `-c sequence.editor`: the runner pins both editor
+        // variables to a no-op so nothing can hang waiting for one, and an environment
+        // variable beats config, so a `-c` here is silently ignored and git replays its own
+        // unedited todo — a rebase that reports success and changes nothing.
+        //
+        // No `!` prefix either: that is special to aliases and credential helpers. This value
+        // goes straight to the shell, where a leading `!` is part of the command name.
+        //
+        // `GIT_EDITOR` keeps its no-op: a squash or fixup opens an editor on the combined
+        // message that nobody is there to answer, and accepting what git prepared is exactly
+        // the message the user was shown.
+        let cmd = crate::process::GitCommand::write("rebase", self.display_path())
+            .env(
+                "GIT_SEQUENCE_EDITOR",
+                format!(
+                    "'{}' rebase-editor --todo '{}'",
+                    coral_binary.display(),
+                    path.display()
+                ),
+            )
+            .args(["rebase", "--interactive", "--no-autosquash"])
+            .arg(onto);
+
+        let result = runner.output(cmd).await;
+        // The file has served its purpose either way; leaving it behind would be read as a
+        // rebase in progress by anything looking at the git dir.
+        let _ = std::fs::remove_file(&path);
+
+        match result {
+            Ok(out) => {
+                let msg = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+                self.op_outcome(runner, msg).await
+            }
+            Err(e) => {
+                let outcome = self
+                    .op_outcome(runner, e.stderr().unwrap_or_default().to_owned())
+                    .await?;
+                if outcome.completed {
+                    Err(e)
+                } else {
+                    Ok(outcome)
+                }
+            }
+        }
+    }
+}

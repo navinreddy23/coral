@@ -1,0 +1,95 @@
+// @vitest-environment happy-dom
+import { render } from '@testing-library/svelte';
+import { fireEvent } from '@testing-library/dom';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
+vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
+vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn() }));
+
+import RebasePicker from '../../src/app/RebasePicker.svelte';
+import { RebaseState } from '../../src/state/rebase.svelte';
+import type { TodoItem } from '../../src/ipc/types';
+
+function item(oid: string, summary: string): TodoItem {
+  return { step: 'pick', oid: oid.padEnd(40, '0'), summary };
+}
+
+function picker(items: TodoItem[]) {
+  const rebase = new RebaseState();
+  rebase.onto = 'main';
+  rebase.items = items;
+  return { rebase, ...render(RebasePicker, { props: { rebase, onDone: () => {} } }) };
+}
+
+const three = () => [item('aaa', 'commit a'), item('bbb', 'commit b'), item('ccc', 'commit c')];
+
+describe('the interactive rebase picker', () => {
+  it('lists the range oldest first, one row per commit', () => {
+    const { container } = picker(three());
+    const rows = [...container.querySelectorAll('li')];
+    expect(rows).toHaveLength(3);
+    expect(rows[0]?.textContent).toContain('commit a');
+    expect(rows[2]?.textContent).toContain('commit c');
+  });
+
+  it('counts what will survive as commits are dropped', () => {
+    const { rebase, container } = picker(three());
+    expect(container.textContent).toContain('3 of 3 commits kept');
+    rebase.setStep(1, 'drop');
+    expect(rebase.remaining).toBe(2);
+  });
+
+  it('leaves a dropped commit in place rather than removing the row', () => {
+    // Its position still matters: it says where the ones around it sit.
+    const { rebase, container } = picker(three());
+    rebase.setStep(1, 'drop');
+    expect(container.querySelectorAll('li')).toHaveLength(3);
+  });
+
+  it('refuses a list whose first commit has nothing to fold into', async () => {
+    const { rebase, container } = picker(three());
+    rebase.setStep(0, 'squash');
+    expect(rebase.invalid).toBe(true);
+    await Promise.resolve();
+    const start = [...container.querySelectorAll('footer button')].find(
+      (b) => b.textContent?.includes('Start'),
+    ) as HTMLButtonElement;
+    expect(start.disabled).toBe(true);
+    expect(container.querySelector('.warn')?.textContent).toContain('nothing above it');
+  });
+
+  it('does not offer reword, which needs an editor nothing here can answer', () => {
+    const { container } = picker(three());
+    const options = [...container.querySelectorAll('option')].map((o) => o.textContent);
+    expect(options).toContain('pick');
+    expect(options).toContain('fixup');
+    expect(options).not.toContain('reword');
+  });
+});
+
+describe('reordering', () => {
+  it('moves one commit and keeps the rest in order', () => {
+    const rebase = new RebaseState();
+    rebase.items = three();
+    rebase.move(2, 0);
+    expect(rebase.items.map((i) => i.summary)).toEqual(['commit c', 'commit a', 'commit b']);
+  });
+
+  it('ignores a move that goes nowhere or off the end', () => {
+    const rebase = new RebaseState();
+    rebase.items = three();
+    for (const [from, to] of [[1, 1], [-1, 0], [0, 9], [9, 0]] as const) {
+      rebase.move(from, to);
+      expect(rebase.items.map((i) => i.summary)).toEqual(['commit a', 'commit b', 'commit c']);
+    }
+  });
+
+  it('reorders by dragging one row onto another', async () => {
+    const { rebase, container } = picker(three());
+    const rows = [...container.querySelectorAll('li')];
+    await fireEvent.dragStart(rows[2] as HTMLElement);
+    await fireEvent.drop(rows[0] as HTMLElement);
+    expect(rebase.items.map((i) => i.summary)).toEqual(['commit c', 'commit a', 'commit b']);
+  });
+});

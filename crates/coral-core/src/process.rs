@@ -96,6 +96,7 @@ pub struct GitCommand {
     args: Vec<OsString>,
     secret_args: Vec<usize>,
     stdin: Option<Vec<u8>>,
+    env: Vec<(OsString, OsString)>,
 }
 
 impl GitCommand {
@@ -129,12 +130,26 @@ impl GitCommand {
             args: Vec::new(),
             secret_args: Vec::new(),
             stdin: None,
+            env: Vec::new(),
         }
     }
 
     #[must_use]
     pub fn arg(mut self, a: impl AsRef<OsStr>) -> Self {
         self.args.push(a.as_ref().to_os_string());
+        self
+    }
+
+    /// Overrides one environment variable for this command alone.
+    ///
+    /// Applied after the hermetic defaults, so it can replace them. There is one reason to:
+    /// the defaults pin `GIT_EDITOR` and `GIT_SEQUENCE_EDITOR` to a no-op so nothing can ever
+    /// hang waiting for an editor, and an environment variable beats `-c` config, so an
+    /// interactive rebase cannot install its todo any other way.
+    #[must_use]
+    pub fn env(mut self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) -> Self {
+        self.env
+            .push((key.as_ref().to_os_string(), value.as_ref().to_os_string()));
         self
     }
 
@@ -557,6 +572,9 @@ impl GitRunner {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         apply_env(&mut c);
+        for (key, value) in &cmd.env {
+            c.env(key, value);
+        }
         c
     }
 

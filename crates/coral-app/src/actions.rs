@@ -232,3 +232,47 @@ async fn run(
     }
     Ok(false)
 }
+
+/// The todo list an interactive rebase onto `onto` would start from.
+///
+/// # Errors
+/// Propagates git failures, including an unknown revision.
+#[tauri::command]
+pub async fn rebase_todo(
+    path: String,
+    onto: String,
+) -> Result<coral_core::sequence::Todo, IpcError> {
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc.rebase_todo(&runner, &onto).await?)
+}
+
+/// Runs an interactive rebase against a todo the user has decided.
+///
+/// # Errors
+/// Propagates git failures. A rebase that stops on a conflict is an outcome, not an error.
+#[tauri::command]
+pub async fn rebase_start(
+    path: String,
+    onto: String,
+    todo: coral_core::sequence::Todo,
+) -> Result<ActionOutcome, IpcError> {
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    let binary = std::env::current_exe().map_err(|e| coral_core::CoralError::Protocol {
+        label: "rebase",
+        detail: format!("could not locate the running binary: {e}"),
+    })?;
+
+    let before = loc.snapshot_refs(&runner).await?;
+    let outcome = loc
+        .rebase_interactive(&runner, &onto, &todo, &binary)
+        .await?;
+    let after = loc.snapshot_refs(&runner).await?;
+    loc.journal_change(&format!("rebase onto {onto}"), before, after)?;
+
+    Ok(ActionOutcome {
+        what: format!("rebase onto {onto}"),
+        conflicted: !outcome.conflicts.is_empty(),
+    })
+}

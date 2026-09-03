@@ -4,6 +4,14 @@
 use coral_app_lib::{actions, commands, conflicts, graph, hosting, tabs};
 
 fn main() {
+    // git invokes the running binary as its sequence editor during an interactive rebase, so
+    // this has to be answered before anything else starts: no window, no logging, no Tauri.
+    // Handled here rather than by shelling out to the CLI, which a packaged application has no
+    // reason to assume is installed.
+    if let Some(code) = rebase_editor() {
+        std::process::exit(code);
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_env("CORAL_LOG")
@@ -46,6 +54,8 @@ fn main() {
             graph::commit_detail,
             graph::file_diff,
             actions::repo_action,
+            actions::rebase_todo,
+            actions::rebase_start,
             conflicts::repo_operation,
             conflicts::repo_conflicts,
             conflicts::conflict_blocks,
@@ -67,6 +77,34 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("tauri failed to start");
+}
+
+/// Installs a prepared rebase todo list, when invoked as git's sequence editor.
+///
+/// Returns the exit code to use, or `None` when this is an ordinary launch. Writes nothing to
+/// stdout: git reads the todo file back, so anything printed would be read as an instruction.
+fn rebase_editor() -> Option<i32> {
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) != Some("rebase-editor") {
+        return None;
+    }
+    let todo = args
+        .iter()
+        .position(|a| a == "--todo")
+        .and_then(|at| args.get(at + 1));
+    let target = args.last().filter(|a| *a != "rebase-editor");
+
+    let (Some(todo), Some(target)) = (todo, target) else {
+        eprintln!("coral rebase-editor: expected --todo <prepared> <file>");
+        return Some(2);
+    };
+    match std::fs::copy(todo, target) {
+        Ok(_) => Some(0),
+        Err(e) => {
+            eprintln!("coral rebase-editor: {e}");
+            Some(1)
+        }
+    }
 }
 
 /// Turns off GPU compositing so text keeps subpixel antialiasing.
