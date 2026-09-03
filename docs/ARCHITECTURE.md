@@ -63,6 +63,25 @@ at the end, against a sorted lookup index built at the same time.
 Measured on the kernel: 1,481,528 rows and 1,601,455 edges build in 4.2 s into 85.8 MB, at
 60.7 bytes per row and a maximum width of 214 lanes.
 
+First paint is two-phase and that is not optional. Topological order must prepaint indegrees
+across the entire graph before it can emit one row, so a screenful costs the same as the whole
+thing — 1.5 s against a 300 ms budget. The engine paints a commit-time walk first (96 ms) with
+every row flagged provisional, then swaps in topological rows when the full walk lands. A
+`--limit` does not avoid this, which is why `coral graph --limit N` is no faster than the full
+walk while `--first-paint` is.
+
+## Reads, watching, and scheduling
+
+`Engine` deduplicates reads by `ReadKey`: concurrent callers asking the same question join one
+git child. A read that started before a change was observed is stale and is not joined, so the
+UI cannot be handed state from before the user's own edit.
+
+`RepoWatcher` classifies each changed path into a coarse mask — refs, index, worktree, ops,
+graph — rather than a path list, because a kernel build emits tens of thousands of events a
+second. Object churn and lock files are dropped. Bursts coalesce behind a 300 ms trailing
+debounce with a 1 s ceiling. Worktree watching is best-effort and reports when it degrades
+rather than silently going stale.
+
 ## Contracts
 
 - **CLI envelope** — `{"schema":1,"ok":true,"result":{…}}` or `{"schema":1,"ok":false,"error":{…}}`.
@@ -71,6 +90,9 @@ Measured on the kernel: 1,481,528 rows and 1,601,455 edges build in 4.2 s into 8
   disagree about success.
 - **IPC types** — `ui/src/ipc/types.ts` is generated from the Rust types by `ts-rs` during
   `cargo test`, and CI fails if it drifts.
+- **Paths** — `BString` everywhere internally, converted to strings only in `bytes.rs` at the
+  serialization boundary, where invalid UTF-8 renders lossily. Diff paths come from
+  `--numstat -z`, never from the patch header, which is ambiguous for paths containing spaces.
 - **Errors** — every `CoralError` carries a stable `code()`. The redacted argv is stored at
   construction, in `process.rs`, so a token cannot reach a log by way of an error that skipped
   the formatter.

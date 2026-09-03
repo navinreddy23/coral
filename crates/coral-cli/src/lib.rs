@@ -78,7 +78,9 @@ pub enum Command {
     },
     /// Walk the commit graph and report rows with their lanes.
     Graph {
-        /// Stop after this many commits.
+        /// Stop after this many commits. Note that this does not make a topological walk
+        /// cheap: the order requires prepainting the whole graph before the first row, so a
+        /// small limit costs about as much as no limit. Use --first-paint for a fast screen.
         #[arg(long)]
         limit: Option<u64>,
         /// First row to print; the walk still covers everything before it.
