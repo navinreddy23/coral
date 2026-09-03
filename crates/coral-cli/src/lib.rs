@@ -41,6 +41,36 @@ pub enum Command {
         #[arg(value_name = "PATH")]
         paths: Vec<String>,
     },
+    /// Read commit history.
+    Log {
+        /// Start from this revision.
+        #[arg(long, default_value = "HEAD")]
+        rev: String,
+        /// Limit to commits touching this path.
+        #[arg(long)]
+        path: Option<String>,
+        /// Follow the path across renames. Requires --path.
+        #[arg(long, requires = "path")]
+        follow: bool,
+        #[arg(long)]
+        author: Option<String>,
+        /// Match the commit message.
+        #[arg(long)]
+        grep: Option<String>,
+        /// Match added or removed content.
+        #[arg(long)]
+        search: Option<String>,
+        #[arg(long, default_value_t = 50)]
+        limit: u64,
+    },
+    /// Attribute each line of a file to the commit that last changed it.
+    Blame {
+        /// Revision to blame at.
+        #[arg(long, default_value = "HEAD")]
+        rev: String,
+        /// File to blame.
+        file: String,
+    },
     /// List refs.
     Refs {
         #[arg(long, value_enum, default_value_t = commands::refs::Kind::All)]
@@ -95,6 +125,29 @@ pub async fn run(argv: Vec<OsString>) -> output::Rendered {
         Command::Status => output::render(&commands::status::run(&repo).await),
         Command::Diff { staged, paths } => {
             output::render(&commands::diff::run(&repo, staged, &paths).await)
+        }
+        Command::Log {
+            rev,
+            path,
+            follow,
+            author,
+            grep,
+            search,
+            limit,
+        } => {
+            let q = coral_core::history::LogQuery {
+                rev: Some(rev),
+                path,
+                follow,
+                author,
+                grep,
+                pickaxe: search,
+                limit: Some(limit),
+            };
+            output::render(&commands::log::run(&repo, &q).await)
+        }
+        Command::Blame { rev, file } => {
+            output::render(&commands::blame::run(&repo, &rev, &file).await)
         }
         Command::Refs { kind } => output::render(&commands::refs::run(&repo, kind).await),
         Command::Graph {

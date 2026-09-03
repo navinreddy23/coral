@@ -214,3 +214,67 @@ async fn status_reports_staged_and_untracked_entries() {
     assert!(paths.contains(&"tracked.txt"));
     assert!(paths.contains(&"new.txt"));
 }
+
+#[tokio::test]
+async fn diff_reports_staged_and_unstaged_separately() {
+    let fixture = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let fixture = fixture.write("a.txt", "staged\n");
+    fixture.git(["add", "a.txt"]);
+    let fixture = fixture.write("b.txt", "unstaged\n");
+    let repo = fixture.path().to_str().unwrap();
+
+    let staged = coral_cli::run(argv(&["--json", "--repo", repo, "diff", "--staged"])).await;
+    let files = staged.json["result"]["files"].as_array().unwrap();
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0]["path"], "a.txt");
+    assert_eq!(files[0]["change"], "modified");
+    assert!(!files[0]["hunks"].as_array().unwrap().is_empty());
+
+    // b.txt is untracked, so it does not appear in a worktree diff at all.
+    let unstaged = coral_cli::run(argv(&["--json", "--repo", repo, "diff"])).await;
+    assert!(
+        unstaged.json["result"]["files"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn log_reports_commits_newest_first() {
+    let fixture = TestRepo::new().write("a.txt", "1\n").commit("older");
+    let fixture = fixture.write("a.txt", "2\n").commit("newer");
+
+    let out = coral_cli::run(argv(&[
+        "--json",
+        "--repo",
+        fixture.path().to_str().unwrap(),
+        "log",
+    ]))
+    .await;
+    let commits = out.json["result"]["commits"].as_array().unwrap();
+
+    assert_eq!(commits.len(), 2);
+    assert_eq!(commits[0]["summary"], "newer");
+    assert_eq!(commits[1]["summary"], "older");
+    assert_eq!(commits[0]["author"]["name"], "Coral Fixture");
+}
+
+#[tokio::test]
+async fn blame_maps_lines_to_the_commits_that_wrote_them() {
+    let fixture = TestRepo::new().write("f.txt", "a\nb\n").commit("first");
+    let fixture = fixture.write("f.txt", "a\nCHANGED\n").commit("second");
+
+    let out = coral_cli::run(argv(&[
+        "--json",
+        "--repo",
+        fixture.path().to_str().unwrap(),
+        "blame",
+        "f.txt",
+    ]))
+    .await;
+    let r = &out.json["result"];
+
+    assert_eq!(r["chunks"].as_array().unwrap().len(), 2);
+    assert_eq!(r["commits"].as_object().unwrap().len(), 2);
+}

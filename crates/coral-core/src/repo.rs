@@ -290,6 +290,72 @@ impl RepoLocation {
         Ok(files)
     }
 
+    /// Reads commit history, optionally narrowed by [`crate::history::LogQuery`].
+    ///
+    /// # Errors
+    /// Propagates git failures and [`CoralError::Protocol`] if the output does not parse.
+    pub async fn log(
+        &self,
+        runner: &GitRunner,
+        q: &crate::history::LogQuery,
+    ) -> Result<Vec<crate::commit::Commit>, CoralError> {
+        let mut cmd = GitCommand::read("log", self.display_path())
+            .arg("log")
+            .arg("-z")
+            .arg(format!("--format={}", crate::history::FORMAT));
+
+        if let Some(n) = q.limit {
+            cmd = cmd.arg(format!("--max-count={n}"));
+        }
+        if let Some(a) = &q.author {
+            cmd = cmd.arg(format!("--author={a}"));
+        }
+        if let Some(g) = &q.grep {
+            cmd = cmd.args(["--grep", g]).arg("--fixed-strings");
+        }
+        if let Some(s) = &q.pickaxe {
+            cmd = cmd.arg(format!("-S{s}"));
+        }
+        // --follow needs exactly one pathspec and must precede it.
+        if q.follow && q.path.is_some() {
+            cmd = cmd.arg("--follow");
+        }
+        cmd = cmd.arg(q.rev.as_deref().unwrap_or("HEAD"));
+        if let Some(p) = &q.path {
+            cmd = cmd.arg("--").arg(p);
+        }
+
+        let out = runner.output(cmd).await?;
+        crate::history::parse(&out.stdout)
+    }
+
+    /// Attributes each line of a file to the commit that last changed it.
+    ///
+    /// Streams rather than buffers: `--incremental` emits chunks as it resolves them, which is
+    /// what lets the UI paint a long file progressively.
+    ///
+    /// # Errors
+    /// Propagates git failures and [`CoralError::Protocol`] on malformed output.
+    pub async fn blame(
+        &self,
+        runner: &GitRunner,
+        rev: &str,
+        path: &str,
+    ) -> Result<crate::blame::Blame, CoralError> {
+        let cmd = GitCommand::read("blame", self.display_path())
+            .args(["blame", "--porcelain", "--incremental", rev, "--"])
+            .arg(path);
+
+        let mut parser = crate::blame::BlameParser::default();
+        runner
+            .stream(cmd, b'\n', |line| {
+                parser.push(line)?;
+                Ok(crate::process::Sink::Continue)
+            })
+            .await?;
+        Ok(parser.finish())
+    }
+
     /// Gathers everything `coral open` reports.
     ///
     /// # Errors
