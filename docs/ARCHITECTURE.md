@@ -82,10 +82,34 @@ second. Object churn and lock files are dropped. Bursts coalesce behind a 300 ms
 debounce with a 1 s ceiling. Worktree watching is best-effort and reports when it degrades
 rather than silently going stale.
 
+## Writes
+
+Every git command string lives in `ops.rs`, built with `GitCommand`. Writes go through
+`Engine::write`, which serializes them against each other and against index-touching reads on a
+FIFO-fair lock, so a stream of status refreshes during a rebase cannot starve the writer.
+
+**A stopped operation is an outcome, not an error.** git exits non-zero both when a merge
+conflicts and when it fails outright, so the two are distinguished by asking the repository
+what state it is in — `MERGE_HEAD` and friends — rather than by reading the exit code. The CLI
+reports a stop as exit 3.
+
+**Partial staging** builds a patch and feeds it to `git apply --cached`. The difficult part is
+the header, not the line filter: an unselected addition disappears from both sides, while an
+unselected removal becomes *context*, because declining to stage a removal means the line is
+still there. `--unidiff-zero` is required, since a line selection can leave a hunk with no
+context at all.
+
+**Undo** journals a snapshot of every ref before and after each mutation, so it works for
+operations it knows nothing about. It refuses over a dirty worktree, because moving refs
+underneath uncommitted work silently changes what that work means. Restoring refs also syncs
+the worktree explicitly: checking out the branch you are already on is a no-op, so moving its
+ref underneath would otherwise leave the index describing the old commit.
+
 ## Contracts
 
 - **CLI envelope** — `{"schema":1,"ok":true,"result":{…}}` or `{"schema":1,"ok":false,"error":{…}}`.
   Exit codes: 0 ok, 1 git error, 2 usage, 3 stopped on conflicts, 4 auth needed, 130 cancelled.
+  Exit 3 is produced in exactly one place, `output::render_op`.
   Rendered in one place (`coral-cli/src/output.rs`), so human and JSON output can never
   disagree about success.
 - **IPC types** — `ui/src/ipc/types.ts` is generated from the Rust types by `ts-rs` during
