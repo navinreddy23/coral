@@ -1,4 +1,5 @@
 pub mod error;
+pub mod graph;
 pub mod process;
 pub mod repo;
 

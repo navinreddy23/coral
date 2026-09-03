@@ -92,6 +92,14 @@ walk lands ~2.7 s later. Commit-time order can misorder a child before its paren
 skew; the swap is what makes it correct, so the first paint must be visibly provisional in the
 row store rather than treated as final.
 
+**The subprocess fallback can replace gix for the full walk, but not for first paint.**
+Measured through the `CommitStream` trait: a 4,096-row commit-time walk costs gix 54 ms and
+`git rev-list --date-order --max-count=4096 --all` 2,424 ms, because rev-list still resolves and
+orders all 945 tips before it emits anything. Both agree exactly on the full graph
+(1,481,528 commits, 1,601,455 edges) at 2,733 ms and 2,991 ms respectively. So if gix ever has
+to be swapped out, first paint needs its own strategy — first-parent from HEAD alone — rather
+than the same query with a row limit.
+
 **The 437 MB peak is the binding memory constraint.** That is the walk's own transient state
 (indegree and flag maps plus the priority queues), not the row store, and it is freed when the
 walk ends. Against a 600 MB total budget it means graph builds must be serialized across tabs:

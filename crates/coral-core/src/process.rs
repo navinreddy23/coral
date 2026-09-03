@@ -241,6 +241,19 @@ pub struct GitOutput {
     pub stderr: Vec<u8>,
 }
 
+/// Returned by a streaming sink to end the walk early. The runner then kills the child rather
+/// than draining output nobody will read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Sink {
+    Continue,
+    Stop,
+}
+
+pub struct GitStream {
+    pub records: u64,
+    pub stopped_early: bool,
+}
+
 /// Locates `git` once at startup, checks its version, and runs commands through it.
 #[derive(Clone, Debug)]
 pub struct GitRunner {
@@ -327,12 +340,106 @@ impl GitRunner {
         Err(Self::exit_error(cmd.label, argv, &out))
     }
 
-    fn spawn(
+    /// Streams stdout to `sink` one record at a time, splitting on `delim`. Never holds more
+    /// than one record plus the read buffer, so it is safe on a walk of the whole kernel.
+    ///
+    /// # Errors
+    /// As [`GitRunner::output`]. A sink returning [`Sink::Stop`] is not an error.
+    pub async fn stream<F>(
         &self,
-        cmd: &GitCommand,
-        argv: &[String],
-    ) -> Result<tokio::process::Child, CoralError> {
-        let mut c = tokio::process::Command::new(&self.git);
+        cmd: GitCommand,
+        delim: u8,
+        mut sink: F,
+    ) -> Result<GitStream, CoralError>
+    where
+        F: FnMut(&[u8]) -> Result<Sink, CoralError>,
+    {
+        use tokio::io::AsyncReadExt;
+
+        let argv = cmd.redacted_argv(&self.git);
+        let mut child = self.spawn(&cmd, &argv)?;
+        let Some(mut out) = child.stdout.take() else {
+            return Err(CoralError::Protocol {
+                label: cmd.label,
+                detail: "stdout was not piped".to_owned(),
+            });
+        };
+
+        let mut buf = vec![0_u8; 64 * 1024];
+        let mut pending: Vec<u8> = Vec::with_capacity(256);
+        let mut records = 0_u64;
+        let mut stopped = false;
+
+        'read: loop {
+            let n = out.read(&mut buf).await?;
+            if n == 0 {
+                break;
+            }
+            // A record can straddle any number of reads, so anything left over is carried.
+            let mut rest = &buf[..n];
+            while let Some(i) = rest.iter().position(|b| *b == delim) {
+                let (head, tail) = rest.split_at(i);
+                rest = &tail[1..];
+                let record: &[u8] = if pending.is_empty() {
+                    head
+                } else {
+                    pending.extend_from_slice(head);
+                    &pending
+                };
+                records += 1;
+                let control = sink(record)?;
+                pending.clear();
+                if control == Sink::Stop {
+                    stopped = true;
+                    break 'read;
+                }
+            }
+            pending.extend_from_slice(rest);
+        }
+
+        if stopped {
+            // Nobody will read the rest, so do not make git finish writing it.
+            let _ = child.start_kill();
+            let _ = child.wait().await;
+            return Ok(GitStream {
+                records,
+                stopped_early: true,
+            });
+        }
+
+        // A trailing record with no delimiter still counts.
+        if !pending.is_empty() {
+            records += 1;
+            sink(&pending)?;
+        }
+
+        let status = child.wait().await?;
+        if status.success() {
+            Ok(GitStream {
+                records,
+                stopped_early: false,
+            })
+        } else {
+            let stderr = read_stderr(&mut child).await;
+            Err(match status.code() {
+                Some(code) => CoralError::GitExit {
+                    label: cmd.label,
+                    code,
+                    argv,
+                    stderr,
+                },
+                None => CoralError::GitSignal {
+                    label: cmd.label,
+                    signal: signal_of(status),
+                    argv,
+                },
+            })
+        }
+    }
+    /// Builds the fully configured child process. `tokio::process::Command` wraps this, so the
+    /// async and blocking paths cannot drift in their arguments or environment.
+    fn std_command(&self, cmd: &GitCommand) -> std::process::Command {
+        let mut c = std::process::Command::new(&self.git);
         c.args(cmd.base_args())
             .args(&cmd.args)
             .stdin(if cmd.stdin.is_some() {
@@ -341,9 +448,123 @@ impl GitRunner {
                 Stdio::null()
             })
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true);
+            .stderr(Stdio::piped());
         apply_env(&mut c);
+        c
+    }
+
+    /// Synchronous [`GitRunner::stream`], for callers that are already on a blocking thread.
+    ///
+    /// [`crate::graph::CommitStream`] is synchronous by design, so the subprocess walk uses
+    /// this rather than borrowing a runtime handle: `block_on` panics when the calling thread
+    /// is already driving the runtime.
+    ///
+    /// # Errors
+    /// As [`GitRunner::stream`].
+    pub fn stream_blocking<F>(
+        &self,
+        cmd: &GitCommand,
+        delim: u8,
+        mut sink: F,
+    ) -> Result<GitStream, CoralError>
+    where
+        F: FnMut(&[u8]) -> Result<Sink, CoralError>,
+    {
+        use std::io::Read;
+
+        let argv = cmd.redacted_argv(&self.git);
+        let mut child = self
+            .std_command(cmd)
+            .spawn()
+            .map_err(|source| CoralError::GitSpawn {
+                label: cmd.label,
+                argv: argv.clone(),
+                source,
+            })?;
+        let Some(mut out) = child.stdout.take() else {
+            return Err(CoralError::Protocol {
+                label: cmd.label,
+                detail: "stdout was not piped".to_owned(),
+            });
+        };
+
+        let mut buf = vec![0_u8; 64 * 1024];
+        let mut pending: Vec<u8> = Vec::with_capacity(256);
+        let mut records = 0_u64;
+        let mut stopped = false;
+
+        'read: loop {
+            let n = out.read(&mut buf)?;
+            if n == 0 {
+                break;
+            }
+            let mut rest = &buf[..n];
+            while let Some(i) = rest.iter().position(|b| *b == delim) {
+                let (head, tail) = rest.split_at(i);
+                rest = &tail[1..];
+                let record: &[u8] = if pending.is_empty() {
+                    head
+                } else {
+                    pending.extend_from_slice(head);
+                    &pending
+                };
+                records += 1;
+                let control = sink(record)?;
+                pending.clear();
+                if control == Sink::Stop {
+                    stopped = true;
+                    break 'read;
+                }
+            }
+            pending.extend_from_slice(rest);
+        }
+
+        if stopped {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Ok(GitStream {
+                records,
+                stopped_early: true,
+            });
+        }
+        if !pending.is_empty() {
+            records += 1;
+            sink(&pending)?;
+        }
+
+        let status = child.wait()?;
+        if status.success() {
+            return Ok(GitStream {
+                records,
+                stopped_early: false,
+            });
+        }
+        let mut stderr = String::new();
+        if let Some(mut e) = child.stderr.take() {
+            let _ = e.read_to_string(&mut stderr);
+        }
+        Err(match status.code() {
+            Some(code) => CoralError::GitExit {
+                label: cmd.label,
+                code,
+                argv,
+                stderr: stderr.trim().to_owned(),
+            },
+            None => CoralError::GitSignal {
+                label: cmd.label,
+                signal: signal_of(status),
+                argv,
+            },
+        })
+    }
+
+    fn spawn(
+        &self,
+        cmd: &GitCommand,
+        argv: &[String],
+    ) -> Result<tokio::process::Child, CoralError> {
+        let mut c = tokio::process::Command::from(self.std_command(cmd));
+        c.kill_on_drop(true);
         c.spawn().map_err(|source| CoralError::GitSpawn {
             label: cmd.label,
             argv: argv.to_vec(),
@@ -373,6 +594,15 @@ impl GitRunner {
     }
 }
 
+async fn read_stderr(child: &mut tokio::process::Child) -> String {
+    use tokio::io::AsyncReadExt;
+    let mut s = String::new();
+    if let Some(mut e) = child.stderr.take() {
+        let _ = e.read_to_string(&mut s).await;
+    }
+    s.trim().to_owned()
+}
+
 #[cfg(unix)]
 fn signal_of(status: std::process::ExitStatus) -> i32 {
     use std::os::unix::process::ExitStatusExt;
@@ -386,7 +616,7 @@ fn signal_of(_status: std::process::ExitStatus) -> i32 {
 
 /// Pins the locale so stderr fingerprinting is sound, and clears every git environment
 /// variable that would silently redirect the command somewhere else.
-fn apply_env(c: &mut tokio::process::Command) {
+fn apply_env(c: &mut std::process::Command) {
     for (k, v) in [
         ("LC_ALL", "C"),
         ("LANG", "C"),
