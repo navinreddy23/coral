@@ -4,8 +4,14 @@
   "version": "0.1.0",
   "identifier": "dev.coral.app",
   "build": {
-    "beforeDevCommand": { "script": "npm run dev", "cwd": "../../ui" },
-    "beforeBuildCommand": { "script": "npm run build", "cwd": "../../ui" },
+    "beforeDevCommand": {
+      "script": "npm run dev",
+      "cwd": "../../ui"
+    },
+    "beforeBuildCommand": {
+      "script": "npm run build",
+      "cwd": "../../ui"
+    },
     "devUrl": "http://localhost:5173",
     "frontendDist": "../../ui/dist"
   },
@@ -20,11 +26,31 @@
         "resizable": true
       }
     ],
-    "security": { "csp": null }
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: asset: http://asset.localhost; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'"
+    }
   },
   "bundle": {
     "active": true,
-    "targets": ["deb", "appimage", "dmg", "nsis"],
-    "icon": ["icons/icon.png"]
+    "targets": [
+      "deb",
+      "appimage",
+      "dmg",
+      "nsis"
+    ],
+    "icon": [
+      "icons/icon.png"
+    ],
+    "category": "DeveloperTool",
+    "shortDescription": "A fast Git client",
+    "longDescription": "Coral is a desktop Git client that stays responsive on very large repositories. Reads go through gix, every mutation goes through the system git binary.",
+    "licenseFile": "../../LICENSE",
+    "linux": {
+      "deb": {
+        "depends": [
+          "git"
+        ]
+      }
+    }
   }
 }

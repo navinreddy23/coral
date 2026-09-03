@@ -223,6 +223,14 @@ impl GitCommand {
             v.push("-c".into());
             v.push(kv.into());
         }
+        // Only network commands can need a credential, and only they should be able to reach
+        // the helper: a read that somehow asked for one would be answered by a helper the user
+        // never saw a prompt from.
+        if matches!(self.class, GitClass::Network)
+            && let Some((args, _)) = crate::credential::helper_config()
+        {
+            v.extend(args.into_iter().map(OsString::from));
+        }
         v
     }
 }
@@ -572,6 +580,11 @@ impl GitRunner {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         apply_env(&mut c);
+        if matches!(cmd.class, GitClass::Network)
+            && let Some((_, session)) = crate::credential::helper_config()
+        {
+            c.env(crate::credential::SESSION_VAR, session);
+        }
         for (key, value) in &cmd.env {
             c.env(key, value);
         }

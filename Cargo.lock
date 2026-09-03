@@ -844,6 +844,7 @@ name = "coral-core"
 version = "0.1.0"
 dependencies = [
  "bstr",
+ "getrandom 0.3.4",
  "gix",
  "insta",
  "keyring",

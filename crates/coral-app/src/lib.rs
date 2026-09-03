@@ -4,6 +4,7 @@
 pub mod actions;
 pub mod commands;
 pub mod conflicts;
+pub mod credentials;
 pub mod graph;
 pub mod hosting;
 pub mod session;

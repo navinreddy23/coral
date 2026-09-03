@@ -335,6 +335,19 @@ pub async fn run(argv: Vec<OsString>) -> output::Rendered {
         }
     };
 
+    // Makes git ask this binary for credentials rather than a terminal it cannot prompt on.
+    // Not done when serving as the helper itself: that invocation spawns no git and needs no
+    // configuration, and generating a nonce there would only slow it down.
+    if !matches!(
+        cli.command,
+        Command::CredentialHelper { .. } | Command::RebaseEditor { .. }
+    ) && let (Ok(binary), Some(session)) = (
+        std::env::current_exe(),
+        coral_core::credential::new_session(),
+    ) {
+        coral_core::credential::configure(binary, session);
+    }
+
     // The sequence editor answers git, not a person. It writes nothing at all: git reads the
     // todo file back, so anything on stdout is noise and a JSON envelope would be read as a
     // rebase instruction.

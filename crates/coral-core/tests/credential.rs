@@ -222,7 +222,7 @@ fn the_session_check_denies_unless_both_sides_match_exactly() {
 /// could answer first and ours would never be consulted.
 #[test]
 fn the_helper_arguments_clear_existing_helpers_first() {
-    let args = helper_args(std::path::Path::new("/usr/local/bin/coral"));
+    let args = helper_args(std::path::Path::new("/usr/local/bin/coral"), "n0nce");
 
     assert_eq!(args[0], "-c");
     assert_eq!(
@@ -232,6 +232,11 @@ fn the_helper_arguments_clear_existing_helpers_first() {
     assert_eq!(args[2], "-c");
     assert!(args[3].contains("/usr/local/bin/coral"));
     assert!(args[3].contains("credential-helper"));
+    // Without the nonce on the command line the helper answers empty every time, because
+    // there is nothing for it to compare the environment against.
+    assert!(args[3].contains("--session 'n0nce'"));
+    // git appends the action, so the nonce must come before it.
+    assert!(args[3].trim_end().ends_with("'n0nce'"));
 }
 
 /// The password must never reach a log through an accidental Debug format.
@@ -258,4 +263,31 @@ fn actions_parse_and_unknown_ones_are_refused() {
 
     let err = Action::parse("exfiltrate").unwrap_err();
     assert_eq!(err.code(), "refused");
+}
+
+#[test]
+fn a_network_command_carries_the_helper_and_its_nonce() {
+    use coral_core::process::GitCommand;
+
+    // The nonce goes on the command line and in the environment; the helper answers only when
+    // they match, which is what stops another local process asking for the user's tokens.
+    coral_core::credential::configure(std::path::PathBuf::from("/opt/coral"), "abc123".to_owned());
+
+    let network = GitCommand::network("push", "/tmp").args(["push", "origin"]);
+    let argv = network.redacted_argv(std::path::Path::new("git")).join(" ");
+    assert!(
+        argv.contains("credential.helper="),
+        "clears inherited helpers"
+    );
+    assert!(argv.contains("/opt/coral"), "points at this binary: {argv}");
+    assert!(
+        argv.contains("--session 'abc123'"),
+        "carries the nonce: {argv}"
+    );
+
+    // A read must not be able to reach it: a helper answering a request the user never saw a
+    // prompt for is a credential leak, not a convenience.
+    let read = GitCommand::read("rev-list", "/tmp").args(["rev-list", "HEAD"]);
+    let read_argv = read.redacted_argv(std::path::Path::new("git")).join(" ");
+    assert!(!read_argv.contains("credential.helper"), "{read_argv}");
 }

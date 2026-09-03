@@ -11,6 +11,9 @@ fn main() {
     if let Some(code) = rebase_editor() {
         std::process::exit(code);
     }
+    if let Some(code) = credential_helper() {
+        std::process::exit(code);
+    }
 
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -20,6 +23,18 @@ fn main() {
         .init();
 
     tracing::info!("coral-app starting");
+
+    // Makes git ask this binary for credentials rather than a terminal the user cannot see.
+    // Without a nonce the helper stays off: a guessable one would let any local process ask
+    // for the user's tokens, which is worse than not having a helper at all.
+    if let (Ok(binary), Some(session)) = (
+        std::env::current_exe(),
+        coral_core::credential::new_session(),
+    ) {
+        coral_core::credential::configure(binary, session);
+    } else {
+        tracing::warn!("no credential helper; git will use whatever the user configured");
+    }
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -77,6 +92,41 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("tauri failed to start");
+}
+
+/// Answers git's credential protocol, when invoked as its helper.
+///
+/// Like the sequence editor, git runs the binary that spawned it, so this is handled here
+/// rather than by shelling out to the CLI a packaged application cannot assume is installed.
+/// Its stdout is the protocol itself and must carry nothing else.
+fn credential_helper() -> Option<i32> {
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) != Some("credential-helper") {
+        return None;
+    }
+    // git appends the action after whatever `credential.helper` was configured with, so the
+    // invocation reads `credential-helper --session <nonce> get`.
+    let session = args
+        .iter()
+        .position(|a| a == "--session")
+        .and_then(|at| args.get(at + 1))
+        .map(String::as_str);
+    let action = args
+        .iter()
+        .skip(2)
+        .find(|a| !a.starts_with("--") && Some(a.as_str()) != session)
+        .map_or("get", String::as_str);
+
+    match coral_app_lib::credentials::serve(action, session) {
+        Ok(response) => {
+            print!("{response}");
+            Some(0)
+        }
+        Err(e) => {
+            eprintln!("coral credential-helper: {e}");
+            Some(1)
+        }
+    }
 }
 
 /// Installs a prepared rebase todo list, when invoked as git's sequence editor.
