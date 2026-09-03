@@ -2,6 +2,8 @@
   import { hasFlag, oidOf, RowFlag, type Frame } from '../graph/frame';
   import GraphCanvas from '../graph/GraphCanvas.svelte';
   import { initialsOf } from '../graph/initials';
+  import Splitter from './Splitter.svelte';
+  import { PANE_LIMITS, PanesState } from '../state/panes.svelte';
   import {
     DEFAULT_METRICS,
     firstRowFor,
@@ -101,6 +103,7 @@
   let error = $state<string | null>(null);
   let scrollTop = $state(0);
   let viewport = $state(600);
+  const panes = new PanesState();
   let scroller = $state<HTMLDivElement | null>(null);
 
   const headName = $derived(
@@ -286,7 +289,13 @@
   {#if graph.loading && !graph.frame}
     <p class="muted">Walking the graph…</p>
   {:else if graph.frame}
-    <div class="body">
+    <div
+      class="body"
+      style:--refs-col="{panes.widths.refs}px"
+      style:--graph-col="{panes.widths.graph}px"
+      style:--sidebar-w="{panes.widths.sidebar}px"
+      style:--details-w="{panes.widths.details}px"
+    >
     {#if showSidebar}
       <Sidebar
         groups={refs.groups}
@@ -294,6 +303,14 @@
         submodules={refs.submodules}
         onSelect={reveal}
         onOpenSubmodule={openSubmodule}
+      />
+      <Splitter
+        label="Resize the sidebar"
+        value={panes.widths.sidebar}
+        min={PANE_LIMITS.sidebar.min}
+        max={PANE_LIMITS.sidebar.max}
+        onresize={(px) => panes.resize('sidebar', px)}
+        onreset={() => panes.reset()}
       />
     {/if}
     <div
@@ -303,8 +320,28 @@
       bind:clientHeight={viewport}
     >
       <div class="columns">
-        <span class="col refs">Branch / Tag</span>
-        <span class="col graph-col">Graph</span>
+        <span class="col refs">
+          Branch / Tag
+          <Splitter
+            label="Resize the branch and tag column"
+            value={panes.widths.refs}
+            min={PANE_LIMITS.refs.min}
+            max={PANE_LIMITS.refs.max}
+            onresize={(px) => panes.resize('refs', px)}
+            onreset={() => panes.reset()}
+          />
+        </span>
+        <span class="col graph-col">
+          Graph
+          <Splitter
+            label="Resize the graph column"
+            value={panes.widths.graph}
+            min={PANE_LIMITS.graph.min}
+            max={PANE_LIMITS.graph.max}
+            onresize={(px) => panes.resize('graph', px)}
+            onreset={() => panes.reset()}
+          />
+        </span>
         <span class="col message">Commit message</span>
       </div>
       {#if worktree.dirty}
@@ -326,6 +363,7 @@
             frame={graph.frame}
             firstRow={rows[0] ?? 0}
             height={viewport}
+            width={panes.widths.graph}
             initials={nodeInitials}
           />
         </div>
@@ -358,6 +396,15 @@
       </div>
     </div>
     {#if showDetails}
+      <Splitter
+        label="Resize the detail panel"
+        value={panes.widths.details}
+        min={PANE_LIMITS.details.min}
+        max={PANE_LIMITS.details.max}
+        grows="left"
+        onresize={(px) => panes.resize('details', px)}
+        onreset={() => panes.reset()}
+      />
       {#if showWip}
         <aside class="wip-panel"><Staging {worktree} /></aside>
       {:else}
@@ -408,12 +455,16 @@
   }
   .columns {
     position: sticky; top: 0; z-index: 2;
-    height: 22px; padding: 0 var(--space-3);
+    height: 24px; padding: 0 var(--space-3);
     background: var(--bg-1); border-bottom: 1px solid var(--border);
     font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
     color: var(--fg-2);
   }
-  .col { overflow: hidden; }
+  .col { overflow: hidden; position: relative; display: flex; align-items: center; }
+  /* The handle sits on the column's right edge and spans the header's full height. */
+  .col :global(.splitter) {
+    position: absolute; right: 0; top: 0; bottom: 0; margin: 0 -4px 0 0;
+  }
 
   .spacer { position: relative; }
   /* The canvas tracks the scroll position rather than being as tall as the graph: a canvas
@@ -491,7 +542,7 @@
   }
 
   .wip-panel {
-    width: 340px; flex: 0 0 auto; overflow-y: auto;
+    width: var(--details-w, 340px); flex: 0 0 auto; overflow-y: auto;
     border-left: 1px solid var(--border); background: var(--bg-1);
     padding: var(--space-3);
   }

@@ -124,7 +124,7 @@
 
 <style>
   aside {
-    width: 340px; flex: 0 0 auto; overflow-y: auto;
+    width: var(--details-w, 340px); flex: 0 0 auto; overflow-y: auto;
     border-left: 1px solid var(--border); background: var(--bg-1);
     padding: var(--space-3); font-size: 12px;
   }

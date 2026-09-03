@@ -116,7 +116,7 @@
 
 <style>
   aside {
-    width: 240px; flex: 0 0 auto; overflow-y: auto;
+    width: var(--sidebar-w, 240px); flex: 0 0 auto; overflow-y: auto;
     border-right: 1px solid var(--border); background: var(--bg-1);
     padding: var(--space-2);
   }
