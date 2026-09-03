@@ -122,19 +122,20 @@
     text-align: left;
   }
   .tally { flex: 0 0 auto; font-size: 11px; display: flex; gap: var(--space-2); }
-  .added { color: var(--ok); }
-  .removed { color: var(--danger); }
+  .added { color: var(--ok); font-weight: 600; }
+  .removed { color: var(--danger); font-weight: 600; }
   .toggle { display: flex; border: 1px solid var(--border); border-radius: 3px; overflow: hidden; }
   .toggle button {
     font: inherit; font-size: 11px; cursor: pointer; padding: 1px var(--space-2);
     background: var(--bg-0); border: 0; color: var(--fg-1);
   }
-  .toggle button.on { background: var(--bg-3); color: var(--fg-0); }
+  .toggle button:hover { color: var(--fg-0); }
+  .toggle button.on { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
   .close {
     font: inherit; cursor: pointer; background: none; border: 0; color: var(--fg-2);
-    padding: 0 var(--space-1);
+    padding: 2px var(--space-2); border-radius: var(--radius-1);
   }
-  .close:hover { color: var(--fg-0); }
+  .close:hover { color: var(--fg-0); background: var(--bg-2); }
 
   .scroll { flex: 1; overflow: auto; }
   .lines {
@@ -145,17 +146,29 @@
     width: 1%; white-space: nowrap; text-align: right; user-select: none;
     padding: 0 var(--space-2); color: var(--fg-2); background: var(--bg-1);
     border-right: 1px solid var(--border);
+    /* Numbers only ever read down the column, so they line up. */
+    font-variant-numeric: tabular-nums;
   }
   /* Long lines scroll with the table rather than wrapping: a wrapped diff loses the one-line,
      one-row correspondence that makes the two columns comparable. */
   .text { white-space: pre; padding: 0 var(--space-2); color: var(--fg-0); }
   .sign { user-select: none; color: var(--fg-2); }
-  tr.add .text, td.text.add { background: var(--add-bg); }
-  tr.remove .text, td.text.remove { background: var(--remove-bg); }
+  tr.add .text, td.text.add {
+    background: var(--add-bg); box-shadow: inset 2px 0 0 var(--ok);
+  }
+  tr.remove .text, td.text.remove {
+    background: var(--remove-bg); box-shadow: inset 2px 0 0 var(--danger);
+  }
   td.text.blank { background: var(--bg-1); }
+  /*
+   * The hunk header is a divider with a location on it, not a line of the file. Ruled above
+   * and below so a long diff reads as a sequence of regions rather than one wall.
+   */
   tr.hunk td {
-    background: var(--bg-2); color: var(--fg-2); padding: 1px var(--space-2);
+    background: var(--bg-2); color: var(--fg-2); padding: 3px var(--space-2);
     white-space: pre; user-select: none;
+    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    font-size: 10px; letter-spacing: 0.02em;
   }
   .split td.text { width: 50%; max-width: 0; overflow: hidden; }
   .muted { color: var(--fg-2); padding: var(--space-3); font-size: 12px; }

@@ -73,10 +73,19 @@
   .tally { opacity: 0.8; margin-left: var(--space-1); }
 
   .tab {
-    display: flex; align-items: center;
-    border-radius: 4px 4px 0 0; background: transparent;
+    display: flex; align-items: center; position: relative;
+    border-radius: var(--radius-1) var(--radius-1) 0 0; background: transparent;
   }
+  /*
+   * The active tab is the page continuing upward: same surface, and a line of accent along
+   * its top edge. Its own bottom border is covered by the bar's, which is what joins it to
+   * the window below rather than leaving it floating in the strip.
+   */
   .tab.active { background: var(--bg-0); }
+  .tab.active::before {
+    content: ''; position: absolute; inset: 0 0 auto; height: 2px;
+    background: var(--accent); border-radius: var(--radius-1) var(--radius-1) 0 0;
+  }
   .tab:hover:not(.active) { background: var(--bg-3); }
   .tab.missing .pick { text-decoration: line-through; color: var(--fg-2); }
 
@@ -87,16 +96,21 @@
     background: none; border: 0; color: var(--fg-1);
   }
   .tab.active .pick { color: var(--fg-0); }
+  /* The close button appears on the tab being pointed at, and on the active one always: a row
+     of crosses is noise, and a tab with no visible way to close it is a trap. */
   .shut {
     font: inherit; cursor: pointer; padding: 0 var(--space-2);
     background: none; border: 0; color: var(--fg-2); align-self: stretch;
+    visibility: hidden;
   }
+  .tab:hover .shut, .tab.active .shut { visibility: visible; }
   .shut:hover { color: var(--danger); }
 
   .add {
-    font: inherit; font-size: 15px; cursor: pointer; align-self: center;
-    padding: 0 var(--space-3); background: none; border: 0; color: var(--fg-2);
+    font: inherit; font-size: 15px; line-height: 1; cursor: pointer; align-self: center;
+    padding: 3px var(--space-2); margin-left: var(--space-1);
+    background: none; border: 0; border-radius: var(--radius-1); color: var(--fg-2);
   }
-  .add:hover { color: var(--fg-0); }
+  .add:hover { color: var(--fg-0); background: var(--bg-3); }
   .error { align-self: center; color: var(--danger); font-size: 11px; }
 </style>
