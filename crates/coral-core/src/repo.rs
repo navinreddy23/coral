@@ -231,6 +231,21 @@ impl RepoLocation {
         crate::status::Status::parse(&out.stdout)
     }
 
+    /// Lists every ref, with upstream tracking for local branches.
+    ///
+    /// # Errors
+    /// Propagates git failures and [`CoralError::Protocol`] if the output does not parse.
+    pub async fn refs(&self, runner: &GitRunner) -> Result<Vec<crate::refs::GitRef>, CoralError> {
+        let out = runner
+            .output(
+                GitCommand::read("for-each-ref", self.display_path())
+                    .arg("for-each-ref")
+                    .arg(format!("--format={}", crate::refs::FORMAT)),
+            )
+            .await?;
+        crate::refs::parse(&out.stdout)
+    }
+
     /// Gathers everything `coral open` reports.
     ///
     /// # Errors

@@ -47,7 +47,73 @@ scenario_open() {
     fi
 }
 
-scenario_status()      { echo "2. status";              miss "needs coral status (M1)"; }
+# Scenario 2 — status. Budget: 1 s warm on a 96k-file worktree.
+scenario_status() {
+    echo "2. status"
+    "$CORAL" --repo "$REPO" --json status >/dev/null   # warm the index stat cache
+    local start elapsed limit
+    start=$(date +%s%N)
+    local out; out="$("$CORAL" --repo "$REPO" --json status)"
+    elapsed=$(( ($(date +%s%N) - start) / 1000000 ))
+    limit=$(budget 1000)
+
+    if [ "$(jq -r .ok <<<"$out")" = "true" ]; then ok "status returns ok"; else bad "status: $(jq -c .error <<<"$out")"; fi
+    if [ "$(jq -r '.result.entries | length' <<<"$out")" -eq 0 ]; then
+        ok "worktree is clean"
+    else
+        bad "worktree is dirty; scenarios need a clean checkout"
+    fi
+    if [ "$elapsed" -le "$limit" ]; then
+        ok "status took ${elapsed}ms (budget ${limit}ms)"
+    else
+        bad "status took ${elapsed}ms, over budget ${limit}ms"
+    fi
+}
+
+# Scenario 2b — the graph pipeline, against both budgets in docs/ARCHITECTURE.md.
+scenario_graph() {
+    echo "2b. graph"
+    local start elapsed limit out
+
+    start=$(date +%s%N)
+    out="$("$CORAL" --repo "$REPO" --json graph --limit 4096 --first-paint)"
+    elapsed=$(( ($(date +%s%N) - start) / 1000000 ))
+    limit=$(budget 300)
+    if [ "$elapsed" -le "$limit" ]; then
+        ok "first paint took ${elapsed}ms (budget ${limit}ms)"
+    else
+        bad "first paint took ${elapsed}ms, over budget ${limit}ms"
+    fi
+    [ "$(jq -r .result.provisional <<<"$out")" = "true" ] \
+        && ok "first paint rows are marked provisional" \
+        || bad "first paint rows are not marked provisional"
+
+    start=$(date +%s%N)
+    out="$("$CORAL" --repo "$REPO" --json graph --from 4294967295)"
+    elapsed=$(( ($(date +%s%N) - start) / 1000000 ))
+    limit=$(budget 5000)
+    local total; total=$(jq -r .result.total <<<"$out")
+    local expected; expected=$(git -C "$REPO" rev-list --all --count)
+    if [ "$total" = "$expected" ]; then
+        ok "full graph has $total rows, matching git rev-list"
+    else
+        bad "full graph has $total rows, git rev-list says $expected"
+    fi
+    if [ "$elapsed" -le "$limit" ]; then
+        ok "full graph took ${elapsed}ms (budget ${limit}ms)"
+    else
+        bad "full graph took ${elapsed}ms, over budget ${limit}ms"
+    fi
+}
+
+# Scenario 2c — refs.
+scenario_refs() {
+    echo "2c. refs"
+    local out; out="$("$CORAL" --repo "$REPO" --json refs)"
+    local n; n=$(jq -r '.result.refs | length' <<<"$out")
+    local expected; expected=$(git -C "$REPO" for-each-ref --format='%(refname)' | wc -l)
+    [ "$n" = "$expected" ] && ok "listed $n refs, matching for-each-ref" || bad "listed $n refs, git says $expected"
+}
 scenario_merge()       { echo "3. merge conflict";      miss "needs coral merge + conflicts (M2/M3)"; }
 scenario_rebase()      { echo "4. rebase with stops";   miss "needs coral rebase (M2/M3)"; }
 scenario_cherry_pick() { echo "5. cherry-pick/revert";  miss "needs coral cherry-pick (M2)"; }
@@ -66,6 +132,8 @@ require_repo
 echo "kernel scenarios against $REPO (budget scale ${SCALE}x)"
 scenario_open
 scenario_status
+scenario_graph
+scenario_refs
 scenario_merge
 scenario_rebase
 scenario_cherry_pick

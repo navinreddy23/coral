@@ -32,6 +32,23 @@ pub enum Command {
     Open,
     /// Report the working tree state.
     Status,
+    /// List refs.
+    Refs {
+        #[arg(long, value_enum, default_value_t = commands::refs::Kind::All)]
+        kind: commands::refs::Kind,
+    },
+    /// Walk the commit graph and report rows with their lanes.
+    Graph {
+        /// Stop after this many commits.
+        #[arg(long)]
+        limit: Option<u64>,
+        /// First row to print; the walk still covers everything before it.
+        #[arg(long, default_value_t = 0)]
+        from: u32,
+        /// Use the fast commit-time order the UI paints first, rather than topological order.
+        #[arg(long)]
+        first_paint: bool,
+    },
     /// Report the git binary coral will drive.
     Version,
 }
@@ -67,6 +84,12 @@ pub async fn run(argv: Vec<OsString>) -> output::Rendered {
     match cli.command {
         Command::Open => output::render(&commands::open::run(&repo).await),
         Command::Status => output::render(&commands::status::run(&repo).await),
+        Command::Refs { kind } => output::render(&commands::refs::run(&repo, kind).await),
+        Command::Graph {
+            limit,
+            from,
+            first_paint,
+        } => output::render(&commands::graph::run(&repo, limit, from, first_paint).await),
         Command::Version => output::render(&commands::version::run().await),
     }
 }

@@ -11,6 +11,24 @@ export type Change = "unmodified" | "modified" | "added" | "deleted" | "renamed"
  */
 export type ConflictKind = "both_modified" | "both_added" | "both_deleted" | "added_by_us" | "added_by_them" | "deleted_by_us" | "deleted_by_them";
 
+export type GitRef = { 
+/**
+ * Full name, e.g. `refs/heads/main`.
+ */
+name: string, 
+/**
+ * The name the UI shows, e.g. `main` or `origin/main`.
+ */
+short: string, kind: RefKind, 
+/**
+ * What the ref points at. For an annotated tag this is the tag object.
+ */
+target: string, 
+/**
+ * The commit an annotated tag ultimately points at. `None` for everything else.
+ */
+peeled: string | null, upstream: string | null, ahead: number, behind: number, };
+
 /**
  * Where HEAD points.
  */
@@ -21,6 +39,11 @@ export type Head = { "kind": "branch", name: string, } | { "kind": "detached", o
  * leaves in the git dir rather than from porcelain.
  */
 export type OpState = "clean" | "merge" | "rebase" | "cherry_pick" | "revert" | "bisect";
+
+/**
+ * What kind of thing a ref names.
+ */
+export type RefKind = { "kind": "local_branch" } | { "kind": "remote_branch", remote: string, } | { "kind": "tag", annotated: boolean, } | { "kind": "stash" } | { "kind": "other" };
 
 /**
  * What `coral open` reports.
