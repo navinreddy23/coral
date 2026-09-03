@@ -6,6 +6,9 @@
   import { PANE_LIMITS, PanesState } from '../state/panes.svelte';
   import DiffView from './DiffView.svelte';
   import { DiffState } from '../state/diff.svelte';
+  import { ActionsState } from '../state/actions.svelte';
+  import Palette, { type Command } from './Palette.svelte';
+  import type { Action } from '../ipc/commands';
   import {
     DEFAULT_METRICS,
     firstRowFor,
@@ -45,6 +48,7 @@
   const LIVE = new Set([
     'select.next', 'select.previous', 'select.first', 'select.last',
     'stage.all', 'unstage.all', 'tab.new', 'tab.close', 'tab.next', 'tab.previous',
+    'palette', 'repo.open',
     'panel.left', 'panel.detail', 'help',
   ]);
 
@@ -90,6 +94,8 @@
       case 'panel.left': showSidebar = !showSidebar; break;
       case 'panel.detail': showDetails = !showDetails; break;
       case 'help': showHelp = !showHelp; break;
+      case 'palette': showPalette = !showPalette; break;
+      case 'repo.open': void openAnother(); break;
       default: break;
     }
   }
@@ -107,6 +113,8 @@
   let viewport = $state(600);
   const panes = new PanesState();
   const diff = new DiffState();
+  const actions = new ActionsState();
+  let showPalette = $state(false);
   let scroller = $state<HTMLDivElement | null>(null);
 
   const headName = $derived(
@@ -120,11 +128,109 @@
     void selection.select(info.path, row, oidOf(graph.frame, local));
   }
 
+  /** Every ref and where it points, as one string, to tell whether an action moved anything. */
+  function refSignature(): string {
+    return refs.all.map((r) => `${r.name}@${r.target}`).join('\u0000');
+  }
+
+  /**
+   * Runs an action and reloads whatever it could have changed.
+   *
+   * Refs and status always, the graph only when a ref actually moved: rewalking 1.4M commits
+   * after a stash that touched no ref would freeze the window for five seconds for nothing.
+   */
+  async function act(action: Action) {
+    if (!info) return;
+    const path = info.path;
+    const before = refSignature();
+    const outcome = await actions.run(path, action);
+    if (!outcome) return;
+
+    await Promise.all([refs.load(path), worktree.load(path)]);
+    const after = refSignature();
+    if (before !== after) await graph.open(path);
+  }
+
   /** Opens one of the selected commit's files in the diff viewer. */
   function openFile(file: string) {
     const rev = selection.detail?.commit.oid;
     if (!info || rev === undefined) return;
     void diff.open(info.path, rev, file);
+  }
+
+  /**
+   * Everything the palette offers.
+   *
+   * Built from the repository rather than a fixed list, so a branch can be checked out, merged
+   * or rebased onto by name without a submenu for each.
+   */
+  const commands = $derived.by<Command[]>(() => {
+    const out: Command[] = [
+      { id: 'fetch', label: 'Fetch', group: 'Remote', run: () => void act({ kind: 'fetch', remote: null }) },
+      { id: 'pull', label: 'Pull (fast-forward only)', group: 'Remote', run: () => void act({ kind: 'pull', remote: null, mode: 'ffOnly' }) },
+      { id: 'pull-rebase', label: 'Pull, rebasing', group: 'Remote', run: () => void act({ kind: 'pull', remote: null, mode: 'rebase' }) },
+      { id: 'push', label: 'Push', group: 'Remote', run: () => void act({ kind: 'push', remote: null, setUpstream: true }) },
+      { id: 'stash', label: 'Stash changes', group: 'Stash', run: () => void act({ kind: 'stashPush', message: null }) },
+      { id: 'pop', label: 'Pop the latest stash', group: 'Stash', run: () => void act({ kind: 'stashApply', index: 0, pop: true }) },
+      { id: 'undo', label: 'Undo', group: 'History', run: () => void act({ kind: 'undo' }) },
+      { id: 'redo', label: 'Redo', group: 'History', run: () => void act({ kind: 'redo' }) },
+      { id: 'theme', label: 'Toggle dark mode', group: 'View', run: () => theme.toggle() },
+    ];
+
+    for (const r of refs.groups.local) {
+      if (r.short === headName) continue;
+      out.push({ id: `co:${r.name}`, label: `Checkout ${r.short}`, group: 'Branch', run: () => void act({ kind: 'checkout', rev: r.short }) });
+      out.push({ id: `merge:${r.name}`, label: `Merge ${r.short} into ${headName ?? 'HEAD'}`, group: 'Branch', run: () => void act({ kind: 'merge', rev: r.short }) });
+      out.push({ id: `rebase:${r.name}`, label: `Rebase onto ${r.short}`, group: 'Branch', run: () => void act({ kind: 'rebase', onto: r.short }) });
+    }
+    for (const r of refs.groups.tags.slice(0, 200)) {
+      out.push({ id: `co:${r.name}`, label: `Checkout tag ${r.short}`, group: 'Tag', run: () => void act({ kind: 'checkout', rev: r.short }) });
+    }
+    return out;
+  });
+
+  /**
+   * A branch dropped onto another.
+   *
+   * The reference reads the gesture as "bring `source` into `target`", which needs `target`
+   * checked out first — dropping onto a branch you are not on otherwise merges into the wrong
+   * one silently. Dropping a local branch onto its remote counterpart pushes instead, which is
+   * the one case where the gesture means something else entirely.
+   */
+  async function dropRef(source: string, target: string) {
+    const pushing = target === `origin/${source}` || target.endsWith(`/${source}`);
+    if (pushing) {
+      await act({ kind: 'push', remote: null, setUpstream: true });
+      return;
+    }
+    const how = window.prompt(`Bring ${source} into ${target}? Type "merge" or "rebase".`, 'merge');
+    if (how === null) return;
+    if (target !== headName) await act({ kind: 'checkout', rev: target });
+    if (how.trim().toLowerCase() === 'rebase') await act({ kind: 'rebase', onto: source });
+    else await act({ kind: 'merge', rev: source });
+  }
+
+  /** The toolbar's seven buttons, each the commonest form of its action. */
+  function toolbarAction(name: string) {
+    const branch = headName;
+    switch (name) {
+      case 'undo': return void act({ kind: 'undo' });
+      case 'redo': return void act({ kind: 'redo' });
+      case 'fetch': return void act({ kind: 'fetch', remote: null });
+      case 'pull': return void act({ kind: 'pull', remote: null, mode: 'ffOnly' });
+      // set-upstream on every push: it is a no-op once one is configured, and without it the
+      // first push of a new branch fails with advice instead of pushing.
+      case 'push': return void act({ kind: 'push', remote: null, setUpstream: true });
+      case 'stash': return void act({ kind: 'stashPush', message: null });
+      case 'pop': return void act({ kind: 'stashApply', index: 0, pop: true });
+      case 'branch': {
+        const name = window.prompt(`New branch from ${branch ?? 'HEAD'}`)?.trim();
+        if (name) void act({ kind: 'branchCreate', name, at: null, checkout: true });
+        return;
+      }
+      default:
+        return;
+    }
   }
 
   function pickWip() {
@@ -302,8 +408,8 @@
     <Toolbar
       repo={info.path.split('/').pop() ?? info.path}
       branch={headName ?? 'detached'}
-      busy={worktree.busy}
-      onAction={() => {}}
+      busy={worktree.busy || actions.busy}
+      onAction={toolbarAction}
     />
   {/if}
 
@@ -333,6 +439,7 @@
         submodules={refs.submodules}
         onSelect={reveal}
         onOpenSubmodule={openSubmodule}
+        onDropRef={dropRef}
       />
       <Splitter
         label="Resize the sidebar"
@@ -462,6 +569,18 @@
   {/if}
 </main>
 
+{#if actions.report}
+  <!-- The one place an action says what happened; it clears on the next one. -->
+  <p class="status {actions.report.tone}">
+    {actions.report.text}
+    <button class="dismiss" onclick={() => actions.clear()} aria-label="Dismiss">✕</button>
+  </p>
+{/if}
+
+{#if showPalette}
+  <Palette {commands} onClose={() => (showPalette = false)} />
+{/if}
+
 {#if showHelp}
   <Shortcuts live={LIVE} onClose={() => (showHelp = false)} />
 {/if}
@@ -492,6 +611,18 @@
   .muted { padding: var(--space-4); color: var(--fg-2); }
 
   .body { display: flex; flex: 1; min-height: 0; }
+  .status {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; margin: 0;
+    display: flex; align-items: center; gap: var(--space-2);
+    padding: 4px var(--space-3); font-size: 12px;
+    border-top: 1px solid var(--border); background: var(--bg-1); color: var(--fg-1);
+  }
+  .status.warn { color: var(--fg-0); background: var(--add-bg); }
+  .status.error { color: var(--danger); background: var(--remove-bg); }
+  .dismiss {
+    margin-left: auto; font: inherit; cursor: pointer;
+    background: none; border: 0; color: inherit;
+  }
   .graph { flex: 1; overflow-y: auto; position: relative; background: var(--bg-0); }
   /* Hidden rather than unmounted: remounting would refetch the frame and lose the scroll
      position every time a file is opened and closed. */

@@ -55,3 +55,38 @@ export function repoSubmodules(path: string): Promise<Submodule[]> {
 export function fileDiff(path: string, rev: string, file: string): Promise<FileDiff | null> {
   return invoke<FileDiff | null>('file_diff', { path, rev, file });
 }
+
+/**
+ * Something to ask the repository to do.
+ *
+ * Mirrors `actions::Action` in Rust, which is a tagged union because every one of these
+ * follows the same snapshot-run-journal path in the engine.
+ */
+export type Action =
+  | { kind: 'fetch'; remote: string | null }
+  | { kind: 'pull'; remote: string | null; mode: 'ffOnly' | 'merge' | 'rebase' }
+  | { kind: 'push'; remote: string | null; setUpstream: boolean }
+  | { kind: 'checkout'; rev: string }
+  | { kind: 'branchCreate'; name: string; at: string | null; checkout: boolean }
+  | { kind: 'branchDelete'; name: string; force: boolean }
+  | { kind: 'merge'; rev: string }
+  | { kind: 'rebase'; onto: string }
+  | { kind: 'cherryPick'; revs: string[] }
+  | { kind: 'revert'; revs: string[] }
+  | { kind: 'stashPush'; message: string | null }
+  | { kind: 'stashApply'; index: number; pop: boolean }
+  | { kind: 'stashDrop'; index: number }
+  | { kind: 'tagCreate'; name: string; at: string | null; message: string | null }
+  | { kind: 'tagDelete'; name: string }
+  | { kind: 'undo' }
+  | { kind: 'redo' };
+
+export interface ActionOutcome {
+  what: string;
+  /** The operation stopped on conflicts and the worktree needs attention. */
+  conflicted: boolean;
+}
+
+export function runAction(path: string, action: Action): Promise<ActionOutcome> {
+  return invoke<ActionOutcome>('repo_action', { path, action });
+}

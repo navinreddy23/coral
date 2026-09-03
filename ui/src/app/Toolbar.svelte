@@ -6,18 +6,16 @@
     onAction: (name: string) => void;
   } = $props();
 
-  /**
-   * Labels sit above their glyph, as in the reference. Actions that are not wired yet are
-   * disabled rather than absent, so the shape of the toolbar does not shift as they land.
-   */
+  /** Labels sit above their glyph, as in the reference. */
   const actions = [
-    { name: 'undo', label: 'Undo', glyph: '↶', ready: false },
-    { name: 'redo', label: 'Redo', glyph: '↷', ready: false },
-    { name: 'pull', label: 'Pull', glyph: '↓', ready: false },
-    { name: 'push', label: 'Push', glyph: '↑', ready: false },
-    { name: 'branch', label: 'Branch', glyph: '⑂', ready: false },
-    { name: 'stash', label: 'Stash', glyph: '⤓', ready: false },
-    { name: 'pop', label: 'Pop', glyph: '⤒', ready: false },
+    { name: 'undo', label: 'Undo', glyph: '↶', ready: true },
+    { name: 'redo', label: 'Redo', glyph: '↷', ready: true },
+    { name: 'fetch', label: 'Fetch', glyph: '⟳', ready: true },
+    { name: 'pull', label: 'Pull', glyph: '↓', ready: true },
+    { name: 'push', label: 'Push', glyph: '↑', ready: true },
+    { name: 'branch', label: 'Branch', glyph: '⑂', ready: true },
+    { name: 'stash', label: 'Stash', glyph: '⤓', ready: true },
+    { name: 'pop', label: 'Pop', glyph: '⤒', ready: true },
   ];
 </script>
 

@@ -4,7 +4,7 @@ use coral_core::CoralError;
 use coral_core::ops::{CommitOpts, MergeMode, OpAction, OpOutcome, ResetMode};
 use coral_core::process::GitRunner;
 use coral_core::repo::RepoLocation;
-use coral_core::undo::{Journal, JournalEntry};
+use coral_core::undo::Journal;
 
 /// CLI mirrors of the engine enums. The engine deliberately does not depend on clap.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
@@ -111,18 +111,7 @@ where
     let result = f(runner.clone(), loc.clone()).await?;
 
     let after = loc.snapshot_refs(&runner).await?;
-    if before != after {
-        let mut journal = Journal::load(&loc);
-        journal.record(JournalEntry {
-            label: label.to_owned(),
-            before,
-            after,
-            at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0)),
-        });
-        journal.save(&loc)?;
-    }
+    loc.journal_change(label, before, after)?;
     Ok(result)
 }
 
@@ -262,35 +251,8 @@ pub async fn redo(path: &Path) -> Result<Done, CoralError> {
 async fn step(path: &Path, backwards: bool) -> Result<Done, CoralError> {
     let runner = GitRunner::discover().await?;
     let loc = RepoLocation::discover(&runner, path).await?;
-    let mut journal = Journal::load(&loc);
-
-    let picked = if backwards {
-        journal.undoable()
-    } else {
-        journal.redoable()
-    };
-    let entry = picked.cloned().ok_or_else(|| CoralError::Refused {
-        label: if backwards { "undo" } else { "redo" },
-        detail: format!("nothing to {}", if backwards { "undo" } else { "redo" }),
-    })?;
-
-    let (target, from) = if backwards {
-        (&entry.before, &entry.after)
-    } else {
-        (&entry.after, &entry.before)
-    };
-    loc.restore_refs(&runner, target, from).await?;
-
-    if backwards {
-        journal.undone += 1;
-    } else {
-        journal.undone -= 1;
-    }
-    journal.save(&loc)?;
-
-    let verb = if backwards { "undid" } else { "redid" };
     Ok(Done {
-        what: format!("{verb} {}", entry.label),
+        what: loc.undo_step(&runner, backwards).await?,
         oid: None,
     })
 }

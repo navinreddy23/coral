@@ -2,14 +2,44 @@
   import type { Submodule } from '../ipc/types';
   import type { PlacedRef, RefGroups } from '../state/refs.svelte';
 
-  const { groups, head, submodules, onSelect, onOpenSubmodule }: {
+  const { groups, head, submodules, onSelect, onOpenSubmodule, onDropRef }: {
     groups: RefGroups;
     head: string | null;
     submodules: Submodule[];
     onSelect: (row: number) => void;
     /** Opens a submodule's working copy in its own tab. */
     onOpenSubmodule: (path: string) => void;
+    /** `source` was dragged onto `target`; the shell decides what that means. */
+    onDropRef: (source: string, target: string) => void;
   } = $props();
+
+  /** Ref being dragged, and the one under the pointer, so both can be marked. */
+  let dragging = $state<string | null>(null);
+  let over = $state<string | null>(null);
+
+  function startDrag(event: DragEvent, short: string) {
+    dragging = short;
+    // A plain-text payload as well as the local state, so a drop onto another application
+    // gets the branch name rather than nothing.
+    event.dataTransfer?.setData('text/plain', short);
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+  }
+
+  function dragOver(event: DragEvent, short: string) {
+    if (dragging === null || dragging === short) return;
+    // Preventing the default is what marks this a valid drop target.
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    over = short;
+  }
+
+  function drop(event: DragEvent, short: string) {
+    event.preventDefault();
+    const source = dragging;
+    dragging = null;
+    over = null;
+    if (source !== null && source !== short) onDropRef(source, short);
+  }
 
   let filter = $state('');
   /**
@@ -72,6 +102,17 @@
               <button
                 class="ref"
                 class:current={r.short === head}
+                class:dragging={dragging === r.short}
+                class:over={over === r.short}
+                draggable={section.key === 'local' || section.key === 'remote'}
+                ondragstart={(e) => startDrag(e, r.short)}
+                ondragend={() => {
+                  dragging = null;
+                  over = null;
+                }}
+                ondragover={(e) => dragOver(e, r.short)}
+                ondragleave={() => (over = over === r.short ? null : over)}
+                ondrop={(e) => drop(e, r.short)}
                 disabled={r.row === null}
                 onclick={() => r.row !== null && onSelect(r.row)}
                 title={r.row === null ? 'not in the loaded graph' : r.name}
@@ -164,6 +205,9 @@
   .ref:hover:not(:disabled) { background: var(--bg-3); }
   .ref:disabled { color: var(--fg-2); cursor: default; }
   .ref.current { color: var(--fg-0); font-weight: 600; background: var(--accent-soft); }
+  .ref.dragging { opacity: 0.5; }
+  /* The drop target, outlined rather than filled so the branch name stays readable under it. */
+  .ref.over { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 3px; }
   .tick { color: var(--accent); flex: 0 0 auto; }
   .track { margin-left: auto; font-size: 11px; color: var(--fg-2); }
   .more {

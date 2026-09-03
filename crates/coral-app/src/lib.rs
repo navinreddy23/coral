@@ -1,6 +1,7 @@
 //! The Tauri command layer, exposed as a library so the commands can be tested without
 //! starting a window.
 
+pub mod actions;
 pub mod commands;
 pub mod graph;
 pub mod session;

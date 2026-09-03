@@ -227,3 +227,73 @@ impl RepoLocation {
         Ok(())
     }
 }
+
+impl RepoLocation {
+    /// Records an entry when an operation moved a ref.
+    ///
+    /// Snapshots are taken either side of the mutation rather than the operation describing
+    /// what it changed, so undo works for operations the journal knows nothing about.
+    ///
+    /// # Errors
+    /// Propagates a failure to write the journal file.
+    pub fn journal_change(
+        &self,
+        label: &str,
+        before: RefSnapshot,
+        after: RefSnapshot,
+    ) -> Result<(), CoralError> {
+        if before == after {
+            return Ok(());
+        }
+        let mut journal = Journal::load(self);
+        journal.record(JournalEntry {
+            label: label.to_owned(),
+            before,
+            after,
+            at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0)),
+        });
+        journal.save(self)
+    }
+
+    /// Moves one step through the journal, backwards to undo or forwards to redo.
+    ///
+    /// Returns what it did, phrased for the user.
+    ///
+    /// # Errors
+    /// [`CoralError::Refused`] when there is nothing to step to, or the worktree is dirty.
+    pub async fn undo_step(
+        &self,
+        runner: &GitRunner,
+        backwards: bool,
+    ) -> Result<String, CoralError> {
+        let mut journal = Journal::load(self);
+        let picked = if backwards {
+            journal.undoable()
+        } else {
+            journal.redoable()
+        };
+        let entry = picked.cloned().ok_or_else(|| CoralError::Refused {
+            label: if backwards { "undo" } else { "redo" },
+            detail: format!("nothing to {}", if backwards { "undo" } else { "redo" }),
+        })?;
+
+        let (target, from) = if backwards {
+            (&entry.before, &entry.after)
+        } else {
+            (&entry.after, &entry.before)
+        };
+        self.restore_refs(runner, target, from).await?;
+
+        if backwards {
+            journal.undone += 1;
+        } else {
+            journal.undone -= 1;
+        }
+        journal.save(self)?;
+
+        let verb = if backwards { "undid" } else { "redid" };
+        Ok(format!("{verb} {}", entry.label))
+    }
+}
