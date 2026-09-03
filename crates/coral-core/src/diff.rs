@@ -260,22 +260,30 @@ fn range(spec: &str) -> Result<(u32, u32), CoralError> {
     }
 }
 
+/// Reads a hunk's lines, bounded by the counts its header declares.
+///
+/// The bound is not an optimisation. Splitting a patch on newlines leaves a trailing empty
+/// element after the final line, and an empty element is indistinguishable from a context line
+/// whose single space was stripped. Consuming until the prefix stops matching therefore
+/// appended a phantom context line to the last file of every patch, producing a hunk one line
+/// longer than the file — which `git apply` rejects.
 fn read_hunk_body<'a, I>(hunk: &mut Hunk, lines: &mut std::iter::Peekable<I>)
 where
     I: Iterator<Item = &'a [u8]>,
 {
     let mut old_no = hunk.old_start;
     let mut new_no = hunk.new_start;
+    let mut old_seen = 0;
+    let mut new_seen = 0;
 
-    while let Some(line) = lines.peek() {
+    while old_seen < hunk.old_lines || new_seen < hunk.new_lines {
+        let Some(line) = lines.peek() else { break };
         let kind = match line.first() {
-            // An empty line inside a hunk is a context line whose single trailing space git
-            // omitted, so it is handled by the same arm.
-            Some(b' ') | None => LineKind::Context,
+            Some(b' ') => LineKind::Context,
             Some(b'+') => LineKind::Add,
             Some(b'-') => LineKind::Remove,
-            // git's marker for a file that does not end in a newline; it annotates the line
-            // above rather than being a line of its own.
+            // git's marker for a file with no trailing newline; it annotates the line above
+            // rather than being a line of its own, and does not count towards either side.
             Some(b'\\') => {
                 lines.next();
                 if let Some(last) = hunk.lines.last_mut() {
@@ -293,16 +301,20 @@ where
                 let v = (Some(old_no), Some(new_no));
                 old_no += 1;
                 new_no += 1;
+                old_seen += 1;
+                new_seen += 1;
                 v
             }
             LineKind::Add => {
                 let v = (None, Some(new_no));
                 new_no += 1;
+                new_seen += 1;
                 v
             }
             LineKind::Remove => {
                 let v = (Some(old_no), None);
                 old_no += 1;
+                old_seen += 1;
                 v
             }
         };
@@ -313,6 +325,15 @@ where
             new_no: n,
             no_newline: false,
         });
+    }
+
+    // The counts are satisfied by the last content line, but a "no newline" marker can still
+    // follow it and belongs to it.
+    if lines.peek().is_some_and(|l| l.starts_with(b"\\")) {
+        lines.next();
+        if let Some(last) = hunk.lines.last_mut() {
+            last.no_newline = true;
+        }
     }
 }
 

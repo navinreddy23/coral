@@ -356,6 +356,68 @@ impl RepoLocation {
         Ok(parser.finish())
     }
 
+    /// Stages whole paths.
+    ///
+    /// # Errors
+    /// Propagates git failures.
+    pub async fn stage(&self, runner: &GitRunner, paths: &[&str]) -> Result<(), CoralError> {
+        let cmd = GitCommand::write("add", self.display_path())
+            .args(["add", "--all", "--"])
+            .args(paths);
+        runner.output(cmd).await.map(|_| ())
+    }
+
+    /// Unstages whole paths, leaving the worktree alone.
+    ///
+    /// # Errors
+    /// Propagates git failures.
+    pub async fn unstage(&self, runner: &GitRunner, paths: &[&str]) -> Result<(), CoralError> {
+        // `restore --staged` needs a source; without a commit there is nothing to restore
+        // from, so an unborn HEAD uses `rm --cached` instead.
+        let unborn = matches!(self.head(runner).await?, Head::Unborn { .. });
+        let cmd = if unborn {
+            GitCommand::write("rm", self.display_path())
+                .args(["rm", "--cached", "-r", "--quiet", "--"])
+                .args(paths)
+        } else {
+            GitCommand::write("restore", self.display_path())
+                .args(["restore", "--staged", "--"])
+                .args(paths)
+        };
+        runner.output(cmd).await.map(|_| ())
+    }
+
+    /// Throws away worktree changes to `paths`. Staged content is left in the index.
+    ///
+    /// # Errors
+    /// Propagates git failures.
+    pub async fn discard(&self, runner: &GitRunner, paths: &[&str]) -> Result<(), CoralError> {
+        let cmd = GitCommand::write("restore", self.display_path())
+            .args(["restore", "--worktree", "--"])
+            .args(paths);
+        runner.output(cmd).await.map(|_| ())
+    }
+
+    /// Applies a generated patch to the index, for hunk and line staging.
+    ///
+    /// # Errors
+    /// Propagates git failures; a patch that does not apply surfaces as
+    /// [`CoralError::GitExit`] carrying git's own explanation.
+    pub async fn apply_to_index(
+        &self,
+        runner: &GitRunner,
+        patch: &bstr::BString,
+        direction: crate::index::Direction,
+    ) -> Result<(), CoralError> {
+        if crate::index::is_empty_patch(patch) {
+            return Ok(());
+        }
+        let cmd = GitCommand::write("apply", self.display_path())
+            .args(crate::index::apply_args(direction))
+            .stdin_bytes(patch.to_vec());
+        runner.output(cmd).await.map(|_| ())
+    }
+
     /// Gathers everything `coral open` reports.
     ///
     /// # Errors

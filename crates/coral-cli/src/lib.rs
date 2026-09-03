@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
+use coral_core::index::Direction as D;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -32,6 +33,37 @@ pub enum Command {
     Open,
     /// Report the working tree state.
     Status,
+    /// Stage changes.
+    Stage {
+        /// Paths to stage whole.
+        #[arg(value_name = "PATH")]
+        paths: Vec<String>,
+        /// Stage one hunk of a file instead. Use with --file.
+        #[arg(long, requires = "file")]
+        hunk: Option<usize>,
+        /// The file a --hunk or --lines selection applies to.
+        #[arg(long)]
+        file: Option<String>,
+        /// Stage only these line indices within --hunk.
+        #[arg(long, requires = "hunk", value_delimiter = ',')]
+        lines: Option<Vec<usize>>,
+    },
+    /// Unstage changes, leaving the worktree alone.
+    Unstage {
+        #[arg(value_name = "PATH")]
+        paths: Vec<String>,
+        #[arg(long, requires = "file")]
+        hunk: Option<usize>,
+        #[arg(long)]
+        file: Option<String>,
+        #[arg(long, requires = "hunk", value_delimiter = ',')]
+        lines: Option<Vec<usize>>,
+    },
+    /// Throw away worktree changes. This cannot be undone from the index.
+    Discard {
+        #[arg(value_name = "PATH", required = true)]
+        paths: Vec<String>,
+    },
     /// Show changes to the worktree, or to the index with --staged.
     Diff {
         /// Diff the index against HEAD rather than the worktree against the index.
@@ -125,6 +157,21 @@ pub async fn run(argv: Vec<OsString>) -> output::Rendered {
     match cli.command {
         Command::Open => output::render(&commands::open::run(&repo).await),
         Command::Status => output::render(&commands::status::run(&repo).await),
+        Command::Stage {
+            paths,
+            hunk,
+            file,
+            lines,
+        } => output::render(&stage_or_unstage(&repo, paths, hunk, file, lines, D::Stage).await),
+        Command::Unstage {
+            paths,
+            hunk,
+            file,
+            lines,
+        } => output::render(&stage_or_unstage(&repo, paths, hunk, file, lines, D::Unstage).await),
+        Command::Discard { paths } => {
+            output::render(&commands::stage::discard(&repo, &paths).await)
+        }
         Command::Diff { staged, paths } => {
             output::render(&commands::diff::run(&repo, staged, &paths).await)
         }
@@ -158,5 +205,20 @@ pub async fn run(argv: Vec<OsString>) -> output::Rendered {
             first_paint,
         } => output::render(&commands::graph::run(&repo, limit, from, first_paint).await),
         Command::Version => output::render(&commands::version::run().await),
+    }
+}
+
+/// Routes a stage or unstage to the whole-path or partial form.
+async fn stage_or_unstage(
+    repo: &std::path::Path,
+    paths: Vec<String>,
+    hunk: Option<usize>,
+    file: Option<String>,
+    lines: Option<Vec<usize>>,
+    direction: D,
+) -> Result<commands::stage::Staged, coral_core::CoralError> {
+    match (hunk, file) {
+        (Some(h), Some(f)) => commands::stage::partial(repo, &f, h, lines, direction).await,
+        _ => commands::stage::whole(repo, &paths, direction).await,
     }
 }

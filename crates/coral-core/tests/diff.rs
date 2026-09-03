@@ -181,3 +181,67 @@ async fn a_clean_repository_diffs_to_nothing() {
     let repo = TestRepo::new().write("a.txt", "a\n").commit("base");
     assert!(staged(&repo).await.is_empty());
 }
+
+/// Regression: splitting a patch on newlines leaves a trailing empty element, which is
+/// indistinguishable from a context line whose single space was stripped. Reading until the
+/// prefix stopped matching therefore appended a phantom context line to the *last* file of
+/// every patch — invisible until a generated patch was fed back to `git apply`, which
+/// rejected it because the hunk claimed one line more than the file has.
+#[tokio::test]
+async fn the_last_file_in_a_patch_gets_no_phantom_trailing_line() {
+    let repo = TestRepo::new()
+        .write("only.txt", "keep\ndrop me\ntail\n")
+        .commit("base");
+    let repo = repo.write("only.txt", "keep\ntail\n");
+    repo.git(["add", "--all"]);
+
+    let files = staged(&repo).await;
+    let hunk = &files[0].hunks[0];
+
+    let old: u32 = hunk
+        .lines
+        .iter()
+        .filter(|l| l.kind != coral_core::diff::LineKind::Add)
+        .count()
+        .try_into()
+        .unwrap();
+    let new: u32 = hunk
+        .lines
+        .iter()
+        .filter(|l| l.kind != coral_core::diff::LineKind::Remove)
+        .count()
+        .try_into()
+        .unwrap();
+
+    assert_eq!(
+        old, hunk.old_lines,
+        "parsed old-side lines must match the header"
+    );
+    assert_eq!(
+        new, hunk.new_lines,
+        "parsed new-side lines must match the header"
+    );
+    assert!(
+        hunk.lines.iter().all(|l| !l.text.is_empty()),
+        "no phantom empty line"
+    );
+}
+
+/// Every hunk of every file must agree with its own header, which is what makes a generated
+/// patch applicable.
+#[tokio::test]
+async fn every_hunk_agrees_with_its_header() {
+    let repo = every_shape();
+    for f in staged(&repo).await {
+        for h in &f.hunks {
+            let old = h.lines.iter().filter(|l| l.kind != LineKind::Add).count();
+            let new = h
+                .lines
+                .iter()
+                .filter(|l| l.kind != LineKind::Remove)
+                .count();
+            assert_eq!(u32::try_from(old).unwrap(), h.old_lines, "{}: old", f.path);
+            assert_eq!(u32::try_from(new).unwrap(), h.new_lines, "{}: new", f.path);
+        }
+    }
+}

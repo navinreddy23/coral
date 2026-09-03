@@ -4,5 +4,6 @@ pub mod graph;
 pub mod log;
 pub mod open;
 pub mod refs;
+pub mod stage;
 pub mod status;
 pub mod version;

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use tokio::sync::{Semaphore, broadcast};
+use tokio::sync::{RwLock, Semaphore, broadcast};
 
 use crate::error::CoralError;
 use crate::process::GitRunner;
@@ -49,6 +49,10 @@ pub struct Engine {
     runner: GitRunner,
     children: Arc<Semaphore>,
     inflight: std::sync::Mutex<HashMap<ReadKey, Inflight>>,
+    /// Read guard for anything that touches `.git/index`; write guard for mutations. Used as
+    /// a barrier rather than to protect data. `tokio`'s `RwLock` is FIFO-fair, which is
+    /// load-bearing: a stream of status refreshes during a rebase must not starve the writer.
+    index_gate: RwLock<()>,
     epoch: AtomicU64,
     events: broadcast::Sender<RepoEvent>,
 }
@@ -69,6 +73,7 @@ impl Engine {
             runner,
             children: Arc::new(Semaphore::new(MAX_CHILDREN)),
             inflight: std::sync::Mutex::new(HashMap::new()),
+            index_gate: RwLock::new(()),
             epoch: AtomicU64::new(0),
             events,
         }
@@ -145,6 +150,46 @@ impl Engine {
         };
         let _ = tx.send(Some(clone_result(&shared)));
         downcast(shared)
+    }
+
+    /// Runs a read that refreshes `.git/index` — status, diff, ls-files.
+    ///
+    /// Held against mutations, so a write never observes a half-updated index and a read never
+    /// races git's own index rewrite.
+    ///
+    /// # Errors
+    /// Whatever `f` returns.
+    pub async fn read_index<T, F, Fut>(&self, key: ReadKey, f: F) -> Result<Arc<T>, CoralError>
+    where
+        T: Send + Sync + 'static,
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<T, CoralError>>,
+    {
+        let _guard = self.index_gate.read().await;
+        self.read(key, f).await
+    }
+
+    /// Runs a mutation, serialized against every other write and against index-touching reads.
+    ///
+    /// The epoch is bumped *before* the operation as well as after: anything already in flight
+    /// is answering a question about a repository that is about to change, so it must not be
+    /// joined by a caller arriving later.
+    ///
+    /// # Errors
+    /// Whatever `f` returns.
+    pub async fn write<T, F, Fut>(&self, changed: RepoChanged, f: F) -> Result<T, CoralError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<T, CoralError>>,
+    {
+        let guard = self.index_gate.write().await;
+        self.epoch.fetch_add(1, Ordering::SeqCst);
+        let result = f().await;
+        // The declared effects are announced whether or not the operation succeeded: a failed
+        // merge still leaves MERGE_HEAD and a partly-updated index behind.
+        drop(guard);
+        self.observe(changed);
+        result
     }
 
     /// An in-flight read worth joining: same question, and not started before a change we

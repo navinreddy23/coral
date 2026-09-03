@@ -6,6 +6,7 @@ pub mod engine;
 pub mod error;
 pub mod graph;
 pub mod history;
+pub mod index;
 pub mod process;
 pub mod refs;
 pub mod repo;
