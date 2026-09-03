@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Frame } from '../src/graph/frame';
-import { DEFAULT_METRICS, laneX, type Window } from '../src/graph/layout';
+import { DEFAULT_METRICS, laneX, rowY, type Window } from '../src/graph/layout';
 import { drawLanes } from '../src/graph/render';
 
 interface Segment {
@@ -11,14 +11,44 @@ interface Segment {
   y1: number;
 }
 
+interface Label {
+  text: string;
+  x: number;
+  y: number;
+}
+
+interface Corner {
+  cx: number;
+  cy: number;
+  x: number;
+  y: number;
+  radius: number;
+}
+
+interface Disc {
+  x: number;
+  y: number;
+  radius: number;
+}
+
 /**
  * Records the straight strokes a render produces.
  *
  * Only the geometry matters here, so curves and fills are accepted and dropped rather than
  * mocked faithfully; a bezier is always an edge between two adjacent rows.
  */
-function recorder(): { ctx: CanvasRenderingContext2D; segments: Segment[] } {
+function recorder(): {
+  ctx: CanvasRenderingContext2D;
+  segments: Segment[];
+  labels: Label[];
+  corners: Corner[];
+  discs: Disc[];
+} {
   const segments: Segment[] = [];
+  const labels: Label[] = [];
+  const corners: Corner[] = [];
+  const discs: Disc[] = [];
+  let pendingArc: Disc | null = null;
   let at = { x: 0, y: 0 };
   let pending: Segment | null = null;
   const ctx = {
@@ -46,22 +76,30 @@ function recorder(): { ctx: CanvasRenderingContext2D; segments: Segment[] } {
      * straight run that follows it starts.
      */
     arcTo(cx: number, cy: number, x: number, y: number, radius: number) {
+      corners.push({ cx, cy, x, y, radius });
       const dx = x - cx;
       const dy = y - cy;
       const len = Math.hypot(dx, dy) || 1;
       at = { x: cx + (dx / len) * radius, y: cy + (dy / len) * radius };
       pending = null;
     },
-    arc() {
+    arc(x: number, y: number, radius: number) {
+      pendingArc = { x, y, radius };
       pending = null;
     },
-    fill() {},
+    fill() {
+      if (pendingArc) discs.push(pendingArc);
+      pendingArc = null;
+    },
+    fillText(text: string, x: number, y: number) {
+      labels.push({ text, x, y });
+    },
     stroke() {
       if (pending) segments.push(pending);
       pending = null;
     },
   };
-  return { ctx: ctx as unknown as CanvasRenderingContext2D, segments };
+  return { ctx: ctx as unknown as CanvasRenderingContext2D, segments, labels, corners, discs };
 }
 
 /**
@@ -157,5 +195,62 @@ describe('drawLanes', () => {
     const bottom = Math.max(...verticalsIn(4, segments).map((s) => s.y1));
     // The node's own row centre, and not a pixel below it.
     expect(bottom).toBe((50 - window.first) * DEFAULT_METRICS.rowHeight + DEFAULT_METRICS.rowHeight / 2);
+  });
+});
+
+
+describe('drawing a node', () => {
+  it('puts the author initials on the disc', () => {
+    const frame = longRunFrame(20, 2);
+    const window: Window = { first: 0, last: 3 };
+    const { ctx, labels, discs } = recorder();
+
+    drawLanes(ctx, frame, window, DEFAULT_METRICS, ['#a', '#b', '#c'], 200, 200, '#fff', (row) =>
+      row === 1 ? 'LT' : null,
+    );
+
+    // A disc for every visible row, whether or not its metadata has arrived, so a node does
+    // not change size under the pointer as a scroll settles.
+    expect(discs.length).toBe(4);
+    expect(discs.every((d) => d.radius === DEFAULT_METRICS.nodeRadius)).toBe(true);
+
+    expect(labels).toHaveLength(1);
+    expect(labels[0]?.text).toBe('LT');
+    expect(labels[0]?.x).toBe(laneX(0, DEFAULT_METRICS));
+  });
+
+  it('leaves a node blank while its metadata is still loading', () => {
+    const frame = longRunFrame(20, 2);
+    const { ctx, labels, discs } = recorder();
+    drawLanes(ctx, frame, { first: 0, last: 3 }, DEFAULT_METRICS, ['#a'], 200, 200, '#fff');
+    expect(labels).toHaveLength(0);
+    expect(discs.length).toBe(4);
+  });
+});
+
+describe('an edge that changes lane', () => {
+  it('turns through a rounded corner rather than a lazy diagonal', () => {
+    const frame = longRunFrame(20, 3);
+    const { ctx, corners } = recorder();
+    drawLanes(ctx, frame, { first: 0, last: 3 }, DEFAULT_METRICS, ['#a', '#b', '#c', '#d'], 200, 200, '#fff');
+
+    // Row 0 opens lane 3 for its second parent; that is the only lane change in the window.
+    expect(corners).toHaveLength(1);
+    const corner = corners[0];
+    // Horizontal out of the node, then straight down the parent's lane: the corner sits at the
+    // parent lane's x on the node's own row, and the arc ends heading downwards.
+    expect(corner?.cx).toBe(laneX(3, DEFAULT_METRICS));
+    expect(corner?.cy).toBe(rowY(0, 0, DEFAULT_METRICS));
+    expect(corner?.x).toBe(laneX(3, DEFAULT_METRICS));
+    expect(corner?.y).toBeGreaterThan(corner?.cy ?? 0);
+    expect(corner?.radius).toBeGreaterThan(0);
+  });
+
+  it('draws no corner where the edge stays in its lane', () => {
+    const frame = longRunFrame(20, 3);
+    const { ctx, corners } = recorder();
+    // A window past row 0 has only the straight first-parent run in it.
+    drawLanes(ctx, frame, { first: 5, last: 8 }, DEFAULT_METRICS, ['#a', '#b', '#c', '#d'], 200, 200, '#fff');
+    expect(corners).toHaveLength(0);
   });
 });

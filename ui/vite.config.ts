@@ -3,9 +3,14 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 
 export default defineConfig({
   plugins: [svelte()],
-  // Component tests mount the real component, so the browser build of Svelte has to win over
-  // the server one; without this a mounted component renders nothing at all.
-  resolve: { conditions: process.env.VITEST ? ['browser'] : [] },
+  /*
+   * Component tests need Svelte's browser build to win over its server one, or a mounted
+   * component renders nothing. The key is added only under Vitest and never otherwise:
+   * `conditions` replaces Vite's defaults rather than adding to them, so setting it to an
+   * empty array for the real build resolves the server entry and `mount` disappears — the
+   * window then opens on a blank page with `mount(...) is not available on the server`.
+   */
+  ...(process.env.VITEST ? { resolve: { conditions: ['browser'] } } : {}),
   // Tauri points devUrl at this exact port; a silent bump would leave the window blank.
   server: { port: 5173, strictPort: true },
   clearScreen: false,

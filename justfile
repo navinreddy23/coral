@@ -25,7 +25,20 @@ test:
     cargo test --workspace --all-features
 
 ui-check:
-    cd ui && npm run check && npm run build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export PATH="$HOME/.cargo/bin:$PATH"
+    cd ui
+    npm run check
+    npm run build
+    # A bundle that resolved Svelte's server build instead of its browser one compiles without
+    # complaint and then throws the moment it loads, leaving the window blank. Nothing else in
+    # the gate notices, because the failure is at runtime, so the built output is searched for
+    # the error it would raise.
+    if grep -rql "is not available on the server" dist/assets; then
+        echo "ui build resolved Svelte's server entry; the window would open blank" >&2
+        exit 1
+    fi
 
 # Fails if the generated bindings drift from the Rust types.
 bindings-drift: test
