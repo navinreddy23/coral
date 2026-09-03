@@ -333,3 +333,128 @@ pub async fn journal(path: &Path) -> Result<JournalView, CoralError> {
         entries: j.entries.iter().map(|e| e.label.clone()).collect(),
     })
 }
+
+/// Creates a branch, optionally checking it out.
+///
+/// # Errors
+/// Propagates git failures, including an existing branch of the same name.
+pub async fn branch_create(
+    path: &Path,
+    name: String,
+    at: Option<String>,
+    checkout: bool,
+) -> Result<Done, CoralError> {
+    journaled(path, &format!("create branch {name}"), |r, l| async move {
+        l.branch_create(&r, &name, at.as_deref(), checkout).await
+    })
+    .await?;
+    Ok(Done {
+        what: "branch created".into(),
+        oid: None,
+    })
+}
+
+/// Deletes a branch.
+///
+/// # Errors
+/// Propagates git failures; git refuses an unmerged branch without `force`.
+pub async fn branch_delete(path: &Path, name: String, force: bool) -> Result<Done, CoralError> {
+    journaled(path, &format!("delete branch {name}"), |r, l| async move {
+        l.branch_delete(&r, &name, force).await
+    })
+    .await?;
+    Ok(Done {
+        what: "branch deleted".into(),
+        oid: None,
+    })
+}
+
+/// Renames a branch.
+///
+/// # Errors
+/// Propagates git failures.
+pub async fn branch_rename(path: &Path, from: String, to: String) -> Result<Done, CoralError> {
+    journaled(path, &format!("rename branch {from}"), |r, l| async move {
+        l.branch_rename(&r, &from, &to).await
+    })
+    .await?;
+    Ok(Done {
+        what: "branch renamed".into(),
+        oid: None,
+    })
+}
+
+/// Creates a tag. A message makes it annotated.
+///
+/// # Errors
+/// Propagates git failures.
+pub async fn tag_create(
+    path: &Path,
+    name: String,
+    at: Option<String>,
+    message: Option<String>,
+) -> Result<Done, CoralError> {
+    journaled(path, &format!("create tag {name}"), |r, l| async move {
+        l.tag_create(&r, &name, at.as_deref(), message.as_deref())
+            .await
+    })
+    .await?;
+    Ok(Done {
+        what: "tag created".into(),
+        oid: None,
+    })
+}
+
+/// Deletes a tag.
+///
+/// # Errors
+/// Propagates git failures.
+pub async fn tag_delete(path: &Path, name: String) -> Result<Done, CoralError> {
+    journaled(path, &format!("delete tag {name}"), |r, l| async move {
+        l.tag_delete(&r, &name).await
+    })
+    .await?;
+    Ok(Done {
+        what: "tag deleted".into(),
+        oid: None,
+    })
+}
+
+/// What to do with the stash.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum StashAction {
+    Push,
+    Apply,
+    Pop,
+    Drop,
+}
+
+/// Pushes, applies, pops or drops a stash entry.
+///
+/// # Errors
+/// Propagates git failures, including conflicts raised by applying.
+pub async fn stash(
+    path: &Path,
+    action: StashAction,
+    index: usize,
+    message: Option<String>,
+    include_untracked: bool,
+) -> Result<Done, CoralError> {
+    let label = format!("stash {action:?}").to_lowercase();
+    journaled(path, &label, |r, l| async move {
+        match action {
+            StashAction::Push => {
+                l.stash_push(&r, message.as_deref(), include_untracked)
+                    .await
+            }
+            StashAction::Apply => l.stash_apply(&r, index, false).await,
+            StashAction::Pop => l.stash_apply(&r, index, true).await,
+            StashAction::Drop => l.stash_drop(&r, index).await,
+        }
+    })
+    .await?;
+    Ok(Done {
+        what: label,
+        oid: None,
+    })
+}

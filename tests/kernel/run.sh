@@ -23,6 +23,17 @@ budget() { echo $(( $1 * SCALE )); }
 require_repo() {
     [ -d "$REPO/.git" ] || { echo "no kernel clone at $REPO; run 'just kernel-clone'" >&2; exit 1; }
     [ -x "$CORAL" ] || { echo "no release binary at $CORAL; run 'cargo build --release'" >&2; exit 1; }
+
+    # Refuse to start on a repository a previous run left mid-operation: the scenarios would
+    # compound the mess and every later assertion would be meaningless.
+    if [ -n "$(git -C "$REPO" status --porcelain)" ]; then
+        echo "clone at $REPO has uncommitted changes; clean it before running" >&2
+        exit 1
+    fi
+    if [ -n "$(git -C "$REPO" for-each-ref --format='%(refname)' 'refs/heads/bench/*')" ]; then
+        echo "clone at $REPO still has bench/ branches from an earlier run" >&2
+        exit 1
+    fi
 }
 
 # Scenario 1 — open and report. Budget: 300 ms to a usable RepoInfo.

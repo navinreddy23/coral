@@ -88,6 +88,48 @@ pub enum Command {
         #[arg(value_enum)]
         action: commands::write::Action,
     },
+    /// Create a branch.
+    BranchCreate {
+        name: String,
+        /// Start the branch here instead of at HEAD.
+        #[arg(long)]
+        at: Option<String>,
+        /// Check it out after creating it.
+        #[arg(long)]
+        checkout: bool,
+    },
+    /// Delete a branch.
+    BranchDelete {
+        name: String,
+        /// Delete even when the branch is not merged.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Rename a branch.
+    BranchRename { from: String, to: String },
+    /// Create a tag. With a message it is annotated.
+    TagCreate {
+        name: String,
+        #[arg(long)]
+        at: Option<String>,
+        #[arg(short, long)]
+        message: Option<String>,
+    },
+    /// Delete a tag.
+    TagDelete { name: String },
+    /// Push, apply, pop or drop a stash entry.
+    Stash {
+        #[arg(value_enum)]
+        action: commands::write::StashAction,
+        /// Which entry to act on.
+        #[arg(long, default_value_t = 0)]
+        index: usize,
+        #[arg(short, long)]
+        message: Option<String>,
+        /// Include untracked files when pushing.
+        #[arg(long)]
+        include_untracked: bool,
+    },
     /// Reverse the most recent operation.
     Undo,
     /// Replay the most recently undone operation.
@@ -292,6 +334,29 @@ async fn dispatch_write(command: Command, repo: &std::path::Path) -> output::Ren
         }
         Command::Checkout { rev } => output::render(&commands::write::checkout(repo, rev).await),
         Command::Op { action } => output::render_op(&commands::write::op(repo, action).await),
+        Command::BranchCreate { name, at, checkout } => {
+            output::render(&commands::write::branch_create(repo, name, at, checkout).await)
+        }
+        Command::BranchDelete { name, force } => {
+            output::render(&commands::write::branch_delete(repo, name, force).await)
+        }
+        Command::BranchRename { from, to } => {
+            output::render(&commands::write::branch_rename(repo, from, to).await)
+        }
+        Command::TagCreate { name, at, message } => {
+            output::render(&commands::write::tag_create(repo, name, at, message).await)
+        }
+        Command::TagDelete { name } => {
+            output::render(&commands::write::tag_delete(repo, name).await)
+        }
+        Command::Stash {
+            action,
+            index,
+            message,
+            include_untracked,
+        } => output::render(
+            &commands::write::stash(repo, action, index, message, include_untracked).await,
+        ),
         Command::Undo => output::render(&commands::write::undo(repo).await),
         Command::Redo => output::render(&commands::write::redo(repo).await),
         Command::Journal => output::render(&commands::write::journal(repo).await),
