@@ -1,6 +1,15 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import type { FileDiff, GitRef, Submodule, RepoInfo } from './types';
+import type {
+  Blocks,
+  ConflictedFile,
+  FileDiff,
+  GitRef,
+  Operation,
+  OpOutcome,
+  Submodule,
+  RepoInfo,
+} from './types';
 
 /**
  * The only module that calls `invoke`. Types come from `types.ts`, which Rust generates via
@@ -89,4 +98,38 @@ export interface ActionOutcome {
 
 export function runAction(path: string, action: Action): Promise<ActionOutcome> {
   return invoke<ActionOutcome>('repo_action', { path, action });
+}
+
+/** The operation in progress, and what its two sides are called. */
+export function repoOperation(path: string): Promise<Operation> {
+  return invoke<Operation>('repo_operation', { path });
+}
+
+/** Files still needing a decision. */
+export function repoConflicts(path: string): Promise<ConflictedFile[]> {
+  return invoke<ConflictedFile[]>('repo_conflicts', { path });
+}
+
+/** One conflicted file broken into agreeing and disagreeing regions. */
+export function conflictBlocks(path: string, file: string): Promise<Blocks> {
+  return invoke<Blocks>('conflict_blocks', { path, file });
+}
+
+/** How the user chose to settle one file. */
+export type Choice =
+  | { kind: 'ours' }
+  | { kind: 'theirs' }
+  | { kind: 'delete' }
+  | { kind: 'content'; text: string };
+
+export function resolveConflict(path: string, file: string, choice: Choice): Promise<void> {
+  return invoke<void>('resolve_conflict', { path, file, choice });
+}
+
+/** Continues, aborts, or skips the operation in progress. */
+export function operationStep(
+  path: string,
+  step: 'continue' | 'abort' | 'skip',
+): Promise<OpOutcome> {
+  return invoke<OpOutcome>('operation_step', { path, step });
 }

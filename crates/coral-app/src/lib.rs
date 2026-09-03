@@ -3,6 +3,7 @@
 
 pub mod actions;
 pub mod commands;
+pub mod conflicts;
 pub mod graph;
 pub mod session;
 pub mod tabs;

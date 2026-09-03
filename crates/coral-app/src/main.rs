@@ -1,7 +1,7 @@
 // The desktop build must not open a console window on Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use coral_app_lib::{actions, commands, graph, tabs};
+use coral_app_lib::{actions, commands, conflicts, graph, tabs};
 
 fn main() {
     tracing_subscriber::fmt()
@@ -45,6 +45,11 @@ fn main() {
             graph::commit_detail,
             graph::file_diff,
             actions::repo_action,
+            conflicts::repo_operation,
+            conflicts::repo_conflicts,
+            conflicts::conflict_blocks,
+            conflicts::resolve_conflict,
+            conflicts::operation_step,
             tabs::session_get,
             tabs::tab_open,
             tabs::tab_close,

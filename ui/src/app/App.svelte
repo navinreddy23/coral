@@ -7,6 +7,8 @@
   import DiffView from './DiffView.svelte';
   import { DiffState } from '../state/diff.svelte';
   import { ActionsState } from '../state/actions.svelte';
+  import MergeTool from './MergeTool.svelte';
+  import { MergeState } from '../state/merge.svelte';
   import Palette, { type Command } from './Palette.svelte';
   import type { Action } from '../ipc/commands';
   import {
@@ -114,6 +116,7 @@
   const panes = new PanesState();
   const diff = new DiffState();
   const actions = new ActionsState();
+  const merge = new MergeState();
   let showPalette = $state(false);
   let scroller = $state<HTMLDivElement | null>(null);
 
@@ -126,6 +129,14 @@
     if (local === null || !graph.frame || !info) return;
     showWip = false;
     void selection.select(info.path, row, oidOf(graph.frame, local));
+  }
+
+  /** Reloads everything after an operation finished, since it may have moved any of it. */
+  async function reloadAll() {
+    if (!info) return;
+    const path = info.path;
+    await Promise.all([refs.load(path), worktree.load(path), merge.load(path)]);
+    await graph.open(path);
   }
 
   /** Every ref and where it points, as one string, to tell whether an action moved anything. */
@@ -146,7 +157,7 @@
     const outcome = await actions.run(path, action);
     if (!outcome) return;
 
-    await Promise.all([refs.load(path), worktree.load(path)]);
+    await Promise.all([refs.load(path), worktree.load(path), merge.load(path)]);
     const after = refSignature();
     if (before !== after) await graph.open(path);
   }
@@ -276,6 +287,9 @@
       await graph.open(info.path);
       await refs.load(info.path);
       await worktree.load(info.path);
+      // A repository can be opened mid-merge, so the tool has to be there on arrival rather
+      // than only after an action of ours stopped.
+      await merge.load(info.path);
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
@@ -450,12 +464,16 @@
         onreset={() => panes.reset()}
       />
     {/if}
-    {#if diff.path !== null}
+    {#if merge.inProgress}
+      <!-- A stopped merge or rebase is the only thing that matters until it is settled, so it
+           takes the main pane outright rather than sitting behind the graph. -->
+      <MergeTool {merge} onDone={reloadAll} />
+    {:else if diff.path !== null}
       <DiffView {diff} onClose={() => diff.close()} />
     {/if}
     <div
       class="graph"
-      class:hidden={diff.path !== null}
+      class:hidden={diff.path !== null || merge.inProgress}
       bind:this={scroller}
       onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}
       bind:clientHeight={viewport}
