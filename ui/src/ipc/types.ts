@@ -11,6 +11,25 @@ export type Change = "unmodified" | "modified" | "added" | "deleted" | "renamed"
  */
 export type ConflictKind = "both_modified" | "both_added" | "both_deleted" | "added_by_us" | "added_by_them" | "deleted_by_us" | "deleted_by_them";
 
+/**
+ * What happened to a file between two trees.
+ */
+export type FileChange = "added" | "deleted" | "modified" | "renamed" | "copied";
+
+export type FileDiff = { path: string, oldPath: string | null, change: FileChange, binary: boolean, 
+/**
+ * Lines added and removed. `None` for a binary file, where git reports no counts.
+ */
+added: number | null, removed: number | null, 
+/**
+ * Empty for a binary file, a pure rename, or a mode-only change.
+ */
+hunks: Array<Hunk>, 
+/**
+ * Set when the file was not read because it exceeds the size guard.
+ */
+tooLarge: boolean, };
+
 export type GitRef = { 
 /**
  * Full name, e.g. `refs/heads/main`.
@@ -33,6 +52,20 @@ peeled: string | null, upstream: string | null, ahead: number, behind: number, }
  * Where HEAD points.
  */
 export type Head = { "kind": "branch", name: string, } | { "kind": "detached", oid: string, } | { "kind": "unborn", name: string, };
+
+export type Hunk = { 
+/**
+ * The `@@ ... @@` line verbatim, including any trailing section heading.
+ */
+header: string, oldStart: number, oldLines: number, newStart: number, newLines: number, lines: Array<Line>, };
+
+export type Line = { kind: LineKind, text: string, oldNo: number | null, newNo: number | null, 
+/**
+ * The file does not end with a newline, and this is its last line.
+ */
+noNewline: boolean, };
+
+export type LineKind = "context" | "add" | "remove";
 
 /**
  * The multi-step operation the repository is in the middle of, detected from the files git

@@ -246,6 +246,50 @@ impl RepoLocation {
         crate::refs::parse(&out.stdout)
     }
 
+    /// Diffs the worktree, or the index when `staged`, optionally limited to `paths`.
+    ///
+    /// Three git invocations rather than one: numstat gives unambiguous paths and counts,
+    /// name-status distinguishes add from delete from rename, and the patch supplies hunks.
+    /// The patch header cannot be trusted for paths — `diff --git a/x b/y` is ambiguous when a
+    /// path contains a space, which git does not quote.
+    ///
+    /// # Errors
+    /// Propagates git failures and [`CoralError::Protocol`] if the output does not parse.
+    pub async fn diff(
+        &self,
+        runner: &GitRunner,
+        staged: bool,
+        paths: &[&str],
+    ) -> Result<Vec<crate::diff::FileDiff>, CoralError> {
+        let base = |args: &[&str]| {
+            let mut c = GitCommand::status("diff", self.display_path())
+                .arg("diff")
+                .arg("-M");
+            if staged {
+                c = c.arg("--cached");
+            }
+            c = c.args(args);
+            if paths.is_empty() {
+                c
+            } else {
+                c.arg("--").args(paths)
+            }
+        };
+
+        let numstat = runner.output(base(&["-z", "--numstat"])).await?;
+        let mut files = crate::diff::parse_numstat(&numstat.stdout)?;
+        if files.is_empty() {
+            return Ok(files);
+        }
+
+        let names = runner.output(base(&["-z", "--name-status"])).await?;
+        crate::diff::apply_name_status(&mut files, &names.stdout)?;
+
+        let patch = runner.output(base(&["--no-color", "-p", "-U3"])).await?;
+        crate::diff::apply_patch(&mut files, &patch.stdout)?;
+        Ok(files)
+    }
+
     /// Gathers everything `coral open` reports.
     ///
     /// # Errors

@@ -2,30 +2,6 @@ use bstr::{BString, ByteSlice};
 
 use crate::error::CoralError;
 
-/// Paths are bytes internally, because git's are. They become strings only here, at the
-/// serialization boundary, where a non-UTF-8 path is rendered lossily rather than dropped.
-mod path_as_str {
-    use bstr::{BString, ByteSlice};
-    use serde::Serializer;
-
-    pub fn serialize<S: Serializer>(p: &BString, s: S) -> Result<S::Ok, S::Error> {
-        s.serialize_str(&p.to_str_lossy())
-    }
-
-    pub mod option {
-        use super::{BString, ByteSlice, Serializer};
-
-        // serde's serialize_with always passes the field by reference.
-        #[allow(clippy::ref_option)]
-        pub fn serialize<S: Serializer>(p: &Option<BString>, s: S) -> Result<S::Ok, S::Error> {
-            match p {
-                Some(p) => s.serialize_str(&p.to_str_lossy()),
-                None => s.serialize_none(),
-            }
-        }
-    }
-}
-
 /// How one side of the index/worktree pair changed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "types.ts"))]
@@ -92,11 +68,11 @@ impl ConflictKind {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "types.ts"))]
 #[serde(rename_all = "camelCase")]
 pub struct StatusEntry {
-    #[serde(serialize_with = "path_as_str::serialize")]
+    #[serde(serialize_with = "crate::bytes::as_str")]
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub path: BString,
     /// Where a rename or copy came from.
-    #[serde(serialize_with = "path_as_str::option::serialize")]
+    #[serde(serialize_with = "crate::bytes::as_str_opt")]
     #[cfg_attr(feature = "ts", ts(type = "string | null"))]
     pub orig_path: Option<BString>,
     pub index: Change,

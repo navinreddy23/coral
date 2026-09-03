@@ -1,3 +1,5 @@
+pub mod bytes;
+pub mod diff;
 pub mod error;
 pub mod graph;
 pub mod process;
