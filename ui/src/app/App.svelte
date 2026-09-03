@@ -1,7 +1,13 @@
 <script lang="ts">
   import { hasFlag, oidOf, RowFlag, type Frame } from '../graph/frame';
   import GraphCanvas from '../graph/GraphCanvas.svelte';
-  import { DEFAULT_METRICS, firstRowFor, spacerHeight } from '../graph/layout';
+  import {
+    DEFAULT_METRICS,
+    firstRowFor,
+    GRAPH_COLUMN_PX,
+    REFS_COLUMN_PX,
+    spacerHeight,
+  } from '../graph/layout';
   import { initialRepo, open } from '../ipc/commands';
   import { GraphState } from '../state/graph.svelte';
   import { RefsState } from '../state/refs.svelte';
@@ -11,6 +17,7 @@
   import Staging from './Staging.svelte';
   import Details from './Details.svelte';
   import Sidebar from './Sidebar.svelte';
+  import Toolbar from './Toolbar.svelte';
   import type { RepoInfo } from '../ipc/types';
 
   const graph = new GraphState();
@@ -118,6 +125,15 @@
     </button>
   </header>
 
+  {#if info}
+    <Toolbar
+      repo={info.path.split('/').pop() ?? info.path}
+      branch={headName ?? 'detached'}
+      busy={worktree.busy}
+      onAction={() => {}}
+    />
+  {/if}
+
   {#if graph.transportWarning}
     <p class="banner">{graph.transportWarning}</p>
   {/if}
@@ -138,18 +154,26 @@
       onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}
       bind:clientHeight={viewport}
     >
+      <div class="columns">
+        <span class="col refs">Branch / Tag</span>
+        <span class="col graph-col">Graph</span>
+        <span class="col message">Commit message</span>
+      </div>
       {#if worktree.dirty}
-        <button class="wip" class:selected={showWip} onclick={pickWip}>
-          <span class="wip-mark">//</span>
-          <span class="wip-text">Uncommitted changes</span>
-          <span class="wip-count">{wipCount} file{wipCount === 1 ? '' : 's'}</span>
+        <button class="row wip" class:selected={showWip} onclick={pickWip}>
+          <span class="cell refs"></span>
+          <span class="cell graph-col"><span class="wip-node"></span></span>
+          <span class="cell message">
+            <span class="summary">WIP on {headName ?? 'HEAD'}</span>
+            <span class="detail">{wipCount} file{wipCount === 1 ? '' : 's'}</span>
+          </span>
         </button>
       {/if}
       <div
         class="spacer"
         style:height="{spacerHeight(graph.frame.rowCount, DEFAULT_METRICS)}px"
       >
-        <div class="lanes" style:top="{0}px">
+        <div class="lanes">
           <GraphCanvas frame={graph.frame} {scrollTop} height={viewport} />
         </div>
         <ul class="rows">
@@ -161,13 +185,21 @@
               class:selected={selection.row === row}
             >
               <button class="hit" onclick={() => pick(row)} aria-label="Select commit"></button>
-              {#each refs.byRow.get(row) ?? [] as label (label.name)}
-                <span class="pill" class:head={label.short === headName}>{label.short}</span>
-              {/each}
-              <span class="summary">{graph.meta.get(row)?.summary ?? ''}</span>
-              <span class="author">{graph.meta.get(row)?.author ?? ''}</span>
-              <span class="age">{when(graph.frame.times[row] ?? 0)}</span>
-              <span class="sha mono">{oidOf(graph.frame, row).slice(0, 8)}</span>
+              <span class="cell refs">
+                {#each (refs.byRow.get(row) ?? []).slice(0, 2) as label (label.name)}
+                  <span class="pill" class:head={label.short === headName}>{label.short}</span>
+                {/each}
+                {#if (refs.byRow.get(row) ?? []).length > 2}
+                  <span class="pill more">+{(refs.byRow.get(row) ?? []).length - 2}</span>
+                {/if}
+              </span>
+              <span class="cell graph-col"></span>
+              <span class="cell message">
+                <span class="summary">{graph.meta.get(row)?.summary ?? ''}</span>
+                <span class="detail">{graph.meta.get(row)?.author ?? ''}</span>
+                <span class="age">{when(graph.frame.times[row] ?? 0)}</span>
+                <span class="sha mono">{oidOf(graph.frame, row).slice(0, 8)}</span>
+              </span>
             </li>
           {/each}
         </ul>
@@ -183,6 +215,7 @@
 </main>
 
 <style>
+  :root { --refs-col: 150px; --graph-col: 120px; }
   main { display: flex; flex-direction: column; height: 100%; }
   header {
     display: flex; align-items: center; gap: var(--space-3);
@@ -207,54 +240,80 @@
   .muted { padding: var(--space-4); color: var(--fg-2); }
 
   .body { display: flex; flex: 1; min-height: 0; }
-  .wip {
-    display: flex; align-items: center; gap: var(--space-3);
-    width: 100%; height: var(--row-h); padding: 0 var(--space-4) 0 240px;
-    font: inherit; font-size: 12px; text-align: left; cursor: pointer;
-    background: var(--bg-1); border: 0; border-bottom: 1px solid var(--border);
-    color: var(--fg-0); position: sticky; top: 0; z-index: 1;
-  }
-  .wip.selected { background: var(--bg-2); }
-  .wip-mark { color: var(--lane-3); font-family: var(--font-mono); }
-  .wip-text { flex: 1; }
-  .wip-count { color: var(--fg-2); }
-  .wip-panel {
-    width: 340px; flex: 0 0 auto; overflow-y: auto;
-    border-left: 1px solid var(--border); background: var(--bg-1);
-    padding: var(--space-3);
-  }
   .graph { flex: 1; overflow-y: auto; position: relative; }
+
+  /* Column headers, matching the row grid below so the two cannot drift apart. */
+  .columns, .row, .wip {
+    display: grid;
+    grid-template-columns: var(--refs-col) var(--graph-col) 1fr;
+    align-items: center;
+  }
+  .columns {
+    position: sticky; top: 0; z-index: 2;
+    height: 22px; padding: 0 var(--space-3);
+    background: var(--bg-1); border-bottom: 1px solid var(--border);
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--fg-2);
+  }
+  .col { overflow: hidden; }
+
   .spacer { position: relative; }
   /* The canvas tracks the scroll position rather than being as tall as the graph: a canvas
      millions of pixels high exhausts GPU texture memory. */
-  .lanes { position: sticky; top: 0; float: left; height: 0; }
-  .rows { list-style: none; margin: 0; padding: 0; }
-  .row {
-    position: absolute; left: 240px; right: 0; height: var(--row-h);
-    display: flex; align-items: center; gap: var(--space-4);
-    font-size: 12px; color: var(--fg-1);
+  .lanes {
+    position: sticky; top: 22px; float: left; height: 0;
+    margin-left: calc(var(--refs-col) + var(--space-3)); pointer-events: none;
   }
-  .row.merge { color: var(--fg-0); }
-  .row.selected { background: var(--bg-2); }
-  .row:hover { background: var(--bg-1); }
+  .rows { list-style: none; margin: 0; padding: 0; }
+
+  .row, .wip {
+    position: absolute; left: 0; right: 0; height: var(--row-h);
+    padding: 0 var(--space-3);
+    font-size: 12px; color: var(--fg-1);
+    border: 0; background: none; font-family: inherit; text-align: left;
+  }
+  .wip { position: sticky; top: 22px; z-index: 1; cursor: pointer; background: var(--bg-0); }
+  .row:hover, .wip:hover { background: var(--bg-1); }
+  .row.selected, .wip.selected { background: var(--accent-soft); }
   /* The whole row is the target; a button laid over it keeps that keyboard-reachable without
      nesting interactive elements inside one another. */
   .hit {
     position: absolute; inset: 0; width: 100%; height: 100%;
     background: none; border: 0; padding: 0; margin: 0; cursor: pointer;
   }
+  .cell { min-width: 0; display: flex; align-items: center; gap: var(--space-2); }
+  .cell.refs { justify-content: flex-end; padding-right: var(--space-2); }
+  .cell.message { gap: var(--space-3); }
+
   .pill {
-    flex: 0 0 auto; font-size: 11px; padding: 1px var(--space-2);
-    border-radius: 9px; border: 1px solid var(--border);
+    flex: 0 0 auto; font-size: 11px; line-height: 1.5; padding: 0 var(--space-2);
+    border-radius: 3px; border: 1px solid var(--border);
     background: var(--bg-2); color: var(--fg-1);
-    max-width: 14em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .pill.head { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .pill.more { color: var(--fg-2); }
+
   .summary {
-    flex: 1; min-width: 0; color: var(--fg-0);
+    flex: 0 1 auto; min-width: 0; color: var(--fg-0);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .author { width: 12em; flex: 0 0 auto; color: var(--fg-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .age { width: 3.5em; flex: 0 0 auto; color: var(--fg-2); text-align: right; }
-  .sha { width: 6em; flex: 0 0 auto; color: var(--fg-2); text-align: right; padding-right: var(--space-4); }
+  .row.merge .summary { color: var(--fg-0); }
+  .detail {
+    flex: 0 1 auto; min-width: 0; color: var(--fg-2);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .age { margin-left: auto; flex: 0 0 auto; color: var(--fg-2); }
+  .sha { flex: 0 0 auto; color: var(--fg-2); }
+
+  .wip-node {
+    width: 10px; height: 10px; border-radius: 50%;
+    border: 2px dashed var(--fg-2); margin-left: var(--space-1);
+  }
+
+  .wip-panel {
+    width: 340px; flex: 0 0 auto; overflow-y: auto;
+    border-left: 1px solid var(--border); background: var(--bg-1);
+    padding: var(--space-3);
+  }
 </style>

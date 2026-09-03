@@ -18,6 +18,8 @@
   --fg-2: #6b7586;
 
   --accent: #0f7a70;
+  /* The selected row, tinted rather than filled so the text on it keeps its contrast. */
+  --accent-soft: #d3ebe8;
   --danger: #b3261e;
 
   /*
@@ -62,6 +64,7 @@
   --fg-2: #6d7580;
 
   --accent: #179287;
+  --accent-soft: #1d3b3a;
   --danger: #d95c5c;
 
   --lane-1: #3fa9f5;

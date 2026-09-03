@@ -8,7 +8,9 @@
   } = $props();
 
   let filter = $state('');
-  let collapsed = $state<Record<string, boolean>>({});
+  // Remote and tag lists run to hundreds on a real repository, so they start closed as they do
+  // in the reference; local branches are what people look at.
+  let collapsed = $state<Record<string, boolean>>({ remote: true, tags: true });
 
   function shown(refs: PlacedRef[]): PlacedRef[] {
     const q = filter.trim().toLowerCase();
@@ -16,19 +18,25 @@
   }
 
   const sections = $derived([
-    { key: 'local', title: 'Local', refs: shown(groups.local) },
-    { key: 'remote', title: 'Remote', refs: shown(groups.remote) },
-    { key: 'tags', title: 'Tags', refs: shown(groups.tags) },
-    { key: 'stashes', title: 'Stashes', refs: shown(groups.stashes) },
+    { key: 'local', title: 'Local', icon: '🖿', refs: shown(groups.local) },
+    { key: 'remote', title: 'Remote', icon: '☁', refs: shown(groups.remote) },
+    { key: 'stashes', title: 'Stashes', icon: '⤓', refs: shown(groups.stashes) },
+    { key: 'tags', title: 'Tags', icon: '🏷', refs: shown(groups.tags) },
   ]);
+
+  const total = $derived(
+    groups.local.length + groups.remote.length + groups.tags.length + groups.stashes.length,
+  );
 </script>
 
 <aside>
-  <input class="filter" placeholder="Filter refs…" bind:value={filter} />
+  <p class="viewing">Viewing <strong>{total}</strong></p>
+  <input class="filter" placeholder="Filter" bind:value={filter} />
   {#each sections as section (section.key)}
     <section>
       <button class="head" onclick={() => (collapsed[section.key] = !collapsed[section.key])}>
-        <span class="caret">{collapsed[section.key] ? '▸' : '▾'}</span>
+        <span class="caret">{collapsed[section.key] ? '›' : '⌄'}</span>
+        <span class="icon" aria-hidden="true">{section.icon}</span>
         {section.title}
         <span class="count">{section.refs.length}</span>
       </button>
@@ -65,6 +73,12 @@
     border-right: 1px solid var(--border); background: var(--bg-1);
     padding: var(--space-2);
   }
+  .viewing {
+    margin: var(--space-1) var(--space-1) var(--space-2);
+    font-size: 12px; color: var(--fg-2);
+  }
+  .viewing strong { color: var(--fg-0); font-weight: 600; }
+  .icon { width: 1.1em; }
   .filter {
     width: 100%; box-sizing: border-box; font: inherit; font-size: 12px;
     padding: var(--space-1) var(--space-2); margin-bottom: var(--space-2);

@@ -14,8 +14,14 @@ export const DEFAULT_METRICS: Metrics = {
   rowHeight: 28,
   laneWidth: 14,
   laneOrigin: 12,
-  nodeRadius: 4,
+  nodeRadius: 5,
 };
+
+/** Width of the branch and tag column, which sits left of the lanes. */
+export const REFS_COLUMN_PX = 150;
+
+/** Width of the lane column. Wider graphs scroll within it rather than pushing the message. */
+export const GRAPH_COLUMN_PX = 120;
 
 export function laneX(lane: number, m: Metrics): number {
   return m.laneOrigin + lane * m.laneWidth;

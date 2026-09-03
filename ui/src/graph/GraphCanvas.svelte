@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
 
   import type { Frame } from './frame';
-  import { DEFAULT_METRICS, laneColours, visibleRows } from './layout';
+  import { DEFAULT_METRICS, GRAPH_COLUMN_PX, laneColours, visibleRows } from './layout';
   import { drawLanes, resizeCanvas } from './render';
 
   const { frame, scrollTop = 0, height = 400 }: {
@@ -35,7 +35,7 @@
   function paint() {
     if (!canvas || !frame) return;
     const metrics = DEFAULT_METRICS;
-    const width = Math.max(1, (frame.rowCount > 0 ? 1 : 0) * 240);
+    const width = GRAPH_COLUMN_PX;
     const ctx = resizeCanvas(canvas, width, height, window.devicePixelRatio || 1);
     if (!ctx) return;
 
