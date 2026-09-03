@@ -12,6 +12,15 @@
   } = $props();
 
   let filter = $state('');
+  /**
+   * Sections rendered in full, by key.
+   *
+   * A capped list keeps the DOM small — a repository can carry tens of thousands of tags, and
+   * the kernel carries 944 — but the cap has to be liftable, or the refs past it cannot be
+   * reached at all.
+   */
+  let showingAll = $state<Record<string, boolean>>({});
+  const CAP = 200;
   // Remote and tag lists run to hundreds on a real repository, so they start closed as they do
   // in the reference; local branches are what people look at.
   let collapsed = $state<Record<string, boolean>>({ remote: true, tags: true });
@@ -58,7 +67,7 @@
       </button>
       {#if !collapsed[section.key]}
         <ul>
-          {#each section.refs.slice(0, 200) as r (r.name)}
+          {#each (showingAll[section.key] ? section.refs : section.refs.slice(0, CAP)) as r (r.name)}
             <li>
               <button
                 class="ref"
@@ -75,8 +84,12 @@
               </button>
             </li>
           {/each}
-          {#if section.refs.length > 200}
-            <li class="more">…and {section.refs.length - 200} more</li>
+          {#if section.refs.length > CAP && !showingAll[section.key]}
+            <li>
+              <button class="more" onclick={() => (showingAll[section.key] = true)}>
+                Show all {section.refs.length}
+              </button>
+            </li>
           {/if}
         </ul>
       {/if}
@@ -153,5 +166,10 @@
   .ref.current { color: var(--fg-0); font-weight: 600; background: var(--accent-soft); }
   .tick { color: var(--accent); flex: 0 0 auto; }
   .track { margin-left: auto; font-size: 11px; color: var(--fg-2); }
-  .more { padding: 3px var(--space-4); font-size: 11px; color: var(--fg-2); }
+  .more {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    padding: 3px var(--space-4); font-size: 11px; color: var(--accent);
+    background: none; border: 0; font-family: inherit;
+  }
+  .more:hover { background: var(--bg-3); }
 </style>

@@ -3,7 +3,11 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import {
+  covers,
   decodeFrame,
+  frameStartFor,
+  localRow,
+  ROWS_PER_FRAME,
   FrameError,
   FrameFlag,
   hasFlag,
@@ -122,5 +126,62 @@ describe('decodeFrame', () => {
     expect(Section.ParentStart).toBe(4);
     expect(Section.ParentLane).toBe(5);
     expect(Section.Oid).toBe(6);
+  });
+});
+
+describe('paging', () => {
+  function frameAt(startRow: number, rowCount: number, totalRows: number): Frame {
+    return {
+      startRow,
+      rowCount,
+      totalRows,
+      flags: 0,
+      hashLen: 20,
+      lanes: new Uint16Array(rowCount),
+      rowFlags: new Uint8Array(rowCount),
+      times: new Float64Array(rowCount),
+      parentStart: new Uint32Array(rowCount + 1),
+      parentLanes: new Uint16Array(0),
+      oids: new Uint8Array(rowCount * 20),
+      open: new Uint32Array(rowCount),
+    };
+  }
+
+  const kernel = 1_481_528;
+
+  it('knows which rows a frame holds', () => {
+    const frame = frameAt(4096, ROWS_PER_FRAME, kernel);
+    expect(covers(frame, 4096, 8191)).toBe(true);
+    expect(covers(frame, 4095, 4100)).toBe(false);
+    expect(covers(frame, 8191, 8192)).toBe(false);
+    expect(covers(null, 0, 0)).toBe(false);
+  });
+
+  it('places a frame with room to scroll back', () => {
+    const start = frameStartFor(900_000, kernel);
+    expect(start).toBeLessThan(900_000);
+    expect(start + ROWS_PER_FRAME).toBeGreaterThan(900_000);
+  });
+
+  it('never asks for rows past the end of the graph', () => {
+    // The engine clamps, but a frame that starts past the end comes back short and the window
+    // would then fall outside it on every scroll, refetching forever.
+    const start = frameStartFor(kernel - 1, kernel);
+    expect(start + ROWS_PER_FRAME).toBeLessThanOrEqual(kernel);
+    expect(covers(frameAt(start, ROWS_PER_FRAME, kernel), kernel - 1, kernel - 1)).toBe(true);
+  });
+
+  it('starts at zero near the top, and for a graph shorter than one frame', () => {
+    expect(frameStartFor(10, kernel)).toBe(0);
+    expect(frameStartFor(5, 100)).toBe(0);
+    expect(frameStartFor(99, 100)).toBe(0);
+  });
+
+  it('maps an absolute row into the frame, and refuses one it does not hold', () => {
+    const frame = frameAt(4096, ROWS_PER_FRAME, kernel);
+    expect(localRow(frame, 4096)).toBe(0);
+    expect(localRow(frame, 5000)).toBe(904);
+    expect(localRow(frame, 4095)).toBeNull();
+    expect(localRow(frame, 900_000)).toBeNull();
   });
 });

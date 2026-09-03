@@ -53,7 +53,9 @@
     const perScreen = Math.ceil(height / metrics.rowHeight);
     const win = {
       first: firstRow,
-      last: Math.min(frame.rowCount - 1, firstRow + perScreen + 2),
+      // Absolute rows: the frame is a window into the graph, so its last row is its own start
+      // plus its length, not its length alone.
+      last: Math.min(frame.startRow + frame.rowCount - 1, firstRow + perScreen + 2),
     };
     drawLanes(ctx, frame, win, metrics, colours, width, height, background, initials);
   }

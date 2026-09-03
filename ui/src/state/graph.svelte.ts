@@ -1,6 +1,6 @@
 import { checkBinaryTransport, graphFrame, rowMetadata } from '../ipc/graph';
 import type { CommitMeta } from '../ipc/types';
-import type { Frame } from '../graph/frame';
+import { covers, frameStartFor, type Frame } from '../graph/frame';
 
 /**
  * The graph for one repository.
@@ -23,6 +23,8 @@ export class GraphState {
   meta = $state<Map<number, CommitMeta>>(new Map());
   #path = '';
   #inFlight = new Set<number>();
+  /** Start row of the frame being fetched, so a scroll does not queue the same one twice. */
+  #wantedStart = -1;
 
   /**
    * Loads metadata for a window, in blocks, skipping what is already held.
@@ -61,11 +63,38 @@ export class GraphState {
    * while a commit-time walk answers in tens of milliseconds but may place a child before its
    * parent when committer clocks disagree.
    */
+  /**
+   * Makes sure the loaded frame holds `[first, last]`, fetching another if it does not.
+   *
+   * A frame is a window, not the whole graph: 1.4M rows of lanes and object ids is far more
+   * than the webview should hold, and the engine caps one frame at `ROWS_PER_FRAME`. Rows
+   * outside it have no lanes, no object id, and no position, which is what made a ref pointing
+   * deep into history scroll to nowhere.
+   */
+  async ensureRows(first: number, last: number): Promise<void> {
+    if (!this.#path || this.totalRows === 0) return;
+    if (covers(this.frame, first, last)) return;
+
+    const start = frameStartFor(first, this.totalRows);
+    if (this.#wantedStart === start) return;
+    this.#wantedStart = start;
+    const path = this.#path;
+    try {
+      const next = await graphFrame(path, start, false);
+      // A tab switch or a reload may have landed while this was in flight.
+      if (this.#wantedStart === start && this.#path === path) this.frame = next;
+    } catch (e) {
+      if (this.#wantedStart === start) this.#wantedStart = -1;
+      this.error = e instanceof Error ? e.message : String(e);
+    }
+  }
+
   async open(path: string): Promise<void> {
     this.loading = true;
     this.error = null;
     this.meta = new Map();
     this.#path = path;
+    this.#wantedStart = 0;
     try {
       const check = await checkBinaryTransport();
       this.transportWarning = check.binary ? null : check.detail;

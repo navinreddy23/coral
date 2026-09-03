@@ -161,3 +161,31 @@ export function laneOpenAt(frame: Frame, row: number, lane: number): boolean {
   const mask = frame.open[row];
   return mask !== undefined && (mask & (1 << lane)) !== 0;
 }
+
+/** How many rows a frame holds, at most. Mirrors `graph::wire::ROWS_PER_FRAME` in Rust. */
+export const ROWS_PER_FRAME = 4096;
+
+/** Whether `frame` holds every row in `[first, last]`. */
+export function covers(frame: Frame | null, first: number, last: number): boolean {
+  if (!frame) return false;
+  return first >= frame.startRow && last < frame.startRow + frame.rowCount;
+}
+
+/**
+ * Where to start the frame that should be fetched to show `[first, last]`.
+ *
+ * Placed with room above as well as below, so scrolling back up a little does not immediately
+ * cost another round trip. A frame is three orders of magnitude taller than a viewport, so in
+ * practice one fetch covers a long scroll in either direction.
+ */
+export function frameStartFor(first: number, totalRows: number): number {
+  const lookback = Math.floor(ROWS_PER_FRAME / 4);
+  const lastPossible = Math.max(0, totalRows - ROWS_PER_FRAME);
+  return Math.max(0, Math.min(lastPossible, first - lookback));
+}
+
+/** A frame-local index for an absolute row, or null when the frame does not hold it. */
+export function localRow(frame: Frame | null, row: number): number | null {
+  if (!covers(frame, row, row) || !frame) return null;
+  return row - frame.startRow;
+}

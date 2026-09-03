@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { hasFlag, oidOf, RowFlag, type Frame } from '../graph/frame';
+  import { covers, hasFlag, localRow, oidOf, RowFlag, type Frame } from '../graph/frame';
   import GraphCanvas from '../graph/GraphCanvas.svelte';
   import { initialsOf } from '../graph/initials';
   import Splitter from './Splitter.svelte';
@@ -49,7 +49,7 @@
   function move(delta: number) {
     if (!graph.frame) return;
     const at = selection.row ?? -1;
-    const next = Math.min(graph.frame.rowCount - 1, Math.max(0, at + delta));
+    const next = Math.min(graph.totalRows - 1, Math.max(0, at + delta));
     pick(next);
     scrollToRow(next);
   }
@@ -111,9 +111,10 @@
   );
 
   function pick(row: number) {
-    if (!graph.frame || !info) return;
+    const local = localRow(graph.frame, row);
+    if (local === null || !graph.frame || !info) return;
     showWip = false;
-    void selection.select(info.path, row, oidOf(graph.frame, row));
+    void selection.select(info.path, row, oidOf(graph.frame, local));
   }
 
   function pickWip() {
@@ -133,16 +134,19 @@
    * it: without the selection the detail panel still describes whatever was picked last, and
    * nothing on the row that was scrolled to says it is the one that was asked for.
    */
-  function reveal(row: number) {
-    pick(row);
+  async function reveal(row: number) {
     scrollToRow(row);
+    // A ref can point anywhere in the history, which is very unlikely to be inside whatever
+    // frame is loaded, so the rows have to arrive before there is anything to select.
+    await graph.ensureRows(row, row);
+    pick(row);
   }
 
   function scrollToRow(row: number) {
     if (!graph.frame || !scroller) return;
     // Above the height cap a row is a fraction of a pixel, so the target is the fraction of
     // the scrollable range rather than the row's pixel offset.
-    const total = graph.frame.rowCount;
+    const total = graph.totalRows;
     const height = spacerHeight(total, DEFAULT_METRICS);
     const lastTop = Math.max(1, total - Math.floor(viewport / DEFAULT_METRICS.rowHeight));
     const fraction = Math.max(0, row - 3) / lastTop;
@@ -208,8 +212,8 @@
   function windowRows(frame: Frame | null): number[] {
     if (!frame) return [];
     const perScreen = Math.ceil(viewport / DEFAULT_METRICS.rowHeight);
-    const first = firstRowFor(scrollTop, viewport, frame.rowCount, DEFAULT_METRICS);
-    const last = Math.min(frame.rowCount - 1, first + perScreen + 2);
+    const first = firstRowFor(scrollTop, viewport, frame.totalRows, DEFAULT_METRICS);
+    const last = Math.min(frame.totalRows - 1, first + perScreen + 2);
     const out: number[] = [];
     for (let r = first; r <= last; r++) out.push(r);
     return out;
@@ -232,9 +236,13 @@
   });
 
 
-  // Only rows that are on screen are worth an object read.
+  // Only rows that are on screen are worth an object read, or a frame.
   $effect(() => {
-    if (rows.length > 0) void graph.loadMetadata(rows[0] ?? 0, rows.length);
+    if (rows.length === 0) return;
+    const first = rows[0] ?? 0;
+    const last = rows[rows.length - 1] ?? first;
+    void graph.ensureRows(first, last);
+    void graph.loadMetadata(first, rows.length);
   });
 
   /**
@@ -368,7 +376,7 @@
       {/if}
       <div
         class="spacer"
-        style:height="{spacerHeight(graph.frame.rowCount, DEFAULT_METRICS)}px"
+        style:height="{spacerHeight(graph.totalRows, DEFAULT_METRICS)}px"
       >
         <div class="lanes" style:top="{listTop(scrollTop)}px">
           <GraphCanvas
@@ -381,9 +389,14 @@
         </div>
         <ul class="rows" style:top="{listTop(scrollTop)}px">
           {#each rows as row (row)}
+            <!--
+              A row the loaded frame does not reach is left blank rather than read out of the
+              wrong end of a typed array, which would show another commit's date and hash.
+            -->
+            {@const local = localRow(graph.frame, row)}
             <li
               class="row"
-              class:merge={hasFlag(graph.frame.rowFlags[row] ?? 0, RowFlag.Merge)}
+              class:merge={hasFlag(graph.frame.rowFlags[local ?? -1] ?? 0, RowFlag.Merge)}
               class:selected={selection.row === row}
             >
               <button class="hit" onclick={() => pick(row)} aria-label="Select commit"></button>
@@ -399,8 +412,10 @@
               <span class="cell message">
                 <span class="summary">{graph.meta.get(row)?.summary ?? ''}</span>
                 <span class="detail">{flatten(graph.meta.get(row)?.body ?? '')}</span>
-                <span class="age">{when(graph.frame.times[row] ?? 0)}</span>
-                <span class="sha mono">{oidOf(graph.frame, row).slice(0, 8)}</span>
+                {#if local !== null}
+                  <span class="age">{when(graph.frame.times[local] ?? 0)}</span>
+                  <span class="sha mono">{oidOf(graph.frame, local).slice(0, 8)}</span>
+                {/if}
               </span>
             </li>
           {/each}
