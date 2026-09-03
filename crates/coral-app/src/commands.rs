@@ -18,8 +18,19 @@ impl From<coral_core::CoralError> for IpcError {
     }
 }
 
+/// Which repository the window should open with.
+///
+/// `CORAL_REPO` exists so the app can be pointed at a repository without a file dialog, which
+/// is what makes benchmarking against a large clone possible. M5 replaces this with the tab
+/// session.
+#[tauri::command]
+pub fn initial_repo() -> String {
+    std::env::var("CORAL_REPO").unwrap_or_else(|_| ".".to_owned())
+}
+
 #[tauri::command]
 pub async fn open_repo(path: String) -> Result<RepoInfo, IpcError> {
+    tracing::info!(path, "open_repo");
     let runner = GitRunner::discover().await?;
     let loc = RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
     Ok(loc.info(&runner).await?)

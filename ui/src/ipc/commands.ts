@@ -9,3 +9,8 @@ import type { RepoInfo } from './types';
 export async function open(path: string): Promise<RepoInfo> {
   return invoke<RepoInfo>('open_repo', { path });
 }
+
+/** Which repository to open on launch. Replaced by the tab session later in M5. */
+export async function initialRepo(): Promise<string> {
+  return invoke<string>('initial_repo');
+}

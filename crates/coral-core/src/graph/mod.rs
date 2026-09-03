@@ -3,6 +3,7 @@ pub mod lanes;
 pub mod store;
 pub mod stream;
 pub mod subprocess;
+pub mod wire;
 
 pub use gix_stream::GixCommitStream;
 pub use lanes::{LaneAssigner, NO_LANE, RowTopology};

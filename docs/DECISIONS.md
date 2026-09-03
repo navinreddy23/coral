@@ -68,6 +68,27 @@ failure downstream.
 `fs.inotify.max_user_instances` is 128, which a per-tab watcher would exhaust with enough open
 repositories. `max_user_watches` is 524288, which is ample for the kernel tree.
 
+## Interface
+
+**Light is the default theme**, at the owner's request; the design document specified dark.
+The choice is explicit rather than following `prefers-color-scheme`, so a preference is stable
+across machines whose system settings differ. Dark is opt-in via `data-theme="dark"` on the
+root element and is remembered in local storage; a webview with storage disabled still opens.
+Lane colours are darkened for the light palette, since the dark set is illegible on white.
+
+**Graph rows never become JavaScript objects.** They stay inside one decoded frame as typed
+arrays: 1.4M row objects would cost hundreds of megabytes in the webview before any drawing.
+Measured in the app against the kernel — first paint 4,096 rows in 90 ms, the full
+topological walk of 1,481,528 rows in 5.0 s, 286 MB resident for the whole application.
+
+**The frame layout is pinned by a golden fixture** at `ui/tests/fixtures/frame.bin`, written by
+the Rust tests and read by the TypeScript ones. An encoder and decoder in one language prove
+only self-consistency; the shared bytes are what make a layout change fail on both sides.
+
+**Running `target/*/coral-app` directly is not a supported configuration.** A debug build loads
+`devUrl`, so without a dev server the window shows "connection refused" and no command is ever
+called. Use `just dev` (`cargo tauri dev`) for development and `cargo tauri build` for a bundle.
+
 ## Environment
 
 **`cargo` is not on the non-interactive `PATH`.** It lives in `~/.cargo/bin`. The `justfile`

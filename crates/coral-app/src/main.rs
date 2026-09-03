@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod graph;
 
 fn main() {
     tracing_subscriber::fmt()
@@ -11,8 +12,16 @@ fn main() {
         )
         .init();
 
+    tracing::info!("coral-app starting");
+
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![commands::open_repo])
+        .manage(graph::GraphCache::default())
+        .invoke_handler(tauri::generate_handler![
+            commands::initial_repo,
+            commands::open_repo,
+            graph::graph_frame,
+            graph::binary_self_test
+        ])
         .run(tauri::generate_context!())
         .expect("tauri failed to start");
 }

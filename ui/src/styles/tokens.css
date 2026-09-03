@@ -1,5 +1,51 @@
-/* The only place colour, spacing and type live. Components reference these, never hex. */
+/*
+ * The only place colour, spacing and type live. Components reference these, never hex.
+ *
+ * Light is the default. Dark is opt-in with data-theme="dark" on the root element, so the
+ * choice is explicit rather than inherited from the system — the theme switch sets it.
+ */
 :root {
+  color-scheme: light;
+
+  --bg-0: #ffffff;
+  --bg-1: #f5f6f8;
+  --bg-2: #eceef2;
+  --bg-3: #e0e4ea;
+  --border: #d3d8e0;
+
+  --fg-0: #1b2028;
+  --fg-1: #4b5566;
+  --fg-2: #7b8595;
+
+  --accent: #0f7a70;
+  --danger: #c0392b;
+
+  /* Darkened against the dark-theme set so lanes stay legible on white. */
+  --lane-1: #1a7fd4;
+  --lane-2: #c0397f;
+  --lane-3: #b8791a;
+  --lane-4: #2f8f45;
+  --lane-5: #6f4fd0;
+  --lane-6: #d1601f;
+  --lane-7: #0e93a8;
+  --lane-8: #7f8c1f;
+
+  --row-h: 28px;
+  --row-h-compact: 22px;
+
+  --font-ui: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
   --bg-0: #16191e;
   --bg-1: #1c2027;
   --bg-2: #232830;
@@ -21,16 +67,4 @@
   --lane-6: #ff8a4c;
   --lane-7: #26c6da;
   --lane-8: #c0ca33;
-
-  --row-h: 28px;
-  --row-h-compact: 22px;
-
-  --font-ui: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
-
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
 }
