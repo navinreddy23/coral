@@ -11,6 +11,11 @@ import type {
   GitRef,
   Operation,
   OpOutcome,
+  SigningConfig,
+  SigningFormat,
+  SigningKey,
+  SigningOverrides,
+  SigningScopes,
   Status,
   Submodule,
   RepoInfo,
@@ -48,6 +53,21 @@ export async function pickRepository(): Promise<string | null> {
 /** A ref together with the graph row it labels, or null when that commit is not in the walk. */
 export interface PlacedRef extends GitRef {
   row: number | null;
+}
+
+/**
+ * Asks for a program to run, such as a particular gpg build.
+ *
+ * A picker rather than a typed path for the same reason as the repository one: a path typed by
+ * hand is the input nobody gets right, and the dialog confirms the file exists.
+ */
+export async function pickProgram(): Promise<string | null> {
+  const chosen = await openDialog({
+    directory: false,
+    multiple: false,
+    title: 'Choose the signing program',
+  });
+  return typeof chosen === 'string' ? chosen : null;
 }
 
 /** Every ref, each already resolved to the graph row it labels. */
@@ -234,4 +254,33 @@ export function commitStaged(path: string, message: string, amend: boolean): Pro
 /** Everything the detail panel shows for one commit. */
 export function commitDetail(path: string, rev: string): Promise<CommitDetail> {
   return invoke<CommitDetail>('commit_detail', { path, rev });
+}
+
+/* Commit signing. A key belongs to a repository, not to a person: the app-level settings are
+   the default and a repository overrides them, which is how git's own config is layered. */
+export function signingRead(path: string): Promise<SigningScopes> {
+  return invoke<SigningScopes>('signing_read', { path });
+}
+
+export function signingSetApp(path: string, config: SigningConfig): Promise<SigningScopes> {
+  return invoke<SigningScopes>('signing_set_app', { path, config });
+}
+
+export function signingSetRepo(
+  path: string,
+  overrides: SigningOverrides,
+): Promise<SigningScopes> {
+  return invoke<SigningScopes>('signing_set_repo', { path, overrides });
+}
+
+export function signingKeys(format: SigningFormat, program: string): Promise<SigningKey[]> {
+  return invoke<SigningKey[]>('signing_keys', { format, program });
+}
+
+export function signingGenerate(
+  path: string,
+  program: string,
+  passphrase: string,
+): Promise<SigningKey> {
+  return invoke<SigningKey>('signing_generate', { path, program, passphrase });
 }

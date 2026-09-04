@@ -16,6 +16,8 @@
   import Palette, { type Command } from './Palette.svelte';
   import StatusBar from './StatusBar.svelte';
   import Ask, { type Choice } from './Ask.svelte';
+  import Preferences from './Preferences.svelte';
+  import { SigningState } from '../state/signing.svelte';
   import { elidePath } from './path';
   import type { Action } from '../ipc/commands';
   import {
@@ -128,6 +130,8 @@
   const merge = new MergeState();
   const hosting = new HostingState();
   const rebase = new RebaseState();
+  const signing = new SigningState();
+  let showPrefs = $state(false);
   let showPalette = $state(false);
 
   /**
@@ -226,6 +230,15 @@
       { id: 'undo', label: 'Undo', group: 'History', run: () => void act({ kind: 'undo' }) },
       { id: 'redo', label: 'Redo', group: 'History', run: () => void act({ kind: 'redo' }) },
       { id: 'theme', label: 'Toggle dark mode', group: 'View', run: () => theme.toggle() },
+      {
+        id: 'signing',
+        label: 'Commit signing settings',
+        group: 'View',
+        run: () => {
+          showPrefs = true;
+          if (info) void signing.load(info.path);
+        },
+      },
     ];
 
     for (const r of refs.groups.local) {
@@ -585,6 +598,9 @@
         onreset={() => panes.reset()}
       />
     {/if}
+    {#if showPrefs}
+      <Preferences {signing} onClose={() => (showPrefs = false)} />
+    {/if}
     {#if merge.inProgress}
       <!-- A stopped merge or rebase is the only thing that matters until it is settled, so it
            takes the main pane outright rather than sitting behind the graph. -->
@@ -798,7 +814,9 @@
   .empty .lead { margin: 0; font-size: 14px; font-weight: 600; color: var(--fg-1); }
   .empty .muted { margin: 0; max-width: 34em; line-height: 1.5; font-size: 12px; }
 
-  .body { display: flex; flex: 1; min-height: 0; }
+  /* Positioned, so the preferences screen can cover the panes without covering the
+     window's own chrome. */
+  .body { display: flex; flex: 1; min-height: 0; position: relative; }
   .graph { flex: 1; overflow-y: auto; position: relative; background: var(--bg-0); }
   /* Hidden rather than unmounted: remounting would refetch the frame and lose the scroll
      position every time a file is opened and closed. */

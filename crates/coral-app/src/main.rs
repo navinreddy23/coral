@@ -1,7 +1,7 @@
 // The desktop build must not open a console window on Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use coral_app_lib::{actions, commands, conflicts, graph, hosting, tabs};
+use coral_app_lib::{actions, commands, conflicts, graph, hosting, signing, tabs};
 
 fn main() {
     // git invokes the running binary as its sequence editor during an interactive rebase, so
@@ -81,6 +81,11 @@ fn main() {
             hosting::hosting_logout,
             hosting::hosting_pull_requests,
             hosting::hosting_create,
+            signing::signing_read,
+            signing::signing_set_app,
+            signing::signing_set_repo,
+            signing::signing_keys,
+            signing::signing_generate,
             tabs::session_get,
             tabs::tab_open,
             tabs::tab_close,

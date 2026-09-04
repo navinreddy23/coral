@@ -9,6 +9,7 @@ pub mod open;
 pub mod rebase;
 pub mod refs;
 pub mod remote;
+pub mod signing;
 pub mod stage;
 pub mod status;
 pub mod submodule;

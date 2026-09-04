@@ -270,6 +270,25 @@ pub enum Command {
     },
     /// List submodules.
     Submodules,
+    /// Report commit signing at every level for this repository.
+    Signing,
+    /// List the keys that could sign.
+    SigningKeys,
+    /// Override commit signing for this repository.
+    SigningSet {
+        /// The key to sign with.
+        #[arg(long)]
+        key: Option<String>,
+        /// One of: openpgp, x509, ssh.
+        #[arg(long)]
+        format: Option<String>,
+        /// Whether commits are signed here.
+        #[arg(long)]
+        sign_commits: Option<bool>,
+        /// Drop every override so the app-level settings apply again.
+        #[arg(long)]
+        inherit: bool,
+    },
     /// Show the todo list an interactive rebase onto a revision would start from.
     RebaseTodo {
         /// The commit to rebase onto.
@@ -426,6 +445,16 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
         }
         Command::Refs { kind } => output::render(&commands::refs::run(repo, kind).await),
         Command::Submodules => output::render(&commands::submodule::run(repo).await),
+        Command::Signing => output::render(&commands::signing::show(repo).await),
+        Command::SigningKeys => output::render(&commands::signing::keys(repo).await),
+        Command::SigningSet {
+            key,
+            format,
+            sign_commits,
+            inherit,
+        } => {
+            output::render(&commands::signing::set(repo, key, format, sign_commits, inherit).await)
+        }
         Command::RebaseTodo { onto } => output::render(&commands::rebase::todo(repo, &onto).await),
         Command::Host => output::render(&commands::hosting::detect(repo).await),
         Command::HostLogin => {

@@ -8,6 +8,7 @@ pub mod credentials;
 pub mod graph;
 pub mod hosting;
 pub mod session;
+pub mod signing;
 pub mod tabs;
 
 pub use commands::{commit_staged, open_repo, repo_status, stage_paths};

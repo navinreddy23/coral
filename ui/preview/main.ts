@@ -17,6 +17,8 @@ import MergeTool from '../src/app/MergeTool.svelte';
 import Palette from '../src/app/Palette.svelte';
 import RebasePicker from '../src/app/RebasePicker.svelte';
 import Ask from '../src/app/Ask.svelte';
+import Preferences from '../src/app/Preferences.svelte';
+import { SigningState } from '../src/state/signing.svelte';
 import { DiffState } from '../src/state/diff.svelte';
 import { MergeState } from '../src/state/merge.svelte';
 import { RebaseState } from '../src/state/rebase.svelte';
@@ -134,6 +136,55 @@ mount(Palette, {
     ],
     onClose: () => {},
   },
+});
+
+const signing = new SigningState();
+signing.scopes = {
+  effective: {
+    format: 'openpgp',
+    program: 'gpg',
+    key: '0633C12121B1A10FADE103E39E9BC1B3B7C4AA29',
+    signCommits: true,
+    signTags: false,
+  },
+  global: {
+    format: 'openpgp',
+    program: '',
+    key: 'AAAA111122223333444455556666777788889999',
+    signCommits: false,
+    signTags: false,
+  },
+  local: {
+    format: null,
+    program: 'gpg',
+    key: '0633C12121B1A10FADE103E39E9BC1B3B7C4AA29',
+    signCommits: true,
+    signTags: null,
+  },
+};
+signing.keys = [
+  {
+    id: '0633C12121B1A10FADE103E39E9BC1B3B7C4AA29',
+    label: 'Navin Reddy <navin@work.example>',
+    expires: 1_851_575_560,
+    expired: false,
+  },
+  {
+    id: 'AAAA111122223333444455556666777788889999',
+    label: 'Navin Reddy <navin@personal.example>',
+    expires: null,
+    expired: false,
+  },
+  {
+    id: 'BBBB111122223333444455556666777788889999',
+    label: 'Old Laptop <old@personal.example>',
+    expires: 1_600_000_000,
+    expired: true,
+  },
+];
+mount(Preferences, {
+  target: panel('Preferences — commit signing, overridden by this repository', '560px'),
+  props: { signing, onClose: () => {} },
 });
 
 mount(Ask, {

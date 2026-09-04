@@ -302,6 +302,71 @@ export type Signature = { name: string, email: string,
  */
 time: number, };
 
+/**
+ * Everything the signing settings screen shows.
+ */
+export type SigningConfig = { format: SigningFormat, 
+/**
+ * Empty when git's default for the format is in use.
+ */
+program: string, 
+/**
+ * `user.signingkey`. Empty when git is left to choose.
+ */
+key: string, signCommits: boolean, signTags: boolean, };
+
+/**
+ * The signature format git will produce.
+ */
+export type SigningFormat = "openpgp" | "x509" | "ssh";
+
+/**
+ * A key that could sign.
+ */
+export type SigningKey = { 
+/**
+ * What goes in `user.signingkey`: a full fingerprint, or a path for ssh.
+ */
+id: string, 
+/**
+ * Who the key belongs to, for the list.
+ */
+label: string, 
+/**
+ * Seconds since the epoch, or `None` for a key that does not expire.
+ */
+expires: bigint | null, 
+/**
+ * True when it has expired already, which is why it is still listed rather than dropped.
+ */
+expired: boolean, };
+
+/**
+ * What this repository sets for itself.
+ *
+ * `None` means the repository says nothing and the app-level setting applies. That is a
+ * different state from a value that happens to match, and the difference is what lets a
+ * setting be cleared back to inheriting rather than pinned to whatever it inherited.
+ */
+export type SigningOverrides = { format: SigningFormat | null, program: string | null, key: string | null, signCommits: boolean | null, signTags: boolean | null, };
+
+/**
+ * Signing as it stands for one repository: what will happen, what it inherits, what it sets.
+ */
+export type SigningScopes = { 
+/**
+ * What git will actually do here.
+ */
+effective: SigningConfig, 
+/**
+ * The app-level defaults, which every repository inherits until it says otherwise.
+ */
+global: SigningConfig, 
+/**
+ * What this repository sets for itself.
+ */
+local: SigningOverrides, };
+
 export type Status = { branch: string | null, oid: string | null, upstream: string | null, ahead: bigint, behind: bigint, stashCount: number, entries: Array<StatusEntry>, };
 
 export type StatusEntry = { path: string, 
