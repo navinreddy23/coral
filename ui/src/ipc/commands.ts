@@ -120,8 +120,13 @@ export function submoduleRevision(
  * One file at a time: a large merge touches thousands, and their patches together are far
  * more than the panel can show or the webview should hold.
  */
-export function fileDiff(path: string, rev: string, file: string): Promise<FileDiff | null> {
-  return invoke<FileDiff | null>('file_diff', { path, rev, file });
+export function fileDiff(
+  path: string,
+  rev: string,
+  file: string,
+  wholeFile: boolean,
+): Promise<FileDiff | null> {
+  return invoke<FileDiff | null>('file_diff', { path, rev, file, wholeFile });
 }
 
 /**
@@ -135,8 +140,9 @@ export function worktreeDiff(
   path: string,
   staged: boolean,
   file: string,
+  wholeFile: boolean,
 ): Promise<FileDiff | null> {
-  return invoke<FileDiff | null>('worktree_diff', { path, staged, file });
+  return invoke<FileDiff | null>('worktree_diff', { path, staged, file, wholeFile });
 }
 
 /**

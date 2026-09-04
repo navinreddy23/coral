@@ -5,6 +5,15 @@ import { messageOf } from '../ipc/error';
 
 export type { DiffMode };
 
+/** Where the diff on screen came from, so it can be read again. */
+interface Request {
+  repo: string;
+  source: 'commit' | 'unstaged' | 'staged';
+  /** The commit, for a commit diff. */
+  rev: string;
+  path: string;
+}
+
 /** The file currently open in the diff viewer. */
 export class DiffState {
   file = $state<FileDiff | null>(null);
@@ -15,6 +24,7 @@ export class DiffState {
 
   #token = 0;
   #views: ViewsState;
+  #request: Request | null = null;
 
   constructor(views: ViewsState) {
     this.#views = views;
@@ -30,8 +40,18 @@ export class DiffState {
     return this.#views.current.diff;
   }
 
+  /**
+   * Changes the layout, and re-reads the file if that changes how much of it is wanted.
+   *
+   * Side by side shows the whole file, which git only supplies if it is asked to; the hunks a
+   * unified view is built from are a window cut out of it and there is nothing to widen them
+   * with on this side. What is on screen stays up until the new answer lands, so the panel does
+   * not blank on a button press.
+   */
   setMode(mode: DiffMode): void {
+    const before = wholeFileFor(this.mode);
     this.#views.set('diff', mode);
+    if (wholeFileFor(mode) !== before) void this.#reread();
   }
 
   /** What is being shown, so the header can say whether it is a commit or the working tree. */
@@ -39,7 +59,10 @@ export class DiffState {
 
   /** Opens one file's diff from a commit. A second call supersedes the first. */
   async open(repo: string, rev: string, path: string): Promise<void> {
-    await this.#load('commit', path, () => fileDiff(repo, rev, path), 'This commit did not change that file.');
+    await this.#load(
+      { repo, source: 'commit', rev, path },
+      'This commit did not change that file.',
+    );
   }
 
   /**
@@ -50,9 +73,7 @@ export class DiffState {
    */
   async openWorking(repo: string, staged: boolean, path: string): Promise<void> {
     await this.#load(
-      staged ? 'staged' : 'unstaged',
-      path,
-      () => worktreeDiff(repo, staged, path),
+      { repo, source: staged ? 'staged' : 'unstaged', rev: '', path },
       absent(staged),
     );
   }
@@ -65,35 +86,37 @@ export class DiffState {
    * it. A commit's diff is not re-read, because a commit does not change.
    */
   async reload(repo: string): Promise<void> {
-    const path = this.path;
-    if (path === null || this.source === 'commit') return;
-    const staged = this.source === 'staged';
+    const request = this.#request;
+    if (request === null || request.source === 'commit') return;
+    await this.#reread({ ...request, repo });
+  }
+
+  /** Reads the open file again, leaving what is on screen up until the answer arrives. */
+  async #reread(request: Request | null = this.#request): Promise<void> {
+    if (request === null) return;
+    this.#request = request;
     const token = ++this.#token;
     try {
-      const got = await worktreeDiff(repo, staged, path);
+      const got = await read(request, wholeFileFor(this.mode));
       if (token !== this.#token) return;
       this.file = got;
-      this.error = got === null ? absent(staged) : null;
+      this.error = got === null ? absentFor(request.source) : null;
     } catch (e) {
       if (token !== this.#token) return;
       this.error = messageOf(e);
     }
   }
 
-  async #load(
-    source: 'commit' | 'unstaged' | 'staged',
-    path: string,
-    read: () => Promise<FileDiff | null>,
-    absent: string,
-  ): Promise<void> {
+  async #load(request: Request, absent: string): Promise<void> {
     const token = ++this.#token;
-    this.source = source;
-    this.path = path;
+    this.#request = request;
+    this.source = request.source;
+    this.path = request.path;
     this.file = null;
     this.error = null;
     this.loading = true;
     try {
-      const got = await read();
+      const got = await read(request, wholeFileFor(this.mode));
       // Clicking down a long file list must not let an earlier, slower read win.
       if (token !== this.#token) return;
       this.file = got;
@@ -108,6 +131,7 @@ export class DiffState {
 
   close(): void {
     this.#token++;
+    this.#request = null;
     this.file = null;
     this.path = null;
     this.error = null;
@@ -116,7 +140,22 @@ export class DiffState {
   }
 }
 
+/** Side by side shows the file end to end; inline shows the hunks. */
+function wholeFileFor(mode: DiffMode): boolean {
+  return mode === 'split';
+}
+
+function read(request: Request, wholeFile: boolean): Promise<FileDiff | null> {
+  return request.source === 'commit'
+    ? fileDiff(request.repo, request.rev, request.path, wholeFile)
+    : worktreeDiff(request.repo, request.source === 'staged', request.path, wholeFile);
+}
+
 /** What to say when the side being shown has nothing in it for that file. */
 function absent(staged: boolean): string {
   return staged ? 'Nothing is staged for that file.' : 'That file has no unstaged changes.';
+}
+
+function absentFor(source: Request['source']): string {
+  return source === 'commit' ? 'This commit did not change that file.' : absent(source === 'staged');
 }

@@ -80,13 +80,16 @@ describe('the diff viewer', () => {
     expect(texts).toEqual(['two', 'TWO']);
   });
 
-  it('shows the hunk header once in either mode', () => {
-    for (const mode of ['inline', 'split'] as const) {
-      const { container } = mounted(mode);
-      const headers = [...container.querySelectorAll('tr.hunk')];
-      expect(headers, mode).toHaveLength(1);
-      expect(headers[0]?.textContent, mode).toContain('@@ -1,3 +1,3 @@');
-    }
+  it('shows the hunk header inline, and none side by side', () => {
+    const inline = mounted('inline').container;
+    const headers = [...inline.querySelectorAll('tr.hunk')];
+    expect(headers).toHaveLength(1);
+    expect(headers[0]?.textContent).toContain('@@ -1,3 +1,3 @@');
+
+    // Side by side asks for the file end to end, so there is one hunk covering all of it and
+    // a header saying which lines it spans is noise.
+    const split = mounted('split').container;
+    expect(split.querySelectorAll('tr.hunk')).toHaveLength(0);
   });
 
   it('says so for a binary file rather than showing an empty table', () => {

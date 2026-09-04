@@ -263,6 +263,7 @@ impl RepoLocation {
         runner: &GitRunner,
         staged: bool,
         paths: &[&str],
+        context: crate::diff::Context,
     ) -> Result<Vec<crate::diff::FileDiff>, CoralError> {
         let base = |args: &[&str]| {
             let mut c = GitCommand::status("diff", self.display_path())
@@ -288,7 +289,9 @@ impl RepoLocation {
         let names = runner.output(base(&["-z", "--name-status"])).await?;
         crate::diff::apply_name_status(&mut files, &names.stdout)?;
 
-        let patch = runner.output(base(&["--no-color", "-p", "-U3"])).await?;
+        let patch = runner
+            .output(base(&["--no-color", "-p", context.flag()]))
+            .await?;
         crate::diff::apply_patch(&mut files, &patch.stdout)?;
         Ok(files)
     }
@@ -312,6 +315,7 @@ impl RepoLocation {
         runner: &GitRunner,
         rev: &str,
         paths: &[&str],
+        context: crate::diff::Context,
     ) -> Result<Vec<crate::diff::FileDiff>, CoralError> {
         let base = |args: &[&str]| {
             let c = GitCommand::read("diff-tree", self.display_path())
@@ -335,7 +339,9 @@ impl RepoLocation {
         let names = runner.output(base(&["-z", "--name-status"])).await?;
         crate::diff::apply_name_status(&mut files, &names.stdout)?;
 
-        let patch = runner.output(base(&["--no-color", "-p", "-U3"])).await?;
+        let patch = runner
+            .output(base(&["--no-color", "-p", context.flag()]))
+            .await?;
         crate::diff::apply_patch(&mut files, &patch.stdout)?;
         Ok(files)
     }

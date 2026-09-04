@@ -2,6 +2,30 @@ use bstr::{BString, ByteSlice};
 
 use crate::error::CoralError;
 
+/// How much unchanged text a patch carries around each change.
+///
+/// A hunk view wants the three lines either side that git gives by default. A side-by-side
+/// view of a whole file wants all of it, so the reader can see the change where it sits rather
+/// than in a window cut out of the file.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Context {
+    #[default]
+    Hunks,
+    WholeFile,
+}
+
+impl Context {
+    /// The `-U` git wants. Whole-file is a count larger than any file, which is how git is
+    /// asked for all of it; there is no flag that says so.
+    #[must_use]
+    pub const fn flag(self) -> &'static str {
+        match self {
+            Self::Hunks => "-U3",
+            Self::WholeFile => "-U1000000000",
+        }
+    }
+}
+
 /// What happened to a file between two trees.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "types.ts"))]

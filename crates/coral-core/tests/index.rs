@@ -4,6 +4,7 @@
 
 use std::fmt::Write as _;
 
+use coral_core::diff::Context;
 use coral_core::diff::FileDiff;
 use coral_core::index::{Direction, Selection, build_patch};
 use coral_core::process::GitRunner;
@@ -31,7 +32,7 @@ fn staged_content(repo: &TestRepo, path: &str) -> String {
 
 async fn unstaged_diff(repo: &TestRepo) -> Vec<FileDiff> {
     let (runner, loc) = open(repo).await;
-    loc.diff(&runner, false, &[]).await.unwrap()
+    loc.diff(&runner, false, &[], Context::Hunks).await.unwrap()
 }
 
 #[tokio::test]
@@ -208,7 +209,7 @@ async fn unstages_a_hunk_in_reverse() {
     loc.stage(&runner, &["f.txt"]).await.unwrap();
 
     // Now diff the index against HEAD and reverse one hunk back out.
-    let staged = loc.diff(&runner, true, &[]).await.unwrap();
+    let staged = loc.diff(&runner, true, &[], Context::Hunks).await.unwrap();
     let f = &staged[0];
     assert_eq!(f.hunks.len(), 2);
     let patch = build_patch(f, &[(1, Selection::WholeHunk)], Direction::Unstage).unwrap();

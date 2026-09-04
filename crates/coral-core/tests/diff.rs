@@ -1,7 +1,9 @@
 //! Every shape `git diff` emits, checked against a live repository rather than only against
 //! captured text, so the parser cannot drift from what git actually produces.
 
-use coral_core::diff::{FileChange, LineKind};
+use std::fmt::Write as _;
+
+use coral_core::diff::{Context, FileChange, LineKind};
 use coral_core::process::GitRunner;
 use coral_core::repo::RepoLocation;
 use coral_core::testutil::TestRepo;
@@ -37,7 +39,7 @@ fn every_shape() -> TestRepo {
 async fn staged(repo: &TestRepo) -> Vec<coral_core::diff::FileDiff> {
     let runner = GitRunner::discover().await.unwrap();
     let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
-    loc.diff(&runner, true, &[]).await.unwrap()
+    loc.diff(&runner, true, &[], Context::Hunks).await.unwrap()
 }
 
 #[tokio::test]
@@ -260,7 +262,10 @@ fn a_commit_diff_carries_hunks_for_one_file() {
         let runner = GitRunner::discover().await.unwrap();
         let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
 
-        let files = loc.commit_diff(&runner, "HEAD", &["a.txt"]).await.unwrap();
+        let files = loc
+            .commit_diff(&runner, "HEAD", &["a.txt"], Context::Hunks)
+            .await
+            .unwrap();
         assert_eq!(files.len(), 1, "narrowed to the one path asked for");
         let f = &files[0];
         assert_eq!(f.path, "a.txt");
@@ -290,7 +295,10 @@ fn the_first_commit_shows_its_contents_rather_than_nothing() {
     rt.block_on(async {
         let runner = GitRunner::discover().await.unwrap();
         let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
-        let files = loc.commit_diff(&runner, "HEAD", &[]).await.unwrap();
+        let files = loc
+            .commit_diff(&runner, "HEAD", &[], Context::Hunks)
+            .await
+            .unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].change, FileChange::Added);
         assert_eq!(files[0].hunks[0].lines[0].text, "hello");
@@ -310,10 +318,68 @@ fn a_merge_diffs_against_its_first_parent() {
     rt.block_on(async {
         let runner = GitRunner::discover().await.unwrap();
         let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
-        let files = loc.commit_diff(&runner, "HEAD", &[]).await.unwrap();
+        let files = loc
+            .commit_diff(&runner, "HEAD", &[], Context::Hunks)
+            .await
+            .unwrap();
         // What the merge brought in relative to the branch it was merged into, which is the
         // only reading a patch parser can represent.
         let paths: Vec<_> = files.iter().map(|f| f.path.to_string()).collect();
         assert_eq!(paths, ["side.txt"]);
+    });
+}
+
+/// A side-by-side view shows the change where it sits in the file, so it needs all of it.
+#[test]
+fn whole_file_context_carries_the_lines_no_hunk_would_reach() {
+    let mut before = String::new();
+    for n in 1..=60 {
+        writeln!(before, "line {n}").unwrap();
+    }
+    let after = before.replace("line 30\n", "line 30 changed\n");
+    let repo = TestRepo::new()
+        .write("a.txt", &before)
+        .commit("first")
+        .write("a.txt", &after)
+        .commit("second");
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+        let narrow = loc
+            .commit_diff(&runner, "HEAD", &["a.txt"], Context::Hunks)
+            .await
+            .unwrap();
+        let wide = loc
+            .commit_diff(&runner, "HEAD", &["a.txt"], Context::WholeFile)
+            .await
+            .unwrap();
+
+        let reaches = |files: &[coral_core::diff::FileDiff], text: &str| {
+            files[0]
+                .hunks
+                .iter()
+                .flat_map(|h| h.lines.iter())
+                .any(|l| l.text == text)
+        };
+
+        // Three lines either side of line 30, and nothing of the rest of the file.
+        assert!(reaches(&narrow, "line 27"));
+        assert!(!reaches(&narrow, "line 1"));
+        assert!(!reaches(&narrow, "line 60"));
+
+        // One hunk holding the file end to end, with the change still marked as one.
+        assert_eq!(wide[0].hunks.len(), 1);
+        assert!(reaches(&wide, "line 1"));
+        assert!(reaches(&wide, "line 60"));
+        assert_eq!((wide[0].added, wide[0].removed), (Some(1), Some(1)));
+        let changed = wide[0].hunks[0]
+            .lines
+            .iter()
+            .filter(|l| l.kind != LineKind::Context)
+            .count();
+        assert_eq!(changed, 2, "one line out, one line in");
     });
 }

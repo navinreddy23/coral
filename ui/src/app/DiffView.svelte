@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { splitRows } from '../diff/split';
+  import { splitRows, windowAround } from '../diff/split';
   import { elidePath } from './path';
   import type { DiffState } from '../state/diff.svelte';
 
@@ -31,7 +31,52 @@
     return out;
   });
 
+  /**
+   * The whole file as side-by-side rows, windowed to the budget.
+   *
+   * Side by side asks git for the file end to end rather than for hunks, so there is normally
+   * one hunk here holding all of it and no `@@` header worth showing. Past the budget the
+   * window is taken around the first change rather than from the top, or a long file would
+   * open on a screen of unchanged lines.
+   */
+  const split = $derived.by(() => {
+    const all = (diff.file?.hunks ?? []).flatMap(splitRows);
+    const { rows, from } = windowAround(all, LIMIT);
+    return { rows, from, total: all.length };
+  });
+
   const sign: Record<string, string> = { add: '+', remove: '-', context: ' ' };
+
+  let scroller: HTMLElement | null = $state(null);
+  /** Which file and layout the view has already been positioned for. */
+  let placed = '';
+
+  /**
+   * Puts the first change on screen when the whole file is shown.
+   *
+   * Side by side starts at line one, and the first change in a kernel defconfig is on line
+   * 1428: left where it opens, the panel shows a screen of unchanged text and the reader has
+   * to go looking for what the commit did. Only when the file or the layout changes, so an
+   * editor's autosave reloading the diff does not drag the view back while it is being read.
+   */
+  $effect(() => {
+    const key = `${diff.path ?? ''}\u0000${diff.mode}`;
+    const file = diff.file;
+    const el = scroller;
+    if (!file || diff.mode !== 'split' || el === null || placed === key) return;
+    placed = key;
+    requestAnimationFrame(() => reveal(el));
+  });
+
+  function reveal(el: HTMLElement) {
+    const cell = el.querySelector('td.add, td.remove');
+    const row = cell?.closest('tr');
+    if (!row) return;
+    // Measured rather than computed from a row height: the table's rows are uniform now and
+    // an assumption that they stay so is one nobody would think to check.
+    const top = row.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
+    el.scrollTop = Math.max(0, top - el.clientHeight / 3);
+  }
 </script>
 
 <section class="diff">
@@ -54,7 +99,7 @@
     <button class="close" onclick={onClose} aria-label="Close the diff">✕</button>
   </header>
 
-  <div class="scroll">
+  <div class="scroll" bind:this={scroller}>
     {#if diff.loading}
       <p class="muted">Loading…</p>
     {:else if diff.error}
@@ -87,22 +132,25 @@
     {:else}
       <table class="lines split">
         <tbody>
-          {#each hunks as hunk (hunk.header + hunk.newStart)}
-            <tr class="hunk"><td colspan="4">{hunk.header}</td></tr>
-            {#each splitRows(hunk) as row, i (i)}
-              <tr>
-                <td class="no">{row.left?.oldNo ?? ''}</td>
-                <td class="text {row.left ? row.left.kind : 'blank'}">{row.left?.text ?? ''}</td>
-                <td class="no">{row.right?.newNo ?? ''}</td>
-                <td class="text {row.right ? row.right.kind : 'blank'}">{row.right?.text ?? ''}</td>
-              </tr>
-            {/each}
+          {#each split.rows as row, i (i)}
+            <tr>
+              <td class="no">{row.left?.oldNo ?? ''}</td>
+              <td class="text {row.left ? row.left.kind : 'blank'}">{row.left?.text ?? ''}</td>
+              <td class="no">{row.right?.newNo ?? ''}</td>
+              <td class="text {row.right ? row.right.kind : 'blank'}">{row.right?.text ?? ''}</td>
+            </tr>
           {/each}
         </tbody>
       </table>
     {/if}
 
-    {#if total > LIMIT}
+    {#if diff.mode === 'split' && split.total > split.rows.length}
+      <p class="muted">
+        Showing lines {(split.from + 1).toLocaleString()} to
+        {(split.from + split.rows.length).toLocaleString()} of {split.total.toLocaleString()},
+        around the first change.
+      </p>
+    {:else if diff.mode === 'inline' && total > LIMIT}
       <p class="muted">
         Showing the first {LIMIT.toLocaleString()} of {total.toLocaleString()} lines.
       </p>

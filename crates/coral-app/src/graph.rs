@@ -390,10 +390,13 @@ pub async fn repo_submodules(
     Ok(loc.submodules(&runner).await?)
 }
 
-/// The hunks for one file in one commit.
+/// One file's diff in one commit.
 ///
 /// Fetched per file rather than with the commit: a kernel merge touches thousands of files,
 /// and their patches together are far larger than anything the panel can show at once.
+///
+/// `whole_file` carries the unchanged text too, which is what a side-by-side view shows the
+/// change inside rather than in a window cut out of the file.
 ///
 /// # Errors
 /// Propagates git failures.
@@ -402,12 +405,24 @@ pub async fn file_diff(
     path: String,
     rev: String,
     file: String,
+    whole_file: bool,
 ) -> Result<Option<coral_core::diff::FileDiff>, crate::commands::IpcError> {
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
-    let files = loc.commit_diff(&runner, &rev, &[file.as_str()]).await?;
+    let files = loc
+        .commit_diff(&runner, &rev, &[file.as_str()], context(whole_file))
+        .await?;
     Ok(files.into_iter().next())
+}
+
+/// How much of the file to carry with the change.
+const fn context(whole_file: bool) -> coral_core::diff::Context {
+    if whole_file {
+        coral_core::diff::Context::WholeFile
+    } else {
+        coral_core::diff::Context::Hunks
+    }
 }
 
 /// One file's diff in the working tree, staged or not.
@@ -423,11 +438,14 @@ pub async fn worktree_diff(
     path: String,
     staged: bool,
     file: String,
+    whole_file: bool,
 ) -> Result<Option<coral_core::diff::FileDiff>, crate::commands::IpcError> {
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
-    let files = loc.diff(&runner, staged, &[file.as_str()]).await?;
+    let files = loc
+        .diff(&runner, staged, &[file.as_str()], context(whole_file))
+        .await?;
     Ok(files.into_iter().next())
 }
 

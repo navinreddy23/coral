@@ -39,3 +39,30 @@ export function splitRows(hunk: Hunk): SplitRow[] {
   flush();
   return rows;
 }
+
+/**
+ * A window of at most `limit` rows that contains the first change.
+ *
+ * A whole file is more rows than the panel can hold as DOM, and every way of cutting it but
+ * this one can show a file with no change in it — which is the one thing the reader opened it
+ * for. The window starts a quarter of the budget above the first change, so there is context
+ * over it rather than the change sitting on the first line.
+ */
+export function windowAround(
+  rows: SplitRow[],
+  limit: number,
+): { rows: SplitRow[]; from: number } {
+  if (rows.length <= limit) return { rows, from: 0 };
+
+  const change = rows.findIndex(isChanged);
+  if (change < 0) return { rows: rows.slice(0, limit), from: 0 };
+
+  const lead = Math.floor(limit / 4);
+  const from = Math.min(Math.max(0, change - lead), rows.length - limit);
+  return { rows: rows.slice(from, from + limit), from };
+}
+
+/** True for a row that is not the same line on both sides. */
+function isChanged(row: SplitRow): boolean {
+  return row.left?.kind !== 'context' || row.right?.kind !== 'context';
+}
