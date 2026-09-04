@@ -347,6 +347,21 @@
     void selection.select(info.path, row, oidOf(graph.frame, local));
   }
 
+  /*
+   * A working-tree action supersedes whatever the line along the bottom last said.
+   *
+   * Staging, discarding and committing do not go through `actions`, so a failed checkout sat
+   * along the bottom while a commit succeeded above it — the line describing a state the
+   * repository was no longer in. Watched as one boolean rather than wired through the panel:
+   * every one of those calls raises it.
+   */
+  let wasBusy = false;
+  $effect(() => {
+    const busy = worktree.busy;
+    if (busy && !wasBusy) actions.clear();
+    wasBusy = busy;
+  });
+
   /** Reloads everything after an operation finished, since it may have moved any of it. */
   async function reloadAll() {
     if (!info) return;
@@ -448,7 +463,7 @@
         out.push({
           kind: 'item',
           label: `Checkout ${ref.short}`,
-          hint: 'a tag has no branch, so this detaches HEAD',
+          hint: 'detaches HEAD',
           run: () => void act({ kind: 'checkout', rev: ref.short }),
         });
       }
@@ -565,7 +580,7 @@
       return [`Checkout ${name}`, name, `tracking ${ref.short}`];
     }
     if (ref.kind.kind === 'tag') {
-      return [`Checkout ${ref.short}`, ref.short, 'a tag has no branch, so this detaches HEAD'];
+      return [`Checkout ${ref.short}`, ref.short, 'detaches HEAD'];
     }
     return [`Checkout ${ref.short}`, ref.short, undefined];
   }
@@ -642,7 +657,7 @@
         {
           kind: 'item',
           label: 'Checkout this commit',
-          hint: `${short}, detached from any branch`,
+          hint: `${short}, detached`,
           run: () => void act({ kind: 'checkout', rev: oid }),
         },
         { kind: 'item', label: 'Create worktree from this commit', run: () => void worktreeAt(oid) },
@@ -1164,7 +1179,10 @@
       out.push({ id: `rebase:${r.name}`, label: `Rebase onto ${r.short}`, group: 'Branch', run: () => void act({ kind: 'rebase', onto: r.short }) });
       out.push({ id: `irebase:${r.name}`, label: `Rebase onto ${r.short}, interactively`, group: 'Branch', run: () => info && void rebase.load(info.path, r.short) });
     }
-    for (const r of refs.groups.tags.slice(0, 200)) {
+    // Every tag, not the first few hundred. The palette scores the whole list and shows the
+    // best sixty, so a capped list is not a shorter list — it is a tag that cannot be found at
+    // all, and the kernel carries five thousand of them.
+    for (const r of refs.groups.tags) {
       out.push({ id: `co:${r.name}`, label: `Checkout tag ${r.short}`, group: 'Tag', run: () => void act({ kind: 'checkout', rev: r.short }) });
     }
     return out;

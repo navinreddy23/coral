@@ -345,7 +345,7 @@ describe('checking out from the graph', () => {
     const labels = await openMenu(container);
     expect(labels).toContain('Checkout topic');
     expect(labels).toContain('Checkout this commit');
-    expect(container.textContent).toContain('detached from any branch');
+    expect(container.textContent).toContain('detached');
   });
 
   it('does not offer to check out the branch already checked out', async () => {
@@ -399,7 +399,7 @@ describe('checking out from the graph', () => {
 
     const labels = await openMenu(container);
     expect(labels).toContain('Checkout v1.2.0');
-    expect(container.textContent).toContain('a tag has no branch');
+    expect(container.textContent).toContain('detaches HEAD');
   });
 
   it('offers nothing extra on a row with no refs on it', async () => {

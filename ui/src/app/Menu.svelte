@@ -137,7 +137,7 @@
 <style>
   .scrim { position: fixed; inset: 0; z-index: 60; }
   .menu {
-    position: fixed; z-index: 61; min-width: 15em; max-width: 26em;
+    position: fixed; z-index: 61; min-width: 15em; max-width: 32em;
     padding: var(--space-1) 0;
     background: var(--bg-0); color: var(--fg-0);
     border: 1px solid var(--border-strong); border-radius: var(--radius-2);
@@ -161,8 +161,20 @@
   .row:disabled { color: var(--fg-2); cursor: default; }
   .row.danger { color: var(--danger); }
   .row.danger:hover:not(:disabled) { background: var(--danger-soft); }
-  .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .hint, .more { flex: 0 0 auto; color: var(--fg-2); font-size: 11px; }
+  /*
+   * The label says what the item does and the hint only qualifies it, so the hint gives way
+   * first. Both shrinking together cut "Checkout v1.0" to "Check…" beside a hint that had the
+   * whole row to itself.
+   */
+  .label {
+    flex: 0 1 auto; min-width: 0; margin-right: auto;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .hint {
+    flex: 0 8 auto; min-width: 0; color: var(--fg-2); font-size: 11px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .more { flex: 0 0 auto; color: var(--fg-2); font-size: 11px; }
   .rule { height: 1px; margin: var(--space-1) 0; background: var(--border); }
   /* Opens to the right of its parent row, overlapping it by a pixel so the pointer can cross
      between the two without passing over the page and closing it. */
