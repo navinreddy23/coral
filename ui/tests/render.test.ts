@@ -320,3 +320,17 @@ describe('an edge that changes lane', () => {
     expect(corners).toHaveLength(0);
   });
 });
+
+describe('a graph drawn tight', () => {
+  it('leaves the letters off a node too small to hold them', () => {
+    const frame = longRunFrame(20, 2);
+    const tight = { ...DEFAULT_METRICS, laneWidth: 7, nodeRadius: 3, laneOrigin: 5 };
+    const { ctx, discs, labels } = recorder();
+
+    drawLanes(ctx, frame, { first: 0, last: 3 }, tight, ['#a'], 200, 200, ['#fill'], () => 'LT');
+
+    // The nodes are still drawn; it is only the letters in them that would be a smudge.
+    expect(discs).toHaveLength(4);
+    expect(labels).toHaveLength(0);
+  });
+});

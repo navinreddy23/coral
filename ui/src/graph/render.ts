@@ -1,4 +1,4 @@
-import { parentLanesOf, type Frame } from './frame';
+import { NO_LANE, parentLanesOf, type Frame } from './frame';
 import { authorColourIndex } from './initials';
 import { laneColour, laneX, rowY, type Metrics, type Window } from './layout';
 
@@ -12,6 +12,9 @@ const NODE_STROKE = 2;
  * the lane one: see `--node-1` in tokens.css.
  */
 const NODE_LABEL = '#ffffff';
+
+/** Smallest node that can hold two letters legibly. */
+const LABELLED_FROM = 7;
 
 /**
  * Draws the lane column onto a canvas.
@@ -53,6 +56,8 @@ export function drawLanes(
     const y0 = rowY(row, first, metrics);
 
     for (const parentLane of parentLanesOf(frame, local)) {
+      // A parent the assigner had no lane left for; there is nowhere to draw the edge to.
+      if (parentLane === NO_LANE) continue;
       const x1 = laneX(parentLane, metrics);
       const y1 = rowY(row + 1, first, metrics);
       ctx.strokeStyle = laneColour(parentLane, colours);
@@ -111,7 +116,10 @@ export function drawLanes(
     ctx.strokeStyle = laneColour(lane, colours);
     ctx.stroke();
 
-    const label = initials(row);
+    // Only where there is room for them to be read. In a merge region the lanes are drawn
+    // tight and the node is a few pixels across; two letters in it are a smudge, and a smudge
+    // in every node is worse than a plain dot.
+    const label = metrics.nodeRadius >= LABELLED_FROM ? initials(row) : null;
     if (label !== null) {
       ctx.fillStyle = NODE_LABEL;
       ctx.fillText(label, x, y + 0.5);
@@ -188,6 +196,7 @@ function drawThroughLanes(
     // run picks up from the next row's centre. A lane already open is one an earlier child
     // reserved; its run is continuous and must keep its original start.
     for (const parentLane of parentLanesOf(frame, local)) {
+      if (parentLane === NO_LANE) continue;
       if (!open.has(parentLane)) open.set(parentLane, rowY(row + 1, first, metrics));
     }
   }

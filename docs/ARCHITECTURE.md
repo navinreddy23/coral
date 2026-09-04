@@ -186,6 +186,18 @@ corrupt or hand-edited session is repaired on load rather than refused.
 
 ## The window
 
+**The file panel answers four questions about one file**: what changed, who wrote each line,
+what has touched it, and the same again with whitespace discounted. Side by side asks git for
+the file end to end — hunks are a window cut out of it and there is nothing on the front end to
+widen them with — and only the rows on screen are built, since a whole file is thousands of
+them and a table that size is one layer the engine repaints on every wheel notch. Blame and
+history are read only when the view that shows them is asked for: each is a walk of the file's
+whole history and costs seconds on a large repository.
+
+**Finding a commit** matches the message, the author and the object id, which takes three git
+invocations because `--author` is ANDed with `--grep`. Matches are resolved to rows in Rust and
+sorted by row, so stepping through them moves down the list rather than about it.
+
 **Every surface carrying text paints its own opaque background.** WebKit antialiases text on a
 composited layer with subpixel precision only where it knows what is behind it; `background:
 none` leaves it guessing and it drops to grayscale, which reads as soft. The giveaway is that

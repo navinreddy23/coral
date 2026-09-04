@@ -99,10 +99,9 @@ describe('the graph column following the lanes', () => {
     expect(panes.widths.graph).toBe(PANE_LIMITS.graph.min);
   });
 
-  it('stops following once the handle has been dragged', () => {
+  it('keeps a hand-set width when the next repository starts again', () => {
     const panes = new PanesState();
     panes.resize('graph', 220);
-    panes.fitGraph(400);
     panes.refit();
     expect(panes.widths.graph).toBe(220);
   });
@@ -110,8 +109,21 @@ describe('the graph column following the lanes', () => {
   it('remembers that it was pinned, across a restart', () => {
     new PanesState().resize('graph', 220);
     const next = new PanesState();
-    next.fitGraph(400);
+    next.refit();
     expect(next.widths.graph).toBe(220);
+  });
+
+  it('still widens a hand-set column that cannot hold the lanes', () => {
+    // A drag settles how narrow the column may be, not how wide. Stopping the fit for good
+    // left every node drawn off the side of a column nothing would widen again, in the merge
+    // stretches of the kernel where the graph is at its widest.
+    const panes = new PanesState();
+    panes.resize('graph', 220);
+    panes.fitGraph(400);
+    expect(panes.widths.graph).toBe(400);
+    // And never narrower than the width that was chosen.
+    panes.fitGraph(100);
+    expect(panes.widths.graph).toBe(400);
   });
 
   it('follows again after a reset', () => {

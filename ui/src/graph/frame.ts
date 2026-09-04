@@ -169,7 +169,9 @@ export function widestLane(frame: Frame | null, rows: readonly number[]): number
     const local = localRow(frame, row);
     if (local === null) continue;
     widest = Math.max(widest, frame.lanes[local] ?? 0);
-    for (const lane of parentLanesOf(frame, local)) widest = Math.max(widest, lane);
+    for (const lane of parentLanesOf(frame, local)) {
+      if (lane !== NO_LANE) widest = Math.max(widest, lane);
+    }
     // The open mask is 32 lanes wide; its highest set bit is the outermost of them.
     const open = frame.open[local] ?? 0;
     if (open !== 0) widest = Math.max(widest, 31 - Math.clz32(open));
@@ -205,6 +207,14 @@ export function frameStartFor(first: number, totalRows: number): number {
   const lastPossible = Math.max(0, totalRows - ROWS_PER_FRAME);
   return Math.max(0, Math.min(lastPossible, first - lookback));
 }
+
+/**
+ * A parent whose edge is not drawn, matching `graph::lanes::NO_LANE`.
+ *
+ * The graph is capped at 32 lanes, and a commit whose parent could not be given one of them
+ * says so with this rather than with a lane nothing is drawn in.
+ */
+export const NO_LANE = 0xffff;
 
 /** A frame-local index for an absolute row, or null when the frame does not hold it. */
 export function localRow(frame: Frame | null, row: number): number | null {

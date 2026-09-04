@@ -31,6 +31,34 @@ export const REFS_COLUMN_PX = 240;
 /** Width of the lane column. Wider graphs scroll within it rather than pushing the message. */
 export const GRAPH_COLUMN_PX = 170;
 
+/**
+ * Narrowest a lane may be drawn.
+ *
+ * Below this the nodes touch and the lines are indistinguishable, so a graph needing more
+ * lanes than fit is clipped rather than squeezed further.
+ */
+const MIN_LANE_WIDTH = 7;
+
+/**
+ * The metrics for drawing `maxLane` lanes in `columnPx` of column.
+ *
+ * The shipped pitch where it fits, tighter where it does not. A kernel merge region is thirty
+ * lanes wide and would need six hundred pixels at the full pitch — more than the column can
+ * have without taking the commit message with it — and drawn at the full pitch anyway every
+ * node past the edge is simply not on screen, which reads as a graph with no commits in it.
+ */
+export function fittedMetrics(maxLane: number, columnPx: number): Metrics {
+  const base = DEFAULT_METRICS;
+  if (maxLane <= 0) return base;
+
+  const room = columnPx - base.laneOrigin - base.nodeRadius - 10;
+  const pitch = Math.max(MIN_LANE_WIDTH, Math.floor(room / maxLane));
+  if (pitch >= base.laneWidth) return base;
+
+  const nodeRadius = Math.max(3, Math.min(base.nodeRadius, Math.floor(pitch / 2)));
+  return { ...base, laneWidth: pitch, nodeRadius, laneOrigin: nodeRadius + 2 };
+}
+
 export function laneX(lane: number, m: Metrics): number {
   return m.laneOrigin + lane * m.laneWidth;
 }

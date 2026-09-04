@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
 
   import type { Frame } from './frame';
-  import { DEFAULT_METRICS, GRAPH_COLUMN_PX, laneColours, nodeColours } from './layout';
+  import { fittedMetrics, GRAPH_COLUMN_PX, laneColours, nodeColours } from './layout';
   import { drawLanes, resizeCanvas } from './render';
   import type { Theme } from '../state/theme.svelte';
 
@@ -19,6 +19,7 @@
     theme,
     initials = () => null,
     author = () => null,
+    maxLane = 0,
   }: {
     frame: Frame | null;
     firstRow?: number;
@@ -37,6 +38,8 @@
     initials?: (row: number) => string | null;
     /** The author's identity, which fixes the node's fill. Null while it is loading. */
     author?: (row: number) => string | null;
+    /** The widest lane on screen, which decides how tightly the lanes have to be drawn. */
+    maxLane?: number;
   } = $props();
 
   let canvas: HTMLCanvasElement;
@@ -71,7 +74,7 @@
 
   function paint() {
     if (!canvas || !frame) return;
-    const metrics = DEFAULT_METRICS;
+    const metrics = fittedMetrics(maxLane, width);
     const ctx = resizeCanvas(canvas, width, height, window.devicePixelRatio || 1);
     if (!ctx) return;
 
@@ -92,6 +95,7 @@
     void firstRow;
     void initials;
     void author;
+    void maxLane;
     void width;
     void height;
     void colours;

@@ -20,7 +20,10 @@ export const PANE_LIMITS: Record<PaneKey, { min: number; max: number }> = {
   sidebar: { min: 150, max: 520 },
   details: { min: 220, max: 720 },
   refs: { min: 60, max: 480 },
-  graph: { min: 60, max: 640 },
+  // Enough for the widest graph the engine will draw: `graph::lanes::MAX_LANES` at the lane
+  // pitch, plus the node's own radius and a gap before the message. A cap below that leaves
+  // commits drawn off the side of the column, which reads as a graph with no commits in it.
+  graph: { min: 60, max: 720 },
 };
 
 const STORAGE_KEY = 'coral.panes';
@@ -63,9 +66,13 @@ export class PanesState {
    * Only ever wider. A column that shrank again would shift every commit message sideways
    * each time a merge cluster scrolled off the screen, and a little unused width is cheaper
    * than a list that moves under the eye.
+   *
+   * It widens whether or not the width was last set by hand. Dragging the column used to stop
+   * the fit for good, so scrolling into a merge-heavy stretch of the kernel left every node
+   * drawn off the side of a column nothing would widen again — a graph with no commits in it.
+   * What a drag settles is how narrow the column may be, not how wide.
    */
   fitGraph(px: number): void {
-    if (!this.graphAuto) return;
     const want = clampPane('graph', px);
     if (want > this.widths.graph) this.widths = { ...this.widths, graph: want };
   }

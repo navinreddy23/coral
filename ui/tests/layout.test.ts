@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_METRICS,
+  fittedMetrics,
   firstRowFor,
   graphWidthFor,
   isCompressed,
@@ -159,5 +160,33 @@ describe('row placement', () => {
         expect(onScreen % 1, `scroll ${scroll}, row ${index}`).toBe(0);
       }
     }
+  });
+});
+
+describe('fitting the lanes into the column there is', () => {
+  it('draws at the shipped pitch when the lanes fit', () => {
+    expect(fittedMetrics(3, 400)).toEqual(DEFAULT_METRICS);
+    expect(fittedMetrics(0, 60)).toEqual(DEFAULT_METRICS);
+  });
+
+  it('tightens the pitch rather than drawing off the side of the column', () => {
+    // Thirty lanes in three hundred pixels: at the shipped pitch that is six hundred, and
+    // every node past the edge simply is not on screen.
+    const m = fittedMetrics(30, 300);
+    expect(m.laneWidth).toBeLessThan(DEFAULT_METRICS.laneWidth);
+    expect(laneX(30, m) + m.nodeRadius).toBeLessThanOrEqual(300);
+    // The rows stay where they were; only the lanes move.
+    expect(m.rowHeight).toBe(DEFAULT_METRICS.rowHeight);
+  });
+
+  it('shrinks the node with the lane, so neighbours do not touch', () => {
+    const m = fittedMetrics(40, 180);
+    expect(m.nodeRadius * 2).toBeLessThanOrEqual(m.laneWidth);
+  });
+
+  it('stops tightening rather than drawing lanes nobody can tell apart', () => {
+    const m = fittedMetrics(200, 120);
+    expect(m.laneWidth).toBeGreaterThanOrEqual(7);
+    expect(m.nodeRadius).toBeGreaterThanOrEqual(3);
   });
 });

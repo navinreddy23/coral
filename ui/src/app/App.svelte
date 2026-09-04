@@ -1802,9 +1802,14 @@
    * the corridor of empty pixels the wide setting left between a commit's node and its message
    * is what made the two read as unrelated.
    */
-  const laneFit = $derived(
-    rows.length === 0 ? 0 : graphWidthFor(widestLane(graph.frame, rows), DEFAULT_METRICS),
-  );
+  const laneFit = $derived.by(() => {
+    if (rows.length === 0) return 0;
+    const want = graphWidthFor(widestLane(graph.frame, rows), DEFAULT_METRICS);
+    // Never more than a share of the pane. A merge region thirty lanes wide would otherwise
+    // take the commit message with it, and a graph beside no message is not worth the trade;
+    // past this the lanes are drawn tighter instead.
+    return Math.min(want, Math.round(paneWidth * 0.35));
+  });
 
   /*
    * Applied untracked, because `fitGraph` reads the width before deciding to widen it: tracked,
@@ -2180,6 +2185,7 @@
             theme={theme.current}
             initials={nodeInitials}
             author={nodeAuthor}
+            maxLane={widestLane(graph.frame, rows)}
           />
         </div>
         <ul class="rows" style:top="{listTop(scrollTop)}px">
