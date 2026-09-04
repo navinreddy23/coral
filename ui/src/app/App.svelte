@@ -303,6 +303,10 @@
   /** Reloads everything after an operation finished, since it may have moved any of it. */
   async function reloadAll() {
     if (!info) return;
+    // The line along the bottom describes the action that stopped. Continuing or aborting ends
+    // it, and leaving "rebase onto main stopped on conflicts" up after the rebase was aborted
+    // says the repository is in a state it is no longer in.
+    actions.clear();
     const path = info.path;
     await Promise.all([refs.load(path), worktree.load(path), merge.load(path)]);
     await graph.open(path);
