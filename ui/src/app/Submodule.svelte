@@ -76,7 +76,7 @@
       <p class="state">Reading the current revision…</p>
     {:else if revision.inSync}
       <p class="state ok">
-        ✓ This submodule is where {submodule.path.split('/').pop()} pins it.
+        ✓ This submodule is at the commit this repository records.
       </p>
     {:else}
       <p class="state warn">
