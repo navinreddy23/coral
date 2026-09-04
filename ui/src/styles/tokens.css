@@ -71,6 +71,21 @@
   --lane-7: #16737f;
   --lane-8: #686d1c;
 
+  /*
+   * The same eight, mixed into the page behind them, for anything that has to be *labelled*
+   * with a lane rather than drawn in it — a branch pill, a row band. A stroke colour at full
+   * strength behind 10px text leaves the text unreadable; these carry the same identity at a
+   * sixth of the weight.
+   */
+  --lane-1-soft: #d8e7f3;
+  --lane-2-soft: #f5dceb;
+  --lane-3-soft: #ede6d7;
+  --lane-4-soft: #dde9df;
+  --lane-5-soft: #e8e1fc;
+  --lane-6-soft: #f4e0d6;
+  --lane-7-soft: #dae9eb;
+  --lane-8-soft: #e7e8db;
+
   --row-h: 28px;
   --row-h-compact: 22px;
 
@@ -132,4 +147,13 @@
   --lane-6: #ff9560;
   --lane-7: #35cbdd;
   --lane-8: #c6cf45;
+
+  --lane-1-soft: #21394d;
+  --lane-2-soft: #432d40;
+  --lane-3-soft: #463b24;
+  --lane-4-soft: #253f30;
+  --lane-5-soft: #34314d;
+  --lane-6-soft: #48342c;
+  --lane-7-soft: #1c3f47;
+  --lane-8-soft: #3c4026;
 }

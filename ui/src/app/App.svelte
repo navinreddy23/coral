@@ -1,6 +1,15 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { messageOf } from '../ipc/error';
-  import { covers, hasFlag, localRow, oidOf, RowFlag, type Frame } from '../graph/frame';
+  import {
+    covers,
+    hasFlag,
+    localRow,
+    oidOf,
+    RowFlag,
+    widestLane,
+    type Frame,
+  } from '../graph/frame';
   import GraphCanvas from '../graph/GraphCanvas.svelte';
   import { initialsOf } from '../graph/initials';
   import Splitter from './Splitter.svelte';
@@ -20,9 +29,12 @@
   import Preferences from './Preferences.svelte';
   import Menu, { type MenuItem } from './Menu.svelte';
   import HostMark, { hostOf } from './HostMark.svelte';
+  import RefMark from './RefMark.svelte';
   import Toasts from './Toasts.svelte';
   import Splash from './Splash.svelte';
   import Remotes from './Remotes.svelte';
+  import Activity from './Activity.svelte';
+  import { ActivityState } from '../state/activity.svelte';
   import SubmodulePanel from './Submodule.svelte';
   import { RemotesState } from '../state/remotes.svelte';
   import { describe, ToastsState } from '../state/toasts.svelte';
@@ -38,11 +50,19 @@
     DEFAULT_METRICS,
     firstRowFor,
     GRAPH_COLUMN_PX,
+    graphWidthFor,
     listTop,
     REFS_COLUMN_PX,
     spacerHeight,
   } from '../graph/layout';
-  import { commitUrl, initialRepo, open, pickDirectory, pickRepository } from '../ipc/commands';
+  import {
+    commitUrl,
+    graphRowOf,
+    initialRepo,
+    open,
+    pickDirectory,
+    pickRepository,
+  } from '../ipc/commands';
   import { GraphState } from '../state/graph.svelte';
   import { RefsState } from '../state/refs.svelte';
   import { ThemeState } from '../state/theme.svelte';
@@ -57,7 +77,7 @@
   import Shortcuts from './Shortcuts.svelte';
   import TabBar from './TabBar.svelte';
   import Toolbar from './Toolbar.svelte';
-  import type { RepoInfo, Submodule, SubmoduleRevision } from '../ipc/types';
+  import type { RepoInfo, StatusEntry, Submodule, SubmoduleRevision } from '../ipc/types';
   import { submoduleRevision } from '../ipc/commands';
   import type { PlacedRef } from '../state/refs.svelte';
 
@@ -154,6 +174,8 @@
   const toasts = new ToastsState();
   const remotes = new RemotesState();
   let showRemotes = $state<{ focus: string | null } | null>(null);
+  const activity = new ActivityState();
+  let showActivity = $state(false);
   /** The submodule whose panel is open, and its recorded commit once that has been read. */
   let showSubmodule = $state<Submodule | null>(null);
   let submoduleAt = $state<SubmoduleRevision | null>(null);
@@ -216,6 +238,44 @@
   const headName = $derived(
     info && info.head.kind !== 'detached' ? info.head.name : null,
   );
+
+  /**
+   * What HEAD is on, as one value that changes whenever the checkout does.
+   *
+   * The branch name alone cannot see a move between two commits with no branch on either:
+   * checking out a commit while already detached left this unchanged, so the view stayed where
+   * it was and the checkout looked as though it had not happened.
+   */
+  const headMark = $derived(
+    info === null ? null : info.head.kind === 'detached' ? info.head.oid : info.head.name,
+  );
+
+  /**
+   * The row HEAD sits on while it is detached, or null when it is on a branch.
+   *
+   * A detached HEAD has no ref to label its commit, so without this the row that is actually
+   * checked out is drawn like every other row.
+   */
+  let detachedRow = $state<number | null>(null);
+
+  $effect(() => {
+    const head = info?.head;
+    const path = info?.path;
+    if (path === undefined || head === undefined || head.kind !== 'detached') {
+      detachedRow = null;
+      return;
+    }
+    const oid = head.oid;
+    void graphRowOf(path, oid).then(
+      (row) => {
+        // The answer can arrive after another checkout has already moved HEAD on.
+        if (info?.head.kind === 'detached' && info.head.oid === oid) detachedRow = row;
+      },
+      () => {
+        detachedRow = null;
+      },
+    );
+  });
 
   function pick(row: number) {
     const local = localRow(graph.frame, row);
@@ -501,6 +561,79 @@
     };
   }
 
+  /**
+   * Throws away working-tree changes, once the user has agreed to exactly what goes.
+   *
+   * The dialog splits the files rather than the engine, because the two halves are not the
+   * same promise. A tracked file goes back to what HEAD holds and its content is still in the
+   * object database; a file git has never seen is deleted from disk and exists nowhere else.
+   * So the count of each is named, deleting the new ones is a separate button, and neither is
+   * what the Enter key does.
+   */
+  async function discardChanges(entries: StatusEntry[]) {
+    if (!info || entries.length === 0) return;
+    const untracked = entries.filter((e) => e.worktree === 'untracked').map((e) => e.path);
+    const tracked = entries.filter((e) => e.worktree !== 'untracked').map((e) => e.path);
+
+    const choices: Choice[] = [{ id: 'keep', label: 'Cancel', primary: true }];
+    if (tracked.length > 0) {
+      choices.push({
+        id: 'tracked',
+        label: untracked.length > 0
+          ? `Discard ${count(tracked.length, 'change')}, keep the new files`
+          : `Discard ${count(tracked.length, 'change')}`,
+      });
+    }
+    if (untracked.length > 0) {
+      choices.push({
+        id: 'all',
+        label: tracked.length > 0
+          ? `Discard everything, deleting ${count(untracked.length, 'new file')}`
+          : `Delete ${count(untracked.length, 'new file')}`,
+      });
+    }
+
+    const { choice } = await ask({
+      title: 'Discard changes?',
+      detail: discardDetail(tracked.length, untracked.length, headName),
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices,
+    });
+    if (choice === null || choice === 'keep') return;
+
+    await worktree.discard(tracked, choice === 'all' ? untracked : []);
+    if (!worktree.error) toasts.push('ok', 'Changes discarded.');
+  }
+
+  /** "1 change", "4 changes" — the plural of a count without a helper library. */
+  function count(n: number, noun: string): string {
+    return `${n} ${noun}${n === 1 ? '' : 's'}`;
+  }
+
+  function discardDetail(tracked: number, untracked: number, branch: string | null): string {
+    const where = branch === null ? 'the commit that is checked out' : branch;
+    const parts: string[] = [];
+    if (tracked > 0) {
+      parts.push(`${count(tracked, 'file')} go back to what ${where} last committed.`);
+    }
+    if (untracked > 0) {
+      parts.push(
+        `${count(untracked, 'file')} ${untracked === 1 ? 'is' : 'are'} not tracked by git,` +
+          ' so deleting them removes the only copy there is.',
+      );
+    }
+    parts.push('This cannot be undone.');
+    return parts.join(' ');
+  }
+
+  function openActivity() {
+    if (info) activity.repo(info.path);
+    showActivity = true;
+    void activity.load();
+  }
+
   function openPreferences() {
     showPrefs = true;
     if (!info) return;
@@ -663,6 +796,12 @@
         label: 'SSH keys and commit signing',
         group: 'View',
         run: openPreferences,
+      },
+      {
+        id: 'activity',
+        label: 'Activity logs',
+        group: 'View',
+        run: openActivity,
       },
     ];
 
@@ -872,11 +1011,14 @@
     actions.clear();
     menu = null;
     showRemotes = null;
+    showActivity = false;
     showSubmodule = null;
     submoduleAt = null;
     showWip = false;
     scrollTop = 0;
     if (scroller) scroller.scrollTop = 0;
+    // The lane column's fitted width belongs to the graph it was fitted to.
+    panes.refit();
   }
 
   /**
@@ -915,10 +1057,16 @@
    */
   async function focusHead() {
     if (!info) return;
-    const name = info.head.kind !== 'detached' ? info.head.name : null;
-    const target = name === null
-      ? refs.all.find((r) => r.kind.kind === 'local_branch' && r.row !== null)
-      : refs.groups.local.find((r) => r.short === name);
+    if (info.head.kind === 'detached') {
+      // No ref names it, so the row has to be looked up by object id. Picking some branch
+      // instead — which is what this used to do — moved the view to a commit that was not the
+      // one just checked out.
+      const row = await graphRowOf(info.path, info.head.oid).catch(() => null);
+      if (row !== null) await reveal(row);
+      return;
+    }
+    const name = info.head.name;
+    const target = refs.groups.local.find((r) => r.short === name);
     if (target?.row === undefined || target.row === null) return;
     await reveal(target.row);
   }
@@ -933,7 +1081,7 @@
   async function repoChanged(change: RepoChanged) {
     if (!info || actions.busy) return;
     const path = info.path;
-    const wasHead = headName;
+    const wasHead = headMark;
 
     if (change.index || change.worktree) await worktree.load(path);
     if (change.ops) await merge.load(path);
@@ -944,7 +1092,7 @@
     if (change.refs || change.graph) await graph.open(path);
     // Only when it actually moved: following HEAD on every commit would drag the view away
     // from whatever the user was reading.
-    if (headName !== wasHead) await focusHead();
+    if (headMark !== wasHead) await focusHead();
   }
 
   /**
@@ -1233,6 +1381,47 @@
   });
 
   /**
+   * How wide the lane column has to be for the lanes on screen.
+   *
+   * A shipped width cannot be right for both a linear repository and a merge-heavy one, and
+   * the corridor of empty pixels the wide setting left between a commit's node and its message
+   * is what made the two read as unrelated.
+   */
+  const laneFit = $derived(
+    rows.length === 0 ? 0 : graphWidthFor(widestLane(graph.frame, rows), DEFAULT_METRICS),
+  );
+
+  /*
+   * Applied untracked, because `fitGraph` reads the width before deciding to widen it: tracked,
+   * the effect would depend on the very state it writes and re-run itself until Svelte gave up,
+   * which shows as a window that renders nothing at all.
+   */
+  $effect(() => {
+    const px = laneFit;
+    if (px > 0) untrack(() => panes.fitGraph(px));
+  });
+
+  /**
+   * The lane a row's commit sits in, as a token number.
+   *
+   * The eight lane colours repeat, so this is the lane modulo eight and matches exactly what
+   * the canvas drew for that row.
+   */
+  function laneOf(row: number): number {
+    const local = localRow(graph.frame, row);
+    if (local === null || !graph.frame) return 1;
+    return ((graph.frame.lanes[local] ?? 0) % 8) + 1;
+  }
+
+  /**
+   * How many characters a ref name has room for.
+   *
+   * Derived from the column the user has dragged rather than fixed: widening the column should
+   * show more of the name, which is the only reason to widen it.
+   */
+  const refChars = $derived(Math.max(10, Math.floor((panes.widths.refs - 62) / 5.9)));
+
+  /**
    * Which host a tracking branch's remote belongs to.
    *
    * From the remote's URL, not from its name: a remote called `origin` says nothing about who
@@ -1304,6 +1493,12 @@
         </span>
       {/if}
     {/if}
+    <button
+      class="theme"
+      onclick={() => openActivity()}
+      title="Activity logs: what Coral has been doing"
+      aria-label="Activity logs"
+    >☰</button>
     <button
       class="theme"
       onclick={() => openPreferences()}
@@ -1421,6 +1616,9 @@
         onChanged={() => info && void refs.load(info.path)}
       />
     {/if}
+    {#if showActivity}
+      <Activity {activity} onClose={() => (showActivity = false)} />
+    {/if}
     {#if merge.inProgress}
       <!-- A stopped merge or rebase is the only thing that matters until it is settled, so it
            takes the main pane outright rather than sitting behind the graph. -->
@@ -1503,39 +1701,59 @@
             >
               <button class="hit" onclick={() => pick(row)} aria-label="Select commit"></button>
               <!--
-                Stacked, not side by side. Two pills abreast in a 190px column clip the second
-                one, and a clipped ref name is every branch that starts the same way; stacked,
-                each gets the column's whole width. Two is what the row's height allows.
+                One name, and a count for the rest. Two pills stacked inside a 28px row left
+                each of them ten pixels tall and the name cut to fit, which is the state the
+                column was in when it read as noise: a row commonly carries `master` and
+                `origin/master`, and half a name twice says less than one name whole.
               -->
               <span class="cell refs">
-                {#each labels.slice(0, 2) as label, i (label.name)}
-                  <span class="line">
-                    <!--
-                      A button, so the full name is reachable: hovering shows it, and a
-                      keyboard can land on it and read it out. Clicking selects the row, which
-                      is what clicking anywhere else on the row does.
-                    -->
-                    <button
-                      class="pill {label.kind.kind}"
-                      class:head={label.short === headName}
-                      title="{label.short}&#10;{label.name}"
-                      onclick={() => pick(row)}
-                    >
+                {#if labels.length > 1}
+                  <button
+                    class="more"
+                    title="Show the other refs on this commit"
+                    onclick={(e) => refsMenu(e, labels.slice(1))}
+                  >+{labels.length - 1}</button>
+                {/if}
+                {#each labels.slice(0, 1) as label (label.name)}
+                  <!--
+                    A button, so the full name is reachable: hovering shows it, and a keyboard
+                    can land on it and read it out. Clicking selects the row, which is what
+                    clicking anywhere else on the row does.
+
+                    Tinted with the lane its commit sits in, and right up against the lanes,
+                    which is what ties the name to the node beside it. A grey pill floating at
+                    the far side of the column leaves the eye to trace the line back itself.
+                  -->
+                  <button
+                    class="pill {label.kind.kind}"
+                    class:head={label.short === headName}
+                    style:--tint="var(--lane-{laneOf(row)}-soft)"
+                    style:--tint-line="var(--lane-{laneOf(row)})"
+                    title="{label.short}&#10;{label.name}"
+                    onclick={() => pick(row)}
+                  >
+                    <!-- The cap says what the ref is; for a tracking branch that is the host
+                         it came from, which is more than "a branch" says. -->
+                    <span class="cap">
                       {#if label.kind.kind === 'remote_branch'}
                         <HostMark kind={hostFor(label.short)} />
                       {:else}
-                        <span class="pip" aria-hidden="true"></span>
-                      {/if}{elideRef(label.short, 26)}
-                    </button>
-                    {#if i === 1 && labels.length > 2}
-                      <button
-                        class="pill more"
-                        title="Show the other refs on this commit"
-                        onclick={(e) => refsMenu(e, labels.slice(2))}
-                      >+{labels.length - 2}</button>
-                    {/if}
-                  </span>
+                        <RefMark kind={label.kind.kind} />
+                      {/if}
+                    </span>
+                    <span class="pill-text">{elideRef(label.short, refChars)}</span>
+                  </button>
                 {/each}
+                <!--
+                  Detached HEAD gets a label of its own, because nothing else on the row says
+                  the commit is the one checked out and the state is easy to be in by accident.
+                -->
+                {#if row === detachedRow}
+                  <span class="pill head detached" title="HEAD is detached at this commit">
+                    <span class="cap"><RefMark kind="other" /></span>
+                    <span class="pill-text">HEAD</span>
+                  </span>
+                {/if}
               </span>
               <span class="cell graph-col"></span>
               <span class="cell message">
@@ -1572,6 +1790,7 @@
             grouping={views.current.changes}
             onGrouping={(g) => views.set('changes', g)}
             onOpenFile={openWorkingFile}
+            onDiscard={(entries) => void discardChanges(entries)}
           />
         </aside>
       {:else}
@@ -1768,10 +1987,18 @@
   }
   .row.selected .cell.message .summary { color: var(--fg-0); font-weight: 600; }
   /*
-   * The text columns paint an opaque background of their own. Over a transparent composited
-   * layer WebKit drops from subpixel to grayscale antialiasing, which reads as soft — and
-   * these rows sit above a canvas, which is what promotes the layer. The lane column stays
-   * transparent so the canvas shows through it.
+   * Every text surface paints an opaque background of its own, and this is not optional.
+   *
+   * WebKit antialiases text on a composited layer with subpixel precision only where it knows
+   * what is behind it; `background: none` leaves it guessing and it falls back to grayscale,
+   * which reads as soft. The giveaway was that hovering a row sharpened it — the hover colour
+   * was the only thing telling WebKit what the backdrop was.
+   *
+   * The whole page is composited, because that is what makes the wheel scroll at all.
+   *
+   * It has to be the cells and not the row. The lane canvas is a sibling painted before the
+   * row list, so an opaque background on the row itself covers the graph completely — every
+   * edge and node gone, with nothing in the console to say why.
    */
   .cell.message, .cell.refs { background: var(--bg-0); }
   .cell.message {
@@ -1795,58 +2022,69 @@
   .cell.refs { position: relative; z-index: 1; }
   .cell { min-width: 0; display: flex; align-items: center; gap: var(--space-2); }
   /*
-   * Pills sit against the graph, which is the thing they label, and are clipped to their own
-   * column rather than spilling over the lanes. Right-aligning them looked tidier and read
-   * worse: the ends of the names lined up, so what varied down the list was the left edge,
-   * which is where the eye starts.
+   * Pills are pushed to the trailing edge, so each one touches the lane of the commit it
+   * names. Left-aligned they floated at the far side of a column that is mostly empty, and
+   * the name and its node read as two unrelated things on the same line. The cost is that the
+   * left edge of the names no longer lines up; the gain is that the column stops being a gap.
    */
   .cell.refs {
-    flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px;
-    padding-left: var(--space-1); padding-right: var(--space-2);
+    justify-content: flex-end; gap: var(--space-1);
+    padding-left: var(--space-1); padding-right: 0;
     overflow: hidden;
   }
-  .line { display: flex; align-items: center; gap: var(--space-1); max-width: 100%; min-width: 0; }
   .cell.message { gap: var(--space-3); }
 
   /*
-   * A pill per ref, coloured by what kind of ref it is. The dot carries the colour and the
-   * text stays near-black, because a whole pill in colour at 11px is unreadable and there can
-   * be three of them on one row.
+   * One pill per row, tinted with the lane its commit sits in and capped with a mark saying
+   * what kind of ref it is.
+   *
+   * The tint is the lane's own colour at low saturation rather than a colour per ref kind: on
+   * a busy graph what the eye needs from this column is which line the name belongs to, and
+   * the cap already says branch, tag or stash. Text stays near-black on the tint — a whole
+   * pill in a saturated lane colour is unreadable at eleven pixels.
    */
-  /* Sized so two stack inside one row: 12px of text and a hairline either side is 12.5px, and
-     the row is 28px. Any larger and the second pill is cut off by the row below. */
   .pill {
-    display: inline-flex; align-items: center; gap: 4px;
-    flex: 0 1 auto; min-width: 0; font: inherit; font-size: 10px; line-height: 12px;
-    padding: 0 6px; cursor: pointer;
-    border-radius: 7px; border: 1px solid var(--border);
-    background: var(--bg-1); color: var(--fg-1);
-    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 5px;
+    flex: 0 1 auto; min-width: 0; font: inherit; font-size: 11px; line-height: 18px;
+    padding: 0 7px 0 0; cursor: pointer;
+    border-radius: 9px; border: 1px solid var(--tint-line, var(--border));
+    background: var(--tint, var(--bg-1)); color: var(--fg-0);
+    max-width: 100%; overflow: hidden; white-space: nowrap;
   }
-  .pill:hover { border-color: var(--border-strong); }
-  .pip { width: 5px; height: 5px; }
-  .pip {
-    flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%;
-    background: var(--fg-2);
+  /*
+   * The cap is the lane colour solid, and it is what makes the pill read as belonging to the
+   * line beside it rather than as a grey chip that happens to be nearby. Its mark is drawn in
+   * the pill's own background, so the colour reads as a block and not as a coloured glyph.
+   */
+  .cap {
+    flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+    align-self: stretch; width: 18px; margin-right: 1px;
+    border-radius: 8px 0 0 8px;
+    background: var(--tint-line, var(--fg-2)); color: var(--bg-0);
   }
-  .pill.local_branch .pip { background: var(--lane-1); }
-  .pill.remote_branch { color: var(--fg-2); }
-  .pill.remote_branch .pip { background: var(--fg-2); }
-  .pill.tag .pip { background: var(--lane-3); }
-  .pill.stash .pip { background: var(--lane-5); }
-  /* The branch you are on: filled, since it is the one fact the row column exists to show. */
+  .pill-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .pill:hover { background: var(--bg-1); border-color: var(--tint-line, var(--border-strong)); }
+  /*
+   * The branch you are on, which is the one fact this column exists to show. Filled in the
+   * accent rather than in its lane: it has to be findable in one look down a screen of rows
+   * that are all tinted something.
+   */
   .pill.head {
     background: var(--accent); border-color: var(--accent);
     color: var(--accent-fg); font-weight: 600;
   }
-  .pill.head .pip { background: var(--accent-fg); }
+  .pill.head .cap { background: var(--accent-fg); color: var(--accent); }
+  .pill.head:hover { background: var(--accent); }
+  /* A statement rather than a control: everything it could do, the row already does. */
+  .pill.detached { cursor: default; }
   /* A control, not a label: the count opens the refs it stands for. */
-  .pill.more {
-    color: var(--fg-2); background: none; border-style: dashed; padding: 0 4px;
-    flex: 0 0 auto; font: inherit; font-size: 10px; line-height: 12px; cursor: pointer;
+  .more {
+    color: var(--fg-2); background: none; padding: 0 4px;
+    border: 1px dashed var(--border); border-radius: 7px;
+    flex: 0 0 auto; font: inherit; font-size: 10px; line-height: 13px; cursor: pointer;
     position: relative; z-index: 1;
   }
-  .pill.more:hover { color: var(--fg-0); border-color: var(--border-strong); }
+  .more:hover { color: var(--fg-0); border-color: var(--border-strong); }
 
   /* The summary takes its natural width and the dimmed body absorbs what is left. Letting
      both shrink equally gave the body most of the row, so summaries were cut to a few

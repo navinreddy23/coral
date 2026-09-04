@@ -68,3 +68,63 @@ describe('pane widths', () => {
     expect(panes.widths.graph).toBe(GRAPH_COLUMN_PX);
   });
 });
+
+describe('the graph column following the lanes', () => {
+  beforeEach(() => {
+    stubStorage();
+  });
+
+  it('grows to the lanes it is asked to fit', () => {
+    const panes = new PanesState();
+    panes.refit();
+    expect(panes.widths.graph).toBe(PANE_LIMITS.graph.min);
+    panes.fitGraph(200);
+    expect(panes.widths.graph).toBe(200);
+  });
+
+  it('never shrinks while a repository is open', () => {
+    // A column that also shrank would shift every commit message sideways each time a merge
+    // cluster scrolled off the screen, which is worse than a little unused width.
+    const panes = new PanesState();
+    panes.refit();
+    panes.fitGraph(200);
+    panes.fitGraph(90);
+    expect(panes.widths.graph).toBe(200);
+  });
+
+  it('starts again for the next repository', () => {
+    const panes = new PanesState();
+    panes.fitGraph(300);
+    panes.refit();
+    expect(panes.widths.graph).toBe(PANE_LIMITS.graph.min);
+  });
+
+  it('stops following once the handle has been dragged', () => {
+    const panes = new PanesState();
+    panes.resize('graph', 220);
+    panes.fitGraph(400);
+    panes.refit();
+    expect(panes.widths.graph).toBe(220);
+  });
+
+  it('remembers that it was pinned, across a restart', () => {
+    new PanesState().resize('graph', 220);
+    const next = new PanesState();
+    next.fitGraph(400);
+    expect(next.widths.graph).toBe(220);
+  });
+
+  it('follows again after a reset', () => {
+    const panes = new PanesState();
+    panes.resize('graph', 220);
+    panes.reset();
+    panes.fitGraph(300);
+    expect(panes.widths.graph).toBe(300);
+  });
+
+  it('keeps the fitted width inside the handle limits', () => {
+    const panes = new PanesState();
+    panes.fitGraph(10_000);
+    expect(panes.widths.graph).toBe(PANE_LIMITS.graph.max);
+  });
+});

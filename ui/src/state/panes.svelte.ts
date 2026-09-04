@@ -34,20 +34,58 @@ export function clampPane(key: PaneKey, px: number): number {
 export class PanesState {
   widths = $state<PaneWidths>(defaults());
 
+  /**
+   * Whether the graph column still follows the lanes on screen.
+   *
+   * One shipped width is wrong in both directions: it is a corridor of nothing on a linear
+   * repository, and too narrow for a merge-heavy one. So the column fits itself until the
+   * handle is dragged, and a drag is taken as the width the user wants kept.
+   */
+  graphAuto = $state(true);
+
   constructor() {
     const stored = read();
-    if (stored) this.widths = stored;
+    if (stored) {
+      this.widths = stored.widths;
+      this.graphAuto = stored.graphAuto;
+    }
   }
 
   resize(key: PaneKey, px: number): void {
     this.widths = { ...this.widths, [key]: clampPane(key, px) };
-    write(this.widths);
+    if (key === 'graph') this.graphAuto = false;
+    this.save();
+  }
+
+  /**
+   * Widens the graph column to hold `px` of lanes.
+   *
+   * Only ever wider. A column that shrank again would shift every commit message sideways
+   * each time a merge cluster scrolled off the screen, and a little unused width is cheaper
+   * than a list that moves under the eye.
+   */
+  fitGraph(px: number): void {
+    if (!this.graphAuto) return;
+    const want = clampPane('graph', px);
+    if (want > this.widths.graph) this.widths = { ...this.widths, graph: want };
+  }
+
+  /** Starts the fit again, for a repository whose graph is a different shape. */
+  refit(): void {
+    if (!this.graphAuto) return;
+    this.widths = { ...this.widths, graph: PANE_LIMITS.graph.min };
   }
 
   /** Back to the shipped layout, for when a drag has left something unusable. */
   reset(): void {
     this.widths = defaults();
-    write(this.widths);
+    this.graphAuto = true;
+    this.save();
+  }
+
+  // The fitted width is not written: it belongs to the repository on screen, not to the user.
+  private save(): void {
+    write(this.widths, this.graphAuto);
   }
 }
 
@@ -61,7 +99,7 @@ function defaults(): PaneWidths {
  * The limits can change between releases, and a width stored under the old ones would
  * otherwise come back as a pane that cannot be dragged back into view.
  */
-function read(): PaneWidths | null {
+function read(): { widths: PaneWidths; graphAuto: boolean } | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw === null) return null;
@@ -73,16 +111,19 @@ function read(): PaneWidths | null {
       const value = (parsed as Record<string, unknown>)[key];
       if (typeof value === 'number' && Number.isFinite(value)) out[key] = clampPane(key, value);
     }
-    return out;
+    // Absent for anyone whose layout was stored before the column could fit itself, and
+    // following the lanes is the better of the two answers for them.
+    const pinned = (parsed as Record<string, unknown>)['graphAuto'];
+    return { widths: out, graphAuto: pinned !== false };
   } catch {
     // A webview with storage disabled, or a corrupt entry, must still open the window.
     return null;
   }
 }
 
-function write(widths: PaneWidths): void {
+function write(widths: PaneWidths, graphAuto: boolean): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(widths));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...widths, graphAuto }));
   } catch {
     // Losing the layout is not worth failing over.
   }

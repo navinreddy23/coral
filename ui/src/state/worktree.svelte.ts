@@ -1,4 +1,4 @@
-import { commitStaged, repoStatus, stagePaths } from '../ipc/commands';
+import { commitStaged, discardPaths, repoStatus, stagePaths } from '../ipc/commands';
 
 import type { Status, StatusEntry } from '../ipc/types';
 import { messageOf } from '../ipc/error';
@@ -37,6 +37,18 @@ export class WorktreeState {
   async load(path: string): Promise<void> {
     this.#path = path;
     await this.#run(() => repoStatus(path));
+  }
+
+  /**
+   * Throws away changes: `restore` back to HEAD, `remove` deleted from disk.
+   *
+   * Nothing is worked out here. The dialog that asked the user is the only thing that knows
+   * what they agreed to, so it hands both lists over exactly as it described them.
+   */
+  async discard(restore: string[], remove: string[]): Promise<void> {
+    if (restore.length === 0 && remove.length === 0) return;
+    const path = this.#path;
+    await this.#run(() => discardPaths(path, restore, remove));
   }
 
   async stage(paths: string[], stage: boolean): Promise<void> {

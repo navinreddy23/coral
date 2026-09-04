@@ -14,6 +14,7 @@ import {
   oidOf,
   parentLanesOf,
   RowFlag,
+  widestLane,
   Section,
 } from '../src/graph/frame';
 
@@ -185,6 +186,32 @@ describe('paging', () => {
     expect(frameStartFor(10, kernel)).toBe(0);
     expect(frameStartFor(5, 100)).toBe(0);
     expect(frameStartFor(99, 100)).toBe(0);
+  });
+
+  it('sizes the lane column on edges and pass-throughs, not just on the nodes', () => {
+    const frame = frameAt(0, 8, 8);
+    frame.lanes.set([0, 1, 0, 2, 0, 0, 0, 0]);
+    // Row 4 has no node out at lane 5, but an edge runs down to it and the column has to
+    // cover it or the line is drawn off the canvas.
+    frame.parentStart.set([0, 0, 0, 0, 0, 0, 1, 1, 1]);
+    frame.parentLanes = new Uint16Array([5]);
+    // Row 7 has lane 9 crossing it with nothing of its own in view.
+    frame.open[7] = 1 << 9;
+
+    expect(widestLane(frame, [0, 1, 2])).toBe(1);
+    expect(widestLane(frame, [0, 1, 2, 3])).toBe(2);
+    expect(widestLane(frame, [5])).toBe(5);
+    expect(widestLane(frame, [7])).toBe(9);
+  });
+
+  it('ignores rows the frame does not hold, and has no frame at all', () => {
+    // Mid-scroll the window can run past the frame; those rows must not read as lane zero and
+    // shrink the column, nor throw.
+    const frame = frameAt(1000, 8, 8000);
+    frame.lanes.set([3, 0, 0, 0, 0, 0, 0, 0]);
+    expect(widestLane(frame, [1000, 5, 999_999])).toBe(3);
+    expect(widestLane(null, [0, 1, 2])).toBe(0);
+    expect(widestLane(frame, [])).toBe(0);
   });
 
   it('maps an absolute row into the frame, and refuses one it does not hold', () => {

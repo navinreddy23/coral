@@ -155,6 +155,28 @@ export function hasFlag(value: number, flag: number): boolean {
   return (value & flag) !== 0;
 }
 
+/**
+ * The highest lane anything on `rows` occupies: the row's own lane, the lanes its edges run
+ * down to, and the lanes merely passing through it.
+ *
+ * All three, because a lane column sized on the nodes alone clips the edges beside them. Rows
+ * the frame does not hold are skipped rather than counted as lane zero.
+ */
+export function widestLane(frame: Frame | null, rows: readonly number[]): number {
+  if (!frame) return 0;
+  let widest = 0;
+  for (const row of rows) {
+    const local = localRow(frame, row);
+    if (local === null) continue;
+    widest = Math.max(widest, frame.lanes[local] ?? 0);
+    for (const lane of parentLanesOf(frame, local)) widest = Math.max(widest, lane);
+    // The open mask is 32 lanes wide; its highest set bit is the outermost of them.
+    const open = frame.open[local] ?? 0;
+    if (open !== 0) widest = Math.max(widest, 31 - Math.clz32(open));
+  }
+  return widest;
+}
+
 /** Whether lane `lane` carries an edge into `row` from the rows above it. */
 export function laneOpenAt(frame: Frame, row: number, lane: number): boolean {
   if (lane >= 32) return false;

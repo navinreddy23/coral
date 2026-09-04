@@ -81,6 +81,16 @@ export function repoRefs(path: string): Promise<PlacedRef[]> {
   return invoke<PlacedRef[]>('repo_refs', { path });
 }
 
+/**
+ * The row a commit sits on, or `null` when it is outside the graph that is loaded.
+ *
+ * For a commit no ref names: a detached HEAD has a row worth showing and no label to find it
+ * by, and the row lookup belongs where the sorted index already is.
+ */
+export function graphRowOf(path: string, oid: string): Promise<number | null> {
+  return invoke<number | null>('graph_row_of', { path, oid });
+}
+
 /** The repository's submodules. Empty for a repository that declares none. */
 export function repoSubmodules(path: string): Promise<Submodule[]> {
   return invoke<Submodule[]>('repo_submodules', { path });
@@ -343,6 +353,22 @@ export function repoStatus(path: string): Promise<Status> {
 
 export function stagePaths(path: string, paths: string[], stage: boolean): Promise<Status> {
   return invoke<Status>('stage_paths', { path, paths, stage });
+}
+
+/**
+ * Throws away working-tree changes.
+ *
+ * Two lists, because the two are not the same act: `restore` goes back to what HEAD holds and
+ * could be recovered from the object database if it ever came to it, while `remove` is deleted
+ * from disk and has never existed anywhere else. The caller decides which path goes in which,
+ * so that nothing is deleted the user was not asked about by name.
+ */
+export function discardPaths(
+  path: string,
+  restore: string[],
+  remove: string[],
+): Promise<Status> {
+  return invoke<Status>('discard_paths', { path, restore, remove });
 }
 
 export function commitStaged(path: string, message: string, amend: boolean): Promise<Status> {

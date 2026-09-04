@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_METRICS,
   firstRowFor,
+  graphWidthFor,
   isCompressed,
   laneColour,
   laneX,
@@ -111,6 +112,29 @@ describe('very tall graphs', () => {
     const w = visibleRows(MAX_SPACER_PX / 2, 800, kernel, m);
     expect(w.first).toBeLessThanOrEqual(w.last);
     expect(w.last).toBeLessThan(kernel);
+  });
+});
+
+describe('the width the lanes need', () => {
+  const m = DEFAULT_METRICS;
+
+  it('covers the outermost node and leaves it clear of the message', () => {
+    // The node at lane 0 is centred at 15 with a radius of 8, so its right edge is at 23.
+    expect(graphWidthFor(0, m)).toBeGreaterThan(laneX(0, m) + m.nodeRadius);
+    for (const lane of [0, 1, 4, 17]) {
+      expect(graphWidthFor(lane, m), `lane ${lane}`).toBeGreaterThanOrEqual(
+        laneX(lane, m) + m.nodeRadius,
+      );
+    }
+  });
+
+  it('grows by exactly one lane per lane', () => {
+    expect(graphWidthFor(3, m) - graphWidthFor(2, m)).toBe(m.laneWidth);
+  });
+
+  it('never returns less than the width of a single lane', () => {
+    // A frame can report nothing yet, and a negative width would collapse the canvas.
+    expect(graphWidthFor(-1, m)).toBe(graphWidthFor(0, m));
   });
 });
 

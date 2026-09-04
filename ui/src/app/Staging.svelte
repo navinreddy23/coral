@@ -5,7 +5,7 @@
   import type { WorktreeState } from '../state/worktree.svelte';
   import type { Grouping } from '../state/views.svelte';
 
-  const { worktree, branch, openPath, grouping, onGrouping, onOpenFile }: {
+  const { worktree, branch, openPath, grouping, onGrouping, onOpenFile, onDiscard }: {
     worktree: WorktreeState;
     /** What the changes are on, which is what the header names. */
     branch: string | null;
@@ -16,6 +16,13 @@
     onGrouping: (grouping: Grouping) => void;
     /** Opens a working-tree file's diff; `staged` decides which half is shown. */
     onOpenFile: (path: string, staged: boolean) => void;
+    /**
+     * Asks to throw the given changes away.
+     *
+     * The panel never discards anything itself. This is the one action here that destroys
+     * work, and the window owns the dialog that has to be answered first.
+     */
+    onDiscard: (entries: StatusEntry[]) => void;
   } = $props();
 
   let summary = $state('');
@@ -81,6 +88,15 @@
 
 <div class="panel">
   <header>
+    <!-- Leading, and apart from the rest: it is the only control in the header that takes
+         something away, and it is where the reference puts it. -->
+    <button
+      class="discard"
+      disabled={!worktree.dirty || worktree.busy}
+      title="Discard every change in the working copy"
+      aria-label="Discard all changes"
+      onclick={() => onDiscard(worktree.status?.entries ?? [])}
+    >🗑</button>
     <span class="count">
       {worktree.dirty ? worktree.status?.entries.length ?? 0 : 'No'} file
       change{(worktree.status?.entries.length ?? 0) === 1 ? '' : 's'}
@@ -245,6 +261,20 @@
     background: var(--accent-soft); color: var(--accent);
     max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  /*
+   * Outlined in the danger colour rather than filled with it: filled, it would be the
+   * brightest thing in the panel and the eye would land on it before the file list, which is
+   * the wrong instinct to encourage above a list of unsaved work.
+   */
+  .discard {
+    flex: 0 0 auto; font: inherit; font-size: 13px; line-height: 1; cursor: pointer;
+    padding: 3px var(--space-2); border-radius: var(--radius-1);
+    background: var(--bg-1); border: 1px solid var(--border); color: var(--fg-2);
+  }
+  .discard:hover:not(:disabled) {
+    background: var(--danger-soft); border-color: var(--danger); color: var(--danger);
+  }
+  .discard:disabled { opacity: 0.4; cursor: default; }
   .toggle {
     display: flex; margin-left: auto;
     border: 1px solid var(--border); border-radius: var(--radius-1); overflow: hidden;
@@ -273,7 +303,7 @@
   .all:hover { background: var(--bg-3); color: var(--fg-0); }
   .expand {
     font: inherit; font-size: 10px; cursor: pointer; padding: 0 0 2px 4px;
-    background: none; border: 0; color: var(--accent);
+    background: var(--bg-1); border: 0; color: var(--accent);
   }
   .expand:hover { text-decoration: underline; }
   .empty { margin: 0 0 var(--space-2) 4px; color: var(--fg-2); font-size: 11px; }
@@ -285,7 +315,7 @@
     display: flex; align-items: center; gap: var(--space-2);
     flex: 1; min-width: 0; text-align: left; cursor: pointer;
     font: inherit; font-size: 12px; padding: 2px var(--space-2);
-    background: none; border: 0; color: var(--fg-1);
+    background: var(--bg-1); border: 0; color: var(--fg-1);
   }
   .file.open { background: var(--accent-soft); color: var(--fg-0); }
   /* The end of a path identifies the file, so a long one is cut from the left. */

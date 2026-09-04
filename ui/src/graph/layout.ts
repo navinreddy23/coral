@@ -17,14 +17,31 @@ export const DEFAULT_METRICS: Metrics = {
   nodeRadius: 8,
 };
 
-/** Width of the branch and tag column, which sits left of the lanes. */
-export const REFS_COLUMN_PX = 190;
+/**
+ * Width of the branch and tag column, which sits left of the lanes.
+ *
+ * Wide enough for a real branch name. At 190 every name of the shape
+ * `bugfix/REAN2-6135/fix-gitlab-pages-deploy-limit` came out as `…/fix-gitlab-pages-…`, which
+ * is the part every branch on that ticket shares. Not wider than this: the column is empty on
+ * almost every row, and what it takes comes out of the commit message.
+ */
+export const REFS_COLUMN_PX = 240;
 
 /** Width of the lane column. Wider graphs scroll within it rather than pushing the message. */
 export const GRAPH_COLUMN_PX = 170;
 
 export function laneX(lane: number, m: Metrics): number {
   return m.laneOrigin + lane * m.laneWidth;
+}
+
+/**
+ * How wide the lane column has to be to hold lanes up to `maxLane`.
+ *
+ * The outermost node's own radius, plus a gap so it is not flush against the commit message
+ * beside it.
+ */
+export function graphWidthFor(maxLane: number, m: Metrics): number {
+  return laneX(Math.max(0, maxLane), m) + m.nodeRadius + 10;
 }
 
 export function rowY(row: number, first: number, m: Metrics): number {
