@@ -350,13 +350,107 @@ async fn cherry_picks_and_reverts() {
     repo.git(["checkout", "--quiet", "main"]);
 
     let (runner, loc) = open(&repo).await;
-    let out = loc.cherry_pick(&runner, &[&picked]).await.unwrap();
+    let out = loc.cherry_pick(&runner, &[&picked], true).await.unwrap();
     assert!(out.completed);
     assert!(repo.path().join("b.txt").exists());
 
     let out = loc.revert(&runner, &["HEAD"]).await.unwrap();
     assert!(out.completed);
     assert!(!repo.path().join("b.txt").exists(), "the revert undid it");
+}
+
+#[tokio::test]
+async fn cherry_picks_without_committing_when_asked() {
+    // For someone who wants to change it, split it, or fold it into something else before
+    // anything is recorded. The changes are in the index; HEAD has not moved.
+    let repo = TestRepo::new().write("a.txt", "base\n").commit("base");
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo.write("b.txt", "from side\n").commit("side work");
+    let picked = repo.git(["rev-parse", "HEAD"]);
+    repo.git(["checkout", "--quiet", "main"]);
+    let before = repo.git(["rev-parse", "HEAD"]);
+
+    let (runner, loc) = open(&repo).await;
+    let out = loc.cherry_pick(&runner, &[&picked], false).await.unwrap();
+
+    assert!(out.completed);
+    assert!(repo.path().join("b.txt").exists(), "the change is on disk");
+    assert_eq!(repo.git(["rev-parse", "HEAD"]), before, "and not committed");
+    assert!(
+        repo.git(["status", "--porcelain"]).contains("A  b.txt"),
+        "and staged: {}",
+        repo.git(["status", "--porcelain"])
+    );
+}
+
+#[tokio::test]
+async fn a_conflicting_cherry_pick_stops_and_says_which_file() {
+    // The case the window has to show a merge tool for. git leaves the pick in progress, so it
+    // can be resolved and continued exactly like a merge.
+    let repo = TestRepo::new().write("a.txt", "base\n").commit("base");
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo.write("a.txt", "from side\n").commit("side work");
+    let picked = repo.git(["rev-parse", "HEAD"]);
+    repo.git(["checkout", "--quiet", "main"]);
+    let repo = repo.write("a.txt", "from main\n").commit("main work");
+
+    let (runner, loc) = open(&repo).await;
+    let out = loc.cherry_pick(&runner, &[&picked], true).await.unwrap();
+
+    assert!(!out.completed, "it stopped");
+    assert_eq!(out.conflicts, vec!["a.txt".to_owned()]);
+    assert_eq!(
+        loc.op_state(),
+        OpState::CherryPick,
+        "and git knows what is in progress, so it can be continued or abandoned"
+    );
+}
+
+#[tokio::test]
+async fn a_conflicting_cherry_pick_can_be_resolved_and_continued() {
+    let repo = TestRepo::new().write("a.txt", "base\n").commit("base");
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo.write("a.txt", "from side\n").commit("side work");
+    let picked = repo.git(["rev-parse", "HEAD"]);
+    repo.git(["checkout", "--quiet", "main"]);
+    let repo = repo.write("a.txt", "from main\n").commit("main work");
+
+    let (runner, loc) = open(&repo).await;
+    loc.cherry_pick(&runner, &[&picked], true).await.unwrap();
+
+    std::fs::write(repo.path().join("a.txt"), "settled\n").unwrap();
+    loc.stage(&runner, &["a.txt"]).await.unwrap();
+    let out = loc.op(&runner, OpAction::Continue).await.unwrap();
+
+    assert!(out.completed);
+    assert_eq!(loc.op_state(), OpState::Clean);
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("a.txt")).unwrap(),
+        "settled\n"
+    );
+}
+
+#[tokio::test]
+async fn a_conflicting_cherry_pick_can_be_abandoned() {
+    let repo = TestRepo::new().write("a.txt", "base\n").commit("base");
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo.write("a.txt", "from side\n").commit("side work");
+    let picked = repo.git(["rev-parse", "HEAD"]);
+    repo.git(["checkout", "--quiet", "main"]);
+    let repo = repo.write("a.txt", "from main\n").commit("main work");
+    let before = repo.git(["rev-parse", "HEAD"]);
+
+    let (runner, loc) = open(&repo).await;
+    loc.cherry_pick(&runner, &[&picked], true).await.unwrap();
+    loc.op(&runner, OpAction::Abort).await.unwrap();
+
+    assert_eq!(repo.git(["rev-parse", "HEAD"]), before);
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("a.txt")).unwrap(),
+        "from main\n",
+        "the working copy is as it was"
+    );
+    assert_eq!(loc.op_state(), OpState::Clean);
 }
 
 #[tokio::test]

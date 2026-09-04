@@ -397,11 +397,18 @@ impl RepoLocation {
         &self,
         runner: &GitRunner,
         revs: &[&str],
+        commit: bool,
     ) -> Result<OpOutcome, CoralError> {
-        let cmd = GitCommand::write("cherry-pick", self.display_path())
-            .args(["cherry-pick", "--no-edit"])
-            .args(revs);
-        self.run_stoppable(runner, cmd).await
+        let mut cmd = GitCommand::write("cherry-pick", self.display_path())
+            .args(["cherry-pick", "--no-edit"]);
+        if !commit {
+            // The changes land in the index and the working tree and stop there, so they can be
+            // amended, split, or added to something else before anything is recorded. git still
+            // treats this as a cherry-pick in progress, which is what lets a conflict be
+            // resolved and continued the same way.
+            cmd = cmd.arg("--no-commit");
+        }
+        self.run_stoppable(runner, cmd.args(revs)).await
     }
 
     /// Records commits that undo `revs`.
