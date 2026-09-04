@@ -171,6 +171,8 @@
   let question = $state<{
     title: string;
     detail: string;
+    /** Whether a line of text is wanted as well as a choice. Stated, never inferred. */
+    asksText: boolean;
     placeholder: string;
     initial: string;
     choices: Choice[];
@@ -200,6 +202,7 @@
     const { choice, text } = await ask({
       title,
       detail,
+      asksText: true,
       placeholder: '',
       initial,
       choices: [{ id: 'ok', label: 'OK', primary: true }],
@@ -425,6 +428,7 @@
     const { choice } = await ask({
       title: 'Drop this commit?',
       detail: `${summary}\n\nIt is removed and everything above it is replayed, so their object ids change.`,
+      asksText: false,
       placeholder: '',
       initial: '',
       choices: [{ id: 'drop', label: 'Drop the commit', primary: true }],
@@ -439,6 +443,7 @@
       detail:
         'Uncommitted changes in the working copy are discarded and cannot be recovered. The ' +
         'commits themselves stay in the reflog.',
+      asksText: false,
       placeholder: '',
       initial: '',
       choices: [{ id: 'reset', label: 'Discard and reset', primary: true }],
@@ -596,6 +601,7 @@
     const { choice } = await ask({
       title: `Remove the remote ${remote}?`,
       detail: 'Its tracking branches go with it. Nothing on the server is touched.',
+      asksText: false,
       placeholder: '',
       initial: '',
       choices: [{ id: 'remove', label: 'Remove it', primary: true }],
@@ -692,6 +698,7 @@
         target === headName
           ? ''
           : `${target} will be checked out first, since that is the branch the work lands on.`,
+      asksText: false,
       placeholder: '',
       initial: '',
       choices: [
@@ -724,6 +731,7 @@
           const { choice, text } = await ask({
             title: 'New branch',
             detail: `Created at ${branch ?? 'HEAD'} and checked out.`,
+            asksText: true,
             placeholder: 'feature/…',
             initial: '',
             choices: [{ id: 'create', label: 'Create branch', primary: true }],
@@ -1030,6 +1038,7 @@
           'repository will record on the next commit.'
         : 'The working copy is cloned or moved to the commit the repository records. This ' +
           'reaches the network.',
+      asksText: false,
       placeholder: '',
       initial: '',
       choices: [{ id: 'go', label: 'Update it', primary: true }],
@@ -1139,6 +1148,7 @@
       detail:
         'Its working copy, its entry in .gitmodules and its clone under .git/modules all go. ' +
         'Nothing on the server is touched, and the deletion is staged rather than committed.',
+      asksText: false,
       placeholder: '',
       initial: '',
       choices: [{ id: 'go', label: 'Delete it', primary: true }],
@@ -1618,6 +1628,7 @@
   <Ask
     title={question.title}
     detail={question.detail}
+    asksText={question.asksText}
     placeholder={question.placeholder}
     initial={question.initial}
     choices={question.choices}

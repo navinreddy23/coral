@@ -21,6 +21,9 @@ function ask(over: Record<string, unknown> = {}) {
     props: {
       title: 'New branch',
       detail: 'Created at master and checked out.',
+      // Stated, not inferred from the placeholder: a question that wants text but has no hint
+      // to offer used to render no field at all.
+      asksText: true,
       placeholder: 'feature/…',
       initial: '',
       choices: [{ id: 'create', label: 'Create branch', primary: true }],
@@ -62,6 +65,7 @@ describe('asking a question in the window', () => {
   it('offers a choice without a text field when none is asked for', () => {
     const { container } = ask({
       title: 'Bring feature into master?',
+      asksText: false,
       placeholder: '',
       choices: [
         { id: 'merge', label: 'Merge', primary: true },
@@ -81,5 +85,27 @@ describe('asking a question in the window', () => {
     const { answers, container } = ask();
     await fireEvent.click(container.querySelector('.scrim') as HTMLElement);
     expect(answers.at(-1)?.choice).toBeNull();
+  });
+});
+
+describe('whether a question offers a field', () => {
+  it('offers none unless it says it wants one', () => {
+    // A confirmation is not a prompt. This was read off the placeholder, so a question that
+    // wanted text but had no hint to offer silently became one that could only be cancelled.
+    const { container } = ask({ asksText: false, placeholder: '' });
+    expect(container.querySelector('input')).toBeNull();
+  });
+
+  it('offers one even with no placeholder to put in it', () => {
+    const { container } = ask({ asksText: true, placeholder: '' });
+    expect(container.querySelector('input')).not.toBeNull();
+  });
+
+  it('lets a confirmation be taken, since there is nothing to type', () => {
+    // The primary button is disabled while the text is empty. For a question with no field
+    // that would disable it forever.
+    const { container } = ask({ asksText: false, placeholder: '' });
+    const primary = container.querySelector('button.primary') as HTMLButtonElement;
+    expect(primary.disabled).toBe(false);
   });
 });

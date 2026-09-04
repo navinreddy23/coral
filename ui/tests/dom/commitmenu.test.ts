@@ -1,0 +1,280 @@
+// @vitest-environment happy-dom
+import { render, waitFor } from '@testing-library/svelte';
+import { fireEvent } from '@testing-library/dom';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+/**
+ * The commit menu, driven through the shell.
+ *
+ * Four of these items rewrite the branch and one discards uncommitted work, and the only thing
+ * between a misclick and a rewritten history is a confirmation. That is what is checked here:
+ * not that the engine can drop a commit — `coral-core/tests/rewrite.rs` covers that — but that
+ * the window asks first and sends exactly what was asked for.
+ */
+const frameBytes = readFileSync(resolve(process.cwd(), 'tests/fixtures/frame.bin'));
+
+const invoke = vi.hoisted(() => vi.fn());
+vi.mock('@tauri-apps/api/core', () => ({ invoke }));
+vi.mock('../../src/ipc/invoke', () => ({ invoke, isPreview: () => false }));
+vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => undefined }));
+vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
+
+import App from '../../src/app/App.svelte';
+import { decodeFrame, oidOf } from '../../src/graph/frame';
+
+const frame = decodeFrame(
+  frameBytes.buffer.slice(frameBytes.byteOffset, frameBytes.byteOffset + frameBytes.byteLength),
+);
+const REPO = '/repo';
+const SESSION = {
+  tabs: [{ id: 1, path: REPO, submodule: null, group: null, missing: false }],
+  active: 1,
+  groups: [],
+};
+
+function answers(): Record<string, unknown> {
+  return {
+    initial_repo: REPO,
+    open_repo: {
+      path: REPO,
+      gitDir: `${REPO}/.git`,
+      gitVersion: '2.43.0',
+      head: { kind: 'branch', name: 'master' },
+      state: 'clean',
+      commitGraph: true,
+    },
+    binary_self_test: Uint8Array.from({ length: 4096 }, (_, i) => i % 251).buffer,
+    graph_frame: frameBytes.buffer.slice(
+      frameBytes.byteOffset,
+      frameBytes.byteOffset + frameBytes.byteLength,
+    ),
+    row_metadata: Array.from({ length: 256 }, (_, i) => ({
+      oid: `${i}`.padStart(40, '0'),
+      author: 'Linus Torvalds',
+      email: 'torvalds@linux-foundation.org',
+      time: 1_756_000_000,
+      summary: `commit number ${i}`,
+      body: '',
+    })),
+    repo_refs: [],
+    repo_submodules: [],
+    repo_status: { entries: [], conflicted: [] },
+    repo_operation: {
+      state: 'clean',
+      labels: { ours: 'ours', theirs: 'theirs', swapped: false },
+      progress: null,
+      headName: null,
+      stoppedAt: null,
+      interactive: false,
+    },
+    repo_conflicts: [],
+    hosting_status: { host: null, detail: 'no remotes', signedIn: false },
+    hosting_pull_requests: [],
+    remote_list: [],
+    commit_detail: null,
+    watch_repo: { complete: true, detail: null },
+    unwatch_repo: null,
+    session_get: SESSION,
+    tab_open: SESSION,
+    tab_activate: SESSION,
+    repo_action: { what: 'done', conflicted: false, message: '' },
+  };
+}
+
+async function shell() {
+  const table = answers();
+  invoke.mockImplementation(async (cmd: string) => {
+    if (!(cmd in table)) throw new Error(`unstubbed command ${cmd}`);
+    return table[cmd];
+  });
+  const view = render(App);
+  await waitFor(() => {
+    if (view.container.querySelectorAll('li.row').length === 0) throw new Error('no rows yet');
+  });
+  return view;
+}
+
+/** Right-clicks the first commit row and returns the menu's labels. */
+async function openMenu(container: HTMLElement): Promise<string[]> {
+  const row = container.querySelector('li.row') as HTMLElement;
+  await fireEvent.contextMenu(row);
+  await waitFor(() => {
+    if (!container.querySelector('.menu')) throw new Error('no menu');
+  });
+  return [...container.querySelectorAll('.menu .label')].map((e) => e.textContent?.trim() ?? '');
+}
+
+function itemNamed(container: HTMLElement, label: string): HTMLElement {
+  const found = [...container.querySelectorAll('.menu .label')].find(
+    (e) => e.textContent?.trim() === label,
+  );
+  if (!found) throw new Error(`no menu item ${label}`);
+  return found.closest('button') as HTMLElement;
+}
+
+/** The arguments of the last `repo_action`, which is what every one of these ends in. */
+function lastAction(): Record<string, unknown> | undefined {
+  const call = invoke.mock.calls.filter(([cmd]) => cmd === 'repo_action').at(-1);
+  return (call?.[1] as { action?: Record<string, unknown> } | undefined)?.action;
+}
+
+/** Answers the confirmation dialog, if one is up. */
+async function confirm(container: HTMLElement, take: boolean): Promise<void> {
+  const dialog = await waitFor(() => {
+    const found = container.querySelector('[role="dialog"]');
+    if (!found) throw new Error('no question yet');
+    return found as HTMLElement;
+  });
+  const buttons = [...dialog.querySelectorAll('button')] as HTMLButtonElement[];
+  const primary = buttons.find((b) => b.className.includes('primary'));
+  const cancel = buttons.find((b) => b.className.includes('cancel'));
+  const target = take ? primary : cancel;
+  if (!target) throw new Error(`no ${take ? 'primary' : 'cancel'} button`);
+  await fireEvent.click(target);
+}
+
+describe('the commit menu', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  it('offers everything the reference does, in its groups', async () => {
+    const { container } = await shell();
+    const labels = await openMenu(container);
+
+    for (const wanted of [
+      'Checkout this commit',
+      'Create worktree from this commit',
+      'Create branch here',
+      'Cherry pick commit',
+      'Revert commit',
+      'Edit commit message',
+      'Drop commit',
+      'Move commit up',
+      'Move commit down',
+      'Copy commit sha',
+      'Copy link to this commit',
+      'Create patch from commit',
+      'Create tag here',
+      'Create annotated tag here',
+    ]) {
+      expect(labels, wanted).toContain(wanted);
+    }
+    // The reset submenu names the branch it would move.
+    expect(labels.some((l) => l.startsWith('Reset master to'))).toBe(true);
+  });
+
+  it('checks a commit out by its own object id, not by its row', async () => {
+    const { container } = await shell();
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Checkout this commit'));
+
+    await waitFor(() => {
+      expect(lastAction()).toEqual({ kind: 'checkout', rev: oidOf(frame, 0) });
+    });
+  });
+
+  it('moves a commit without asking, since nothing is lost by it', async () => {
+    // Reordering is undoable through the journal and destroys nothing, so a confirmation here
+    // would only be in the way.
+    const { container } = await shell();
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Move commit up'));
+
+    await waitFor(() => {
+      expect(lastAction()).toEqual({
+        kind: 'rewrite',
+        rev: oidOf(frame, 0),
+        how: 'moveNewer',
+        message: null,
+      });
+    });
+  });
+
+  it('asks before dropping a commit, and drops it when told to', async () => {
+    const { container } = await shell();
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Drop commit'));
+
+    // Nothing has been sent yet; the question is what stands between a misclick and a
+    // rewritten branch.
+    expect(lastAction()).toBeUndefined();
+    await confirm(container, true);
+
+    await waitFor(() => {
+      expect(lastAction()).toEqual({
+        kind: 'rewrite',
+        rev: oidOf(frame, 0),
+        how: 'drop',
+        message: null,
+      });
+    });
+  });
+
+  it('drops nothing when the question is dismissed', async () => {
+    const { container } = await shell();
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Drop commit'));
+    await confirm(container, false);
+
+    // A moment for anything that was going to be sent.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(lastAction()).toBeUndefined();
+  });
+
+  it('asks before a hard reset, which is the one that discards uncommitted work', async () => {
+    const { container } = await shell();
+    await openMenu(container);
+
+    const submenu = itemNamed(container, 'Reset master to this commit').closest('.wrap');
+    if (submenu) await fireEvent.mouseEnter(submenu);
+    await fireEvent.click(itemNamed(container, 'Hard — discard everything since'));
+
+    expect(lastAction()).toBeUndefined();
+    await confirm(container, true);
+    await waitFor(() => {
+      expect(lastAction()).toEqual({ kind: 'reset', rev: oidOf(frame, 0), mode: 'hard' });
+    });
+  });
+
+  it('does not ask before a soft reset, which discards nothing', async () => {
+    const { container } = await shell();
+    await openMenu(container);
+
+    const submenu = itemNamed(container, 'Reset master to this commit').closest('.wrap');
+    if (submenu) await fireEvent.mouseEnter(submenu);
+    await fireEvent.click(itemNamed(container, 'Soft — keep the index and the working copy'));
+
+    await waitFor(() => {
+      expect(lastAction()).toEqual({ kind: 'reset', rev: oidOf(frame, 0), mode: 'soft' });
+    });
+  });
+
+  it('sends the message it was given when rewording, and nothing when cancelled', async () => {
+    const { container } = await shell();
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Edit commit message'));
+
+    // The field has to be there at all: it was gated on a placeholder being set, so every
+    // question that wanted text but had no hint to offer rendered none.
+    const field = await waitFor(() => {
+      const found = container.querySelector('[role="dialog"] input');
+      if (!found) throw new Error('the question offers no field to type in');
+      return found as HTMLInputElement;
+    });
+    await fireEvent.input(field, { target: { value: 'core: say it better' } });
+    await confirm(container, true);
+
+    await waitFor(() => {
+      expect(lastAction()).toEqual({
+        kind: 'rewrite',
+        rev: oidOf(frame, 0),
+        how: 'reword',
+        message: 'core: say it better',
+      });
+    });
+  });
+});

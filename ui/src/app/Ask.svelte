@@ -17,12 +17,20 @@
     detail = '',
     placeholder = '',
     initial = '',
+    asksText = false,
     choices,
     onAnswer,
   }: {
     title: string;
     detail?: string;
-    /** Set to ask for text as well as a choice. */
+    /**
+     * Whether the question wants a line of text as well as a choice.
+     *
+     * Stated, not inferred. This was read off `placeholder !== ''`, so every question that
+     * wanted text but had no hint to offer — rename this group, name this branch, reword this
+     * commit — rendered no field at all and could only be cancelled.
+     */
+    asksText?: boolean;
     placeholder?: string;
     initial?: string;
     choices: Choice[];
@@ -37,7 +45,6 @@
   let input = $state<HTMLInputElement | null>(null);
 
   const primary = $derived(choices.find((c) => c.primary) ?? choices[0]);
-  const asksText = $derived(placeholder !== '');
 
   $effect(() => {
     input?.focus();
