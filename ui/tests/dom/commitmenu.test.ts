@@ -32,6 +32,7 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => undefined })
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 
 import App from '../../src/app/App.svelte';
+import type { PlacedRef } from '../../src/ipc/commands';
 import { decodeFrame, oidOf } from '../../src/graph/frame';
 
 const frame = decodeFrame(
@@ -97,8 +98,8 @@ function answers(): Record<string, unknown> {
   };
 }
 
-async function shell() {
-  const table = answers();
+async function shell(over: Record<string, unknown> = {}, awaitRef?: string) {
+  const table = { ...answers(), ...over };
   invoke.mockImplementation(async (cmd: string) => {
     if (!(cmd in table)) throw new Error(`unstubbed command ${cmd}`);
     return table[cmd];
@@ -107,6 +108,13 @@ async function shell() {
   await waitFor(() => {
     if (view.container.querySelectorAll('li.row').length === 0) throw new Error('no rows yet');
   });
+  // The rows arrive with the frame; the refs are a second read and land after it. A menu built
+  // in between knows about no refs at all.
+  if (awaitRef !== undefined) {
+    await waitFor(() => {
+      if (!view.container.textContent?.includes(awaitRef)) throw new Error('no refs yet');
+    });
+  }
   return view;
 }
 
@@ -290,5 +298,116 @@ describe('the commit menu', () => {
         message: 'core: say it better',
       });
     });
+  });
+});
+
+describe('checking out from the graph', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  /** A ref sitting on the first row, as `repo_refs` places them. */
+  function on(short: string, kind: PlacedRef['kind']): PlacedRef {
+    return {
+      name: kind.kind === 'tag' ? `refs/tags/${short}` : `refs/heads/${short}`,
+      short,
+      kind,
+      target: 'a'.repeat(40),
+      peeled: null,
+      upstream: null,
+      ahead: 0,
+      behind: 0,
+      row: 0,
+    };
+  }
+
+  it('checks a branch out by its name, not by the commit it happens to be on', async () => {
+    // The bug: every checkout from the graph ran `git checkout <oid>`, which detaches HEAD
+    // however many branches were sitting on that row.
+    const { container } = await shell(
+      { repo_refs: [on('topic', { kind: 'local_branch' })] },
+      'topic',
+    );
+
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Checkout topic'));
+
+    expect(lastAction()).toEqual({ kind: 'checkout', rev: 'topic' });
+  });
+
+  it('still offers the commit itself, and says that it detaches', async () => {
+    const { container } = await shell(
+      { repo_refs: [on('topic', { kind: 'local_branch' })] },
+      'topic',
+    );
+
+    const labels = await openMenu(container);
+    expect(labels).toContain('Checkout topic');
+    expect(labels).toContain('Checkout this commit');
+    expect(container.textContent).toContain('detached from any branch');
+  });
+
+  it('does not offer to check out the branch already checked out', async () => {
+    // `open_repo` says HEAD is on `master` in this harness.
+    const { container } = await shell(
+      {
+        repo_refs: [on('master', { kind: 'local_branch' }), on('topic', { kind: 'local_branch' })],
+      },
+      'topic',
+    );
+
+    const labels = await openMenu(container);
+    expect(labels).not.toContain('Checkout master');
+    expect(labels).toContain('Checkout topic');
+  });
+
+  it('checks a tracking branch out under its own name', async () => {
+    // `git checkout topic` where only `origin/topic` exists makes a local branch that follows
+    // it; `git checkout origin/topic` detaches, which is not what anyone means by clicking it.
+    const { container } = await shell(
+      { repo_refs: [on('origin/topic', { kind: 'remote_branch', remote: 'origin' })] },
+      'topic',
+    );
+
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Checkout topic'));
+
+    expect(lastAction()).toEqual({ kind: 'checkout', rev: 'topic' });
+  });
+
+  it('offers a tracking branch once, when the local branch is there too', async () => {
+    const { container } = await shell(
+      {
+        repo_refs: [
+          on('topic', { kind: 'local_branch' }),
+          on('origin/topic', { kind: 'remote_branch', remote: 'origin' }),
+        ],
+      },
+      'topic',
+    );
+
+    const labels = await openMenu(container);
+    expect(labels.filter((l) => l === 'Checkout topic')).toHaveLength(1);
+  });
+
+  it('says a tag detaches, because it does', async () => {
+    const { container } = await shell(
+      { repo_refs: [on('v1.2.0', { kind: 'tag', annotated: false })] },
+      'v1.2.0',
+    );
+
+    const labels = await openMenu(container);
+    expect(labels).toContain('Checkout v1.2.0');
+    expect(container.textContent).toContain('a tag has no branch');
+  });
+
+  it('offers nothing extra on a row with no refs on it', async () => {
+    const { container } = await shell();
+    const labels = await openMenu(container);
+    expect(labels.filter((l) => l !== 'Checkout this commit' && l.startsWith('Checkout'))).toEqual(
+      [],
+    );
+    expect(labels).toContain('Checkout this commit');
   });
 });

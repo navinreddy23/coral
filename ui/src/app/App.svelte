@@ -361,6 +361,50 @@
     commitMenu(event, row, oidOf(graph.frame, local));
   }
 
+  /**
+   * Checking out what is on a row, by name.
+   *
+   * A local branch is checked out as itself. A tracking branch is checked out under its own
+   * name without the remote in front, which is git's own rule and makes a local branch that
+   * follows it. A tag has no branch to be on, so git detaches, and the menu says so rather than
+   * leaving the user to discover it.
+   */
+  function checkoutsFor(row: number): MenuItem[] {
+    const here = refs.byRow.get(row) ?? [];
+    const locals = new Set(refs.groups.local.map((r) => r.short));
+    const out: MenuItem[] = [];
+
+    for (const ref of here) {
+      if (ref.kind.kind === 'local_branch') {
+        if (ref.short === headName) continue;
+        out.push({
+          kind: 'item',
+          label: `Checkout ${ref.short}`,
+          run: () => void act({ kind: 'checkout', rev: ref.short }),
+        });
+      } else if (ref.kind.kind === 'remote_branch') {
+        const name = ref.short.slice(ref.short.indexOf('/') + 1);
+        // Not when the local branch of that name is already offered above: two entries that
+        // read the same and do the same is a menu nobody can answer.
+        if (name === '' || name === headName || locals.has(name)) continue;
+        out.push({
+          kind: 'item',
+          label: `Checkout ${name}`,
+          hint: `tracking ${ref.short}`,
+          run: () => void act({ kind: 'checkout', rev: name }),
+        });
+      } else if (ref.kind.kind === 'tag') {
+        out.push({
+          kind: 'item',
+          label: `Checkout ${ref.short}`,
+          hint: 'a tag has no branch, so this detaches HEAD',
+          run: () => void act({ kind: 'checkout', rev: ref.short }),
+        });
+      }
+    }
+    return out.length === 0 ? out : [...out, { kind: 'separator' }];
+  }
+
   function commitMenu(event: MouseEvent, row: number, oid: string) {
     event.preventDefault();
     pick(row);
@@ -372,10 +416,14 @@
       x: event.clientX,
       y: event.clientY,
       items: [
+        // The refs on this row first, each checked out by its own name. Checking the commit out
+        // is a different act with a different result — a detached HEAD — and offering only that
+        // meant every checkout from the graph detached, whatever branch was sitting on the row.
+        ...checkoutsFor(row),
         {
           kind: 'item',
           label: 'Checkout this commit',
-          hint: short,
+          hint: `${short}, detached from any branch`,
           run: () => void act({ kind: 'checkout', rev: oid }),
         },
         { kind: 'item', label: 'Create worktree from this commit', run: () => void worktreeAt(oid) },
