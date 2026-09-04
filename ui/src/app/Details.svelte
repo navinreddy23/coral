@@ -212,7 +212,10 @@
      nothing, which is the one part that must always survive. */
   .dir { flex: 0 1 auto; min-width: 0; color: var(--fg-2);
          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .name { flex: 0 0 auto; color: var(--fg-0); }
+  /* Same weight and colour as the row it sits on. The name used to be set in the strongest
+     foreground while the directory before it was the dimmest, which at this size read as a
+     bold word on the end of every path. */
+  .name { flex: 0 0 auto; }
   .files { list-style: none; margin: 0; padding: 0; }
   .files li { display: flex; }
   /* Each file is the target for its own diff, so the whole row lights up rather than the
@@ -236,7 +239,7 @@
    */
   .mark {
     flex: 0 0 auto; width: 15px; height: 15px; line-height: 15px; text-align: center;
-    font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+    font-family: var(--font-mono); font-size: 10px;
     border-radius: 3px; background: var(--bg-2); color: var(--fg-2);
   }
   .mark.added { color: var(--ok); background: var(--ok-soft); }
