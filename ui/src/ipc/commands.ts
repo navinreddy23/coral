@@ -154,7 +154,7 @@ export type Action =
   | { kind: 'branchDelete'; name: string; force: boolean }
   | { kind: 'merge'; rev: string }
   | { kind: 'rebase'; onto: string }
-  | { kind: 'cherryPick'; revs: string[] }
+  | { kind: 'cherryPick'; revs: string[]; commit: boolean }
   | { kind: 'revert'; revs: string[] }
   | { kind: 'stashPush'; message: string | null }
   | { kind: 'stashApply'; index: number; pop: boolean }

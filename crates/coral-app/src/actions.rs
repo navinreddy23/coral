@@ -51,6 +51,9 @@ pub enum Action {
     },
     CherryPick {
         revs: Vec<String>,
+        /// Whether to record the result. False leaves it staged, for someone who wants to
+        /// change it, split it, or fold it into something else first.
+        commit: bool,
     },
     Revert {
         revs: Vec<String>,
@@ -216,7 +219,14 @@ impl Action {
             Self::BranchDelete { name, .. } => format!("delete branch {name}"),
             Self::Merge { rev } => format!("merge {rev}"),
             Self::Rebase { onto } => format!("rebase onto {onto}"),
-            Self::CherryPick { revs } => format!("cherry-pick {}", revs.join(" ")),
+            Self::CherryPick { revs, commit } => {
+                let what = revs.join(" ");
+                if *commit {
+                    format!("cherry-pick {what}")
+                } else {
+                    format!("cherry-pick {what} without committing")
+                }
+            }
             Self::Revert { revs } => format!("revert {}", revs.join(" ")),
             Self::StashPush { .. } => "stash".to_owned(),
             Self::StashApply { pop: true, .. } => "stash pop".to_owned(),
@@ -399,9 +409,9 @@ async fn run_refs(
             let out = loc.rebase(runner, &onto, true).await?;
             return Ok(Done::from(&out));
         }
-        Action::CherryPick { revs } => {
+        Action::CherryPick { revs, commit } => {
             let refs: Vec<&str> = revs.iter().map(String::as_str).collect();
-            let out = loc.cherry_pick(runner, &refs).await?;
+            let out = loc.cherry_pick(runner, &refs, commit).await?;
             return Ok(Done::from(&out));
         }
         Action::Revert { revs } => {
