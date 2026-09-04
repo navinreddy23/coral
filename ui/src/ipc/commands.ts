@@ -143,8 +143,13 @@ export function fileText(path: string, rev: string, file: string): Promise<strin
 }
 
 /** The commits that touched one file, newest first, following it across renames. */
-export function fileHistory(path: string, file: string, limit: number): Promise<Commit[]> {
-  return invoke<Commit[]>('file_history', { path, file, limit });
+export function fileHistory(
+  path: string,
+  rev: string,
+  file: string,
+  limit: number,
+): Promise<Commit[]> {
+  return invoke<Commit[]>('file_history', { path, rev, file, limit });
 }
 
 /**

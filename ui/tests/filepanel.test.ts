@@ -108,6 +108,21 @@ describe('the file panel', () => {
     expect(called('file_diff')).toHaveLength(2);
   });
 
+  it('walks the history from the commit being looked at, not from HEAD', async () => {
+    // A file added after the checked-out revision has no history at all when walked from
+    // there, which read as "nothing has touched this file" about a file two commits changed.
+    answering();
+    const diff = new DiffState(new ViewsState());
+    await diff.open('/repo', 'deadbeef', 'a.c');
+    diff.setView('history');
+    await vi.waitFor(() => expect(called('file_history')).toHaveLength(1));
+    expect(called('file_history')[0]?.[1]).toMatchObject({ rev: 'deadbeef', file: 'a.c' });
+
+    await diff.openWorking('/repo', false, 'a.c');
+    await vi.waitFor(() => expect(called('file_history')).toHaveLength(2));
+    expect(called('file_history')[1]?.[1]).toMatchObject({ rev: 'HEAD' });
+  });
+
   it('shows one commit from the history, and finds its way back', async () => {
     answering();
     const diff = new DiffState(new ViewsState());

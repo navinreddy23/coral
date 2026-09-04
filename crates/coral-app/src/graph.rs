@@ -514,7 +514,12 @@ pub async fn file_text(
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
-/// The commits that touched one file, newest first.
+/// The commits that touched one file, newest first, walking back from `rev`.
+///
+/// From the commit being looked at rather than from HEAD, or the list would not hold the
+/// change on screen: a file added after the currently checked-out revision has no history at
+/// all when walked from there, which reads as "nothing has touched this file" about a file two
+/// commits changed.
 ///
 /// Follows renames: a file's history stops at the commit that created it under its current
 /// name, and for anything that has ever been moved that is a fraction of what changed it.
@@ -524,14 +529,16 @@ pub async fn file_text(
 #[tauri::command]
 pub async fn file_history(
     path: String,
+    rev: String,
     file: String,
     limit: u64,
 ) -> Result<Vec<coral_core::commit::Commit>, crate::commands::IpcError> {
-    tracing::info!(path, file, limit, "file_history");
+    tracing::info!(path, rev, file, limit, "file_history");
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
     let query = coral_core::history::LogQuery {
+        rev: Some(rev),
         path: Some(file),
         follow: true,
         limit: Some(limit),

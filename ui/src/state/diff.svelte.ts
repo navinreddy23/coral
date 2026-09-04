@@ -152,7 +152,9 @@ export class DiffState {
     if (request === null) return;
     const side = ++this.#side;
     try {
-      const got = await fileHistory(request.repo, request.path, this.#historyLimit);
+      // From the commit being looked at, so the list holds the change on screen.
+      const rev = request.source === 'commit' ? request.rev : 'HEAD';
+      const got = await fileHistory(request.repo, rev, request.path, this.#historyLimit);
       if (side !== this.#side) return;
       this.history = got;
       this.moreHistory = got.length >= this.#historyLimit;
