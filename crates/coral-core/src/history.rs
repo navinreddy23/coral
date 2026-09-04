@@ -90,3 +90,54 @@ pub struct LogQuery {
     /// Follow a file across renames. Only valid with a single path.
     pub follow: bool,
 }
+
+/// Whether `query` could be an abbreviated object id.
+///
+/// Four is git's own floor for an abbreviation, and anything shorter is a word that happens to
+/// be spelled in hex — "added", "face", "beef" — which would send every search through a
+/// `rev-parse` that fails.
+#[must_use]
+pub fn looks_like_an_oid(query: &str) -> bool {
+    let q = query.trim();
+    (4..=64).contains(&q.len()) && q.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// The order matches come back in, so a search reads the same way twice.
+///
+/// Deduplicated keeping the first occurrence: a commit whose message and author both match is
+/// one result, and it is the message match that put it where it is.
+#[must_use]
+pub fn merged(passes: &[Vec<String>]) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for pass in passes {
+        for oid in pass {
+            if seen.insert(oid.clone()) {
+                out.push(oid.clone());
+            }
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{looks_like_an_oid, merged};
+
+    #[test]
+    fn tells_an_abbreviated_id_from_a_word() {
+        assert!(looks_like_an_oid("1a2b3c"));
+        assert!(looks_like_an_oid("deadbeef"));
+        // Hex-looking but too short to be an abbreviation git would accept.
+        assert!(!looks_like_an_oid("abc"));
+        assert!(!looks_like_an_oid("fix the parser"));
+        assert!(!looks_like_an_oid("zzzz"));
+    }
+
+    #[test]
+    fn keeps_the_first_place_a_commit_matched() {
+        let by_message = vec!["a".to_owned(), "b".to_owned()];
+        let by_author = vec!["b".to_owned(), "c".to_owned()];
+        assert_eq!(merged(&[by_message, by_author]), ["a", "b", "c"]);
+    }
+}

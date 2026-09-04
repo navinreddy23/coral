@@ -220,3 +220,87 @@ async fn an_empty_history_is_not_an_error() {
     assert!(coral_core::history::parse(b"").unwrap().is_empty());
     assert!(loc.log(&runner, &LogQuery::default()).await.is_err());
 }
+
+/// A search box takes one word and has to find it wherever it is: the message, the author, or
+/// the object id. git ANDs `--author` with `--grep`, so one invocation cannot do it.
+#[test]
+fn searching_matches_the_message_the_author_or_the_id() {
+    let repo = TestRepo::new()
+        .write("a.txt", "1\n")
+        .commit("teach the parser to count")
+        .write("b.txt", "2\n")
+        .commit("unrelated work");
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+        let by_message = loc.search_commits(&runner, "parser", 50).await.unwrap();
+        assert_eq!(by_message.len(), 1, "one commit mentions the parser");
+
+        // The fixture's author, which appears in no message at all.
+        let by_author = loc.search_commits(&runner, "Fixture", 50).await.unwrap();
+        assert_eq!(by_author.len(), 2, "both commits, by their author");
+
+        // Case-insensitive, and matched as text rather than as a pattern.
+        assert_eq!(
+            loc.search_commits(&runner, "PARSER", 50)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            loc.search_commits(&runner, "par.er", 50)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+
+        // An abbreviated object id names that commit and comes back first.
+        let head = &by_message[0];
+        let by_oid = loc.search_commits(&runner, &head[..8], 50).await.unwrap();
+        assert_eq!(by_oid.first(), Some(head));
+
+        // A hash nothing answers to is an empty result, not a failure.
+        assert!(
+            loc.search_commits(&runner, "0123456789abcdef", 50)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            loc.search_commits(&runner, "   ", 50)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    });
+}
+
+/// A search that matched every commit would be no help and would cost a full walk.
+#[test]
+fn searching_stops_at_the_limit() {
+    let mut repo = TestRepo::new()
+        .write("a.txt", "0\n")
+        .commit("common word 0");
+    for i in 1..12 {
+        repo = repo
+            .write("a.txt", &format!("{i}\n"))
+            .commit(&format!("common word {i}"));
+    }
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+        assert_eq!(
+            loc.search_commits(&runner, "common", 5)
+                .await
+                .unwrap()
+                .len(),
+            5
+        );
+    });
+}
