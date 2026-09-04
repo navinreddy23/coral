@@ -3,6 +3,7 @@ pub mod bytes;
 pub mod commit;
 pub mod config;
 pub mod conflict;
+pub mod create;
 pub mod credential;
 pub mod diff;
 pub mod engine;

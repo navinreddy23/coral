@@ -44,6 +44,12 @@ pub enum CoralError {
     #[error("not a git repository: {0}")]
     NotARepository(PathBuf),
 
+    /// Asked to make a repository where one already is. Refused rather than reported as git's
+    /// "reinitialized existing repository", which is a success message for something the user
+    /// did not ask for.
+    #[error("there is already a git repository at {0}")]
+    AlreadyARepository(PathBuf),
+
     #[error("malformed git {label} output: {detail}")]
     Protocol { label: &'static str, detail: String },
 
@@ -69,6 +75,7 @@ impl CoralError {
             Self::GitExit { .. } | Self::GitSignal { .. } => "git_error",
             Self::GitSpawn { .. } => "git_spawn_failed",
             Self::NotARepository(_) => "not_a_repository",
+            Self::AlreadyARepository(_) => "already_a_repository",
             Self::Protocol { .. } => "protocol_error",
             Self::Refused { .. } => "refused",
             Self::Io(_) => "io_error",
