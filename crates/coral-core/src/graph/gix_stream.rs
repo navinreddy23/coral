@@ -29,19 +29,51 @@ impl GixCommitStream {
     ///
     /// Refs are filtered by object kind because the kernel carries tags that peel to trees and
     /// blobs, and handing one to the walk is a hard error rather than a skip.
+    ///
+    /// A ref whose object cannot be read at all is a different matter, and is refused rather
+    /// than skipped: dropping it silently produces a graph that is missing whole branches with
+    /// nothing anywhere to say so, and the only symptom is a commit count that quietly
+    /// disagrees with git's. That is exactly how it presents, and it took a screenshot from
+    /// another client beside it to notice.
     fn all_tips(repo: &gix::Repository) -> Result<Vec<ObjectId>, CoralError> {
-        let mut tips: Vec<ObjectId> = repo
+        let mut tips: Vec<ObjectId> = Vec::new();
+        let mut unreadable: Vec<String> = Vec::new();
+
+        for reference in repo
             .references()
             .map_err(graph_err)?
             .all()
             .map_err(graph_err)?
-            .filter_map(Result::ok)
-            .filter_map(|mut r| r.peel_to_id().ok().map(gix::Id::detach))
-            .filter(|id| {
-                repo.find_header(*id)
-                    .is_ok_and(|h| h.kind() == gix::object::Kind::Commit)
-            })
-            .collect();
+        {
+            let Ok(mut reference) = reference else {
+                continue;
+            };
+            let name = reference.name().as_bstr().to_string();
+            let Ok(id) = reference.peel_to_id() else {
+                unreadable.push(name);
+                continue;
+            };
+            let id = id.detach();
+            match repo.find_header(id) {
+                // A tag that peels to a tree or a blob is not a mistake; the kernel has them.
+                Ok(header) if header.kind() != gix::object::Kind::Commit => {}
+                Ok(_) => tips.push(id),
+                Err(_) => unreadable.push(name),
+            }
+        }
+
+        if !unreadable.is_empty() {
+            unreadable.sort_unstable();
+            return Err(CoralError::Protocol {
+                label: "graph",
+                detail: format!(
+                    "{} ref(s) point at objects this repository cannot read, so the graph \
+                     would be missing whole branches: {}",
+                    unreadable.len(),
+                    unreadable.join(", ")
+                ),
+            });
+        }
 
         if let Ok(head) = repo.head_id() {
             tips.push(head.detach());

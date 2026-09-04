@@ -199,3 +199,61 @@ async fn an_empty_repository_walks_to_nothing() {
     assert!(collect(&gix, &StreamOpts::default()).is_empty());
     assert!(collect(&sub, &StreamOpts::default()).is_empty());
 }
+
+#[test]
+fn a_ref_pointing_at_an_object_that_cannot_be_read_is_refused() {
+    // Skipping it produces a graph missing whole branches with nothing anywhere to say so.
+    // The only symptom is a commit count that quietly disagrees with git's, which is not
+    // something anyone notices without another client open beside it.
+    let repo = TestRepo::new()
+        .write("a.txt", "a\n")
+        .commit("first")
+        .write("b.txt", "b\n")
+        .commit("second");
+
+    // A ref naming an object the repository has never had.
+    let absent = "0123456789abcdef0123456789abcdef01234567";
+    std::fs::write(
+        repo.path().join(".git/refs/heads/broken"),
+        format!("{absent}\n"),
+    )
+    .unwrap();
+
+    let stream = coral_core::graph::GixCommitStream::open(repo.path()).unwrap();
+    let mut seen = 0_usize;
+    let error = stream
+        .walk(&coral_core::graph::StreamOpts::default(), &mut |_| {
+            seen += 1;
+            coral_core::graph::WalkControl::Continue
+        })
+        .unwrap_err();
+
+    assert_eq!(error.code(), "protocol_error", "{error}");
+    assert!(
+        error.to_string().contains("broken"),
+        "it names the ref: {error}"
+    );
+    assert_eq!(
+        seen, 0,
+        "nothing is emitted from a walk that cannot be complete"
+    );
+}
+
+#[test]
+fn a_tag_that_peels_to_a_tree_is_skipped_rather_than_refused() {
+    // The kernel carries these. They are not commits and never were, so they are not a sign
+    // that anything is wrong.
+    let repo = TestRepo::new().write("a.txt", "a\n").commit("first");
+    let tree = repo.git(["rev-parse", "HEAD^{tree}"]);
+    repo.git(["tag", "a-tree-tag", &tree]);
+
+    let stream = coral_core::graph::GixCommitStream::open(repo.path()).unwrap();
+    let mut seen = 0_usize;
+    stream
+        .walk(&coral_core::graph::StreamOpts::default(), &mut |_| {
+            seen += 1;
+            coral_core::graph::WalkControl::Continue
+        })
+        .unwrap();
+    assert_eq!(seen, 1, "the one commit is still walked");
+}
