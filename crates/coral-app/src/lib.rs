@@ -6,6 +6,7 @@ pub mod activity;
 pub mod commands;
 pub mod conflicts;
 pub mod credentials;
+pub mod experimental;
 pub mod graph;
 pub mod hosting;
 pub mod remotes;

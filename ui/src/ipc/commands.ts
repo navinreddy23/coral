@@ -68,11 +68,16 @@ export interface PlacedRef extends GitRef {
  * hand is the input nobody gets right, and the dialog confirms the file exists.
  */
 export async function pickProgram(): Promise<string | null> {
-  const chosen = await openDialog({
-    directory: false,
-    multiple: false,
-    title: 'Choose the signing program',
-  });
+  return pickFile('Choose the signing program');
+}
+
+/** Asks for a git binary, for someone whose git is somewhere Coral would not look. */
+export async function pickGitProgram(): Promise<string | null> {
+  return pickFile('Choose a git executable');
+}
+
+async function pickFile(title: string): Promise<string | null> {
+  const chosen = await openDialog({ directory: false, multiple: false, title });
   return typeof chosen === 'string' ? chosen : null;
 }
 

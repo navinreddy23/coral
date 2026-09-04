@@ -1,15 +1,19 @@
 <script lang="ts">
   import CommitSigning from './CommitSigning.svelte';
+  import Experimental from './Experimental.svelte';
   import Ssh from './Ssh.svelte';
+  import type { ExperimentalState } from '../state/experimental.svelte';
   import type { SigningState } from '../state/signing.svelte';
   import type { SshState } from '../state/ssh.svelte';
 
-  const { signing, ssh, onClose, onCopied }: {
+  const { signing, ssh, experimental, onClose, onCopied, onPickGit }: {
     signing: SigningState;
     ssh: SshState;
+    experimental: ExperimentalState;
     onClose: () => void;
     /** Says whether the clipboard took something, which a button cannot tell on its own. */
     onCopied: (ok: boolean, what: string) => void;
+    onPickGit: () => void;
   } = $props();
 
   /**
@@ -21,6 +25,7 @@
   const panes = [
     { id: 'ssh', label: 'SSH', glyph: '⛨' },
     { id: 'signing', label: 'Commit Signing', glyph: '✎' },
+    { id: 'experimental', label: 'Experimental', glyph: '⚗' },
   ];
   let active = $state('ssh');
 
@@ -49,6 +54,8 @@
     <CommitSigning {signing} />
   {:else if active === 'ssh'}
     <Ssh {ssh} {onCopied} />
+  {:else if active === 'experimental'}
+    <Experimental {experimental} {onPickGit} />
   {/if}
 </div>
 

@@ -35,6 +35,7 @@
   import Remotes from './Remotes.svelte';
   import Activity from './Activity.svelte';
   import { ActivityState } from '../state/activity.svelte';
+  import { ExperimentalState } from '../state/experimental.svelte';
   import SubmodulePanel from './Submodule.svelte';
   import { RemotesState } from '../state/remotes.svelte';
   import { describe, ToastsState } from '../state/toasts.svelte';
@@ -61,6 +62,7 @@
     initialRepo,
     open,
     pickDirectory,
+    pickGitProgram,
     pickRepository,
   } from '../ipc/commands';
   import { GraphState } from '../state/graph.svelte';
@@ -175,6 +177,7 @@
   const remotes = new RemotesState();
   let showRemotes = $state<{ focus: string | null } | null>(null);
   const activity = new ActivityState();
+  const experimental = new ExperimentalState();
   let showActivity = $state(false);
   /** The submodule whose panel is open, and its recorded commit once that has been read. */
   let showSubmodule = $state<Submodule | null>(null);
@@ -636,9 +639,17 @@
 
   function openPreferences() {
     showPrefs = true;
+    void experimental.load();
     if (!info) return;
     void signing.load(info.path);
     void ssh.load(info.path);
+  }
+
+  /** Points Coral at a git of the user's choosing, from the Experimental page. */
+  async function chooseGitProgram() {
+    const path = await pickGitProgram();
+    if (path === null) return;
+    await experimental.chooseGit({ kind: 'custom', path });
   }
 
   /** How a pull should integrate, offered at the caret beside the Pull button. */
@@ -1083,7 +1094,12 @@
     const path = info.path;
     const wasHead = headMark;
 
-    if (change.index || change.worktree) await worktree.load(path);
+    if (change.index || change.worktree) {
+      await worktree.load(path);
+      // The diff on screen is of a file in that working tree, and a diff of what a file used
+      // to say is worse than no diff at all.
+      await diff.reload(path);
+    }
     if (change.ops) await merge.load(path);
     if (!change.refs && !change.graph) return;
 
@@ -1584,6 +1600,8 @@
       <Preferences
         {signing}
         {ssh}
+        {experimental}
+        onPickGit={() => void chooseGitProgram()}
         onClose={() => (showPrefs = false)}
         onCopied={(ok, what) =>
           ok

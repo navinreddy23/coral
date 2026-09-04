@@ -323,26 +323,31 @@ impl GitInstall {
         })
     }
 
+    /// What `CORAL_GIT` names, if anything: either a git binary or the prefix of a full
+    /// installation.
+    #[must_use]
+    pub fn from_env() -> Option<Self> {
+        let named = PathBuf::from(std::env::var_os(GIT_VAR)?);
+        if named.is_dir() {
+            return Self::at_prefix(&named);
+        }
+        if !named.is_file() {
+            return None;
+        }
+        Some(Self {
+            program: named,
+            exec_path: None,
+            templates: None,
+        })
+    }
+
     /// The git this build carries with it, if it carries one.
     ///
-    /// `CORAL_GIT` wins, so a machine whose own git is too old can be pointed at a newer one
-    /// without rebuilding anything.
+    /// Found but never preferred on its own. It is offered as a choice, and running it because
+    /// it happens to be there would mean the application quietly used a different git from the
+    /// command line beside it.
     #[must_use]
     pub fn bundled() -> Option<Self> {
-        if let Some(named) = std::env::var_os(GIT_VAR) {
-            let named = PathBuf::from(named);
-            if named.is_dir() {
-                return Self::at_prefix(&named);
-            }
-            if !named.is_file() {
-                return None;
-            }
-            return Some(Self {
-                program: named,
-                exec_path: None,
-                templates: None,
-            });
-        }
         bundle_prefixes(
             std::env::current_exe().ok().as_deref(),
             std::env::var_os("APPDIR").map(PathBuf::from).as_deref(),
@@ -350,6 +355,30 @@ impl GitInstall {
         .iter()
         .find_map(|prefix| Self::at_prefix(prefix))
     }
+}
+
+/// The git every later [`GitRunner::discover`] should use, once something has chosen one.
+///
+/// Process-wide, because that is what it is: which git the application runs is not a property
+/// of a repository or of a command, and threading it through every call site would put the same
+/// value in a hundred signatures for the sake of one screen that sets it. `None` puts the
+/// search back to where it starts.
+pub fn use_git(install: Option<GitInstall>) {
+    if let Ok(mut chosen) = chosen().write() {
+        *chosen = install;
+    }
+}
+
+/// What [`use_git`] was last given.
+#[must_use]
+pub fn chosen_git() -> Option<GitInstall> {
+    chosen().read().ok()?.clone()
+}
+
+fn chosen() -> &'static std::sync::RwLock<Option<GitInstall>> {
+    static CHOSEN: std::sync::OnceLock<std::sync::RwLock<Option<GitInstall>>> =
+        std::sync::OnceLock::new();
+    CHOSEN.get_or_init(|| std::sync::RwLock::new(None))
 }
 
 /// Where a bundled git could be, given where this binary is and what packaged it.
@@ -386,25 +415,25 @@ pub struct GitRunner {
 impl GitRunner {
     /// Resolves git and enforces [`MIN_GIT`].
     ///
-    /// A git carried in the bundle is preferred to the one on `PATH`, since it is there
-    /// precisely because the machine's own may be too old. If it cannot be run at all the
-    /// search falls back rather than leaving the user with an application that does nothing:
-    /// a broken bundle is our fault, and `PATH` may still hold a git that works.
+    /// What [`use_git`] chose, else what `CORAL_GIT` names, else `PATH`. A git that was chosen
+    /// and then cannot be run falls back rather than leaving the user with an application that
+    /// does nothing, and says so: the settings screen reports which git is actually in use, so
+    /// a fallback is visible rather than silent.
     ///
     /// # Errors
     /// [`CoralError::GitMissing`] if git cannot be spawned, [`CoralError::GitTooOld`] if it is
     /// older than [`MIN_GIT`].
     pub async fn discover() -> Result<Self, CoralError> {
-        let Some(bundled) = GitInstall::bundled() else {
+        let Some(asked) = chosen_git().or_else(GitInstall::from_env) else {
             return Self::install(GitInstall::on_path()).await;
         };
-        match Self::install(bundled.clone()).await {
+        match Self::install(asked.clone()).await {
             Ok(runner) => Ok(runner),
             Err(e) => {
                 tracing::warn!(
-                    git = %bundled.program.display(),
+                    git = %asked.program.display(),
                     error = %e,
-                    "the git shipped with Coral could not be used; falling back to the one on PATH"
+                    "the chosen git could not be used; falling back to the one on PATH"
                 );
                 Self::install(GitInstall::on_path()).await
             }

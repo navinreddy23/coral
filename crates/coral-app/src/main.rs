@@ -2,8 +2,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use coral_app_lib::{
-    actions, activity, commands, conflicts, graph, hosting, remotes, signing, ssh, tabs, terminal,
-    watcher,
+    actions, activity, commands, conflicts, experimental, graph, hosting, remotes, signing, ssh,
+    tabs, terminal, watcher,
 };
 
 fn main() {
@@ -85,6 +85,11 @@ fn window() {
                 .unwrap_or_else(|_| std::env::temp_dir());
             app.manage(tabs::Tabs::load(dir.join("session.json")));
 
+            // Before anything can run git, since this is what decides which git that is.
+            let settings = experimental::Experimental::load(dir.join("settings.json"));
+            settings.apply();
+            app.manage(settings);
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -100,6 +105,8 @@ fn window() {
             graph::graph_row_of,
             activity::activity_log,
             activity::activity_clear,
+            experimental::experimental_git,
+            experimental::experimental_set_git,
             graph::repo_submodules,
             graph::commit_detail,
             graph::file_diff,
