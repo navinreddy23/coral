@@ -448,6 +448,54 @@ impl RepoLocation {
         runner.output(cmd).await.map(|_| ())
     }
 
+    /// Puts `paths` back to what HEAD holds, in the index and in the working tree.
+    ///
+    /// What a client means by "discard", and deliberately not what [`discard`](Self::discard)
+    /// does: leaving the index alone would put back a file the user had already staged, and
+    /// the panel offers one button rather than two. A path staged as new is not in HEAD at
+    /// all, so this unstages it and removes it, which is the same answer.
+    ///
+    /// Untracked paths must not be passed here. git refuses the whole invocation for one
+    /// pathspec it does not know, so a single new file would stop the rest being discarded.
+    ///
+    /// # Errors
+    /// Propagates git failures.
+    pub async fn restore_from_head(
+        &self,
+        runner: &GitRunner,
+        paths: &[&str],
+    ) -> Result<(), CoralError> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+        let cmd = GitCommand::write("restore", self.display_path())
+            .args(["restore", "--source=HEAD", "--staged", "--worktree", "--"])
+            .args(paths);
+        runner.output(cmd).await.map(|_| ())
+    }
+
+    /// Deletes untracked files and directories under `paths`.
+    ///
+    /// Never `-x`: ignored paths are build output, caches and editor state that the user did
+    /// not put there and is not being asked about. Always with explicit paths, so there is no
+    /// invocation of this that means "everything".
+    ///
+    /// # Errors
+    /// Propagates git failures.
+    pub async fn remove_untracked(
+        &self,
+        runner: &GitRunner,
+        paths: &[&str],
+    ) -> Result<(), CoralError> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+        let cmd = GitCommand::write("clean", self.display_path())
+            .args(["clean", "--force", "-d", "--"])
+            .args(paths);
+        runner.output(cmd).await.map(|_| ())
+    }
+
     /// Applies a generated patch to the index, for hunk and line staging.
     ///
     /// # Errors
