@@ -21,7 +21,18 @@ export class GraphState {
   totalRows = $derived(this.frame?.totalRows ?? 0);
 
   /** Author and summary for rows that have been on screen, keyed by row number. */
-  meta = $state<Map<number, CommitMeta>>(new Map());
+  /**
+   * What is known about each commit, keyed by its object id rather than by its row.
+   *
+   * A row is a position in one walk, and the walk is replaced whenever the repository moves.
+   * Keyed by row this map had to be emptied every time that happened — which blanked every
+   * commit message on screen until the refetch landed, and, if the refetch raced the walk, put
+   * one commit's message under another's object id. A commit's own id means the same thing in
+   * every walk, so nothing has to be thrown away and nothing can be misread.
+   */
+  meta = $state<Map<string, CommitMeta>>(new Map());
+  /** Blocks already read for the walk on screen, so scrolling does not ask twice. */
+  #loaded = new Set<number>();
   #path = '';
   /** Which repository the held frame came from, so a switch can blank it and a reload cannot. */
   #framePath = '';
@@ -39,23 +50,22 @@ export class GraphState {
    */
   async loadMetadata(startRow: number, count: number): Promise<void> {
     if (!this.#path || count <= 0) return;
-    // Which walk this belongs to. A read started before a rewalk answers after it, and without
-    // this it wrote the old rows into the new map: the row then carried the new commit's object
-    // id and the previous commit's message.
+    // Which walk this block belongs to. What it reads is keyed by object id and stays true
+    // whatever happens next; it is only the record of having read it that a rewalk invalidates.
     const walk = this.#walk;
     const block = 256;
     const first = Math.max(0, Math.floor(startRow / block) * block);
     const last = Math.min(this.totalRows, startRow + count);
 
     for (let at = first; at < last; at += block) {
-      if (this.meta.has(at) || this.#inFlight.has(at)) continue;
+      if (this.#loaded.has(at) || this.#inFlight.has(at)) continue;
       this.#inFlight.add(at);
       try {
         const rows = await rowMetadata(this.#path, at, block);
-        if (walk !== this.#walk) return;
         const next = new Map(this.meta);
-        rows.forEach((m, i) => next.set(at + i, m));
+        for (const m of rows) next.set(m.oid, m);
         this.meta = next;
+        if (walk === this.#walk) this.#loaded.add(at);
       } catch {
         // A window that fails to load leaves those rows without a summary rather than
         // breaking the graph; scrolling back will retry.
@@ -118,13 +128,12 @@ export class GraphState {
       // hand back the one it already has, which is why a commit made since did not appear.
       await graphRewalk(path);
 
-      // Only now do the rows mean something different, and this is where saying so belongs.
-      // Emptying the map before the walk was replaced sent the window straight back for the
-      // rows it had just forgotten, against a store that had not been rebuilt yet: it wrote
-      // the old commits' messages under the new commits' object ids.
+      // The rows now mean something different, so what has been read for which row does too.
+      // What was read is kept: it is keyed by object id, and a commit's message does not
+      // change because the walk around it did.
       this.#walk += 1;
       this.#inFlight.clear();
-      this.meta = new Map();
+      this.#loaded.clear();
 
       // The provisional pass is for arriving at a repository, where anything on screen beats a
       // blank one for five seconds. Reopening the one already shown does not need it: the rows

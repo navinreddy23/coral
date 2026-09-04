@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { decodeFrame, oidOf } from '../../src/graph/frame';
+
 /**
  * Two repositories in two tabs, and what has to happen when the user moves between them.
  *
@@ -16,6 +18,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const frameBytes = readFileSync(resolve(process.cwd(), 'tests/fixtures/frame.bin'));
 const frameBuffer = () =>
   frameBytes.buffer.slice(frameBytes.byteOffset, frameBytes.byteOffset + frameBytes.byteLength);
+
+/**
+ * The object ids the fixture frame actually holds.
+ *
+ * Metadata is keyed by object id, because a row is a position in one walk and the walk is
+ * replaced whenever the repository moves. A stub that answered with invented ids would be
+ * answering about commits that are not on those rows.
+ */
+const frameOids = (() => {
+  const frame = decodeFrame(frameBuffer());
+  return Array.from({ length: frame.rowCount }, (_, r) => oidOf(frame, r));
+})();
 
 const invoke = vi.hoisted(() => vi.fn());
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
@@ -76,8 +90,8 @@ function wire() {
       case 'graph_frame':
         return frameBuffer();
       case 'row_metadata':
-        return Array.from({ length: 8 }, (_, i) => ({
-          oid: `${i}`.padStart(40, '0'),
+        return frameOids.map((oid, i) => ({
+          oid,
           author: 'A',
           email: 'a@b.c',
           time: 1_756_000_000,

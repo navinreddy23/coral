@@ -15,6 +15,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  */
 const frameBytes = readFileSync(resolve(process.cwd(), 'tests/fixtures/frame.bin'));
 
+/** The object ids the fixture frame actually holds, so the metadata stub is about those rows. */
+const frameOids = (() => {
+  const copy = frameBytes.buffer.slice(
+    frameBytes.byteOffset,
+    frameBytes.byteOffset + frameBytes.byteLength,
+  );
+  const frame = decodeFrame(copy);
+  return Array.from({ length: frame.rowCount }, (_, r) => oidOf(frame, r));
+})();
+
 const invoke = vi.hoisted(() => vi.fn());
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 vi.mock('../../src/ipc/invoke', () => ({ invoke, isPreview: () => false }));
@@ -50,8 +60,10 @@ function answers(): Record<string, unknown> {
       frameBytes.byteOffset,
       frameBytes.byteOffset + frameBytes.byteLength,
     ),
-    row_metadata: Array.from({ length: 256 }, (_, i) => ({
-      oid: `${i}`.padStart(40, '0'),
+    // Keyed by object id in the window, so a stub that invented ids would be answering about
+    // commits that are not on those rows.
+    row_metadata: frameOids.map((oid, i) => ({
+      oid,
       author: 'Linus Torvalds',
       email: 'torvalds@linux-foundation.org',
       time: 1_756_000_000,
