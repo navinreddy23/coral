@@ -7,6 +7,7 @@ export interface Metrics {
   laneWidth: number;
   /** Distance from the left edge to the centre of lane 0. */
   laneOrigin: number;
+  /** Outer radius of a commit's ring, stroke included. */
   nodeRadius: number;
 }
 
@@ -14,7 +15,7 @@ export const DEFAULT_METRICS: Metrics = {
   rowHeight: 28,
   laneWidth: 20,
   laneOrigin: 15,
-  nodeRadius: 8,
+  nodeRadius: 10,
 };
 
 /**

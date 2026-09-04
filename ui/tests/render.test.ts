@@ -11,12 +11,6 @@ interface Segment {
   y1: number;
 }
 
-interface Label {
-  text: string;
-  x: number;
-  y: number;
-}
-
 interface Corner {
   cx: number;
   cy: number;
@@ -29,6 +23,8 @@ interface Disc {
   x: number;
   y: number;
   radius: number;
+  fill: string;
+  stroke: string;
 }
 
 /**
@@ -40,12 +36,10 @@ interface Disc {
 function recorder(): {
   ctx: CanvasRenderingContext2D;
   segments: Segment[];
-  labels: Label[];
   corners: Corner[];
   discs: Disc[];
 } {
   const segments: Segment[] = [];
-  const labels: Label[] = [];
   const corners: Corner[] = [];
   const discs: Disc[] = [];
   let pendingArc: Disc | null = null;
@@ -84,22 +78,25 @@ function recorder(): {
       pending = null;
     },
     arc(x: number, y: number, radius: number) {
-      pendingArc = { x, y, radius };
+      pendingArc = { x, y, radius, fill: '', stroke: '' };
       pending = null;
     },
+    /** A node is filled and then stroked, so it is recorded once both colours are known. */
     fill() {
-      if (pendingArc) discs.push(pendingArc);
-      pendingArc = null;
-    },
-    fillText(text: string, x: number, y: number) {
-      labels.push({ text, x, y });
+      if (pendingArc) pendingArc.fill = String(ctx.fillStyle);
     },
     stroke() {
+      if (pendingArc) {
+        pendingArc.stroke = String(ctx.strokeStyle);
+        discs.push(pendingArc);
+        pendingArc = null;
+        return;
+      }
       if (pending) segments.push(pending);
       pending = null;
     },
   };
-  return { ctx: ctx as unknown as CanvasRenderingContext2D, segments, labels, corners, discs };
+  return { ctx: ctx as unknown as CanvasRenderingContext2D, segments, corners, discs };
 }
 
 /**
@@ -200,31 +197,31 @@ describe('drawLanes', () => {
 
 
 describe('drawing a node', () => {
-  it('puts the author initials on the disc', () => {
+  it('is a ring in the lane colour, hollowed out with the page behind it', () => {
     const frame = longRunFrame(20, 2);
     const window: Window = { first: 0, last: 3 };
-    const { ctx, labels, discs } = recorder();
+    const { ctx, discs } = recorder();
 
-    drawLanes(ctx, frame, window, DEFAULT_METRICS, ['#a', '#b', '#c'], 200, 200, '#fff', (row) =>
-      row === 1 ? 'LT' : null,
-    );
+    drawLanes(ctx, frame, window, DEFAULT_METRICS, ['#a', '#b', '#c'], 200, 200, '#fff');
 
-    // A disc for every visible row, whether or not its metadata has arrived, so a node does
-    // not change size under the pointer as a scroll settles.
+    // One per visible row, on its own lane.
     expect(discs.length).toBe(4);
-    expect(discs.every((d) => d.radius === DEFAULT_METRICS.nodeRadius)).toBe(true);
-
-    expect(labels).toHaveLength(1);
-    expect(labels[0]?.text).toBe('LT');
-    expect(labels[0]?.x).toBe(laneX(0, DEFAULT_METRICS));
+    expect(discs.every((d) => d.x === laneX(0, DEFAULT_METRICS))).toBe(true);
+    // The fill is the page, so the lane running through the node does not show inside it.
+    expect(discs.every((d) => d.fill === '#fff')).toBe(true);
+    expect(discs.every((d) => d.stroke === '#a')).toBe(true);
   });
 
-  it('leaves a node blank while its metadata is still loading', () => {
+  it('stays inside the radius the layout reserved for it', () => {
+    // The ring is stroked, and a stroke straddles its path. Drawing it at the full radius put
+    // half its width outside what `graphWidthFor` allows for, against the message beside it.
     const frame = longRunFrame(20, 2);
-    const { ctx, labels, discs } = recorder();
+    const { ctx, discs } = recorder();
     drawLanes(ctx, frame, { first: 0, last: 3 }, DEFAULT_METRICS, ['#a'], 200, 200, '#fff');
-    expect(labels).toHaveLength(0);
+
     expect(discs.length).toBe(4);
+    expect(discs.every((d) => d.radius < DEFAULT_METRICS.nodeRadius)).toBe(true);
+    expect(discs.every((d) => d.radius >= DEFAULT_METRICS.nodeRadius - 1)).toBe(true);
   });
 });
 

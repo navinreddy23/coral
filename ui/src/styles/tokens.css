@@ -119,9 +119,13 @@
   --border: #282e37;
   --border-strong: #3a424f;
 
-  --fg-0: #e8eaee;
-  --fg-1: #aab2bd;
-  --fg-2: #78818d;
+  /* White, not a light grey. A commit summary is the one thing on the row that is read
+     rather than glanced at, and #e8eaee against this page measures 14.8:1 where white
+     measures 17.8:1 — the difference between text that sits on the dark and text that lifts
+     off it. The two below are raised with it so the ladder keeps its spacing. */
+  --fg-0: #ffffff;
+  --fg-1: #bcc4cf;
+  --fg-2: #8b95a2;
 
   --accent: #16a094;
   --accent-hover: #1ab5a7;

@@ -4,6 +4,7 @@
   import type { Frame } from './frame';
   import { backgroundColour, DEFAULT_METRICS, GRAPH_COLUMN_PX, laneColours } from './layout';
   import { drawLanes, resizeCanvas } from './render';
+  import type { Theme } from '../state/theme.svelte';
 
   /**
    * `firstRow` is the row the caller drew at the top of its own list. The canvas shares that
@@ -15,18 +16,21 @@
     firstRow = 0,
     height = 400,
     width = GRAPH_COLUMN_PX,
-    initials = () => null,
-    author = () => null,
+    theme,
   }: {
     frame: Frame | null;
     firstRow?: number;
     height?: number;
     /** Width of the lane column, which the user can drag. */
     width?: number;
-    /** Author initials for a row, or null while its metadata is still loading. */
-    initials?: (row: number) => string | null;
-    /** The author's identity, which fixes the node's colour. Null while it is loading. */
-    author?: (row: number) => string | null;
+    /**
+     * Which palette the tokens currently hold.
+     *
+     * The canvas paints in colours read from the stylesheet, and a canvas is pixels: nothing
+     * about it follows a token that changes underneath it. Read once at mount, switching to
+     * dark left the nodes filled in the light page colour — white discs on a dark graph.
+     */
+    theme: Theme;
   } = $props();
 
   let canvas: HTMLCanvasElement;
@@ -34,9 +38,16 @@
   let background = $state('#ffffff');
   let pending = false;
 
-  onMount(() => {
+  function readTokens() {
     colours = laneColours(document.documentElement);
     background = backgroundColour(document.documentElement);
+  }
+
+  onMount(readTokens);
+
+  $effect(() => {
+    void theme;
+    readTokens();
   });
 
   /**
@@ -66,15 +77,13 @@
       // plus its length, not its length alone.
       last: Math.min(frame.startRow + frame.rowCount - 1, firstRow + perScreen + 2),
     };
-    drawLanes(ctx, frame, win, metrics, colours, width, height, background, initials, author);
+    drawLanes(ctx, frame, win, metrics, colours, width, height, background);
   }
 
   $effect(() => {
     // Reading these registers the dependency, so any change repaints.
     void frame;
     void firstRow;
-    void initials;
-    void author;
     void width;
     void height;
     void colours;

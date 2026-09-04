@@ -11,7 +11,6 @@
     type Frame,
   } from '../graph/frame';
   import GraphCanvas from '../graph/GraphCanvas.svelte';
-  import { initialsOf } from '../graph/initials';
   import Splitter from './Splitter.svelte';
   import { PANE_LIMITS, PanesState } from '../state/panes.svelte';
   import DiffView from './DiffView.svelte';
@@ -1694,8 +1693,7 @@
    * in hand, which is the only frame those rows mean anything in.
    *
    * Derived rather than looked up per use, so a row's object id is built once per repaint
-   * instead of once for its initials, once for its colour, once for its summary and once for
-   * its body.
+   * rather than once for its summary and again for its body.
    */
   const visibleMeta = $derived.by(() => {
     const frame = graph.frame;
@@ -1710,36 +1708,6 @@
     }
     return found;
   });
-
-  /**
-   * Reading the metadata here rather than inside the canvas keeps the redraw reactive: the
-   * identity of this function changes whenever a metadata block lands, which is the signal the
-   * canvas repaints on.
-   */
-  const nodeInitials = $derived.by(() => {
-    const meta = visibleMeta;
-    return (row: number) => {
-      const author = meta.get(row)?.author;
-      return author === undefined ? null : initialsOf(author);
-    };
-  });
-
-  /**
-   * What fixes a node's colour.
-   *
-   * The email, not the display name: the same person commits as "Linus Torvalds" and
-   * "torvalds" over a long history, and a node that changes colour partway down the graph
-   * defeats the point of colouring it.
-   */
-  const nodeAuthor = $derived.by(() => {
-    const meta = visibleMeta;
-    return (row: number) => {
-      const entry = meta.get(row);
-      if (entry === undefined) return null;
-      return entry.email.trim().toLowerCase() || entry.author;
-    };
-  });
-
 
   // Only rows that are on screen are worth an object read, or a frame.
   $effect(() => {
@@ -2091,8 +2059,7 @@
             firstRow={rows[0] ?? 0}
             height={viewport}
             width={panes.widths.graph}
-            initials={nodeInitials}
-            author={nodeAuthor}
+            theme={theme.current}
           />
         </div>
         <ul class="rows" style:top="{listTop(scrollTop)}px">
@@ -2382,7 +2349,9 @@
   .row, .wip {
     position: relative; height: var(--row-h);
     padding: 0 var(--space-3);
-    font-size: 12px; color: var(--fg-1);
+    /* A point above the rest of the interface. This list is what the window is for, and it is
+       read at a glance down a column rather than word by word. */
+    font-size: 13px; color: var(--fg-1);
     border: 0; background: none; font-family: inherit; text-align: left;
   }
   /*
@@ -2537,8 +2506,10 @@
     flex: 0 1 auto; min-width: 0; color: var(--fg-0);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  /* Dimmer than the summary it continues, but not the dimmest thing on the row: at `fg-2` the
+     half of the line that carries the body read as grey filler beside the date and the id. */
   .detail {
-    flex: 1 1 0; min-width: 0; color: var(--fg-2);
+    flex: 1 1 0; min-width: 0; color: var(--fg-1);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   /* Pushed to the trailing edge, so the two columns line up down the list whatever the
