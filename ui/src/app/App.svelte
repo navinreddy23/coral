@@ -37,6 +37,7 @@
   import { ActivityState } from '../state/activity.svelte';
   import { StashesState } from '../state/stashes.svelte';
   import { StartState } from '../state/start.svelte';
+  import { FindState } from '../state/find.svelte';
   import type { PlacedStash } from '../ipc/stash';
   import { ExperimentalState } from '../state/experimental.svelte';
   import SubmodulePanel from './Submodule.svelte';
@@ -49,6 +50,7 @@
   import { SigningState } from '../state/signing.svelte';
   import { SshState } from '../state/ssh.svelte';
   import { elidePath, elideRef } from './path';
+  import { shortAge } from './age';
   import { initialsOf } from '../graph/initials';
   import type { Action } from '../ipc/commands';
   import {
@@ -109,7 +111,7 @@
   const LIVE = new Set([
     'select.next', 'select.previous', 'select.first', 'select.last',
     'stage.all', 'unstage.all', 'tab.new', 'tab.close', 'tab.next', 'tab.previous',
-    'palette', 'repo.open', 'terminal',
+    'palette', 'repo.open', 'terminal', 'search.commits',
     'panel.left', 'panel.detail', 'help',
   ]);
 
@@ -156,9 +158,40 @@
       case 'panel.detail': views.set('details', !views.current.details); break;
       case 'help': showHelp = !showHelp; break;
       case 'palette': showPalette = !showPalette; break;
+      case 'search.commits': openFind(); break;
       case 'terminal': terminal.toggle(); break;
       case 'repo.open': void openAnother(); break;
       default: break;
+    }
+  }
+
+  /**
+   * Opens the find bar and puts the caret in it.
+   *
+   * The field is created by this same change, so focusing it has to wait for the DOM.
+   */
+  function openFind() {
+    find.show();
+    queueMicrotask(() => findField?.focus());
+    findField?.select();
+  }
+
+  let findField = $state<HTMLInputElement | null>(null);
+
+  /** Steps to the next match, or the previous one, and scrolls it into view. */
+  async function stepFind(direction: 1 | -1) {
+    const row = find.step(direction);
+    if (row !== null) await reveal(row);
+  }
+
+  function findKey(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      find.close();
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      void stepFind(event.shiftKey ? -1 : 1);
     }
   }
 
@@ -187,6 +220,7 @@
   const remotes = new RemotesState();
   const stashes = new StashesState();
   const startPage = new StartState();
+  const find = new FindState();
   let showStart = $state(false);
   let showRemotes = $state<{ focus: string | null } | null>(null);
   const activity = new ActivityState();
@@ -247,6 +281,19 @@
       choices: [{ id: 'ok', label: 'OK', primary: true }],
     });
     return choice === null ? null : text;
+  }
+
+  /** Asks before something that cannot be undone. */
+  async function confirmThat(title: string, detail: string): Promise<boolean> {
+    const { choice } = await ask({
+      title,
+      detail,
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'yes', label: 'Yes', primary: true }],
+    });
+    return choice !== null;
   }
 
   let scroller = $state<HTMLDivElement | null>(null);
@@ -1838,14 +1885,6 @@
       .join(' | ');
   }
 
-  function when(seconds: number): string {
-    const delta = Date.now() / 1000 - seconds;
-    const hours = delta / 3600;
-    if (hours < 24) return `${Math.max(1, Math.round(hours))}h`;
-    const days = hours / 24;
-    if (days < 365) return `${Math.round(days)}d`;
-    return `${(days / 365).toFixed(1)}y`;
-  }
 </script>
 
 <svelte:window onkeydown={onKey} onfocus={() => void refreshOnFocus()} />
@@ -1892,7 +1931,13 @@
     </button>
   </header>
 
-  <TabBar {tabs} onOpen={openAnother} onAsk={askText} />
+  <TabBar
+    {tabs}
+    newTab={showStart || tabs.session.tabs.length === 0}
+    onOpen={openAnother}
+    onCloseNew={() => (showStart = false)}
+    onAsk={askText}
+  />
 
   {#if info && !showStart}
     <Toolbar
@@ -1951,6 +1996,7 @@
       start={startPage}
       onOpen={(path) => void openFromStart(path)}
       onPickDirectory={pickDirectory}
+      onConfirm={confirmThat}
       onClose={tabs.session.tabs.length === 0 ? null : () => (showStart = false)}
     />
   {:else if graph.loading && !graph.frame}
@@ -2046,6 +2092,45 @@
       bind:clientHeight={viewport}
       bind:clientWidth={paneWidth}
     >
+      {#if find.open}
+        <!--
+          Over the list rather than above it: the bar is transient, and pushing every row down
+          by its height moves the commit the reader was looking at just as they open it.
+        -->
+        <div class="find">
+          <input
+            bind:this={findField}
+            value={find.query}
+            oninput={(e) => info && find.type(info.path, e.currentTarget.value)}
+            onkeydown={findKey}
+            placeholder="Message, author or id"
+            aria-label="Find a commit"
+          />
+          <span class="tally" aria-live="polite">
+            {#if find.searching}
+              searching…
+            {:else if find.query.trim() === ''}
+              &nbsp;
+            {:else if find.matches.length === 0}
+              no matches
+            {:else}
+              {find.at + 1} of {find.matches.length}
+            {/if}
+          </span>
+          <button
+            onclick={() => void stepFind(-1)}
+            disabled={find.matches.length === 0}
+            title="Previous match">↑</button
+          >
+          <button
+            onclick={() => void stepFind(1)}
+            disabled={find.matches.length === 0}
+            title="Next match">↓</button
+          >
+          <button onclick={() => find.close()} title="Close the search">✕</button>
+        </div>
+      {/if}
+
       <div class="columns">
         <span class="col refs">
           Branch / Tag
@@ -2109,6 +2194,8 @@
               class="row"
               class:merge={hasFlag(graph.frame.rowFlags[local ?? -1] ?? 0, RowFlag.Merge)}
               class:selected={selection.row === row}
+            class:found={find.rows.has(row)}
+            class:here={find.current === row}
               oncontextmenu={(e) => rightClickRow(e, row)}
             >
               <button class="hit" onclick={() => pick(row)} aria-label="Select commit"></button>
@@ -2174,7 +2261,7 @@
                   <span class="detail">{flatten(visibleMeta.get(row)?.body ?? '')}</span>
                 {/if}
                 {#if local !== null}
-                  <span class="age">{when(graph.frame.times[local] ?? 0)}</span>
+                  <span class="age">{shortAge(graph.frame.times[local] ?? 0)}</span>
                   <span class="sha mono">{oidOf(graph.frame, local).slice(0, 8)}</span>
                 {/if}
               </span>
@@ -2348,6 +2435,33 @@
   .graph.hidden { display: none; }
 
   /* Column headers, matching the row grid below so the two cannot drift apart. */
+  /*
+   * The find bar, pinned to the top of the list it searches.
+   */
+  .find {
+    position: sticky; top: 0; z-index: 3;
+    display: flex; align-items: center; gap: var(--space-2);
+    padding: var(--space-1) var(--space-2);
+    background: var(--bg-1); border-bottom: 1px solid var(--border);
+  }
+  .find input {
+    flex: 1; min-width: 0; font: inherit; font-size: 12px;
+    background: var(--bg-0); color: var(--fg-0);
+    border: 1px solid var(--border); border-radius: var(--radius-1);
+    padding: 2px var(--space-2);
+  }
+  .find .tally {
+    flex: 0 0 auto; color: var(--fg-2); font-size: 11px;
+    font-variant-numeric: tabular-nums; min-width: 6em; text-align: right;
+  }
+  .find button {
+    flex: 0 0 auto; font: inherit; font-size: 12px; cursor: pointer; line-height: 18px;
+    background: var(--bg-0); border: 1px solid var(--border); border-radius: 3px;
+    color: var(--fg-1); padding: 0 6px;
+  }
+  .find button:hover:not(:disabled) { background: var(--bg-2); color: var(--fg-0); }
+  .find button:disabled { color: var(--fg-2); cursor: default; }
+
   .columns, .row, .wip {
     display: grid;
     grid-template-columns: var(--refs-col) var(--graph-col) 1fr;
@@ -2411,6 +2525,10 @@
   .wip .wip-node { border-color: var(--warn); }
   .wip:hover { box-shadow: inset 3px 0 0 var(--warn); }
   .row:hover .cell.message { background: var(--bg-1); }
+  /* Every match tinted, the one being stood on ruled as well: a screen of identical tints
+     says how many matched and nothing about which one the buttons are pointing at. */
+  .row.found .cell.message { background: var(--warn-soft); }
+  .row.here .cell.message { box-shadow: inset 2px 0 0 var(--warn); }
   /*
    * The selected commit, tinted and given a bar down its leading edge. On a screen of rows
    * that all look alike a tint alone is easy to lose, and the bar survives a hover passing
