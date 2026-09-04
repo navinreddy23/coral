@@ -9,8 +9,16 @@ use crate::commands::IpcError;
 ///
 /// A tagged union rather than a command each: every one of these follows the same
 /// snapshot-run-journal path, and splitting them across commands would mean repeating it.
+// `rename_all` renames the variants; the fields inside them need `rename_all_fields`, and
+// without it `setUpstream` arrived as a field serde had never heard of. Push was the only
+// action with a field of more than one word, so it was the only one that could not be run:
+// "missing field `set_upstream`", from a window that had sent one.
 #[derive(Debug, serde::Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum Action {
     Fetch {
         remote: Option<String>,
