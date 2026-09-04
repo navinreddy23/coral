@@ -42,12 +42,18 @@ export function elideRef(name: string, max: number): string {
 
   const parts = name.split('/');
   const last = parts.pop() ?? name;
-  if (parts.length === 0 || last.length + 2 > max) {
-    return `${name.slice(0, Math.max(1, max - 1))}…`;
-  }
+  // Nothing to drop: one long word, so it can only be cut.
+  if (parts.length === 0) return `${name.slice(0, Math.max(1, max - 1))}…`;
 
   // The remote or the first segment, plus the tail: `origin/…/audio-ringbuffer`.
   const head = parts[0] ?? '';
   const withHead = `${head}/…/${last}`;
-  return withHead.length <= max ? withHead : `…/${last}`;
+  if (withHead.length <= max) return withHead;
+  if (last.length + 2 <= max) return `…/${last}`;
+
+  // Even the last segment alone is too long. Cut *it* rather than the whole name: a branch
+  // called `bugfix/REAN2-6063-discard-triplog` shortened from the right reads
+  // `origin/bugfix/REAN2-6…`, which every branch on that ticket shares. Keeping the segment's
+  // own start gives `…/REAN2-6063-discard-…`, which identifies one.
+  return `…/${last.slice(0, Math.max(1, max - 3))}…`;
 }

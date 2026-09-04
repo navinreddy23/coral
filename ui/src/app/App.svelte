@@ -1499,17 +1499,23 @@
               <span class="cell refs">
                 {#each labels.slice(0, 2) as label, i (label.name)}
                   <span class="line">
-                    <span
+                    <!--
+                      A button, so the full name is reachable: hovering shows it, and a
+                      keyboard can land on it and read it out. Clicking selects the row, which
+                      is what clicking anywhere else on the row does.
+                    -->
+                    <button
                       class="pill {label.kind.kind}"
                       class:head={label.short === headName}
-                      title={label.name}
+                      title="{label.short}&#10;{label.name}"
+                      onclick={() => pick(row)}
                     >
                       {#if label.kind.kind === 'remote_branch'}
                         <HostMark kind={hostFor(label.short)} />
                       {:else}
                         <span class="pip" aria-hidden="true"></span>
-                      {/if}{elideRef(label.short, 22)}
-                    </span>
+                      {/if}{elideRef(label.short, 26)}
+                    </button>
                     {#if i === 1 && labels.length > 2}
                       <button
                         class="pill more"
@@ -1767,6 +1773,14 @@
     position: absolute; inset: 0; width: 100%; height: 100%;
     background: none; border: 0; padding: 0; margin: 0; cursor: pointer;
   }
+  /*
+   * The ref column sits above the row's click overlay.
+   *
+   * That overlay covers the whole row, so the pointer was never over a pill and its `title`
+   * never fired — a truncated branch name had no way at all to be read in full. The pills
+   * select the row themselves, so raising them costs nothing.
+   */
+  .cell.refs { position: relative; z-index: 1; }
   .cell { min-width: 0; display: flex; align-items: center; gap: var(--space-2); }
   /*
    * Pills sit against the graph, which is the thing they label, and are clipped to their own
@@ -1791,11 +1805,13 @@
      the row is 28px. Any larger and the second pill is cut off by the row below. */
   .pill {
     display: inline-flex; align-items: center; gap: 4px;
-    flex: 0 1 auto; min-width: 0; font-size: 10px; line-height: 12px; padding: 0 6px;
+    flex: 0 1 auto; min-width: 0; font: inherit; font-size: 10px; line-height: 12px;
+    padding: 0 6px; cursor: pointer;
     border-radius: 7px; border: 1px solid var(--border);
     background: var(--bg-1); color: var(--fg-1);
     max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  .pill:hover { border-color: var(--border-strong); }
   .pip { width: 5px; height: 5px; }
   .pip {
     flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%;

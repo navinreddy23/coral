@@ -85,3 +85,21 @@ describe('elideRef', () => {
     }
   });
 });
+
+describe('a branch name whose own last segment is too long', () => {
+  it('keeps the start of that segment, not the shared prefix', () => {
+    // Cut from the right, `origin/bugfix/REAN2-6063-discard-triplog` reads
+    // `origin/bugfix/REAN2-6…`, which every branch on that ticket shares. What identifies
+    // one branch is the start of its own last segment.
+    const short = elideRef('origin/bugfix/REAN2-6063-discard-unhandlable-triplog', 26);
+    expect(short).toBe('…/REAN2-6063-discard-unha…');
+    expect(short.length).toBeLessThanOrEqual(26);
+  });
+
+  it('still fits whatever it is given', () => {
+    for (const max of [6, 8, 12, 22, 26, 40]) {
+      const short = elideRef('origin/maintenance/code-savings-ddiv-dmul-removal', max);
+      expect(short.length, `max ${max}: ${short}`).toBeLessThanOrEqual(max);
+    }
+  });
+});

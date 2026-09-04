@@ -220,17 +220,23 @@
     renamed and removed — not merely a prefix on a branch name.
   -->
   <section>
-    <button
-      class="head"
-      onclick={() => onCollapse('remote', !collapsed['remote'])}
-      oncontextmenu={(e) => onRemoteMenu(e, null)}
-      title="Right-click to add or manage remotes"
-    >
-      <span class="caret">{collapsed['remote'] ? '›' : '⌄'}</span>
-      <span class="icon"><HostMark kind={sectionHost} /></span>
-      Remote
-      <span class="count">{groups.remote.length}</span>
-    </button>
+    <div class="row head-row" oncontextmenu={(e) => onRemoteMenu(e, null)} role="presentation">
+      <button
+        class="head"
+        onclick={() => onCollapse('remote', !collapsed['remote'])}
+        title="Remotes"
+      >
+        <span class="caret">{collapsed['remote'] ? '›' : '⌄'}</span>
+        <span class="icon"><HostMark kind={sectionHost} /></span>
+        Remote
+        <span class="count">{groups.remote.length}</span>
+      </button>
+      <button
+        class="dots"
+        title="Add or manage remotes"
+        onclick={(e) => onRemoteMenu(e, null)}
+      >⋮</button>
+    </div>
     {#if !collapsed['remote']}
       {#if byRemote.size === 0}
         <p class="none">
@@ -239,19 +245,25 @@
       {/if}
       {#each [...byRemote] as [name, refs] (name)}
         {@const key = `remote:${name}`}
-        <button
-          class="head remote"
-          onclick={() => onCollapse(key, !collapsed[key])}
-          oncontextmenu={(e) => onRemoteMenu(e, name)}
-          title={`${name}\n${urlOf(name)}\nRight-click for details`}
-        >
-          <span class="caret">{collapsed[key] ? '›' : '⌄'}</span>
-          <span class="icon">
-            <HostMark kind={urlOf(name) === '' ? 'other' : hostOf(urlOf(name))} />
-          </span>
-          <span class="text">{name}</span>
-          <span class="count">{refs.length}</span>
-        </button>
+        <div class="row" oncontextmenu={(e) => onRemoteMenu(e, name)} role="presentation">
+          <button
+            class="head remote"
+            onclick={() => onCollapse(key, !collapsed[key])}
+            title={`${name}\n${urlOf(name)}`}
+          >
+            <span class="caret">{collapsed[key] ? '›' : '⌄'}</span>
+            <span class="icon">
+              <HostMark kind={urlOf(name) === '' ? 'other' : hostOf(urlOf(name))} />
+            </span>
+            <span class="text">{name}</span>
+            <span class="count">{refs.length}</span>
+          </button>
+          <button
+            class="dots"
+            title="What can be done with {name}"
+            onclick={(e) => onRemoteMenu(e, name)}
+          >⋮</button>
+        </div>
         {#if !collapsed[key]}
           <ul class="nested">
             {#each showingAll[key] ? refs : refs.slice(0, CAP) as r (r.name)}
@@ -433,9 +445,12 @@
   /* Declared but not fetched. Dimmed, but still a live target: clicking it fetches one. */
   .ref.absent { color: var(--fg-2); }
   .ref.absent .tick { color: var(--fg-2); }
-  /* A submodule row is not a control: it names a thing, and everything that can be done with
-     it lives behind the dots beside it. */
+  /* A submodule or remote row is not one control: it names a thing, and everything that can be
+     done with it lives behind the dots beside it. */
   .row { display: flex; align-items: center; border-radius: var(--radius-1); }
+  /* The section heading keeps its own spacing; only the dots are added to it. */
+  .row .head { flex: 1; min-width: 0; }
+  .row.head-row:hover { background: none; }
   .row:hover { background: var(--bg-2); }
   .row.current { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent-line); }
   .ref.static { cursor: default; }
