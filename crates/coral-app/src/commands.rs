@@ -94,6 +94,74 @@ fn staging_label(paths: &[String], stage: bool) -> String {
     }
 }
 
+/// Creates an empty repository and answers with where it is.
+///
+/// # Errors
+/// [`coral_core::CoralError::AlreadyARepository`] if there is one there already, and git's own
+/// failure otherwise.
+#[tauri::command]
+pub async fn repo_init(
+    path: String,
+    branch: Option<String>,
+    lfs: bool,
+) -> Result<String, IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let made = coral_core::create::init(
+        &runner,
+        &coral_core::create::NewRepo {
+            path: std::path::PathBuf::from(&path),
+            branch,
+            lfs,
+        },
+    )
+    .await?;
+    Ok(made.display().to_string())
+}
+
+/// Clones a repository and answers with where it landed.
+///
+/// # Errors
+/// [`coral_core::CoralError::AlreadyARepository`] if the destination already holds one, and
+/// git's own failure otherwise.
+#[tauri::command]
+pub async fn repo_clone(
+    url: String,
+    parent: String,
+    name: Option<String>,
+) -> Result<String, IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let what = coral_core::create::Cloned {
+        url,
+        parent: std::path::PathBuf::from(&parent),
+        name: name.filter(|n| !n.trim().is_empty()),
+    };
+    let logged = crate::activity::started(&parent, &format!("Clone {}", what.url));
+    match coral_core::create::clone(&runner, &what).await {
+        Ok(made) => {
+            logged.finished();
+            Ok(made.display().to_string())
+        }
+        Err(e) => {
+            logged.failed(&e.to_string());
+            Err(e.into())
+        }
+    }
+}
+
+/// Whether `git lfs` is on this machine.
+///
+/// Asked before offering it: Large File Storage is a separate program, and a tick box that
+/// fails because it is not installed is worse than one that is not shown.
+///
+/// # Errors
+/// Propagates the failure to find git at all. Not finding `git lfs` is an answer, not a
+/// failure.
+#[tauri::command]
+pub async fn lfs_available() -> Result<bool, IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    Ok(coral_core::create::lfs_available(&runner).await)
+}
+
 /// Throws away working-tree changes, then reports the resulting status.
 ///
 /// Two lists, and the caller says which path goes in which. `restore` goes back to what HEAD

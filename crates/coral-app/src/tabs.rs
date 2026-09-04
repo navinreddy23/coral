@@ -59,7 +59,15 @@ pub fn session_get(tabs: tauri::State<'_, Tabs>) -> Session {
 
 #[tauri::command]
 #[must_use]
-pub fn tab_open(tabs: tauri::State<'_, Tabs>, path: String) -> Session {
+pub fn tab_open(
+    tabs: tauri::State<'_, Tabs>,
+    recents: tauri::State<'_, crate::recent::Recents>,
+    path: String,
+) -> Session {
+    // Recorded here rather than wherever a repository is read, because this is the moment the
+    // user chose one. Reloading after a commit is not choosing, and neither is stepping into a
+    // submodule.
+    recents.opened(&path);
     tabs.update(|s| {
         s.open(PathBuf::from(path));
     })
@@ -73,8 +81,16 @@ pub fn tab_close(tabs: tauri::State<'_, Tabs>, id: u32) -> Session {
 
 #[tauri::command]
 #[must_use]
-pub fn tab_activate(tabs: tauri::State<'_, Tabs>, id: u32) -> Session {
-    tabs.update(|s| s.activate(id))
+pub fn tab_activate(
+    tabs: tauri::State<'_, Tabs>,
+    recents: tauri::State<'_, crate::recent::Recents>,
+    id: u32,
+) -> Session {
+    let session = tabs.update(|s| s.activate(id));
+    if let Some(tab) = session.tabs.iter().find(|t| t.id == id) {
+        recents.opened(&tab.path.display().to_string());
+    }
+    session
 }
 
 #[tauri::command]

@@ -2,8 +2,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use coral_app_lib::{
-    actions, activity, commands, conflicts, experimental, graph, hosting, remotes, signing, ssh,
-    tabs, terminal, watcher,
+    actions, activity, commands, conflicts, experimental, graph, hosting, recent, remotes, signing,
+    ssh, tabs, terminal, watcher,
 };
 
 fn main() {
@@ -86,6 +86,8 @@ fn window() {
             app.manage(tabs::Tabs::load(dir.join("session.json")));
 
             // Before anything can run git, since this is what decides which git that is.
+            app.manage(recent::Recents::load(dir.join("recent.json")));
+
             let settings = experimental::Experimental::load(dir.join("settings.json"));
             settings.apply();
             app.manage(settings);
@@ -99,6 +101,11 @@ fn window() {
             commands::stage_paths,
             commands::commit_staged,
             commands::discard_paths,
+            commands::repo_init,
+            commands::repo_clone,
+            commands::lfs_available,
+            recent::recent_repos,
+            recent::forget_recent,
             graph::graph_frame,
             graph::row_metadata,
             graph::repo_refs,

@@ -9,6 +9,7 @@ pub mod credentials;
 pub mod experimental;
 pub mod graph;
 pub mod hosting;
+pub mod recent;
 pub mod remotes;
 pub mod session;
 pub mod signing;
@@ -17,7 +18,10 @@ pub mod tabs;
 pub mod terminal;
 pub mod watcher;
 
-pub use commands::{commit_staged, discard_paths, open_repo, repo_status, stage_paths};
+pub use commands::{
+    commit_staged, discard_paths, lfs_available, open_repo, repo_clone, repo_init, repo_status,
+    stage_paths,
+};
 pub use graph::{
     GraphCache, binary_self_test, commit_detail, graph_frame, graph_row_of, repo_refs, row_metadata,
 };
