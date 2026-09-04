@@ -19,6 +19,7 @@ pub mod repo;
 pub mod sequence;
 pub mod signing;
 pub mod ssh;
+pub mod stash;
 pub mod status;
 pub mod submodule;
 pub mod undo;

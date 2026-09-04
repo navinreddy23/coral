@@ -427,6 +427,27 @@ privateKey: string | null, publicKey: string | null, credentialHelper: string | 
  */
 export type SshScopes = { effective: SshConfig, global: SshConfig, local: SshOverrides, };
 
+/**
+ * One entry on the stash stack.
+ */
+export type StashEntry = { 
+/**
+ * Position on the stack, which is what `stash@{n}` means and what apply and drop take.
+ */
+index: number, oid: string, 
+/**
+ * The branch it was made on, when git recorded one.
+ */
+branch: string | null, 
+/**
+ * What git wrote, with the "WIP on <branch>: " it puts in front removed.
+ */
+message: string, 
+/**
+ * Seconds since the epoch.
+ */
+time: bigint, };
+
 export type Status = { branch: string | null, oid: string | null, upstream: string | null, ahead: bigint, behind: bigint, stashCount: number, entries: Array<StatusEntry>, };
 
 export type StatusEntry = { path: string, 
