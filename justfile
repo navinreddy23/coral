@@ -142,7 +142,10 @@ build *ARGS:
 #
 # The container's target directory is kept apart from the host's: the two hold objects for
 # different glibcs and sharing one means rebuilding the world on every switch.
-build-linux-portable:
+# Set `git=bundled` to ship a git of Coral's own inside the AppImage, for machines whose own
+# git is older than the 2.40 the engine needs. It is an experimental option and the user has to
+# choose it in Preferences before anything uses it; see docs/DECISIONS.md.
+build-linux-portable git="system":
     #!/usr/bin/env bash
     set -euo pipefail
     # Absolute, so the recipe works whatever directory `just` was invoked from.
@@ -170,13 +173,26 @@ build-linux-portable:
             # built out of the deb tree, so this is not optional even though only the AppImage
             # is wanted here.
             install -D /work/target/portable/release/coral /work/target/release/coral
+
+            # The bundled git is copied out of the image rather than built here, so that
+            # choosing it costs a copy and not another compile of git.
+            config=()
+            if [ "{{ git }}" = bundled ]; then
+                rm -rf /work/target/portable/git
+                cp -a /opt/git-bundle /work/target/portable/git
+                config=(--config /work/packaging/bundled-git.conf.json)
+            fi
+
             cd /work/crates/coral-app
-            cargo tauri build
+            cargo tauri build "${config[@]}"
         '
     # Plain `echo`: inside a shebang recipe the whole body is one script, so just's `@`
     # quiet prefix is not stripped and bash tries to run a command called `@echo`.
     echo
     echo 'One AppImage, under target/portable/release/bundle/appimage.'
+    if [ '{{ git }}' = bundled ]; then
+        echo 'It carries a git of its own; turn it on under Preferences, Experimental.'
+    fi
 
 # Reports the oldest glibc a Linux binary will run on. An AppImage that fails to start on
 # another machine is almost always this and says nothing about it itself.

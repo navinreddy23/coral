@@ -1,0 +1,13 @@
+{
+  "$schema": "../crates/coral-app/gen/schemas/desktop-schema.json",
+  "bundle": {
+    "linux": {
+      "deb": {
+        "files": {
+          "/usr/bin/coral": "../../target/release/coral",
+          "/usr/lib/coral/git": "../../target/portable/git"
+        }
+      }
+    }
+  }
+}

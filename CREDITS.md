@@ -30,6 +30,15 @@ paper, it is added here in the same commit with a link and its license.
 - **Svelte**, **Vite**, **TypeScript** — the interface layer.
 - **Lucide** icons — ISC. **Inter** — OFL. **JetBrains Mono** — OFL.
 
+## Bundled with the Linux build, optionally
+
+- **git** — GPL-2.0-only. `just build-linux-portable git=bundled` puts an unmodified build of
+  git inside the AppImage, for machines whose own git is older than the 2.40 the engine needs.
+  It is off unless the user turns it on under Preferences, Experimental, and that page names
+  the licence and where the source came from. The exact version and the tarball it was built
+  from are recorded in `SOURCE.txt` beside the binaries.
+  <https://mirrors.edge.kernel.org/pub/software/scm/git/>
+
 ## Rust libraries
 
 tokio, notify, reqwest, rustls, serde, thiserror, clap, keyring, secrecy, bstr, similar, insta,
