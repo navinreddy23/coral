@@ -298,6 +298,22 @@ impl RepoLocation {
     }
 }
 
+/// git's output as a terminal would have shown it.
+///
+/// Progress is redrawn with carriage returns rather than newlines: rebase writes
+/// "Rebasing (1/2)\rerror: could not apply …", which a terminal shows as the error alone and a
+/// window shows as "Rebasing (1/2)error: could not apply …" — one run-on line that reads like a
+/// fault in the message rather than in the rebase. Only what survives the last redraw of each
+/// line is kept.
+fn as_shown(text: &str) -> String {
+    text.lines()
+        .map(|line| line.rsplit('\r').next().unwrap_or(line))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_owned()
+}
+
 /// How a stopped operation should proceed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OpAction {
@@ -461,14 +477,14 @@ impl RepoLocation {
     ) -> Result<OpOutcome, CoralError> {
         match runner.output(cmd).await {
             Ok(out) => {
-                let msg = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+                let msg = as_shown(&String::from_utf8_lossy(&out.stdout));
                 self.op_outcome(runner, msg).await
             }
             Err(e) => {
                 // Conflicts and a real failure both exit non-zero. Only the repository's own
                 // state tells them apart.
                 let outcome = self
-                    .op_outcome(runner, e.stderr().unwrap_or_default().to_owned())
+                    .op_outcome(runner, as_shown(e.stderr().unwrap_or_default()))
                     .await?;
                 if outcome.completed {
                     Err(e)
@@ -477,5 +493,27 @@ impl RepoLocation {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::as_shown;
+
+    #[test]
+    fn keeps_only_what_the_last_redraw_left() {
+        // What git actually writes while a rebase stops. Kept whole, the window showed
+        // "Rebasing (1/2)error: could not apply …" as one line.
+        let raw = "Rebasing (1/2)\rerror: could not apply b210f45… feature: rewrite\nhint: Resolve all conflicts manually\n";
+        assert_eq!(
+            as_shown(raw),
+            "error: could not apply b210f45… feature: rewrite\nhint: Resolve all conflicts manually"
+        );
+    }
+
+    #[test]
+    fn leaves_a_message_without_progress_alone() {
+        assert_eq!(as_shown("Successfully rebased.\n"), "Successfully rebased.");
+        assert_eq!(as_shown("first\r\nsecond\r\n"), "first\nsecond");
     }
 }
