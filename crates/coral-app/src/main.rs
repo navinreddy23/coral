@@ -2,7 +2,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use coral_app_lib::{
-    actions, commands, conflicts, graph, hosting, remotes, signing, ssh, tabs, terminal, watcher,
+    actions, activity, commands, conflicts, graph, hosting, remotes, signing, ssh, tabs, terminal,
+    watcher,
 };
 
 fn main() {
@@ -17,12 +18,33 @@ fn main() {
         std::process::exit(code);
     }
 
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_env("CORAL_LOG")
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
-        )
-        .init();
+    // Two destinations for one set of events: the terminal, for whoever started the binary
+    // from one, and the in-memory activity log the window shows.
+    //
+    // Both layers carry their own filter, and the log's is not optional. A layer with no
+    // filter tells the registry it is interested in everything, which turns on every `trace!`
+    // in every dependency for the whole process — gix walking a million objects, rustls on
+    // every byte — and the window comes up and never paints.
+    {
+        use tracing_subscriber::Layer as _;
+        use tracing_subscriber::layer::SubscriberExt as _;
+        use tracing_subscriber::util::SubscriberInitExt as _;
+
+        let terminal = tracing_subscriber::EnvFilter::try_from_env("CORAL_LOG")
+            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn"));
+        // Coral's own crates at info, everyone else's warnings only: the log answers "what has
+        // this application been doing", and a dependency's debug output is not that.
+        let mine = tracing_subscriber::filter::Targets::new()
+            .with_target("coral_app_lib", tracing::Level::INFO)
+            .with_target("coral_core", tracing::Level::INFO)
+            .with_target("coral_hosting", tracing::Level::INFO)
+            .with_default(tracing::Level::WARN);
+
+        tracing_subscriber::registry()
+            .with(tracing_subscriber::fmt::layer().with_filter(terminal))
+            .with(activity::Capture.with_filter(mine))
+            .init();
+    }
 
     tracing::info!("coral-app starting");
 
@@ -62,6 +84,7 @@ fn window() {
                 .app_config_dir()
                 .unwrap_or_else(|_| std::env::temp_dir());
             app.manage(tabs::Tabs::load(dir.join("session.json")));
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -70,9 +93,13 @@ fn window() {
             commands::repo_status,
             commands::stage_paths,
             commands::commit_staged,
+            commands::discard_paths,
             graph::graph_frame,
             graph::row_metadata,
             graph::repo_refs,
+            graph::graph_row_of,
+            activity::activity_log,
+            activity::activity_clear,
             graph::repo_submodules,
             graph::commit_detail,
             graph::file_diff,

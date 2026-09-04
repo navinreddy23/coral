@@ -254,9 +254,25 @@ impl Action {
 /// Propagates git failures, including a merge or rebase that stopped on conflicts.
 #[tauri::command]
 pub async fn repo_action(path: String, action: Action) -> Result<ActionOutcome, IpcError> {
-    let runner = GitRunner::discover().await?;
-    let loc = RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
     let label = action.label();
+    // Logged before anything can fail, so a repository that cannot even be discovered still
+    // leaves the attempt in the log.
+    let logged = crate::activity::started(&path, &label);
+    match act(&path, action, &label).await {
+        Ok(outcome) => {
+            logged.finished();
+            Ok(outcome)
+        }
+        Err(e) => {
+            logged.failed(&e.message);
+            Err(e)
+        }
+    }
+}
+
+async fn act(path: &str, action: Action, label: &str) -> Result<ActionOutcome, IpcError> {
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, std::path::Path::new(path)).await?;
 
     if action.steps_journal() {
         let what = loc
@@ -272,10 +288,10 @@ pub async fn repo_action(path: String, action: Action) -> Result<ActionOutcome, 
     let before = loc.snapshot_refs(&runner).await?;
     let done = run(&loc, &runner, action).await?;
     let after = loc.snapshot_refs(&runner).await?;
-    loc.journal_change(&label, before, after)?;
+    loc.journal_change(label, before, after)?;
 
     Ok(ActionOutcome {
-        what: label,
+        what: label.to_owned(),
         conflicted: done.conflicted,
         message: done.message,
     })

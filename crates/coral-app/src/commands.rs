@@ -6,7 +6,7 @@ use coral_core::repo::{RepoInfo, RepoLocation};
 #[derive(Debug, serde::Serialize)]
 pub struct IpcError {
     code: &'static str,
-    message: String,
+    pub message: String,
 }
 
 impl From<coral_core::CoralError> for IpcError {
@@ -67,12 +67,79 @@ pub async fn stage_paths(
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
     let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
 
-    if stage {
-        loc.stage(&runner, &refs).await?;
+    let logged = crate::activity::started(&path, &staging_label(&paths, stage));
+    let done = if stage {
+        loc.stage(&runner, &refs).await
     } else {
-        loc.unstage(&runner, &refs).await?;
+        loc.unstage(&runner, &refs).await
+    };
+    match done {
+        Ok(()) => logged.finished(),
+        Err(e) => {
+            logged.failed(&e.to_string());
+            return Err(e.into());
+        }
     }
     Ok(loc.status(&runner).await?)
+}
+
+/// What the log calls a staging change: the file when there is one, a count when there are
+/// several, since a hundred paths on one line is not a log entry anyone reads.
+fn staging_label(paths: &[String], stage: bool) -> String {
+    let verb = if stage { "Stage" } else { "Unstage" };
+    match paths {
+        [] => format!("{verb} everything"),
+        [one] => format!("{verb} {one}"),
+        many => format!("{verb} {} files", many.len()),
+    }
+}
+
+/// Throws away working-tree changes, then reports the resulting status.
+///
+/// Two lists, and the caller says which path goes in which. `restore` goes back to what HEAD
+/// holds; `remove` is deleted outright. The split is not inferred here from each path's status
+/// on purpose: deleting a file git has never seen destroys the only copy of it, so the window
+/// has to have asked about those files by name and to say which ones it asked about.
+///
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn discard_paths(
+    path: String,
+    restore: Vec<String>,
+    remove: Vec<String>,
+) -> Result<coral_core::Status, IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    let put_back: Vec<&str> = restore.iter().map(String::as_str).collect();
+    let delete: Vec<&str> = remove.iter().map(String::as_str).collect();
+
+    let logged = crate::activity::started(&path, &discard_label(&restore, &remove));
+    let done = async {
+        loc.restore_from_head(&runner, &put_back).await?;
+        loc.remove_untracked(&runner, &delete).await
+    }
+    .await;
+    match done {
+        Ok(()) => logged.finished(),
+        Err(e) => {
+            logged.failed(&e.to_string());
+            return Err(e.into());
+        }
+    }
+    Ok(loc.status(&runner).await?)
+}
+
+/// What the log calls a discard. It names the deletions separately, because that is the half
+/// nothing can bring back and the half worth being able to find afterwards.
+fn discard_label(restore: &[String], remove: &[String]) -> String {
+    match (restore.len(), remove.len()) {
+        (0, 0) => "Discard nothing".to_owned(),
+        (n, 0) => format!("Discard changes to {n} file(s)"),
+        (0, m) => format!("Delete {m} untracked file(s)"),
+        (n, m) => format!("Discard changes to {n} file(s) and delete {m} untracked"),
+    }
 }
 
 /// Records a commit from what is staged, then reports the resulting status.
@@ -93,6 +160,13 @@ pub async fn commit_staged(
         ..coral_core::ops::CommitOpts::default()
     };
 
-    loc.commit(&runner, &opts).await?;
+    let logged = crate::activity::started(&path, if amend { "Amend the commit" } else { "Commit" });
+    match loc.commit(&runner, &opts).await {
+        Ok(_) => logged.finished(),
+        Err(e) => {
+            logged.failed(&e.to_string());
+            return Err(e.into());
+        }
+    }
     Ok(loc.status(&runner).await?)
 }

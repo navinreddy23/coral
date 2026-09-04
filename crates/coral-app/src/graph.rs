@@ -165,6 +165,25 @@ pub async fn repo_refs(
         .collect())
 }
 
+/// The row a commit sits on, or `None` when it is outside the graph that is loaded.
+///
+/// Wanted for a commit that no ref names — a detached HEAD above all, which has a row to show
+/// and no label to find it by.
+///
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn graph_row_of(
+    cache: tauri::State<'_, GraphCache>,
+    path: String,
+    oid: String,
+) -> Result<Option<u32>, crate::commands::IpcError> {
+    let store = cache.store(&path, false).await?;
+    Ok(gix::ObjectId::from_hex(oid.as_bytes())
+        .ok()
+        .and_then(|id| store.row_of(&id)))
+}
+
 /// A frame of known content, used once at startup to prove the binary path works.
 ///
 /// Tauri's JavaScript falls back to `postMessage` permanently if the custom-protocol fetch
