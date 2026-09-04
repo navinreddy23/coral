@@ -171,7 +171,7 @@ describe('the commit menu', () => {
       'Checkout this commit',
       'Create worktree from this commit',
       'Create branch here',
-      'Cherry pick commit',
+      'Cherry pick commit…',
       'Revert commit',
       'Edit commit message',
       'Drop commit',
@@ -409,5 +409,170 @@ describe('checking out from the graph', () => {
       [],
     );
     expect(labels).toContain('Checkout this commit');
+  });
+});
+
+describe('the branch and tag menu', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  function on(short: string, kind: PlacedRef['kind']): PlacedRef {
+    return {
+      name: kind.kind === 'tag' ? `refs/tags/${short}` : `refs/heads/${short}`,
+      short,
+      kind,
+      target: 'a'.repeat(40),
+      peeled: null,
+      upstream: null,
+      ahead: 0,
+      behind: 0,
+      row: 0,
+    };
+  }
+
+  /** Opens a collapsed section of the panel, so its rows exist to be clicked. */
+  async function expand(container: HTMLElement, title: string) {
+    const head = [...container.querySelectorAll('.head')].find((e) =>
+      e.textContent?.includes(title),
+    );
+    if (head) await fireEvent.click(head);
+  }
+
+  /** Opens the menu at a ref's dots in the panel that lists them. */
+  async function refMenu(container: HTMLElement, short: string): Promise<string[]> {
+    const dots = await waitFor(() => {
+      const found = container.querySelector(`[title="What can be done with ${short}"]`);
+      if (!found) {
+        const titles = [...container.querySelectorAll('[title]')].map((e) => e.getAttribute('title'));
+        throw new Error(`no dots for ${short}; have ${JSON.stringify(titles)}`);
+      }
+      return found as HTMLElement;
+    });
+    await fireEvent.click(dots);
+    await waitFor(() => {
+      if (!container.querySelector('.menu')) throw new Error('no menu');
+    });
+    return [...container.querySelectorAll('.menu .label')].map((e) => e.textContent?.trim() ?? '');
+  }
+
+  it('checks a tag out from the panel that lists it', async () => {
+    // A tag is a place in the history like any other; the panel listed them and offered
+    // nothing to do with one.
+    const { container } = await shell(
+      { repo_refs: [on('v1.2.0', { kind: 'tag', annotated: false })] },
+      'v1.2.0',
+    );
+
+    await expand(container, 'Tags');
+    const labels = await refMenu(container, 'v1.2.0');
+    expect(labels).toContain('Checkout v1.2.0');
+
+    await fireEvent.click(itemNamed(container, 'Checkout v1.2.0'));
+    expect(lastAction()).toEqual({ kind: 'checkout', rev: 'v1.2.0' });
+  });
+
+  it('offers what can be done with a branch, not only going to it', async () => {
+    const { container } = await shell(
+      { repo_refs: [on('topic', { kind: 'local_branch' })] },
+      'topic',
+    );
+
+    const labels = await refMenu(container, 'topic');
+    expect(labels).toContain('Checkout topic');
+    expect(labels).toContain('Merge topic into master');
+    expect(labels).toContain('Rebase master onto topic');
+    expect(labels).toContain('Cherry pick commit…');
+    expect(labels).toContain('Delete topic…');
+  });
+
+  it('will not offer to delete or check out the branch already checked out', async () => {
+    const { container } = await shell(
+      { repo_refs: [on('master', { kind: 'local_branch' })] },
+      'master',
+    );
+
+    const labels = await refMenu(container, 'master');
+    expect(labels).not.toContain('Checkout master');
+    expect(labels).not.toContain('Delete master…');
+    expect(labels).not.toContain('Merge master into master');
+  });
+
+  it('merges the ref that was asked about', async () => {
+    const { container } = await shell(
+      { repo_refs: [on('topic', { kind: 'local_branch' })] },
+      'topic',
+    );
+
+    await refMenu(container, 'topic');
+    await fireEvent.click(itemNamed(container, 'Merge topic into master'));
+    expect(lastAction()).toEqual({ kind: 'merge', rev: 'topic' });
+  });
+
+  it('rebases onto the ref that was asked about', async () => {
+    const { container } = await shell(
+      { repo_refs: [on('topic', { kind: 'local_branch' })] },
+      'topic',
+    );
+
+    await refMenu(container, 'topic');
+    await fireEvent.click(itemNamed(container, 'Rebase master onto topic'));
+    expect(lastAction()).toEqual({ kind: 'rebase', onto: 'topic' });
+  });
+});
+
+describe('cherry picking', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  it('asks whether to commit, and records one when the answer is yes', async () => {
+    const { container } = await shell();
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Cherry pick commit…'));
+
+    await waitFor(() => {
+      if (!container.textContent?.includes('Commit the cherry picked changes?')) {
+        throw new Error('no question yet');
+      }
+    });
+    await confirm(container, true);
+
+    await waitFor(() => {
+      if (lastAction() === undefined) throw new Error('not yet');
+    });
+    expect(lastAction()).toMatchObject({ kind: 'cherryPick', commit: true });
+  });
+
+  it('leaves the changes staged when the answer is no', async () => {
+    // For someone who wants to change it, split it, or fold it into something else before
+    // anything is recorded.
+    const { container } = await shell();
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Cherry pick commit…'));
+
+    const dialog = await waitFor(() => {
+      const found = container.querySelector('[role="dialog"]');
+      if (!found) throw new Error('no question yet');
+      return found as HTMLElement;
+    });
+    const no = [...dialog.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'No');
+    await fireEvent.click(no as HTMLElement);
+
+    await waitFor(() => {
+      if (lastAction() === undefined) throw new Error('not yet');
+    });
+    expect(lastAction()).toMatchObject({ kind: 'cherryPick', commit: false });
+  });
+
+  it('does nothing at all when the question is dismissed', async () => {
+    const { container } = await shell();
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Cherry pick commit…'));
+    await confirm(container, false);
+
+    expect(lastAction()).toBeUndefined();
   });
 });

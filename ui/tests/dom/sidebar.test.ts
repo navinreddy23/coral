@@ -72,6 +72,7 @@ function mount(over: Record<string, unknown> = {}) {
       onInitAllSubmodules: () => {},
       onSubmoduleMenu: () => {},
       onStashMenu: () => {},
+      onRefMenu: () => {},
       ...over,
     },
   });

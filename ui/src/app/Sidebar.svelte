@@ -20,6 +20,7 @@
     onDropRef,
     onOpenPullRequest,
     onRemoteMenu,
+    onRefMenu,
     onStashMenu,
     onInitAllSubmodules,
     onSubmoduleMenu,
@@ -42,6 +43,8 @@
     onSelect: (row: number) => void;
     /** What can be done with one stash, asked for at the dots or by right-clicking. */
     onStashMenu: (event: MouseEvent, stash: PlacedStash) => void;
+    /** The same for a branch or a tag: checkout, merge, rebase, delete. */
+    onRefMenu: (event: MouseEvent, ref: PlacedRef) => void;
     /** Shows a submodule inside this tab. */
     onOpenSubmodule: (path: string) => void;
     /** `source` was dragged onto `target`; the shell decides what that means. */
@@ -170,6 +173,7 @@
 
 {#snippet refRow(r: PlacedRef, label: string, draggable: boolean)}
   <li>
+    <div class="row" oncontextmenu={(e) => onRefMenu(e, r)} role="presentation">
     <button
       class="ref"
       class:current={r.short === head}
@@ -194,6 +198,12 @@
         <span class="track">{r.ahead}↑ {r.behind}↓</span>
       {/if}
     </button>
+    <button
+      class="dots"
+      title="What can be done with {r.short}"
+      onclick={(e) => onRefMenu(e, r)}
+    >⋮</button>
+    </div>
   </li>
 {/snippet}
 
@@ -495,7 +505,7 @@
   ul.nested { margin-left: var(--space-3); }
   .ref {
     display: flex; align-items: center; gap: var(--space-2);
-    width: 100%; text-align: left; font: inherit; font-size: 12px;
+    flex: 1; min-width: 0; text-align: left; font: inherit; font-size: 12px;
     padding: 3px var(--space-2) 3px var(--space-4);
     background: var(--bg-1); border: 0; border-radius: var(--radius-1); cursor: pointer;
     color: var(--fg-1); overflow: hidden;

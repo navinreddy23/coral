@@ -405,6 +405,174 @@
     return out.length === 0 ? out : [...out, { kind: 'separator' }];
   }
 
+  /**
+   * What can be done with one branch or tag, from the panel that lists them.
+   *
+   * The same three things people reach for — go to it, bring it in, put this work on top of it
+   * — plus getting rid of it. A tag is checked out like anything else; git detaches for one,
+   * and saying so is better than a menu that quietly does something else.
+   */
+  function refMenu(event: MouseEvent, ref: PlacedRef) {
+    event.preventDefault();
+    const head = headName ?? 'HEAD';
+    const current = ref.short === headName;
+    const busy = actions.busy || worktree.busy;
+    const items: MenuItem[] = [];
+
+    if (ref.row !== null) {
+      items.push({
+        kind: 'item',
+        label: 'Show it in the graph',
+        run: () => ref.row !== null && void reveal(ref.row),
+      });
+    }
+
+    if (!current) {
+      const [label, rev, hint] = checkoutOf(ref);
+      items.push({ kind: 'item', label, hint, disabled: busy, run: () => void act({ kind: 'checkout', rev }) });
+    }
+
+    if (!current && ref.kind.kind !== 'stash') {
+      items.push({ kind: 'separator' });
+      items.push({
+        kind: 'item',
+        label: `Merge ${ref.short} into ${head}`,
+        disabled: busy,
+        run: () => void act({ kind: 'merge', rev: ref.short }),
+      });
+      items.push({
+        kind: 'item',
+        label: `Rebase ${head} onto ${ref.short}`,
+        disabled: busy,
+        run: () => void act({ kind: 'rebase', onto: ref.short }),
+      });
+      items.push({
+        kind: 'item',
+        label: `Rebase ${head} onto ${ref.short}, interactively`,
+        disabled: busy,
+        run: () => info && void rebase.load(info.path, ref.short),
+      });
+    }
+
+    // Everything that can be done with the commit the ref is on, as the reference offers it:
+    // a branch label is a place in the history as much as it is a name.
+    const oid = ref.peeled ?? ref.target;
+    items.push({ kind: 'separator' });
+    items.push({ kind: 'item', label: 'Create branch here', run: () => void branchAt(oid) });
+    items.push({ kind: 'item', label: 'Cherry pick commit…', run: () => void cherryPick(oid) });
+    items.push({
+      kind: 'item',
+      label: `Reset ${head} to this commit`,
+      run: () => void confirmHardReset(oid, head),
+      danger: true,
+      disabled: busy,
+    });
+    items.push({
+      kind: 'item',
+      label: 'Revert commit',
+      disabled: busy,
+      run: () => void act({ kind: 'revert', revs: [oid] }),
+    });
+
+    items.push({ kind: 'separator' });
+    items.push({
+      kind: 'item',
+      label: ref.kind.kind === 'tag' ? 'Copy the tag name' : 'Copy the branch name',
+      hint: ref.short,
+      run: () => void copyName(ref.short),
+    });
+    items.push({ kind: 'item', label: 'Copy commit sha', run: () => void copySha(oid) });
+
+    if (ref.kind.kind === 'local_branch' && !current) {
+      items.push({ kind: 'separator' });
+      items.push({
+        kind: 'item',
+        label: `Delete ${ref.short}…`,
+        danger: true,
+        disabled: busy,
+        run: () => void deleteBranch(ref.short),
+      });
+    } else if (ref.kind.kind === 'tag') {
+      items.push({ kind: 'separator' });
+      items.push({
+        kind: 'item',
+        label: `Delete the tag ${ref.short}…`,
+        danger: true,
+        disabled: busy,
+        run: () => void deleteTag(ref.short),
+      });
+    }
+
+    if (items.length === 0) return;
+    menu = { x: event.clientX, y: event.clientY, items };
+  }
+
+  /** How one ref is checked out: what to call it, what to pass git, and what it will do. */
+  function checkoutOf(ref: PlacedRef): [string, string, string | undefined] {
+    if (ref.kind.kind === 'remote_branch') {
+      const name = ref.short.slice(ref.short.indexOf('/') + 1);
+      return [`Checkout ${name}`, name, `tracking ${ref.short}`];
+    }
+    if (ref.kind.kind === 'tag') {
+      return [`Checkout ${ref.short}`, ref.short, 'a tag has no branch, so this detaches HEAD'];
+    }
+    return [`Checkout ${ref.short}`, ref.short, undefined];
+  }
+
+  async function deleteBranch(name: string) {
+    const { choice } = await ask({
+      title: `Delete ${name}?`,
+      detail:
+        'The branch goes; the commits on it stay until git collects them, and are hard to find ' +
+        'again without it. Anything only this branch reached is effectively gone.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'delete', label: `Delete ${name}` }],
+    });
+    if (choice !== 'delete') return;
+    await act({ kind: 'branchDelete', name, force: true });
+  }
+
+  async function deleteTag(name: string) {
+    const { choice } = await ask({
+      title: `Delete the tag ${name}?`,
+      detail: 'The tag goes here. A copy on a remote stays until it is deleted there too.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'delete', label: `Delete ${name}` }],
+    });
+    if (choice !== 'delete') return;
+    await act({ kind: 'tagDelete', name });
+  }
+
+  /**
+   * Cherry picking, and whether to record it straight away.
+   *
+   * Two different things, and the reference asks rather than choosing: committing lands it on
+   * this branch now, while stopping short leaves it staged so it can be changed, split, or
+   * folded into something else first.
+   */
+  async function cherryPick(oid: string) {
+    const { choice } = await ask({
+      title: 'Commit the cherry picked changes?',
+      detail:
+        'Yes records a commit on this branch straight away.\n' +
+        'No leaves the changes staged, so they can be edited, split, or folded into ' +
+        'something else before anything is recorded.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [
+        { id: 'yes', label: 'Yes', primary: true },
+        { id: 'no', label: 'No' },
+      ],
+    });
+    if (choice === null) return;
+    await act({ kind: 'cherryPick', revs: [oid], commit: choice === 'yes' });
+  }
+
   function commitMenu(event: MouseEvent, row: number, oid: string) {
     event.preventDefault();
     pick(row);
@@ -431,8 +599,8 @@
         { kind: 'item', label: 'Create branch here', run: () => void branchAt(oid) },
         {
           kind: 'item',
-          label: 'Cherry pick commit',
-          run: () => void act({ kind: 'cherryPick', revs: [oid] }),
+          label: 'Cherry pick commit…',
+          run: () => void cherryPick(oid),
         },
         {
           kind: 'submenu',
@@ -575,6 +743,11 @@
     });
     if (choice === null) return;
     await act({ kind: 'reset', rev: oid, mode: 'hard' });
+  }
+
+  async function copyName(name: string) {
+    if (await copyText(name)) toasts.push('ok', 'Copied', name);
+    else toasts.push('error', 'Could not reach the clipboard');
   }
 
   async function copySha(oid: string) {
@@ -1803,6 +1976,7 @@
         onOpenSubmodule={openSubmodule}
         onRemoteMenu={remoteMenu}
         onStashMenu={stashMenu}
+        onRefMenu={refMenu}
         onInitAllSubmodules={() => void initSubmodule(null, false)}
         onSubmoduleMenu={submoduleMenu}
         onDropRef={dropRef}
