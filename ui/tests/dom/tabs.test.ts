@@ -115,6 +115,25 @@ function wire() {
         };
       case 'hosting_status':
         return { host: null, detail: 'no remotes', signedIn: false };
+      case 'repo_submodules':
+        return path === A
+          ? [
+              {
+                name: 'lib/berkeley-db',
+                path: 'lib/berkeley-db',
+                url: 'https://example.com/db.git',
+                pinned: '0'.repeat(40),
+                initialised: true,
+              },
+              {
+                name: 'lib/never-cloned',
+                path: 'lib/never-cloned',
+                url: 'https://example.com/n.git',
+                pinned: '1'.repeat(40),
+                initialised: false,
+              },
+            ]
+          : [];
       default:
         return [];
     }
@@ -201,6 +220,32 @@ describe('two repositories in two tabs', () => {
       if (!container.textContent?.includes('beta commit')) throw new Error('not beta yet');
     });
     expect(container.querySelector('section.diff')).toBeNull();
+  });
+
+  it('opens an initialised submodule in a tab of its own', async () => {
+    // A submodule is a repository in its own right, and the path it opens at has to be built
+    // from the parent's — the engine reports it relative to the worktree root.
+    const { container } = await shell();
+    const section = await waitFor(() => {
+      const found = [...container.querySelectorAll('section')].find((s) =>
+        s.textContent?.includes('Submodules'),
+      );
+      if (!found) throw new Error('no submodules section');
+      return found;
+    });
+
+    const rows = [...section.querySelectorAll('button.ref')] as HTMLButtonElement[];
+    expect(rows).toHaveLength(2);
+    // One that has never been cloned has nothing to open.
+    expect(rows[1]?.disabled).toBe(true);
+
+    await fireEvent.click(rows[0] as HTMLButtonElement);
+    await waitFor(() => {
+      // The session is restored with a tab_open at startup, so it is the latest that matters.
+      const opened = invoke.mock.calls.filter(([cmd]) => cmd === 'tab_open').at(-1);
+      if (!opened) throw new Error('no tab opened');
+      expect(opened[1]).toEqual({ path: `${A}/lib/berkeley-db` });
+    });
   });
 
   it('starts the other repository at the top of its history', async () => {
