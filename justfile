@@ -133,6 +133,60 @@ build *ARGS:
     wait $npm_pid
     cd crates/coral-app && cargo tauri build {{ARGS}}
 
+# The Linux bundles, built against an old enough glibc to run somewhere else.
+#
+# An AppImage does not bundle glibc — the format assumes the base system provides it — and
+# glibc is forward-compatible only, so one built here on 24.04 demands GLIBC_2.39 and will not
+# start on 22.04, Debian 12, or anything else current. Nothing about the AppImage says so; it
+# simply fails to load. Building in a container fixes the one thing that decides this.
+#
+# The container's target directory is kept apart from the host's: the two hold objects for
+# different glibcs and sharing one means rebuilding the world on every switch.
+build-linux-portable:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Absolute, so the recipe works whatever directory `just` was invoked from.
+    root='{{ justfile_directory() }}'
+    docker build -t coral-linux-build "$root/packaging"
+    # As the invoking user, never as root. A container writing into a bind-mounted repository
+    # as root leaves files nothing on the host can delete without sudo — `ui/node_modules`
+    # among them, which stops the host building at all until someone notices why.
+    #
+    # Cargo's own home goes into the target directory rather than the user's, so a build here
+    # cannot disturb the registry the host build is using.
+    docker run --rm \
+        --user "$(id -u):$(id -g)" \
+        -v "$root:/work" \
+        -e HOME=/work/target/portable/home \
+        -e CARGO_HOME=/work/target/portable/cargo \
+        -e CARGO_TARGET_DIR=/work/target/portable \
+        coral-linux-build \
+        bash -euo pipefail -c '
+            mkdir -p "$HOME" "$CARGO_HOME"
+            npm --prefix /work/ui ci
+            cargo build --release --manifest-path /work/Cargo.toml -p coral-cli
+            # The deb bundler ships the CLI from the path named in tauri.conf.json, which is
+            # relative to that file and so does not follow CARGO_TARGET_DIR. The AppImage is
+            # built out of the deb tree, so this is not optional even though only the AppImage
+            # is wanted here.
+            install -D /work/target/portable/release/coral /work/target/release/coral
+            cd /work/crates/coral-app
+            cargo tauri build
+        '
+    # Plain `echo`: inside a shebang recipe the whole body is one script, so just's `@`
+    # quiet prefix is not stripped and bash tries to run a command called `@echo`.
+    echo
+    echo 'One AppImage, under target/portable/release/bundle/appimage.'
+
+# Reports the oldest glibc a Linux binary will run on. An AppImage that fails to start on
+# another machine is almost always this and says nothing about it itself.
+glibc-floor binary:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    highest=$(objdump -T '{{binary}}' | grep -oP 'GLIBC_\K[0-9.]+' | sort -uV | tail -1)
+    echo "{{binary}} needs glibc >= ${highest}"
+    echo "this machine has $(ldd --version | head -1 | grep -oP '[0-9]+\.[0-9]+$')"
+
 # A universal macOS build, which is what a .dmg should carry: an Intel-only bundle runs under
 # Rosetta on Apple silicon and a native-only one will not start on an Intel Mac at all. Both
 # targets have to be installed — `rustup target add aarch64-apple-darwin x86_64-apple-darwin`.
