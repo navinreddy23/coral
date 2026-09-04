@@ -21,6 +21,7 @@ export function drawLanes(
   width: number,
   height: number,
   background: string,
+  initials: (row: number) => string | null = () => null,
 ): void {
   ctx.clearRect(0, 0, width, height);
   // An even width centred on an integer coordinate covers whole pixels; 1.5px straddles two
@@ -66,10 +67,14 @@ export function drawLanes(
   // Vertical runs for lanes that pass through a row without a node in it.
   drawThroughLanes(ctx, frame, window, metrics, colours, first);
 
-  // A ring in the lane's colour, hollowed out with the page behind it. The fill is what hides
-  // the lane running through the node, so the ring reads as a bead on the line rather than as
-  // a circle drawn over it. Merges are left unmarked: the two edges leaving the node say it.
+  // A ring in the lane's colour, hollowed out with the page behind it, with the author's
+  // initials inside. The fill is what hides the lane running through the node, so the ring
+  // reads as a bead on the line rather than as a circle drawn over it. Merges are left
+  // unmarked: the two edges leaving the node already say it.
   ctx.lineWidth = NODE_STROKE;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `600 ${labelSize(metrics)}px system-ui, sans-serif`;
 
   for (let row = window.first; row <= window.last; row++) {
     const local = rowOf(row);
@@ -83,14 +88,34 @@ export function drawLanes(
     // Stroked inside the radius, so the outer edge is where the metrics say it is whatever the
     // ring is drawn at.
     const radius = metrics.nodeRadius - NODE_STROKE / 2;
+    const colour = laneColour(lane, colours);
 
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fillStyle = background;
     ctx.fill();
-    ctx.strokeStyle = laneColour(lane, colours);
+    ctx.strokeStyle = colour;
     ctx.stroke();
+
+    const label = initials(row);
+    if (label !== null) {
+      // The ring's own colour, so the node reads as one mark. Every lane colour is tuned to
+      // 5.5:1 against the page, which is what the letters are sitting on now that the disc
+      // they used to be reversed out of is gone.
+      ctx.fillStyle = colour;
+      ctx.fillText(label, x, y + 0.5);
+    }
   }
+}
+
+/**
+ * Type size for the two letters inside a node.
+ *
+ * Sized off the ring rather than fixed, and small enough that two capitals clear the stroke:
+ * at the ring's own radius they touched it on both sides and the node read as a smudge.
+ */
+function labelSize(m: Metrics): number {
+  return Math.round(m.nodeRadius * 0.85);
 }
 
 /**

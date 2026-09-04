@@ -49,6 +49,7 @@
   import { SigningState } from '../state/signing.svelte';
   import { SshState } from '../state/ssh.svelte';
   import { elidePath, elideRef } from './path';
+  import { initialsOf } from '../graph/initials';
   import type { Action } from '../ipc/commands';
   import {
     DEFAULT_METRICS,
@@ -1693,7 +1694,7 @@
    * in hand, which is the only frame those rows mean anything in.
    *
    * Derived rather than looked up per use, so a row's object id is built once per repaint
-   * rather than once for its summary and again for its body.
+   * instead of once for its initials, once for its summary and once for its body.
    */
   const visibleMeta = $derived.by(() => {
     const frame = graph.frame;
@@ -1707,6 +1708,19 @@
       if (entry) found.set(row, entry);
     }
     return found;
+  });
+
+  /**
+   * Reading the metadata here rather than inside the canvas keeps the redraw reactive: the
+   * identity of this function changes whenever a metadata block lands, which is the signal the
+   * canvas repaints on.
+   */
+  const nodeInitials = $derived.by(() => {
+    const meta = visibleMeta;
+    return (row: number) => {
+      const author = meta.get(row)?.author;
+      return author === undefined ? null : initialsOf(author);
+    };
   });
 
   // Only rows that are on screen are worth an object read, or a frame.
@@ -2060,6 +2074,7 @@
             height={viewport}
             width={panes.widths.graph}
             theme={theme.current}
+            initials={nodeInitials}
           />
         </div>
         <ul class="rows" style:top="{listTop(scrollTop)}px">

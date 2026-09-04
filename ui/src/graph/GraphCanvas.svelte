@@ -17,6 +17,7 @@
     height = 400,
     width = GRAPH_COLUMN_PX,
     theme,
+    initials = () => null,
   }: {
     frame: Frame | null;
     firstRow?: number;
@@ -31,6 +32,8 @@
      * dark left the nodes filled in the light page colour — white discs on a dark graph.
      */
     theme: Theme;
+    /** Author initials for a row, or null while its metadata is still loading. */
+    initials?: (row: number) => string | null;
   } = $props();
 
   let canvas: HTMLCanvasElement;
@@ -77,13 +80,14 @@
       // plus its length, not its length alone.
       last: Math.min(frame.startRow + frame.rowCount - 1, firstRow + perScreen + 2),
     };
-    drawLanes(ctx, frame, win, metrics, colours, width, height, background);
+    drawLanes(ctx, frame, win, metrics, colours, width, height, background, initials);
   }
 
   $effect(() => {
     // Reading these registers the dependency, so any change repaints.
     void frame;
     void firstRow;
+    void initials;
     void width;
     void height;
     void colours;
