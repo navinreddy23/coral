@@ -1,9 +1,12 @@
-import { fileDiff, worktreeDiff } from '../ipc/commands';
-import type { FileDiff } from '../ipc/types';
-import type { DiffMode, ViewsState } from './views.svelte';
+import { fileBlame, fileDiff, fileHistory, fileText, worktreeDiff } from '../ipc/commands';
+import type { Blame, Commit, FileDiff } from '../ipc/types';
+import type { DiffMode, FileView, ViewsState } from './views.svelte';
 import { messageOf } from '../ipc/error';
 
-export type { DiffMode };
+export type { DiffMode, FileView };
+
+/** How many commits a page of a file's history holds. */
+export const HISTORY_PAGE = 50;
 
 /** Where the diff on screen came from, so it can be read again. */
 interface Request {
@@ -22,9 +25,22 @@ export class DiffState {
   loading = $state(false);
   error = $state<string | null>(null);
 
+  /** Who last changed each line, once the blame view has asked for it. */
+  blame = $state<Blame | null>(null);
+  /** The file itself at the revision the blame was taken at, so the two line up. */
+  text = $state<string | null>(null);
+  /** The commits that touched this file, newest first, once the history view has asked. */
+  history = $state<Commit[]>([]);
+  /** True while there may be older commits than the ones held. */
+  moreHistory = $state(false);
+  /** The commit whose change to this file is being shown, when it came from the history. */
+  atCommit = $state<string | null>(null);
+
   #token = 0;
+  #side = 0;
   #views: ViewsState;
   #request: Request | null = null;
+  #historyLimit = HISTORY_PAGE;
 
   constructor(views: ViewsState) {
     this.#views = views;
@@ -54,8 +70,102 @@ export class DiffState {
     if (wholeFileFor(mode) !== before) void this.#reread();
   }
 
+  /** The change, who wrote each line, or what has touched the file. Remembered like the mode. */
+  get view(): FileView {
+    return this.#views.current.fileView;
+  }
+
+  setView(view: FileView): void {
+    if (view === this.view) return;
+    this.#views.set('fileView', view);
+    void this.#sideLoad();
+  }
+
+  /** Whether a change that is only whitespace counts as one. */
+  get ignoreWhitespace(): boolean {
+    return this.#views.current.ignoreWhitespace;
+  }
+
+  setIgnoreWhitespace(ignore: boolean): void {
+    if (ignore === this.ignoreWhitespace) return;
+    this.#views.set('ignoreWhitespace', ignore);
+    void this.#reread();
+  }
+
+  /** Shows what one commit from the history did to this file. */
+  async showCommit(oid: string): Promise<void> {
+    const request = this.#request;
+    if (request === null) return;
+    this.atCommit = oid;
+    await this.#reread({ ...request, source: 'commit', rev: oid });
+  }
+
+  /** Back to the change the panel was opened on. */
+  async showOpened(): Promise<void> {
+    const request = this.#opened;
+    if (request === null) return;
+    this.atCommit = null;
+    await this.#reread(request);
+  }
+
+  /** Another page of history, oldest-ward. */
+  async deeper(): Promise<void> {
+    this.#historyLimit += HISTORY_PAGE;
+    await this.#loadHistory();
+  }
+
+  /**
+   * Reads whatever the current view needs beyond the diff itself.
+   *
+   * Blame and history are each a walk of the file's whole history and cost seconds on a large
+   * repository, so neither is read until the view that shows it is asked for.
+   */
+  async #sideLoad(): Promise<void> {
+    if (this.view === 'blame') await this.#loadBlame();
+    else if (this.view === 'history') await this.#loadHistory();
+  }
+
+  async #loadBlame(): Promise<void> {
+    const request = this.#request;
+    if (request === null) return;
+    const side = ++this.#side;
+    this.blame = null;
+    this.text = null;
+    // A commit's blame is of the file as that commit left it; the working tree's is of HEAD,
+    // since a line nobody has committed has nobody to attribute it to.
+    const rev = request.source === 'commit' ? request.rev : 'HEAD';
+    try {
+      const [blame, text] = await Promise.all([
+        fileBlame(request.repo, rev, request.path),
+        fileText(request.repo, rev, request.path),
+      ]);
+      if (side !== this.#side) return;
+      this.blame = blame;
+      this.text = text;
+    } catch (e) {
+      if (side === this.#side) this.error = messageOf(e);
+    }
+  }
+
+  async #loadHistory(): Promise<void> {
+    const request = this.#request;
+    if (request === null) return;
+    const side = ++this.#side;
+    try {
+      const got = await fileHistory(request.repo, request.path, this.#historyLimit);
+      if (side !== this.#side) return;
+      this.history = got;
+      this.moreHistory = got.length >= this.#historyLimit;
+    } catch (e) {
+      if (side === this.#side) this.error = messageOf(e);
+    }
+  }
+
   /** What is being shown, so the header can say whether it is a commit or the working tree. */
   source = $state<'commit' | 'unstaged' | 'staged'>('commit');
+
+  /** What the panel was opened on, so the history can hand it back. */
+  #opened: Request | null = null;
 
   /** Opens one file's diff from a commit. A second call supersedes the first. */
   async open(repo: string, rev: string, path: string): Promise<void> {
@@ -97,7 +207,7 @@ export class DiffState {
     this.#request = request;
     const token = ++this.#token;
     try {
-      const got = await read(request, wholeFileFor(this.mode));
+      const got = await read(request, wholeFileFor(this.mode), this.ignoreWhitespace);
       if (token !== this.#token) return;
       this.file = got;
       this.error = got === null ? absentFor(request.source) : null;
@@ -110,13 +220,20 @@ export class DiffState {
   async #load(request: Request, absent: string): Promise<void> {
     const token = ++this.#token;
     this.#request = request;
+    this.#opened = request;
+    this.#historyLimit = HISTORY_PAGE;
+    this.atCommit = null;
+    this.blame = null;
+    this.text = null;
+    this.history = [];
+    this.moreHistory = false;
     this.source = request.source;
     this.path = request.path;
     this.file = null;
     this.error = null;
     this.loading = true;
     try {
-      const got = await read(request, wholeFileFor(this.mode));
+      const got = await read(request, wholeFileFor(this.mode), this.ignoreWhitespace);
       // Clicking down a long file list must not let an earlier, slower read win.
       if (token !== this.#token) return;
       this.file = got;
@@ -127,6 +244,7 @@ export class DiffState {
     } finally {
       if (token === this.#token) this.loading = false;
     }
+    await this.#sideLoad();
   }
 
   close(): void {
@@ -137,6 +255,12 @@ export class DiffState {
     this.error = null;
     this.loading = false;
     this.source = 'commit';
+    this.#opened = null;
+    this.blame = null;
+    this.text = null;
+    this.history = [];
+    this.moreHistory = false;
+    this.atCommit = null;
   }
 }
 
@@ -145,10 +269,16 @@ function wholeFileFor(mode: DiffMode): boolean {
   return mode === 'split';
 }
 
-function read(request: Request, wholeFile: boolean): Promise<FileDiff | null> {
+function read(request: Request, wholeFile: boolean, ignoreWhitespace: boolean): Promise<FileDiff | null> {
   return request.source === 'commit'
-    ? fileDiff(request.repo, request.rev, request.path, wholeFile)
-    : worktreeDiff(request.repo, request.source === 'staged', request.path, wholeFile);
+    ? fileDiff(request.repo, request.rev, request.path, wholeFile, ignoreWhitespace)
+    : worktreeDiff(
+        request.repo,
+        request.source === 'staged',
+        request.path,
+        wholeFile,
+        ignoreWhitespace,
+      );
 }
 
 /** What to say when the side being shown has nothing in it for that file. */

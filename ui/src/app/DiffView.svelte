@@ -1,6 +1,8 @@
 <script lang="ts">
   import { firstChangedRow, marksOf, splitRows, windowAround } from '../diff/split';
   import { elidePath } from './path';
+  import { shortAge } from './age';
+  import { initialsOf } from '../graph/initials';
   import type { DiffState } from '../state/diff.svelte';
 
   const { diff, onClose }: { diff: DiffState; onClose: () => void } = $props();
@@ -96,7 +98,7 @@
    * editor's autosave reloading the diff does not drag the view back while it is being read.
    */
   $effect(() => {
-    const key = `${diff.path ?? ''}\u0000${diff.mode}`;
+    const key = `${diff.path ?? ''}\u0000${diff.mode}\u0000${diff.atCommit ?? ''}`;
     const rows = split.rows;
     const el = scroller;
     if (diff.mode !== 'split' || el === null || rows.length === 0 || placed === key) return;
@@ -125,6 +127,54 @@
     return { at: Math.min(1, scrolled / height), size: Math.min(1, viewport / height) };
   });
 
+  /** Where each changed run starts, as a row, for the next and previous buttons. */
+  const changeRows = $derived(marks.map((mark) => Math.round(mark.at * split.rows.length)));
+
+  /**
+   * Moves to the change before or after the one on screen.
+   *
+   * Measured a third of the way down the viewport rather than from its top edge, so pressing
+   * "next" while a change is half off the bottom goes to that one rather than past it.
+   */
+  function step(direction: 1 | -1) {
+    const el = scroller;
+    if (el === null || changeRows.length === 0) return;
+    const at = (el.scrollTop + el.clientHeight / 3) / ROW;
+    const next =
+      direction === 1
+        ? changeRows.find((row) => row > at + 1)
+        : [...changeRows].reverse().find((row) => row < at - 1);
+    if (next === undefined) return;
+    el.scrollTop = Math.max(0, next * ROW - el.clientHeight / 3);
+  }
+
+  /** The file's lines paired with the commit that last changed each. */
+  const blamed = $derived.by(() => {
+    const blame = diff.blame;
+    const text = diff.text;
+    if (blame === null || text === null) return [];
+
+    const by = new Map<number, (typeof blame.chunks)[number]>();
+    for (const chunk of blame.chunks) by.set(chunk.finalLine, chunk);
+
+    const lines = text.split('\n');
+    if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+    return lines.map((content, i) => {
+      const chunk = by.get(i + 1);
+      const commit = chunk === undefined ? undefined : blame.commits[chunk.oid];
+      return {
+        no: i + 1,
+        content,
+        // Only the first line of a run carries the chip; a column repeating one name down
+        // twenty lines is what makes a blame unreadable.
+        oid: chunk?.oid ?? null,
+        who: commit?.author.name ?? '',
+        when: commit?.author.time ?? 0,
+        summary: commit?.summary ?? '',
+      };
+    });
+  });
+
   function jump(event: MouseEvent) {
     const el = scroller;
     if (el === null) return;
@@ -145,20 +195,110 @@
         <span class="removed">−{diff.file.removed ?? 0}</span>
       </span>
     {/if}
-    <div class="toggle" role="group" aria-label="Diff layout">
-      <button class:on={diff.mode === 'inline'} onclick={() => diff.setMode('inline')}>
-        Inline
-      </button>
-      <button class:on={diff.mode === 'split'} onclick={() => diff.setMode('split')}>
-        Side by side
+    <div class="toggle" role="group" aria-label="What to show about this file">
+      <button class:on={diff.view === 'diff'} onclick={() => diff.setView('diff')}>Diff</button>
+      <button class:on={diff.view === 'blame'} onclick={() => diff.setView('blame')}>Blame</button>
+      <button class:on={diff.view === 'history'} onclick={() => diff.setView('history')}>
+        History
       </button>
     </div>
+
+    {#if diff.view === 'diff'}
+      <div class="toggle" role="group" aria-label="Diff layout">
+        <button class:on={diff.mode === 'inline'} onclick={() => diff.setMode('inline')}>
+          Inline
+        </button>
+        <button class:on={diff.mode === 'split'} onclick={() => diff.setMode('split')}>
+          Side by side
+        </button>
+      </div>
+
+      {#if diff.mode === 'split'}
+        <div class="steps">
+          <button
+            onclick={() => step(-1)}
+            disabled={changeRows.length === 0}
+            title="Previous change">↑</button
+          >
+          <button
+            onclick={() => step(1)}
+            disabled={changeRows.length === 0}
+            title="Next change">↓</button
+          >
+        </div>
+      {/if}
+
+      <!-- A reformatting commit rewrites a file without changing what it says. -->
+      <button
+        class="ws"
+        class:on={diff.ignoreWhitespace}
+        onclick={() => diff.setIgnoreWhitespace(!diff.ignoreWhitespace)}
+        title={diff.ignoreWhitespace ? 'Counting whitespace again' : 'Ignore whitespace'}
+        aria-pressed={diff.ignoreWhitespace}
+      >¶</button>
+    {/if}
     <button class="close" onclick={onClose} aria-label="Close the diff">✕</button>
   </header>
 
   <div class="body">
+  {#if diff.view === 'history'}
+    <!--
+      The commits that touched this file, newest first. Selecting one shows what it did to
+      the file, which is the question a file history is opened to answer.
+    -->
+    <ul class="history">
+      {#each diff.history as commit (commit.oid)}
+        <li>
+          <button
+            class="entry"
+            class:on={diff.atCommit === commit.oid}
+            onclick={() => void diff.showCommit(commit.oid)}
+          >
+            <span class="who" title={commit.author.name}>{initialsOf(commit.author.name) ?? '?'}</span>
+            <span class="what">
+              <span class="subject">{commit.summary}</span>
+              <span class="by">{shortAge(commit.author.time)} ago by {commit.author.name}</span>
+            </span>
+            <span class="sha mono">{commit.oid.slice(0, 7)}</span>
+          </button>
+        </li>
+      {/each}
+      {#if diff.history.length === 0}
+        <li class="muted">Nothing has touched this file.</li>
+      {:else if diff.moreHistory}
+        <li>
+          <button class="deeper" onclick={() => void diff.deeper()}>Go deeper</button>
+        </li>
+      {/if}
+    </ul>
+  {/if}
+
   <div class="scroll" bind:this={scroller} onscroll={onScroll} bind:clientHeight={viewport}>
-    {#if diff.loading}
+    {#if diff.view === 'blame'}
+      {#if diff.blame === null || diff.text === null}
+        <p class="muted">Working out who wrote each line…</p>
+      {:else}
+        <table class="lines blame">
+          <tbody>
+            {#each blamed as line (line.no)}
+              <tr>
+                <td class="author">
+                  {#if line.oid !== null}
+                    <span class="chip" title="{line.summary}&#10;{line.who}">
+                      {line.who}
+                      <span class="mono">{line.oid.slice(0, 7)}</span>
+                      <span class="when">{shortAge(line.when)}</span>
+                    </span>
+                  {/if}
+                </td>
+                <td class="no">{line.no}</td>
+                <td class="text">{line.content}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
+    {:else if diff.loading}
       <p class="muted">Loading…</p>
     {:else if diff.error}
       <p class="error">{diff.error}</p>
@@ -277,6 +417,61 @@
   .close:hover { color: var(--fg-0); background: var(--bg-2); }
 
   .body { flex: 1; min-height: 0; display: flex; }
+
+  .steps { display: flex; gap: 2px; }
+  .steps button, .ws {
+    font: inherit; font-size: 12px; cursor: pointer; line-height: 18px;
+    background: var(--bg-0); border: 1px solid var(--border); border-radius: 3px;
+    color: var(--fg-1); padding: 0 6px;
+  }
+  .steps button:hover:not(:disabled), .ws:hover { background: var(--bg-2); color: var(--fg-0); }
+  .steps button:disabled { color: var(--fg-2); cursor: default; }
+  .ws.on { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+
+  /*
+   * The file's history, beside the change it made rather than above it: the list is scrolled
+   * down while one entry's diff is read, and a list that moved out from under the diff would
+   * cost the reader their place every time they stepped back one commit.
+   */
+  .history {
+    flex: 0 0 auto; width: 300px; overflow-y: auto; list-style: none; margin: 0;
+    padding: var(--space-1); border-right: 1px solid var(--border); background: var(--bg-1);
+  }
+  .entry {
+    display: flex; align-items: center; gap: var(--space-2); width: 100%; text-align: left;
+    font: inherit; font-size: 12px; cursor: pointer; color: var(--fg-1);
+    background: var(--bg-1); border: 0; border-radius: var(--radius-1);
+    padding: var(--space-1) var(--space-2); overflow: hidden;
+  }
+  .entry:hover { background: var(--bg-2); }
+  .entry.on { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent-line); }
+  .who {
+    flex: 0 0 auto; width: 24px; height: 24px; border-radius: var(--radius-1);
+    display: flex; align-items: center; justify-content: center;
+    background: var(--node-1); color: #ffffff; font-size: 10px; font-weight: 600;
+  }
+  .what { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .subject { color: var(--fg-0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .by { color: var(--fg-2); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sha { flex: 0 0 auto; color: var(--fg-2); font-size: 11px; }
+  .deeper {
+    width: 100%; font: inherit; font-size: 11px; cursor: pointer; margin-top: var(--space-2);
+    background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-1);
+    color: var(--fg-1); padding: var(--space-1);
+  }
+  .deeper:hover { background: var(--bg-3); color: var(--fg-0); }
+
+  /* Who wrote each line, named once per run rather than once per line. */
+  .blame .author {
+    width: 1%; white-space: nowrap; user-select: none; vertical-align: top;
+    padding: 0 var(--space-2); background: var(--bg-1);
+    border-right: 1px solid var(--border);
+  }
+  .chip {
+    display: inline-flex; gap: var(--space-2); align-items: baseline;
+    font-family: var(--font-ui); font-size: 11px; color: var(--fg-1);
+  }
+  .chip .when { color: var(--fg-2); }
   .scroll { flex: 1; min-width: 0; overflow: auto; }
 
   /*

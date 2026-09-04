@@ -15,6 +15,9 @@ export type Grouping = 'path' | 'tree';
 /** How a diff is laid out. */
 export type DiffMode = 'inline' | 'split';
 
+/** What the file panel is showing: the change, who wrote each line, or what touched it. */
+export type FileView = 'diff' | 'blame' | 'history';
+
 /** Where the terminal sits. */
 export type Dock = 'bottom' | 'right';
 
@@ -24,6 +27,9 @@ export interface Views {
   /** The staging panel's two lists. */
   changes: Grouping;
   diff: DiffMode;
+  fileView: FileView;
+  /** Whether a change that is only whitespace counts as a change. */
+  ignoreWhitespace: boolean;
   /** Whether the left panel and the detail panel are showing. */
   sidebar: boolean;
   details: boolean;
@@ -40,6 +46,8 @@ function defaults(): Views {
     commitFiles: 'path',
     changes: 'tree',
     diff: 'inline',
+    fileView: 'diff',
+    ignoreWhitespace: false,
     sidebar: true,
     details: true,
     terminalDock: 'bottom',
