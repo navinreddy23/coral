@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { splitRows, windowAround, type SplitRow } from '../src/diff/split';
+import { marksOf, splitRows, windowAround, type SplitRow } from '../src/diff/split';
 import type { Hunk, Line, LineKind } from '../src/ipc/types';
 
 function line(kind: LineKind, text: string): Line {
@@ -111,5 +111,51 @@ describe('windowing a whole-file view', () => {
     const got = windowAround(rows, 50);
     expect(got.from).toBe(0);
     expect(got.rows).toHaveLength(50);
+  });
+});
+
+describe('marking where the changes are', () => {
+  const context = (n: number): SplitRow => ({
+    left: { kind: 'context', text: `l${n}`, oldNo: n, newNo: n, noNewline: false },
+    right: { kind: 'context', text: `l${n}`, oldNo: n, newNo: n, noNewline: false },
+  });
+  const added = (n: number): SplitRow => ({
+    left: null,
+    right: { kind: 'add', text: `new ${n}`, oldNo: null, newNo: n, noNewline: false },
+  });
+  const removed = (n: number): SplitRow => ({
+    left: { kind: 'remove', text: `old ${n}`, oldNo: n, newNo: null, noNewline: false },
+    right: null,
+  });
+
+  it('is one mark per run, not one per line', () => {
+    const rows = [context(1), added(2), added(3), added(4), context(5)];
+    const marks = marksOf(rows);
+    expect(marks).toHaveLength(1);
+    expect(marks[0]?.at).toBeCloseTo(1 / 5);
+    expect(marks[0]?.size).toBeCloseTo(3 / 5);
+    expect(marks[0]?.kind).toBe('add');
+  });
+
+  it('tells a replacement from an insertion', () => {
+    expect(marksOf([removed(1), added(1)])[0]?.kind).toBe('both');
+    expect(marksOf([context(1), removed(2)])[0]?.kind).toBe('remove');
+  });
+
+  it('finds every run down a long file', () => {
+    const rows = [
+      ...Array.from({ length: 50 }, (_, i) => context(i + 1)),
+      added(51),
+      ...Array.from({ length: 50 }, (_, i) => context(i + 52)),
+      removed(102),
+    ];
+    const marks = marksOf(rows);
+    expect(marks.map((m) => m.kind)).toEqual(['add', 'remove']);
+    expect(marks[0]?.at).toBeCloseTo(50 / 102);
+  });
+
+  it('marks nothing in a file that did not change', () => {
+    expect(marksOf([context(1), context(2)])).toEqual([]);
+    expect(marksOf([])).toEqual([]);
   });
 });

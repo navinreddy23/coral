@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { firstChangedRow, splitRows, windowAround } from '../diff/split';
+  import { firstChangedRow, marksOf, splitRows, windowAround } from '../diff/split';
   import { elidePath } from './path';
   import type { DiffState } from '../state/diff.svelte';
 
@@ -110,6 +110,30 @@
     scrolled = (event.currentTarget as HTMLElement).scrollTop;
   }
 
+  /**
+   * Where the changes are in the file, for the strip down the side.
+   *
+   * A whole-file diff is mostly unchanged text and the scrollbar says nothing about where the
+   * few changed lines are; this is the map of them, and clicking it goes there.
+   */
+  const marks = $derived(marksOf(split.rows));
+
+  /** The part of the file on screen, drawn over the marks so the strip says where you are. */
+  const here = $derived.by(() => {
+    const height = split.rows.length * ROW;
+    if (height <= 0) return { at: 0, size: 1 };
+    return { at: Math.min(1, scrolled / height), size: Math.min(1, viewport / height) };
+  });
+
+  function jump(event: MouseEvent) {
+    const el = scroller;
+    if (el === null) return;
+    const strip = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const fraction = Math.min(1, Math.max(0, (event.clientY - strip.top) / strip.height));
+    const height = split.rows.length * ROW;
+    el.scrollTop = Math.max(0, fraction * height - el.clientHeight / 2);
+  }
+
 </script>
 
 <section class="diff">
@@ -132,6 +156,7 @@
     <button class="close" onclick={onClose} aria-label="Close the diff">✕</button>
   </header>
 
+  <div class="body">
   <div class="scroll" bind:this={scroller} onscroll={onScroll} bind:clientHeight={viewport}>
     {#if diff.loading}
       <p class="muted">Loading…</p>
@@ -195,6 +220,25 @@
       </p>
     {/if}
   </div>
+
+  {#if diff.mode === 'split' && marks.length > 0}
+    <button
+      class="overview"
+      onclick={jump}
+      aria-label="Go to a change in the file"
+      title="{marks.length} change{marks.length === 1 ? '' : 's'} in this file"
+    >
+      {#each marks as mark, i (i)}
+        <span
+          class="mark {mark.kind}"
+          style:top="{mark.at * 100}%"
+          style:height="max(2px, {mark.size * 100}%)"
+        ></span>
+      {/each}
+      <span class="here" style:top="{here.at * 100}%" style:height="{here.size * 100}%"></span>
+    </button>
+  {/if}
+  </div>
 </section>
 
 <style>
@@ -232,7 +276,29 @@
   }
   .close:hover { color: var(--fg-0); background: var(--bg-2); }
 
-  .scroll { flex: 1; overflow: auto; }
+  .body { flex: 1; min-height: 0; display: flex; }
+  .scroll { flex: 1; min-width: 0; overflow: auto; }
+
+  /*
+   * The whole file in one column: where every change is, and where the reader is among them.
+   * A scrollbar on a diff of two thousand lines says how far down the file it is and nothing
+   * about the four lines that changed.
+   */
+  .overview {
+    flex: 0 0 auto; width: 14px; position: relative; cursor: pointer;
+    border: 0; border-left: 1px solid var(--border); padding: 0;
+    background: var(--bg-1);
+  }
+  .overview:hover { background: var(--bg-2); }
+  .mark { position: absolute; left: 2px; right: 2px; border-radius: 1px; }
+  .mark.add { background: var(--ok); }
+  .mark.remove { background: var(--danger); }
+  .mark.both { background: var(--lane-3); }
+  /* An outline rather than a fill: the marks under it are the point of the strip. */
+  .here {
+    position: absolute; left: 0; right: 0; min-height: 8px;
+    border: 1px solid var(--fg-2); border-radius: 2px; background: none;
+  }
   .lines {
     border-collapse: collapse; width: 100%;
     font-family: var(--font-mono); font-size: 11px; font-weight: 400; line-height: 17px;
