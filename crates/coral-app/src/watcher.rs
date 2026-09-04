@@ -61,6 +61,9 @@ pub async fn watch_repo(
 
     let mut watcher = RepoWatcher::start(&loc)?;
     let degraded = watcher.degraded();
+    // Taken before the loop, so the first event is measured against the repository as it is
+    // now rather than against nothing.
+    let mut seen = loc.fingerprint(&runner).await.unwrap_or_default();
 
     tauri::async_runtime::spawn(async move {
         // Owning the watcher here is what keeps it alive; the loop ends when a newer watch has
@@ -69,6 +72,23 @@ pub async fn watch_repo(
             if generation.load(Ordering::SeqCst) != me {
                 return;
             }
+            // A file was written, which is not the same as the repository being different. A
+            // build under an ignored directory and git refreshing its own index both look like
+            // change, and reloading the window for either is what made it flicker.
+            let change = match loc.narrow(&runner, &mut seen, change).await {
+                Ok(Some(change)) => change,
+                Ok(None) => continue,
+                // Reporting the event unnarrowed is the safe way to be wrong: a redraw nobody
+                // needed costs a flicker, and a change nobody heard about leaves the window
+                // showing something that is no longer true.
+                Err(e) => {
+                    tracing::warn!(error = %e, "could not tell what changed; reloading anyway");
+                    change
+                }
+            };
+            // Debug, not info: this is one line per real change and the activity log the
+            // window shows keeps only the last few hundred entries.
+            tracing::debug!(?change, "the repository changed");
             if app.emit(EVENT, change).is_err() {
                 return;
             }

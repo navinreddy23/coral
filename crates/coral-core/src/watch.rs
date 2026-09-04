@@ -6,6 +6,7 @@ use notify::{RecursiveMode, Watcher};
 use tokio::sync::mpsc;
 
 use crate::error::CoralError;
+use crate::process::{GitCommand, GitRunner};
 use crate::repo::RepoLocation;
 
 /// What changed since the last notification. Never "nothing": an empty set is not emitted.
@@ -116,6 +117,108 @@ fn is_op_path(rel: &str) -> bool {
         || rel.starts_with("rebase-merge/")
         || rel.starts_with("rebase-apply/")
         || rel.starts_with("sequencer/")
+}
+
+/// What a repository looks like, cheaply enough to ask on every file event.
+///
+/// Two numbers, not two answers: the point is only whether something differs from last time.
+/// They are hashes from the standard library's default hasher, which says nothing across
+/// releases or processes and does not need to — nothing is ever stored or compared but two
+/// values taken minutes apart by the same running program.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Fingerprint {
+    pub refs: u64,
+    pub status: u64,
+}
+
+fn hash(bytes: &[u8]) -> u64 {
+    use std::hash::{Hash as _, Hasher as _};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    bytes.hash(&mut hasher);
+    hasher.finish()
+}
+
+impl RepoLocation {
+    /// A hash of every ref and of what HEAD is on.
+    ///
+    /// HEAD separately, because `for-each-ref` does not list it and checking a commit out
+    /// detached moves nothing else.
+    ///
+    /// # Errors
+    /// Propagates git failures.
+    pub async fn refs_fingerprint(&self, runner: &GitRunner) -> Result<u64, CoralError> {
+        let refs = runner
+            .output(
+                GitCommand::read("for-each-ref", self.display_path())
+                    .args(["for-each-ref", "--format=%(objectname) %(refname)"]),
+            )
+            .await?;
+        let head = std::fs::read(self.git_dir.join("HEAD")).unwrap_or_default();
+        let mut both = refs.stdout;
+        both.extend_from_slice(&head);
+        Ok(hash(&both))
+    }
+
+    /// A hash of the working tree and index, as the window would show them.
+    ///
+    /// Read class on purpose, so git does not write the refreshed index back. Writing it is
+    /// what makes this loop: the write is a change to the git directory, the watcher reports
+    /// it, and asking again is what caused it.
+    ///
+    /// # Errors
+    /// Propagates git failures.
+    pub async fn status_fingerprint(&self, runner: &GitRunner) -> Result<u64, CoralError> {
+        let out = runner
+            .output(GitCommand::read("status", self.display_path()).args([
+                "status",
+                "--porcelain=v2",
+                "--untracked-files=all",
+            ]))
+            .await?;
+        Ok(hash(&out.stdout))
+    }
+
+    /// Drops from `change` everything that turns out not to have changed, updating `seen`.
+    ///
+    /// A file event says a file was written, which is not the same as the repository being
+    /// different: a build writing under an ignored directory, or git refreshing its own index,
+    /// both look like change and are not. Returns `None` when nothing is left worth telling
+    /// anyone about.
+    ///
+    /// # Errors
+    /// Propagates git failures. A failure here is reported rather than swallowed, since
+    /// treating it as "nothing changed" would leave the window stale for good.
+    pub async fn narrow(
+        &self,
+        runner: &GitRunner,
+        seen: &mut Fingerprint,
+        mut change: RepoChanged,
+    ) -> Result<Option<RepoChanged>, CoralError> {
+        if change.refs {
+            let now = self.refs_fingerprint(runner).await?;
+            change.refs = now != seen.refs;
+            seen.refs = now;
+        }
+        if change.index || change.worktree {
+            let now = self.status_fingerprint(runner).await?;
+            let same = now == seen.status;
+            change.index &= !same;
+            change.worktree &= !same;
+            seen.status = now;
+        }
+        Ok(change.any().then_some(change))
+    }
+
+    /// Both hashes as they stand, for seeding [`RepoLocation::narrow`].
+    ///
+    /// # Errors
+    /// Propagates git failures.
+    pub async fn fingerprint(&self, runner: &GitRunner) -> Result<Fingerprint, CoralError> {
+        Ok(Fingerprint {
+            refs: self.refs_fingerprint(runner).await?,
+            status: self.status_fingerprint(runner).await?,
+        })
+    }
 }
 
 /// Watches one repository and emits coalesced [`RepoChanged`] notifications.

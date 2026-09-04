@@ -3,7 +3,7 @@ use std::time::Duration;
 use coral_core::process::GitRunner;
 use coral_core::repo::RepoLocation;
 use coral_core::testutil::TestRepo;
-use coral_core::watch::{RepoWatcher, classify};
+use coral_core::watch::{Fingerprint, RepoChanged, RepoWatcher, classify};
 
 async fn located(repo: &TestRepo) -> RepoLocation {
     let runner = GitRunner::discover().await.unwrap();
@@ -56,6 +56,118 @@ async fn keeps_watching_after_the_call_that_started_it_returns() {
         .expect("the watcher stopped when the call that started it returned")
         .expect("the watcher's channel closed");
     assert!(change.worktree, "{change:?}");
+}
+
+async fn runner_at(repo: &TestRepo) -> (GitRunner, RepoLocation) {
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+    (runner, loc)
+}
+
+#[tokio::test]
+async fn a_file_event_that_changed_nothing_is_dropped() {
+    // The case that made the window flicker. A build writes under an ignored directory and git
+    // refreshes its own index; both look exactly like a file changing, and neither is anything
+    // the user should see the screen redraw for.
+    let repo = TestRepo::new()
+        .write("a.txt", "1\n")
+        .write(".gitignore", "build/\n")
+        .commit("base");
+    let (runner, loc) = runner_at(&repo).await;
+    let mut seen = loc.fingerprint(&runner).await.unwrap();
+
+    std::fs::create_dir_all(repo.path().join("build")).unwrap();
+    std::fs::write(repo.path().join("build/output.bin"), "artefact\n").unwrap();
+
+    let everything = RepoChanged {
+        refs: true,
+        index: true,
+        worktree: true,
+        ops: false,
+        graph: false,
+    };
+    let narrowed = loc.narrow(&runner, &mut seen, everything).await.unwrap();
+    assert_eq!(narrowed, None, "an ignored file is not a change");
+}
+
+#[tokio::test]
+async fn a_real_edit_survives_the_narrowing() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let (runner, loc) = runner_at(&repo).await;
+    let mut seen = loc.fingerprint(&runner).await.unwrap();
+
+    std::fs::write(repo.path().join("a.txt"), "2\n").unwrap();
+
+    let claimed = RepoChanged {
+        worktree: true,
+        ..RepoChanged::default()
+    };
+    let narrowed = loc.narrow(&runner, &mut seen, claimed).await.unwrap();
+    assert_eq!(narrowed.map(|c| c.worktree), Some(true));
+
+    // And the second time, with nothing further written, it is no longer news.
+    let again = loc.narrow(&runner, &mut seen, claimed).await.unwrap();
+    assert_eq!(again, None);
+}
+
+#[tokio::test]
+async fn a_commit_is_a_ref_change_and_a_status_change() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let (runner, loc) = runner_at(&repo).await;
+    let mut seen = loc.fingerprint(&runner).await.unwrap();
+
+    let repo = repo.write("b.txt", "new\n").commit("second");
+    let _ = &repo;
+
+    let claimed = RepoChanged {
+        refs: true,
+        index: true,
+        worktree: true,
+        ..RepoChanged::default()
+    };
+    let narrowed = loc
+        .narrow(&runner, &mut seen, claimed)
+        .await
+        .unwrap()
+        .expect("a commit changes something");
+    assert!(narrowed.refs, "HEAD moved");
+}
+
+#[tokio::test]
+async fn checking_out_a_commit_counts_even_though_no_ref_moved() {
+    // Detached HEAD moves nothing `for-each-ref` lists, so a fingerprint taken from refs alone
+    // would report the checkout as nothing at all.
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let repo = repo.write("a.txt", "2\n").commit("second");
+    let (runner, loc) = runner_at(&repo).await;
+    let mut seen = loc.fingerprint(&runner).await.unwrap();
+
+    repo.git(["checkout", "--quiet", "HEAD~1"]);
+
+    let claimed = RepoChanged {
+        refs: true,
+        ..RepoChanged::default()
+    };
+    let narrowed = loc.narrow(&runner, &mut seen, claimed).await.unwrap();
+    assert_eq!(narrowed.map(|c| c.refs), Some(true));
+}
+
+#[tokio::test]
+async fn narrowing_never_invents_a_change_it_was_not_told_about() {
+    // The mask says which parts of the repository the file events touched. Narrowing may only
+    // take bits away: reporting a ref change because the fingerprint happened to be recomputed
+    // would send the window off to rewalk a graph nothing asked about.
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let (runner, loc) = runner_at(&repo).await;
+    let mut seen = Fingerprint::default();
+
+    let claimed = RepoChanged {
+        ops: true,
+        ..RepoChanged::default()
+    };
+    let narrowed = loc.narrow(&runner, &mut seen, claimed).await.unwrap();
+    assert_eq!(narrowed, Some(claimed), "ops passes through untouched");
+    assert_eq!(seen, Fingerprint::default(), "and nothing was measured");
 }
 
 #[tokio::test]
