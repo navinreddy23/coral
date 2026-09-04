@@ -332,3 +332,97 @@ fn moving_a_tab_that_is_not_there_does_nothing() {
     s.move_tab(9999, Some(group), None);
     assert_eq!(order(&s), before);
 }
+
+#[test]
+fn a_submodule_is_shown_inside_the_tab_that_declares_it() {
+    // Not in a tab of its own: a submodule belongs to its parent, and a second tab loses the
+    // fact that it was reached from one.
+    let mut s = Session::default();
+    let tab = s.open(std::path::PathBuf::from("/repo"));
+    s.enter_submodule(tab, std::path::PathBuf::from("external/dev-scripts"));
+
+    assert_eq!(s.tabs.len(), 1, "no second tab is opened");
+    assert_eq!(
+        Session::working_path(&s.tabs[0]),
+        std::path::PathBuf::from("/repo/external/dev-scripts")
+    );
+    assert_eq!(s.active, Some(tab));
+}
+
+#[test]
+fn leaving_a_submodule_returns_to_the_repository_that_declared_it() {
+    let mut s = Session::default();
+    let tab = s.open(std::path::PathBuf::from("/repo"));
+    s.enter_submodule(tab, std::path::PathBuf::from("lib/thing"));
+    s.leave_submodule(tab);
+
+    assert_eq!(s.tabs[0].submodule, None);
+    assert_eq!(
+        Session::working_path(&s.tabs[0]),
+        std::path::PathBuf::from("/repo")
+    );
+}
+
+#[test]
+fn opening_the_parent_again_steps_back_out_of_the_submodule() {
+    // Otherwise the request appears to do nothing at all: the tab is focused already.
+    let mut s = Session::default();
+    let tab = s.open(std::path::PathBuf::from("/repo"));
+    s.enter_submodule(tab, std::path::PathBuf::from("lib/thing"));
+
+    let again = s.open(std::path::PathBuf::from("/repo"));
+    assert_eq!(again, tab, "the same tab is focused");
+    assert_eq!(s.tabs[0].submodule, None);
+}
+
+#[test]
+fn the_open_submodule_survives_a_restart() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut s = Session::default();
+    let tab = s.open(std::path::PathBuf::from("/repo"));
+    s.enter_submodule(tab, std::path::PathBuf::from("lib/thing"));
+
+    let back = saved(&s, &dir);
+    assert_eq!(
+        back.tabs[0].submodule,
+        Some(std::path::PathBuf::from("lib/thing"))
+    );
+}
+
+#[test]
+fn a_group_can_be_renamed_and_recoloured() {
+    let (mut s, group) = grouped();
+    s.rename_group(group, "release".to_owned());
+    s.recolour_group(group, GroupColour::Lane5);
+
+    let g = &s.groups[0];
+    assert_eq!(g.name, "release");
+    assert_eq!(g.colour, GroupColour::Lane5);
+}
+
+#[test]
+fn dissolving_a_group_keeps_its_tabs_open() {
+    let (mut s, group) = grouped();
+    s.dissolve_group(group);
+
+    assert_eq!(s.tabs.len(), 3, "no tab is closed");
+    assert!(s.tabs.iter().all(|t| t.group.is_none()));
+    assert!(s.groups.is_empty(), "the group itself is gone");
+}
+
+#[test]
+fn closing_a_group_closes_the_tabs_in_it_and_nothing_else() {
+    let (mut s, group) = grouped();
+    s.close_group(group);
+
+    assert_eq!(order(&s), vec![("/c".to_owned(), None)]);
+    assert!(s.groups.is_empty());
+    assert_eq!(s.active, Some(s.tabs[0].id), "focus lands on what is left");
+}
+
+#[test]
+fn renaming_a_group_that_is_not_there_changes_nothing() {
+    let (mut s, group) = grouped();
+    s.rename_group(group + 999, "nowhere".to_owned());
+    assert_eq!(s.groups[0].name, "work");
+}

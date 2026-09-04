@@ -209,13 +209,32 @@ function ref(short: string, kind: unknown, row: number, over: object = {}) {
 
 const TABS = {
   tabs: [
-    { id: 1, path: REPO, group: 1 },
-    { id: 2, path: '/home/dev/projects/linux', group: 1 },
-    { id: 3, path: '/home/dev/projects/notes', group: null },
+    { id: 1, path: REPO, submodule: null, group: 1 },
+    { id: 2, path: '/home/dev/projects/linux', submodule: null, group: 1 },
+    { id: 3, path: '/home/dev/projects/notes', submodule: null, group: null },
   ],
   active: 1,
   groups: [{ id: 1, name: 'work', colour: 'lane1', collapsed: false }],
 };
+
+/** The same session with the first tab stepped into its submodule, for the breadcrumb. */
+const TABS_IN_SUBMODULE = {
+  ...TABS,
+  tabs: TABS.tabs.map((t) => (t.id === 1 ? { ...t, submodule: 'external/dev-scripts' } : t)),
+};
+
+const REMOTES = [
+  {
+    name: 'origin',
+    fetchUrl: 'git@github.com:coral-dev/coral.git',
+    pushUrl: 'git@github.com:coral-dev/coral.git',
+  },
+  {
+    name: 'upstream',
+    fetchUrl: 'https://gitlab.com/open-source-23/coral.git',
+    pushUrl: 'https://gitlab.com/open-source-23/coral.git',
+  },
+];
 
 const FIXTURES: Record<string, unknown> = {
   initial_repo: REPO,
@@ -233,7 +252,54 @@ const FIXTURES: Record<string, unknown> = {
   tab_close: TABS,
   tab_group: TABS,
   tab_ungroup: TABS,
+  tab_move: TABS,
   group_collapse: TABS,
+  group_rename: TABS,
+  group_recolour: TABS,
+  group_dissolve: TABS,
+  group_close: TABS,
+  tab_enter_submodule: TABS_IN_SUBMODULE,
+  tab_leave_submodule: TABS,
+  remote_list: REMOTES,
+  remote_edit: REMOTES,
+  ssh_read: {
+    effective: {
+      useAgent: false,
+      privateKey: '/home/dev/.ssh/id_ed25519',
+      publicKey: '/home/dev/.ssh/id_ed25519.pub',
+      command: "ssh -i '/home/dev/.ssh/id_ed25519' -o IdentitiesOnly=yes",
+      credentialHelper: '',
+    },
+    global: {
+      useAgent: true,
+      privateKey: '',
+      publicKey: '',
+      command: '',
+      credentialHelper: '',
+    },
+    local: {
+      privateKey: '/home/dev/.ssh/id_ed25519',
+      publicKey: '/home/dev/.ssh/id_ed25519.pub',
+      credentialHelper: null,
+    },
+  },
+  ssh_keys: [
+    {
+      path: '/home/dev/.ssh/id_ed25519',
+      publicPath: '/home/dev/.ssh/id_ed25519.pub',
+      comment: 'dev@workstation',
+      kind: 'ssh-ed25519',
+    },
+    {
+      path: '/home/dev/.ssh/id_work',
+      publicPath: '/home/dev/.ssh/id_work.pub',
+      comment: 'dev@company',
+      kind: 'ssh-ed25519',
+    },
+  ],
+  ssh_public_key: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI0000000000 dev@workstation',
+  watch_repo: { complete: true, detail: null },
+  unwatch_repo: null,
   repo_refs: [
     ref('heads/master', { kind: 'local_branch' }, 0, {
       short: 'master',
@@ -244,6 +310,12 @@ const FIXTURES: Record<string, unknown> = {
     ref('heads/graph-lanes', { kind: 'local_branch' }, 2, { short: 'graph-lanes' }),
     ref('remotes/origin/master', { kind: 'remote_branch', remote: 'origin' }, 4, {
       short: 'origin/master',
+    }),
+    ref('remotes/origin/feature/audio-ringbuffer', { kind: 'remote_branch', remote: 'origin' }, 6, {
+      short: 'origin/feature/audio-ringbuffer',
+    }),
+    ref('remotes/upstream/master', { kind: 'remote_branch', remote: 'upstream' }, 7, {
+      short: 'upstream/master',
     }),
     ref('tags/v0.1.0', { kind: 'tag', annotated: true }, 9, { short: 'v0.1.0' }),
     ref('stash', { kind: 'stash' }, 14, { short: 'stash@{0}' }),
@@ -431,6 +503,8 @@ export function preview(command: string, args: Record<string, unknown>): unknown
       return detail(String(args['rev'] ?? oidOf(0)));
     case 'file_diff':
       return DIFF;
+    case 'commit_url':
+      return `https://github.com/coral-dev/coral/commit/${String(args['oid'] ?? '')}`;
     case 'terminal_open':
       return { id: 1, shell: '/usr/bin/zsh' };
     case 'terminal_write':

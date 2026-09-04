@@ -3,7 +3,10 @@ import { render } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
-vi.mock('../../src/ipc/invoke', () => ({ invoke: vi.fn() }));
+vi.mock('../../src/ipc/invoke', () => ({ invoke: vi.fn(), isPreview: () => false }));
+// The window subscribes to terminal output and to repository changes. Neither channel
+// exists without the Tauri shell, and the real `listen` throws rather than returning.
+vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => undefined }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 
 import DiffView from '../../src/app/DiffView.svelte';

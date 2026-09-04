@@ -5,7 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const invoke = vi.hoisted(() => vi.fn());
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
-vi.mock('../../src/ipc/invoke', () => ({ invoke }));
+vi.mock('../../src/ipc/invoke', () => ({ invoke, isPreview: () => false }));
+// The window subscribes to terminal output and to repository changes. Neither channel
+// exists without the Tauri shell, and the real `listen` throws rather than returning.
+vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => undefined }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn() }));
 
@@ -18,9 +21,9 @@ const GROUP = 7;
 function session() {
   return {
     tabs: [
-      { id: 1, path: '/repos/alpha', group: GROUP, missing: false },
-      { id: 2, path: '/repos/beta', group: GROUP, missing: false },
-      { id: 3, path: '/repos/gamma', group: null, missing: false },
+      { id: 1, path: '/repos/alpha', submodule: null, group: GROUP, missing: false },
+      { id: 2, path: '/repos/beta', submodule: null, group: GROUP, missing: false },
+      { id: 3, path: '/repos/gamma', submodule: null, group: null, missing: false },
     ],
     groups: [{ id: GROUP, name: 'work', colour: 'lane1', collapsed: false }],
     active: 1,
@@ -30,7 +33,12 @@ function session() {
 function bar() {
   const tabs = new TabsState();
   tabs.session = session();
-  return { tabs, ...render(TabBar, { props: { tabs, onOpen: () => {} } }) };
+  const onAsk = vi.fn(async () => 'named');
+  return {
+    tabs,
+    onAsk,
+    ...render(TabBar, { props: { tabs, onOpen: () => {}, onAsk } }),
+  };
 }
 
 const transfer = () => ({ setData: () => {}, effectAllowed: '', dropEffect: '' });
@@ -162,5 +170,153 @@ describe('dragging a tab', () => {
     await waitFor(() => {
       expect(invoke.mock.calls.filter(([cmd]) => cmd === 'tab_move')).toHaveLength(1);
     });
+  });
+});
+
+describe('the tab search', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    invoke.mockImplementation(async () => session());
+  });
+
+  async function open(container: HTMLElement) {
+    const button = container.querySelector('.find') as HTMLElement;
+    expect(button, 'the search button').toBeTruthy();
+    await fireEvent.click(button);
+  }
+
+  it('lists every open tab, whichever group it is in', async () => {
+    // The bar scrolls once there are more tabs than fit, and a scrolled bar is no way to find
+    // one repository among twenty.
+    const { container } = bar();
+    await open(container);
+
+    const names = [...container.querySelectorAll('.finder .name')].map((e) => e.textContent);
+    expect(names).toEqual(['alpha', 'beta', 'gamma']);
+  });
+
+  it('says which group each tab belongs to', async () => {
+    const { container } = bar();
+    await open(container);
+
+    const tags = [...container.querySelectorAll('.finder .tag')].map((e) => e.textContent);
+    expect(tags).toEqual(['work', 'work']);
+  });
+
+  it('filters on the whole path, not only the name', async () => {
+    // Two checkouts of the same repository have the same name and differ only in where they
+    // are, so matching the name alone cannot tell them apart.
+    const { container } = bar();
+    await open(container);
+
+    const field = container.querySelector('.finder input') as HTMLInputElement;
+    await fireEvent.input(field, { target: { value: '/repos/be' } });
+
+    const names = [...container.querySelectorAll('.finder .name')].map((e) => e.textContent);
+    expect(names).toEqual(['beta']);
+  });
+
+  it('activates the first match on Enter', async () => {
+    const { container } = bar();
+    await open(container);
+
+    const field = container.querySelector('.finder input') as HTMLInputElement;
+    await fireEvent.input(field, { target: { value: 'gamma' } });
+    await fireEvent.keyDown(field, { key: 'Enter' });
+
+    await waitFor(() => {
+      const call = invoke.mock.calls.filter(([cmd]) => cmd === 'tab_activate').at(-1);
+      expect(call?.[1]).toEqual({ id: 3 });
+    });
+  });
+
+  it('says so rather than showing an empty list when nothing matches', async () => {
+    const { container } = bar();
+    await open(container);
+
+    const field = container.querySelector('.finder input') as HTMLInputElement;
+    await fireEvent.input(field, { target: { value: 'nothing like this' } });
+
+    expect(container.querySelector('.finder .none')).toBeTruthy();
+    expect(container.querySelectorAll('.finder .name')).toHaveLength(0);
+  });
+
+  it('closes on Escape', async () => {
+    const { container } = bar();
+    await open(container);
+    expect(container.querySelector('.finder')).toBeTruthy();
+
+    const field = container.querySelector('.finder input') as HTMLInputElement;
+    await fireEvent.keyDown(field, { key: 'Escape' });
+    expect(container.querySelector('.finder')).toBeNull();
+  });
+
+  it('closes a tab from the list without leaving the search', async () => {
+    const { container } = bar();
+    await open(container);
+
+    const drop = container.querySelectorAll('.finder .drop')[2] as HTMLElement;
+    await fireEvent.click(drop);
+
+    await waitFor(() => {
+      const call = invoke.mock.calls.filter(([cmd]) => cmd === 'tab_close').at(-1);
+      expect(call?.[1]).toEqual({ id: 3 });
+    });
+    expect(container.querySelector('.finder')).toBeTruthy();
+  });
+});
+
+describe('the tab and group menus', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    invoke.mockImplementation(async () => session());
+  });
+
+  it('offers to put a loose tab into a group that already exists', async () => {
+    const { container } = bar();
+    await fireEvent.contextMenu(chipFor(container, 'gamma'));
+
+    const labels = [...container.querySelectorAll('.menu .label')].map((e) => e.textContent?.trim());
+    expect(labels).toContain('New tab group…');
+    expect(labels).toContain('Add to group');
+  });
+
+  it('offers to take a grouped tab out again, and does not offer that to a loose one', async () => {
+    const { container } = bar();
+    await fireEvent.contextMenu(chipFor(container, 'alpha'));
+    let labels = [...container.querySelectorAll('.menu .label')].map((e) => e.textContent?.trim());
+    expect(labels).toContain('Remove from group');
+
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    await fireEvent.contextMenu(chipFor(container, 'gamma'));
+    labels = [...container.querySelectorAll('.menu .label')].map((e) => e.textContent?.trim());
+    expect(labels).not.toContain('Remove from group');
+  });
+
+  it('offers to rename, recolour, dissolve and close a group', async () => {
+    const { container } = bar();
+    const name = container.querySelector('.group') as HTMLElement;
+    await fireEvent.contextMenu(name);
+
+    const labels = [...container.querySelectorAll('.menu .label')].map((e) => e.textContent?.trim());
+    expect(labels).toContain('Rename group…');
+    expect(labels).toContain('Colour');
+    expect(labels).toContain('Ungroup, keeping the tabs');
+    expect(labels).toContain('Close every tab in the group');
+  });
+
+  it('dissolving a group keeps the tabs, which is not the same as closing them', async () => {
+    const { container } = bar();
+    await fireEvent.contextMenu(container.querySelector('.group') as HTMLElement);
+
+    const item = [...container.querySelectorAll('.menu .label')].find(
+      (e) => e.textContent?.trim() === 'Ungroup, keeping the tabs',
+    ) as HTMLElement;
+    await fireEvent.click(item);
+
+    await waitFor(() => {
+      expect(invoke.mock.calls.some(([cmd]) => cmd === 'group_dissolve')).toBe(true);
+    });
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'group_close')).toBe(false);
   });
 });

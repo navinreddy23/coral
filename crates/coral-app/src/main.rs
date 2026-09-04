@@ -1,7 +1,9 @@
 // The desktop build must not open a console window on Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use coral_app_lib::{actions, commands, conflicts, graph, hosting, signing, tabs, terminal};
+use coral_app_lib::{
+    actions, commands, conflicts, graph, hosting, remotes, signing, ssh, tabs, terminal, watcher,
+};
 
 fn main() {
     // git invokes the running binary as its sequence editor during an interactive rebase, so
@@ -36,11 +38,21 @@ fn main() {
         tracing::warn!("no credential helper; git will use whatever the user configured");
     }
 
+    window();
+}
+
+/// Builds and runs the window.
+///
+/// Split from `main` because the command list is long and growing: the startup work above it —
+/// the sequence editor, the credential helper, logging — has nothing to do with the window and
+/// reads better on its own.
+fn window() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(graph::GraphCache::default())
         .manage(terminal::Terminals::default())
+        .manage(watcher::Watchers::default())
         .setup(|app| {
             use tauri::Manager as _;
             // Beside the app's own config, so it travels with the installation rather than
@@ -70,6 +82,11 @@ fn main() {
             graph::commit_detail,
             graph::file_diff,
             actions::repo_action,
+            remotes::remote_list,
+            remotes::remote_edit,
+            remotes::commit_url,
+            watcher::watch_repo,
+            watcher::unwatch_repo,
             actions::rebase_todo,
             actions::rebase_start,
             conflicts::repo_operation,
@@ -87,6 +104,12 @@ fn main() {
             signing::signing_set_repo,
             signing::signing_keys,
             signing::signing_generate,
+            ssh::ssh_read,
+            ssh::ssh_set_app,
+            ssh::ssh_set_repo,
+            ssh::ssh_keys,
+            ssh::ssh_generate,
+            ssh::ssh_public_key,
             terminal::terminal_open,
             terminal::terminal_write,
             terminal::terminal_resize,
@@ -99,6 +122,12 @@ fn main() {
             tabs::tab_move,
             tabs::tab_ungroup,
             tabs::group_collapse,
+            tabs::tab_enter_submodule,
+            tabs::tab_leave_submodule,
+            tabs::group_rename,
+            tabs::group_recolour,
+            tabs::group_dissolve,
+            tabs::group_close,
             graph::binary_self_test
         ])
         .run(tauri::generate_context!())

@@ -111,3 +111,49 @@ pub fn tab_ungroup(tabs: tauri::State<'_, Tabs>, id: u32) -> Session {
 pub fn group_collapse(tabs: tauri::State<'_, Tabs>, id: u32, collapsed: bool) -> Session {
     tabs.update(|s| s.set_collapsed(id, collapsed))
 }
+
+/// Shows a submodule inside the tab that declares it.
+///
+/// Not a tab of its own: a submodule belongs to the repository that declares it, and the
+/// reference shows it as another step in the same tab's breadcrumb.
+#[tauri::command]
+#[must_use]
+pub fn tab_enter_submodule(tabs: tauri::State<'_, Tabs>, id: u32, path: String) -> Session {
+    tabs.update(|s| s.enter_submodule(id, PathBuf::from(path)))
+}
+
+#[tauri::command]
+#[must_use]
+pub fn tab_leave_submodule(tabs: tauri::State<'_, Tabs>, id: u32) -> Session {
+    tabs.update(|s| s.leave_submodule(id))
+}
+
+#[tauri::command]
+#[must_use]
+pub fn group_rename(tabs: tauri::State<'_, Tabs>, id: u32, name: String) -> Session {
+    tabs.update(|s| s.rename_group(id, name))
+}
+
+#[tauri::command]
+#[must_use]
+pub fn group_recolour(
+    tabs: tauri::State<'_, Tabs>,
+    id: u32,
+    colour: crate::session::GroupColour,
+) -> Session {
+    tabs.update(|s| s.recolour_group(id, colour))
+}
+
+/// Dissolves a group, leaving its tabs open.
+#[tauri::command]
+#[must_use]
+pub fn group_dissolve(tabs: tauri::State<'_, Tabs>, id: u32) -> Session {
+    tabs.update(|s| s.dissolve_group(id))
+}
+
+/// Closes every tab in a group.
+#[tauri::command]
+#[must_use]
+pub fn group_close(tabs: tauri::State<'_, Tabs>, id: u32) -> Session {
+    tabs.update(|s| s.close_group(id))
+}

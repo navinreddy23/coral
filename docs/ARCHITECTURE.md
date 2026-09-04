@@ -150,8 +150,13 @@ CLI. The lease refuses when the remote branch has moved since we last saw it, wh
 when a plain force would destroy someone else's work. A rejected ref is reported per-ref, not
 raised as an error.
 
-**SSH is left entirely to the system** — `ssh`, `ssh-agent`, `~/.ssh/config` and
-`GIT_SSH_COMMAND` are untouched. There is no embedded SSH implementation.
+**There is no embedded SSH implementation**: `ssh`, `ssh-agent` and `~/.ssh/config` do the
+work. Choosing *which* key is configuration, and is layered per repository exactly as signing
+is — an app-level default in the user's own git config, overridden per repository. Pinning a
+key writes `core.sshCommand` with `IdentitiesOnly=yes`, which is not optional: without it ssh
+offers every key the agent holds before the one it was asked for, and a server that accepts one
+of those authenticates as the wrong account. Using the agent means writing *nothing*, since an
+empty `core.sshCommand` still shadows whatever the user set by hand.
 
 Coral is its own **git credential helper**, so tokens never appear in a remote URL, a config
 file, or an argument list. Any process on the machine can run the coral binary, so the helper
@@ -164,6 +169,11 @@ unknown host answers *empty*, never an error: a failing helper aborts the whole 
 `coral-app/src/session.rs` holds open repositories as tabs and groups, persisted beside the
 app's own config. The engine knows nothing about it: `coral-core` deals in repositories, not in
 how a window chooses to show them.
+
+**A submodule is a step into a tab, not a tab of its own.** It belongs to the repository that
+declares it, at the commit that repository records; a second tab loses that relationship and
+leaves two entries in the bar with no way to tell which came from which. The tab carries the
+submodule's relative path, and what the window loads is the two joined.
 
 Every session command returns the whole session rather than nothing, so the tab bar cannot
 drift from what is on disk. A group is a coloured band around a *contiguous* run of tabs, so
@@ -188,6 +198,17 @@ list half a pixel off the grid.
 
 Actions run one at a time. Two mutations at once contend for `index.lock`, and the second fails
 with a message about a lock file that says nothing about what the user did.
+
+The commit list handles its own wheel events rather than leaving them to the platform. Above
+`MAX_SPACER_PX` the scrollable area no longer stands for the row range one pixel per row, so a
+wheel notch covers a different number of commits depending on how large the repository is;
+converting the delta to rows first makes a notch three commits everywhere.
+
+`RepoWatcher` is wired to the window, so anything done in the terminal beside Coral — or in any
+other client — reaches it. Only what the change touched is reloaded: rewalking 1.4M commits
+because a build wrote an object file would freeze the window repeatedly. A ref change is the
+one that can move HEAD, and it is the one that also moves the selection, so checking a branch
+out from either side lands the view on that branch.
 
 ## Hosting
 

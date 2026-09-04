@@ -367,6 +367,66 @@ global: SigningConfig,
  */
 local: SigningOverrides, };
 
+/**
+ * How git is told to reach an ssh server.
+ */
+export type SshConfig = { 
+/**
+ * True when nothing overrides `ssh`, so the running agent decides which key to offer.
+ */
+useAgent: boolean, 
+/**
+ * The private key git is pointed at, when it is pointed at one.
+ */
+privateKey: string, 
+/**
+ * Its public half. git never needs this; it is what gets uploaded to the host.
+ */
+publicKey: string, 
+/**
+ * `core.sshCommand`, verbatim, since a user may have written one by hand.
+ */
+command: string, 
+/**
+ * `credential.helper`, so the screen can say which one is answering.
+ */
+credentialHelper: string, };
+
+/**
+ * One key pair found on disk.
+ */
+export type SshKey = { 
+/**
+ * The private key's path, which is what `core.sshCommand` names.
+ */
+path: string, 
+/**
+ * The public half, when it is beside the private one.
+ */
+publicPath: string, 
+/**
+ * The comment at the end of the public key, usually `user@host`.
+ */
+comment: string, 
+/**
+ * `ssh-ed25519`, `ssh-rsa`, and so on.
+ */
+kind: string, };
+
+/**
+ * What this repository sets for itself. `None` means it inherits.
+ */
+export type SshOverrides = { 
+/**
+ * The private key to use here. Setting it writes `core.sshCommand`.
+ */
+privateKey: string | null, publicKey: string | null, credentialHelper: string | null, };
+
+/**
+ * Ssh as it stands for one repository: what will happen, what it inherits, what it sets.
+ */
+export type SshScopes = { effective: SshConfig, global: SshConfig, local: SshOverrides, };
+
 export type Status = { branch: string | null, oid: string | null, upstream: string | null, ahead: bigint, behind: bigint, stashCount: number, entries: Array<StatusEntry>, };
 
 export type StatusEntry = { path: string, 
@@ -429,3 +489,24 @@ export type TodoItem = { step: Step, oid: string, summary: string,
  * The replacement message for a [`Step::Reword`]. Never written to the todo file.
  */
 message: string | null, };
+
+/**
+ * One working tree attached to the repository, the main one included.
+ */
+export type Worktree = { path: string, 
+/**
+ * Empty for a worktree that has never been checked out.
+ */
+head: string, 
+/**
+ * The branch checked out there, short form. None when the head is detached.
+ */
+branch: string | null, 
+/**
+ * True while another process holds it, which is what stops a concurrent checkout.
+ */
+locked: boolean, 
+/**
+ * True when the main worktree of a bare repository, which has no files of its own.
+ */
+bare: boolean, };

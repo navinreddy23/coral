@@ -20,7 +20,10 @@ const frameBytes = readFileSync(resolve(process.cwd(), 'tests/fixtures/frame.bin
 
 const invoke = vi.hoisted(() => vi.fn());
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
-vi.mock('../../src/ipc/invoke', () => ({ invoke }));
+vi.mock('../../src/ipc/invoke', () => ({ invoke, isPreview: () => false }));
+// The window subscribes to terminal output and to repository changes. Neither channel
+// exists without the Tauri shell, and the real `listen` throws rather than returning.
+vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => undefined }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 
 import App from '../../src/app/App.svelte';

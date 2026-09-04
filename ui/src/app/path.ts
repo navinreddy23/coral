@@ -26,3 +26,28 @@ export function elidePath(path: string, max: number): string {
   }
   return `…/${kept}`;
 }
+
+/**
+ * Shortens a ref name for a pill, keeping the part that identifies the branch.
+ *
+ * A ref is a path too, and the same rule applies: `origin/feature/audio-ringbuffer` cut from
+ * the right becomes `origin/feature/audio-rin…`, which is every branch on that feature. Cut
+ * from the left it becomes `…/audio-ringbuffer`, which is exactly one.
+ *
+ * The remote's own name is worth keeping when it fits, since it is what separates a tracking
+ * branch from the local one beside it.
+ */
+export function elideRef(name: string, max: number): string {
+  if (name.length <= max) return name;
+
+  const parts = name.split('/');
+  const last = parts.pop() ?? name;
+  if (parts.length === 0 || last.length + 2 > max) {
+    return `${name.slice(0, Math.max(1, max - 1))}…`;
+  }
+
+  // The remote or the first segment, plus the tail: `origin/…/audio-ringbuffer`.
+  const head = parts[0] ?? '';
+  const withHead = `${head}/…/${last}`;
+  return withHead.length <= max ? withHead : `…/${last}`;
+}

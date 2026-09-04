@@ -4,7 +4,10 @@ import { fireEvent } from '@testing-library/dom';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
-vi.mock('../../src/ipc/invoke', () => ({ invoke: vi.fn() }));
+vi.mock('../../src/ipc/invoke', () => ({ invoke: vi.fn(), isPreview: () => false }));
+// The window subscribes to terminal output and to repository changes. Neither channel
+// exists without the Tauri shell, and the real `listen` throws rather than returning.
+vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => undefined }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 
 import Sidebar from '../../src/app/Sidebar.svelte';
@@ -82,10 +85,16 @@ describe('the sidebar', () => {
     );
     const rows = [...(section?.querySelectorAll('button.ref') ?? [])] as HTMLButtonElement[];
     expect(rows).toHaveLength(2);
-    // One that has never been cloned has nothing to open.
-    expect(rows[1]?.disabled).toBe(true);
+    // One that has never been cloned is marked but still clickable: offering to fetch a
+    // working copy is more use than a row that does nothing.
+    expect(rows[1]?.disabled).toBe(false);
+    expect(rows[1]?.className).toContain('absent');
     await fireEvent.click(rows[0] as HTMLButtonElement);
     expect(opened).toEqual(['external/dev-scripts']);
+
+    // And the shell is told about the missing one too, so it can ask.
+    await fireEvent.click(rows[1] as HTMLButtonElement);
+    expect(opened).toEqual(['external/dev-scripts', 'vendor/other']);
   });
 
   it('shows proposals only when the host gave some, and opens one', async () => {

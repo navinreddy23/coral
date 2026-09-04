@@ -24,9 +24,15 @@
   --border: #dfe3ea;
   --border-strong: #c3cad6;
 
-  --fg-0: #171a20;
-  --fg-1: #4a5364;
-  --fg-2: #737d8d;
+  /*
+   * Measured against `bg-0`, not chosen by eye. The dimmest of the three started at 4.5:1 —
+   * the floor for large text, and not enough for an 11px date or a body preview, which read as
+   * smudges on a bright panel. These are 14.6:1, 11.8:1 and 7.5:1, so even the dimmest clears
+   * the 7:1 enhanced threshold at the small sizes this interface uses everywhere.
+   */
+  --fg-0: #0b0e13;
+  --fg-1: #2f3846;
+  --fg-2: #4a5568;
 
   --accent: #0d7a6f;
   --accent-hover: #0a655c;

@@ -65,8 +65,67 @@ pub enum Action {
     TagDelete {
         name: String,
     },
+    /// Move the current branch, and optionally the index and worktree, to a commit.
+    Reset {
+        rev: String,
+        mode: ResetKind,
+    },
+    /// Drop, reword or reorder one commit, replaying everything above it.
+    Rewrite {
+        rev: String,
+        how: RewriteKind,
+        /// The replacement message, for a reword.
+        message: Option<String>,
+    },
+    /// Check a commit out into a working tree of its own.
+    WorktreeAdd {
+        /// Where the new working tree goes.
+        path: String,
+        rev: String,
+        /// Create this branch there rather than detaching.
+        branch: Option<String>,
+    },
+    /// Clone and check out a submodule's working copy.
+    SubmoduleInit {
+        /// The submodule's path within the repository. All of them when absent.
+        path: Option<String>,
+        recursive: bool,
+    },
+    /// Write a commit out as a patch file.
+    Patch {
+        rev: String,
+        /// Directory to write into.
+        directory: String,
+    },
     Undo,
     Redo,
+}
+
+#[derive(Clone, Copy, Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ResetKind {
+    Soft,
+    Mixed,
+    Hard,
+}
+
+impl From<ResetKind> for coral_core::ops::ResetMode {
+    fn from(k: ResetKind) -> Self {
+        match k {
+            ResetKind::Soft => Self::Soft,
+            ResetKind::Mixed => Self::Mixed,
+            ResetKind::Hard => Self::Hard,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RewriteKind {
+    Drop,
+    Reword,
+    MoveNewer,
+    MoveOlder,
 }
 
 #[derive(Clone, Copy, Debug, serde::Deserialize)]
@@ -96,6 +155,33 @@ pub struct ActionOutcome {
     pub what: String,
     /// The operation stopped with conflicts and the worktree needs attention.
     pub conflicted: bool,
+    /// git's own words about what happened, when there are any.
+    ///
+    /// Carried because "Already up to date." is a different answer from a pull that brought
+    /// commits, and without it both arrive as the same success.
+    pub message: String,
+}
+
+/// What running one action produced, before it is phrased for the window.
+struct Done {
+    conflicted: bool,
+    message: String,
+}
+
+impl Done {
+    fn quiet() -> Self {
+        Self {
+            conflicted: false,
+            message: String::new(),
+        }
+    }
+
+    fn from(outcome: &coral_core::ops::OpOutcome) -> Self {
+        Self {
+            conflicted: !outcome.conflicts.is_empty(),
+            message: outcome.message.clone(),
+        }
+    }
 }
 
 impl Action {
@@ -118,6 +204,17 @@ impl Action {
             Self::StashDrop { .. } => "stash drop".to_owned(),
             Self::TagCreate { name, .. } => format!("tag {name}"),
             Self::TagDelete { name } => format!("delete tag {name}"),
+            Self::Reset { rev, .. } => format!("reset to {rev:.8}"),
+            Self::Rewrite { rev, how, .. } => match how {
+                RewriteKind::Drop => format!("drop {rev:.8}"),
+                RewriteKind::Reword => format!("reword {rev:.8}"),
+                RewriteKind::MoveNewer => format!("move {rev:.8} up"),
+                RewriteKind::MoveOlder => format!("move {rev:.8} down"),
+            },
+            Self::WorktreeAdd { path, .. } => format!("worktree at {path}"),
+            Self::SubmoduleInit { path: Some(p), .. } => format!("initialise {p}"),
+            Self::SubmoduleInit { path: None, .. } => "initialise the submodules".to_owned(),
+            Self::Patch { rev, .. } => format!("patch for {rev:.8}"),
             Self::Undo => "undo".to_owned(),
             Self::Redo => "redo".to_owned(),
         }
@@ -149,26 +246,28 @@ pub async fn repo_action(path: String, action: Action) -> Result<ActionOutcome, 
         return Ok(ActionOutcome {
             what,
             conflicted: false,
+            message: String::new(),
         });
     }
 
     let before = loc.snapshot_refs(&runner).await?;
-    let conflicted = run(&loc, &runner, action).await?;
+    let done = run(&loc, &runner, action).await?;
     let after = loc.snapshot_refs(&runner).await?;
     loc.journal_change(&label, before, after)?;
 
     Ok(ActionOutcome {
         what: label,
-        conflicted,
+        conflicted: done.conflicted,
+        message: done.message,
     })
 }
 
-/// Performs the action, reporting whether it stopped on conflicts.
+/// Performs the action, reporting whether it stopped and what git said.
 async fn run(
     loc: &RepoLocation,
     runner: &GitRunner,
     action: Action,
-) -> Result<bool, coral_core::CoralError> {
+) -> Result<Done, coral_core::CoralError> {
     match action {
         Action::Fetch { remote } => {
             // Prune: a fetch that leaves deleted remote branches in the sidebar is a fetch
@@ -177,7 +276,7 @@ async fn run(
         }
         Action::Pull { remote, mode } => {
             let out = loc.pull(runner, remote.as_deref(), mode.into()).await?;
-            return Ok(!out.conflicts.is_empty());
+            return Ok(Done::from(&out));
         }
         Action::Push {
             remote,
@@ -188,7 +287,18 @@ async fn run(
                 set_upstream,
                 ..PushOpts::default()
             };
-            loc.push(runner, &opts, |_| {}).await?;
+            let results = loc.push(runner, &opts, |_| {}).await?;
+            // git's per-ref answers, which is the only place "Everything up-to-date" and a
+            // rejection are told apart.
+            let message = results
+                .iter()
+                .map(|r| format!("{} -> {} {}", r.local, r.remote, r.summary))
+                .collect::<Vec<_>>()
+                .join("\n");
+            return Ok(Done {
+                conflicted: results.iter().any(|r| r.flag.is_failure()),
+                message,
+            });
         }
         Action::Checkout { rev } => loc.checkout(runner, &rev).await?,
         Action::BranchCreate { name, at, checkout } => {
@@ -198,23 +308,23 @@ async fn run(
         Action::BranchDelete { name, force } => loc.branch_delete(runner, &name, force).await?,
         Action::Merge { rev } => {
             let out = loc.merge(runner, &rev, MergeMode::default(), None).await?;
-            return Ok(!out.conflicts.is_empty());
+            return Ok(Done::from(&out));
         }
         Action::Rebase { onto } => {
             // --update-refs carries any branches pointing inside the rebased range along with
             // it, which is what stops a stack of review branches being left behind.
             let out = loc.rebase(runner, &onto, true).await?;
-            return Ok(!out.conflicts.is_empty());
+            return Ok(Done::from(&out));
         }
         Action::CherryPick { revs } => {
             let refs: Vec<&str> = revs.iter().map(String::as_str).collect();
             let out = loc.cherry_pick(runner, &refs).await?;
-            return Ok(!out.conflicts.is_empty());
+            return Ok(Done::from(&out));
         }
         Action::Revert { revs } => {
             let refs: Vec<&str> = revs.iter().map(String::as_str).collect();
             let out = loc.revert(runner, &refs).await?;
-            return Ok(!out.conflicts.is_empty());
+            return Ok(Done::from(&out));
         }
         Action::StashPush { message } => {
             // Untracked files are included: a stash that leaves them behind is a stash that
@@ -228,9 +338,36 @@ async fn run(
                 .await?;
         }
         Action::TagDelete { name } => loc.tag_delete(runner, &name).await?,
+        Action::Reset { rev, mode } => loc.reset(runner, &rev, mode.into()).await?,
+        Action::Rewrite { rev, how, message } => {
+            let rewrite = match how {
+                RewriteKind::Drop => coral_core::sequence::Rewrite::Drop,
+                RewriteKind::Reword => {
+                    coral_core::sequence::Rewrite::Reword(message.unwrap_or_default())
+                }
+                RewriteKind::MoveNewer => coral_core::sequence::Rewrite::MoveNewer,
+                RewriteKind::MoveOlder => coral_core::sequence::Rewrite::MoveOlder,
+            };
+            let out = loc
+                .rewrite_commit(runner, &rev, &rewrite, &coral_binary()?)
+                .await?;
+            return Ok(Done::from(&out));
+        }
+        Action::WorktreeAdd { path, rev, branch } => {
+            loc.worktree_add(runner, std::path::Path::new(&path), &rev, branch.as_deref())
+                .await?;
+        }
+        Action::SubmoduleInit { path, recursive } => {
+            loc.submodule_init(runner, path.as_deref(), recursive)
+                .await?;
+        }
+        Action::Patch { rev, directory } => {
+            loc.format_patch(runner, &rev, std::path::Path::new(&directory))
+                .await?;
+        }
         Action::Undo | Action::Redo => unreachable!("stepped above"),
     }
-    Ok(false)
+    Ok(Done::quiet())
 }
 
 /// The todo list an interactive rebase onto `onto` would start from.
@@ -259,10 +396,7 @@ pub async fn rebase_start(
 ) -> Result<ActionOutcome, IpcError> {
     let runner = GitRunner::discover().await?;
     let loc = RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
-    let binary = std::env::current_exe().map_err(|e| coral_core::CoralError::Protocol {
-        label: "rebase",
-        detail: format!("could not locate the running binary: {e}"),
-    })?;
+    let binary = coral_binary()?;
 
     let before = loc.snapshot_refs(&runner).await?;
     let outcome = loc
@@ -274,5 +408,17 @@ pub async fn rebase_start(
     Ok(ActionOutcome {
         what: format!("rebase onto {onto}"),
         conflicted: !outcome.conflicts.is_empty(),
+        message: outcome.message,
+    })
+}
+
+/// Where this application is, so git can be pointed back at it as its sequence editor.
+///
+/// The same self-invocation the credential helper uses: a packaged application cannot assume
+/// the CLI is installed, let alone on the PATH.
+fn coral_binary() -> Result<std::path::PathBuf, coral_core::CoralError> {
+    std::env::current_exe().map_err(|e| coral_core::CoralError::Protocol {
+        label: "rebase",
+        detail: format!("could not locate the running binary: {e}"),
     })
 }

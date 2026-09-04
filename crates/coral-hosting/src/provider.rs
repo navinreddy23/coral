@@ -82,6 +82,24 @@ impl Host {
             repo,
         })
     }
+
+    /// Where this commit is served on the web.
+    ///
+    /// GitLab puts a `-` before the noun to keep project paths and page routes apart, since a
+    /// subgroup could otherwise be called `commit`; GitHub does not.
+    #[must_use]
+    pub fn commit_url(&self, oid: &str) -> String {
+        let Self {
+            origin,
+            owner,
+            repo,
+            ..
+        } = self;
+        match self.kind {
+            HostKind::GitHub => format!("{origin}/{owner}/{repo}/commit/{oid}"),
+            HostKind::GitLab => format!("{origin}/{owner}/{repo}/-/commit/{oid}"),
+        }
+    }
 }
 
 /// Rewrites `git@host:owner/repo.git` into a URL the parser accepts. Leaves anything with an
@@ -167,6 +185,24 @@ mod tests {
             Host::detect("https://git.example.com/team/app.git"),
             Err(HostingError::Unrecognised(_))
         ));
+    }
+
+    #[test]
+    fn builds_the_web_address_of_a_commit_for_each_host() {
+        let oid = "0123456789abcdef0123456789abcdef01234567";
+        assert_eq!(
+            Host::detect("git@github.com:torvalds/linux.git")
+                .unwrap()
+                .commit_url(oid),
+            format!("https://github.com/torvalds/linux/commit/{oid}")
+        );
+        // The `-` segment, and a subgroup that stays part of the project path.
+        assert_eq!(
+            Host::detect("https://gitlab.com/group/sub/proj.git")
+                .unwrap()
+                .commit_url(oid),
+            format!("https://gitlab.com/group/sub/proj/-/commit/{oid}")
+        );
     }
 
     #[test]

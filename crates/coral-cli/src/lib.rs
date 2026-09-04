@@ -289,6 +289,45 @@ pub enum Command {
         #[arg(long)]
         inherit: bool,
     },
+    /// List the repository's working trees.
+    Worktrees,
+    /// Check a revision out into a new working tree.
+    WorktreeAdd {
+        /// Where the new working tree goes.
+        path: PathBuf,
+        /// What to check out there. Defaults to HEAD.
+        #[arg(long, default_value = "HEAD")]
+        rev: String,
+        /// Create this branch there rather than detaching.
+        #[arg(long)]
+        branch: Option<String>,
+    },
+    /// Remove a working tree.
+    WorktreeRemove {
+        path: PathBuf,
+        /// Remove it even with uncommitted changes.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Write a commit out as a patch file.
+    Patch {
+        /// The commit to export. Defaults to HEAD.
+        #[arg(long, default_value = "HEAD")]
+        rev: String,
+        /// Directory to write into.
+        #[arg(long, default_value = ".")]
+        out: PathBuf,
+    },
+    /// Drop, reword or reorder one commit, replaying everything above it.
+    Rewrite {
+        /// The commit to change.
+        rev: String,
+        #[arg(long, value_enum)]
+        kind: commands::rewrite::Kind,
+        /// The replacement message, for --kind reword.
+        #[arg(short, long)]
+        message: Option<String>,
+    },
     /// Show the todo list an interactive rebase onto a revision would start from.
     RebaseTodo {
         /// The commit to rebase onto.
@@ -445,6 +484,7 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
         }
         Command::Refs { kind } => output::render(&commands::refs::run(repo, kind).await),
         Command::Submodules => output::render(&commands::submodule::run(repo).await),
+        Command::Worktrees => output::render(&commands::worktree::list(repo).await),
         Command::Signing => output::render(&commands::signing::show(repo).await),
         Command::SigningKeys => output::render(&commands::signing::keys(repo).await),
         Command::SigningSet {
@@ -586,6 +626,18 @@ async fn dispatch_write(command: Command, repo: &std::path::Path) -> output::Ren
         }
         Command::ConflictResolve { file, how } => {
             output::render(&commands::conflicts::resolve(repo, &file, how).await)
+        }
+        Command::WorktreeAdd { path, rev, branch } => {
+            output::render(&commands::worktree::add(repo, &path, &rev, branch).await)
+        }
+        Command::WorktreeRemove { path, force } => {
+            output::render(&commands::worktree::remove(repo, &path, force).await)
+        }
+        Command::Patch { rev, out } => {
+            output::render(&commands::patch::write(repo, &rev, &out).await)
+        }
+        Command::Rewrite { rev, kind, message } => {
+            output::render_op(&commands::rewrite::run(repo, &rev, kind, message).await)
         }
         Command::Undo => output::render(&commands::write::undo(repo).await),
         Command::Redo => output::render(&commands::write::redo(repo).await),

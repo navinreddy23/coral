@@ -66,6 +66,13 @@ pub struct TabGroup {
 pub struct Tab {
     pub id: u32,
     pub path: PathBuf,
+    /// A submodule being looked at inside this tab, relative to `path`.
+    ///
+    /// A submodule is not a separate workspace: it belongs to the repository that declares it,
+    /// and the reference shows it as a step in the same tab's breadcrumb rather than opening a
+    /// tab of its own. Keeping it on the tab is what lets the crumb survive a restart.
+    #[serde(default)]
+    pub submodule: Option<PathBuf>,
     /// The group this tab belongs to, if any.
     pub group: Option<u32>,
     /// Whether the repository is still on disk. A tab for a missing one is kept and marked,
@@ -114,15 +121,21 @@ impl Session {
     }
 
     /// Opens `path`, or focuses the tab that already has it.
+    ///
+    /// Asking for a repository that is already open in a tab currently showing one of its
+    /// submodules steps back out to it, which is what the request means.
     pub fn open(&mut self, path: PathBuf) -> u32 {
-        if let Some(existing) = self.tabs.iter().find(|t| t.path == path) {
-            self.active = Some(existing.id);
-            return existing.id;
+        if let Some(existing) = self.tabs.iter_mut().find(|t| t.path == path) {
+            existing.submodule = None;
+            let id = existing.id;
+            self.active = Some(id);
+            return id;
         }
         let id = self.take_id();
         self.tabs.push(Tab {
             id,
             path,
+            submodule: None,
             group: None,
             missing: false,
         });
@@ -204,6 +217,60 @@ impl Session {
         self.drop_empty_groups();
     }
 
+    /// Shows a submodule inside the tab that declares it.
+    ///
+    /// `relative` is the submodule's path within the repository, which is how `.gitmodules`
+    /// names it. Nothing is validated here: whether the working copy is initialised is the
+    /// engine's answer, not the session's.
+    pub fn enter_submodule(&mut self, tab: u32, relative: PathBuf) {
+        if let Some(t) = self.tabs.iter_mut().find(|t| t.id == tab) {
+            t.submodule = Some(relative);
+        }
+    }
+
+    /// Steps back out to the repository the tab was opened for.
+    pub fn leave_submodule(&mut self, tab: u32) {
+        if let Some(t) = self.tabs.iter_mut().find(|t| t.id == tab) {
+            t.submodule = None;
+        }
+    }
+
+    /// Renames a group.
+    pub fn rename_group(&mut self, group: u32, name: String) {
+        if let Some(g) = self.groups.iter_mut().find(|g| g.id == group) {
+            g.name = name;
+        }
+    }
+
+    /// Changes a group's colour.
+    pub fn recolour_group(&mut self, group: u32, colour: GroupColour) {
+        if let Some(g) = self.groups.iter_mut().find(|g| g.id == group) {
+            g.colour = colour;
+        }
+    }
+
+    /// Dissolves a group, leaving its tabs open and loose.
+    pub fn dissolve_group(&mut self, group: u32) {
+        for tab in self.tabs.iter_mut().filter(|t| t.group == Some(group)) {
+            tab.group = None;
+        }
+        self.drop_empty_groups();
+        self.regroup();
+    }
+
+    /// Closes every tab in a group, and the group with them.
+    pub fn close_group(&mut self, group: u32) {
+        let doomed: Vec<u32> = self
+            .tabs
+            .iter()
+            .filter(|t| t.group == Some(group))
+            .map(|t| t.id)
+            .collect();
+        for id in doomed {
+            self.close(id);
+        }
+    }
+
     /// Removes a tab from its group without closing it.
     pub fn ungroup(&mut self, tab: u32) {
         if let Some(t) = self.tabs.iter_mut().find(|t| t.id == tab) {
@@ -234,6 +301,16 @@ impl Session {
         // Ids are never reused, so a stale reference cannot silently point at a new tab.
         self.next_id = self.next_id.wrapping_add(1);
         self.next_id
+    }
+
+    /// The directory a tab is currently showing: the submodule when one is open, else the
+    /// repository itself.
+    #[must_use]
+    pub fn working_path(tab: &Tab) -> PathBuf {
+        match &tab.submodule {
+            Some(rel) => tab.path.join(rel),
+            None => tab.path.clone(),
+        }
     }
 
     /// Marks tabs whose repository is no longer on disk.

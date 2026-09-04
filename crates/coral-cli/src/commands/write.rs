@@ -91,6 +91,13 @@ impl crate::output::Human for OpOutcome {
             s.push_str("\n  ");
             s.push_str(c);
         }
+        // git's own explanation. A stop with no conflicts — an empty commit, or an `edit` step
+        // the user asked for — says nothing at all without it, and that is exactly the case
+        // where the reason is not obvious from the repository.
+        for line in self.message.lines().filter(|l| !l.trim().is_empty()) {
+            s.push_str("\n  ");
+            s.push_str(line.trim_end());
+        }
         s
     }
 }

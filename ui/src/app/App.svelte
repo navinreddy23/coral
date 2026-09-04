@@ -17,10 +17,19 @@
   import StatusBar from './StatusBar.svelte';
   import Ask, { type Choice } from './Ask.svelte';
   import Preferences from './Preferences.svelte';
+  import Menu, { type MenuItem } from './Menu.svelte';
+  import Toasts from './Toasts.svelte';
+  import Splash from './Splash.svelte';
+  import Remotes from './Remotes.svelte';
+  import { RemotesState } from '../state/remotes.svelte';
+  import { describe, ToastsState } from '../state/toasts.svelte';
+  import { copyText } from './clipboard';
+  import { onRepoChanged, unwatchRepo, watchRepo, type RepoChanged } from '../ipc/watch';
   import Terminal from './Terminal.svelte';
   import { TerminalState } from '../state/terminal.svelte';
   import { SigningState } from '../state/signing.svelte';
-  import { elidePath } from './path';
+  import { SshState } from '../state/ssh.svelte';
+  import { elidePath, elideRef } from './path';
   import type { Action } from '../ipc/commands';
   import {
     DEFAULT_METRICS,
@@ -30,7 +39,7 @@
     REFS_COLUMN_PX,
     spacerHeight,
   } from '../graph/layout';
-  import { initialRepo, open, pickRepository } from '../ipc/commands';
+  import { commitUrl, initialRepo, open, pickDirectory, pickRepository } from '../ipc/commands';
   import { GraphState } from '../state/graph.svelte';
   import { RefsState } from '../state/refs.svelte';
   import { ThemeState } from '../state/theme.svelte';
@@ -45,6 +54,7 @@
   import TabBar from './TabBar.svelte';
   import Toolbar from './Toolbar.svelte';
   import type { RepoInfo } from '../ipc/types';
+  import type { PlacedRef } from '../state/refs.svelte';
 
   const graph = new GraphState();
   const theme = new ThemeState();
@@ -134,6 +144,12 @@
   const hosting = new HostingState();
   const rebase = new RebaseState();
   const signing = new SigningState();
+  const ssh = new SshState();
+  const toasts = new ToastsState();
+  const remotes = new RemotesState();
+  let showRemotes = $state<{ focus: string | null } | null>(null);
+  /** The context menu on screen, if any. */
+  let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   let showPrefs = $state(false);
   const terminal = new TerminalState();
   let showPalette = $state(false);
@@ -166,6 +182,23 @@
       };
     });
   }
+  /**
+   * Asks for one line of text, or null when the user cancelled.
+   *
+   * Wraps `ask` because most callers want a string and nothing else, and repeating the choice
+   * plumbing at every call site is what makes a dialog inconsistent.
+   */
+  async function askText(title: string, detail: string, initial: string): Promise<string | null> {
+    const { choice, text } = await ask({
+      title,
+      detail,
+      placeholder: '',
+      initial,
+      choices: [{ id: 'ok', label: 'OK', primary: true }],
+    });
+    return choice === null ? null : text;
+  }
+
   let scroller = $state<HTMLDivElement | null>(null);
 
   const headName = $derived(
@@ -203,11 +236,369 @@
     const path = info.path;
     const before = refSignature();
     const outcome = await actions.run(path, action);
-    if (!outcome) return;
+    if (!outcome) {
+      // `actions` keeps the message for the status line; the toast is what carries it to
+      // someone who is not looking at the bottom of the window.
+      if (actions.report) toasts.push('error', 'Something went wrong', actions.report.text);
+      return;
+    }
+
+    const said = describe(outcome.what, outcome.message, outcome.conflicted);
+    toasts.push(said.kind, said.title, said.detail);
 
     await Promise.all([refs.load(path), worktree.load(path), merge.load(path)]);
     const after = refSignature();
     if (before !== after) await graph.open(path);
+
+    // A checkout moves HEAD, and leaving the view where it was is the commonest way to end up
+    // reading the branch that was just left.
+    if (action.kind === 'checkout') {
+      info = await open(path).catch(() => info);
+      await focusHead();
+    }
+  }
+
+  /**
+   * What right-clicking a commit offers.
+   *
+   * Grouped as the reference groups them: where to go, what to make here, how to rewrite the
+   * history, what to copy, and what to tag. The history edits are refused by the engine for a
+   * commit that is not on this branch or for a range holding a merge, so nothing here has to
+   * guess at whether they are safe.
+   */
+  /** The row under the pointer, if the loaded frame reaches it. */
+  function rightClickRow(event: MouseEvent, row: number) {
+    const local = localRow(graph.frame, row);
+    if (local === null || !graph.frame) return;
+    commitMenu(event, row, oidOf(graph.frame, local));
+  }
+
+  function commitMenu(event: MouseEvent, row: number, oid: string) {
+    event.preventDefault();
+    pick(row);
+    const short = oid.slice(0, 8);
+    const branch = headName ?? 'HEAD';
+    const summary = graph.meta.get(row)?.summary ?? '';
+
+    menu = {
+      x: event.clientX,
+      y: event.clientY,
+      items: [
+        {
+          kind: 'item',
+          label: 'Checkout this commit',
+          hint: short,
+          run: () => void act({ kind: 'checkout', rev: oid }),
+        },
+        { kind: 'item', label: 'Create worktree from this commit', run: () => void worktreeAt(oid) },
+        { kind: 'separator' },
+        { kind: 'item', label: 'Create branch here', run: () => void branchAt(oid) },
+        {
+          kind: 'item',
+          label: 'Cherry pick commit',
+          run: () => void act({ kind: 'cherryPick', revs: [oid] }),
+        },
+        {
+          kind: 'submenu',
+          label: `Reset ${branch} to this commit`,
+          items: [
+            {
+              kind: 'item',
+              label: 'Soft — keep the index and the working copy',
+              run: () => void act({ kind: 'reset', rev: oid, mode: 'soft' }),
+            },
+            {
+              kind: 'item',
+              label: 'Mixed — keep the working copy',
+              run: () => void act({ kind: 'reset', rev: oid, mode: 'mixed' }),
+            },
+            {
+              kind: 'item',
+              label: 'Hard — discard everything since',
+              danger: true,
+              run: () => void confirmHardReset(oid, branch),
+            },
+          ],
+        },
+        {
+          kind: 'item',
+          label: 'Revert commit',
+          run: () => void act({ kind: 'revert', revs: [oid] }),
+        },
+        { kind: 'separator' },
+        {
+          kind: 'item',
+          label: `Interactive rebase the children of ${short}`,
+          run: () => info && void rebase.load(info.path, `${oid}~1`),
+        },
+        { kind: 'item', label: 'Edit commit message', run: () => void reword(oid, summary) },
+        {
+          kind: 'item',
+          label: 'Drop commit',
+          danger: true,
+          run: () => void confirmDrop(oid, summary),
+        },
+        {
+          kind: 'item',
+          label: 'Move commit up',
+          run: () => void act({ kind: 'rewrite', rev: oid, how: 'moveNewer', message: null }),
+        },
+        {
+          kind: 'item',
+          label: 'Move commit down',
+          run: () => void act({ kind: 'rewrite', rev: oid, how: 'moveOlder', message: null }),
+        },
+        { kind: 'separator' },
+        { kind: 'item', label: 'Copy commit sha', hint: short, run: () => void copySha(oid) },
+        { kind: 'item', label: 'Copy link to this commit', run: () => void copyLink(oid) },
+        { kind: 'item', label: 'Create patch from commit', run: () => void patchOf(oid) },
+        { kind: 'separator' },
+        { kind: 'item', label: 'Create tag here', run: () => void tagAt(oid, false) },
+        { kind: 'item', label: 'Create annotated tag here', run: () => void tagAt(oid, true) },
+      ],
+    };
+  }
+
+  async function branchAt(oid: string) {
+    const name = await askText('Create branch here', `At ${oid.slice(0, 8)}.`, '');
+    if (name === null || name.trim() === '') return;
+    await act({ kind: 'branchCreate', name: name.trim(), at: oid, checkout: true });
+  }
+
+  async function tagAt(oid: string, annotated: boolean) {
+    const name = await askText(
+      annotated ? 'Create annotated tag here' : 'Create tag here',
+      `At ${oid.slice(0, 8)}.`,
+      '',
+    );
+    if (name === null || name.trim() === '') return;
+    let message: string | null = null;
+    if (annotated) {
+      message = await askText('Tag message', `For ${name.trim()}.`, '');
+      if (message === null) return;
+    }
+    await act({ kind: 'tagCreate', name: name.trim(), at: oid, message });
+  }
+
+  async function worktreeAt(oid: string) {
+    const where = await pickDirectory('Where should the new working tree go?');
+    if (where === null) return;
+    const branch = await askText(
+      'Branch for the new working tree',
+      'Leave it empty to check the commit out detached. Two working trees may not share a branch.',
+      '',
+    );
+    if (branch === null) return;
+    await act({
+      kind: 'worktreeAdd',
+      path: where,
+      rev: oid,
+      branch: branch.trim() === '' ? null : branch.trim(),
+    });
+  }
+
+  async function patchOf(oid: string) {
+    const where = await pickDirectory('Where should the patch be written?');
+    if (where === null) return;
+    await act({ kind: 'patch', rev: oid, directory: where });
+  }
+
+  async function reword(oid: string, summary: string) {
+    const message = await askText(
+      'Edit commit message',
+      'Everything above this commit is replayed, so their object ids change.',
+      summary,
+    );
+    if (message === null || message.trim() === '') return;
+    await act({ kind: 'rewrite', rev: oid, how: 'reword', message: message.trim() });
+  }
+
+  async function confirmDrop(oid: string, summary: string) {
+    const { choice } = await ask({
+      title: 'Drop this commit?',
+      detail: `${summary}\n\nIt is removed and everything above it is replayed, so their object ids change.`,
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'drop', label: 'Drop the commit', primary: true }],
+    });
+    if (choice === null) return;
+    await act({ kind: 'rewrite', rev: oid, how: 'drop', message: null });
+  }
+
+  async function confirmHardReset(oid: string, branch: string) {
+    const { choice } = await ask({
+      title: `Reset ${branch} hard?`,
+      detail:
+        'Uncommitted changes in the working copy are discarded and cannot be recovered. The ' +
+        'commits themselves stay in the reflog.',
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'reset', label: 'Discard and reset', primary: true }],
+    });
+    if (choice === null) return;
+    await act({ kind: 'reset', rev: oid, mode: 'hard' });
+  }
+
+  async function copySha(oid: string) {
+    if (await copyText(oid)) toasts.push('ok', 'Copied', oid);
+    else toasts.push('error', 'Could not reach the clipboard');
+  }
+
+  async function copyLink(oid: string) {
+    if (!info) return;
+    const url = await commitUrl(info.path, oid, null).catch(() => null);
+    if (url === null) {
+      toasts.push('info', 'No web address for this commit', 'The remote is not a host Coral knows.');
+      return;
+    }
+    if (await copyText(url)) toasts.push('ok', 'Copied', url);
+    else toasts.push('error', 'Could not reach the clipboard');
+  }
+
+  /**
+   * The refs a row had no room for.
+   *
+   * The overflow chip has to lead somewhere: a row can carry a dozen tags, and a count that
+   * cannot be opened only says how many are being hidden from you.
+   */
+  function refsMenu(event: MouseEvent, hidden: PlacedRef[]) {
+    event.stopPropagation();
+    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    menu = {
+      x: box.left,
+      y: box.bottom + 2,
+      items: hidden.map((r) => ({
+        kind: 'submenu' as const,
+        label: r.short,
+        items: [
+          {
+            kind: 'item' as const,
+            label: 'Go to it',
+            disabled: r.row === null,
+            run: () => r.row !== null && void reveal(r.row),
+          },
+          {
+            kind: 'item' as const,
+            label: `Checkout ${r.short}`,
+            run: () => void act({ kind: 'checkout', rev: r.short }),
+          },
+        ],
+      })),
+    };
+  }
+
+  function openPreferences() {
+    showPrefs = true;
+    if (!info) return;
+    void signing.load(info.path);
+    void ssh.load(info.path);
+  }
+
+  /** How a pull should integrate, offered at the caret beside the Pull button. */
+  function pullMenu(event: MouseEvent) {
+    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    menu = {
+      x: box.left,
+      y: box.bottom + 2,
+      items: [
+        {
+          kind: 'item',
+          label: 'Pull, fast-forward only',
+          hint: 'refuses to merge',
+          run: () => void act({ kind: 'pull', remote: null, mode: 'ffOnly' }),
+        },
+        {
+          kind: 'item',
+          label: 'Pull, merging',
+          run: () => void act({ kind: 'pull', remote: null, mode: 'merge' }),
+        },
+        {
+          kind: 'item',
+          label: 'Pull, rebasing',
+          run: () => void act({ kind: 'pull', remote: null, mode: 'rebase' }),
+        },
+        { kind: 'separator' },
+        {
+          kind: 'item',
+          label: 'Fetch every remote',
+          run: () => void act({ kind: 'fetch', remote: null }),
+        },
+      ],
+    };
+  }
+
+  /** What right-clicking a remote, or the Remote section itself, offers. */
+  function remoteMenu(event: MouseEvent, remote: string | null) {
+    event.preventDefault();
+    const items: MenuItem[] = [
+      { kind: 'item', label: 'Add a remote…', run: () => (showRemotes = { focus: null }) },
+    ];
+    if (remote !== null) {
+      const found = remotes.list.find((r) => r.name === remote);
+      items.unshift(
+        {
+          kind: 'item',
+          label: `Remote details: ${remote}`,
+          hint: found?.fetchUrl ? '' : undefined,
+          run: () => (showRemotes = { focus: remote }),
+        },
+        { kind: 'item', label: 'Edit URL or rename…', run: () => (showRemotes = { focus: remote }) },
+        { kind: 'separator' },
+        { kind: 'item', label: `Fetch ${remote}`, run: () => void act({ kind: 'fetch', remote }) },
+        {
+          kind: 'item',
+          label: 'Prune branches that are gone',
+          run: () => void pruneRemote(remote),
+        },
+        { kind: 'separator' },
+        {
+          kind: 'item',
+          label: `Copy ${remote}'s URL`,
+          disabled: !found,
+          run: () => void copyRemoteUrl(remote),
+        },
+        {
+          kind: 'item',
+          label: `Remove ${remote}`,
+          danger: true,
+          run: () => void confirmRemoveRemote(remote),
+        },
+        { kind: 'separator' },
+      );
+    }
+    menu = { x: event.clientX, y: event.clientY, items };
+  }
+
+  async function pruneRemote(remote: string) {
+    if (await remotes.edit({ kind: 'prune', name: remote })) {
+      toasts.push('ok', `Pruned ${remote}`);
+      if (info) await refs.load(info.path);
+    } else {
+      toasts.push('error', `Could not prune ${remote}`, remotes.error ?? '');
+    }
+  }
+
+  async function copyRemoteUrl(remote: string) {
+    const url = remotes.list.find((r) => r.name === remote)?.fetchUrl ?? '';
+    if (url && (await copyText(url))) toasts.push('ok', 'Copied', url);
+    else toasts.push('error', 'Could not reach the clipboard');
+  }
+
+  async function confirmRemoveRemote(remote: string) {
+    const { choice } = await ask({
+      title: `Remove the remote ${remote}?`,
+      detail: 'Its tracking branches go with it. Nothing on the server is touched.',
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'remove', label: 'Remove it', primary: true }],
+    });
+    if (choice === null) return;
+    if (await remotes.edit({ kind: 'remove', name: remote })) {
+      toasts.push('ok', `Removed ${remote}`);
+      if (info) await refs.load(info.path);
+    } else {
+      toasts.push('error', `Could not remove ${remote}`, remotes.error ?? '');
+    }
   }
 
   /** Opens one of the selected commit's files in the diff viewer. */
@@ -248,12 +639,9 @@
       },
       {
         id: 'signing',
-        label: 'Commit signing settings',
+        label: 'SSH keys and commit signing',
         group: 'View',
-        run: () => {
-          showPrefs = true;
-          if (info) void signing.load(info.path);
-        },
+        run: openPreferences,
       },
     ];
 
@@ -316,6 +704,7 @@
       case 'push': return void act({ kind: 'push', remote: null, setUpstream: true });
       case 'stash': return void act({ kind: 'stashPush', message: null });
       case 'pop': return void act({ kind: 'stashApply', index: 0, pop: true });
+      case 'terminal': return terminal.toggle();
       case 'branch': {
         void (async () => {
           const { choice, text } = await ask({
@@ -361,6 +750,44 @@
     pick(row);
   }
 
+  /**
+   * Scrolls the commit list, rather than leaving it to the browser.
+   *
+   * Two reasons, and the second is why it is here at all. Above `MAX_SPACER_PX` the scrollable
+   * area no longer stands for the row range one pixel per row, so a wheel notch of 100px covers
+   * a different number of commits depending on how large the repository is; converting the
+   * delta to rows first makes a notch three commits everywhere. And the platform's own wheel
+   * handling has proved unreliable in this webview, which leaves a list that can only be moved
+   * by dragging a scrollbar thumb five pixels tall.
+   *
+   * `deltaMode` is honoured because a mouse reports lines and a trackpad reports pixels; taking
+   * `deltaY` as pixels either way makes a mouse scroll three pixels a notch.
+   */
+  function wheel(event: WheelEvent) {
+    if (!scroller) return;
+    if (event.ctrlKey) return;
+
+    const lines = event.deltaMode === 1 ? event.deltaY : event.deltaY / 40;
+    const pages = event.deltaMode === 2 ? event.deltaY : 0;
+    const rows =
+      pages * Math.max(1, Math.floor(viewport / DEFAULT_METRICS.rowHeight) - 1) + lines * 3;
+    if (rows === 0) return;
+
+    const total = graph.totalRows;
+    const height = spacerHeight(total, DEFAULT_METRICS);
+    const reach = Math.max(1, height - viewport);
+    // Below the cap a row is a whole pixel; above it the scrollable area is compressed, so the
+    // same number of rows is a smaller number of pixels.
+    const perRow = total > 0 ? reach / Math.max(1, total - 1) : DEFAULT_METRICS.rowHeight;
+
+    const next = Math.max(0, Math.min(reach, scroller.scrollTop + rows * perRow));
+    if (next !== scroller.scrollTop) {
+      scroller.scrollTop = next;
+      scrollTop = next;
+    }
+    event.preventDefault();
+  }
+
   function scrollToRow(row: number) {
     if (!graph.frame || !scroller) return;
     // Above the height cap a row is a fraction of a pixel, so the target is the fraction of
@@ -383,6 +810,7 @@
       // A repository can be opened mid-merge, so the tool has to be there on arrival rather
       // than only after an action of ours stopped.
       await merge.load(info.path);
+      void remotes.load(info.path);
       // Deliberately not awaited: a host that is slow or unreachable must not hold up the
       // window, and the section simply appears when the answer arrives.
       void hosting.load(info.path);
@@ -405,6 +833,8 @@
     rebase.close();
     merge.close();
     actions.clear();
+    menu = null;
+    showRemotes = null;
     showWip = false;
     scrollTop = 0;
     if (scroller) scroller.scrollTop = 0;
@@ -429,11 +859,66 @@
   // Switching tabs loads that repository; nothing else in the shell needs to know.
   let loadedPath = $state('');
   $effect(() => {
-    const path = tabs.active?.path;
+    // What the tab is showing, which is the submodule when one is open inside it.
+    const path = tabs.workingPath;
     if (path && path !== loadedPath) {
       loadedPath = path;
       void load(path);
     }
+  });
+
+  /**
+   * Moves the selection to whatever HEAD now points at.
+   *
+   * Checking a branch out and leaving the view where it was is the commonest way to end up
+   * reading the wrong branch's commits: the row that is selected still belongs to the branch
+   * that was just left. This follows the checkout, whether it was made here or in the terminal.
+   */
+  async function focusHead() {
+    if (!info) return;
+    const name = info.head.kind !== 'detached' ? info.head.name : null;
+    const target = name === null
+      ? refs.all.find((r) => r.kind.kind === 'local_branch' && r.row !== null)
+      : refs.groups.local.find((r) => r.short === name);
+    if (target?.row === undefined || target.row === null) return;
+    await reveal(target.row);
+  }
+
+  /**
+   * Reacts to the repository changing on disk.
+   *
+   * Reloads only what the change touched: rewalking 1.4M commits because a build wrote an
+   * object file would freeze the window for five seconds, repeatedly. A ref change is the one
+   * that can move HEAD, so it is the one that also moves the selection.
+   */
+  async function repoChanged(change: RepoChanged) {
+    if (!info || actions.busy) return;
+    const path = info.path;
+    const wasHead = headName;
+
+    if (change.index || change.worktree) await worktree.load(path);
+    if (change.ops) await merge.load(path);
+    if (!change.refs && !change.graph) return;
+
+    info = await open(path).catch(() => info);
+    await refs.load(path);
+    if (change.refs || change.graph) await graph.open(path);
+    // Only when it actually moved: following HEAD on every commit would drag the view away
+    // from whatever the user was reading.
+    if (headName !== wasHead) await focusHead();
+  }
+
+  // One watch, following whichever repository the active tab is showing.
+  $effect(() => {
+    const path = loadedPath;
+    if (!path) return;
+    void watchRepo(path).catch(() => undefined);
+    return () => void unwatchRepo().catch(() => undefined);
+  });
+
+  $effect(() => {
+    const stop = onRepoChanged((change) => void repoChanged(change));
+    return () => void stop.then((off) => off());
   });
 
   async function openAnother() {
@@ -442,15 +927,47 @@
   }
 
   /**
-   * Opens a submodule in its own tab.
+   * Shows a submodule inside the tab that declares it.
    *
-   * A submodule is a repository in its own right, so it gets a tab rather than a mode of this
-   * one; joining with the parent's path keeps it working when the parent was opened relatively.
+   * Not a tab of its own. A submodule belongs to the repository that declares it, at the commit
+   * that repository records; opening a second tab loses that relationship and leaves two
+   * entries in the bar with no way to tell which came from which. The reference shows it as
+   * another step in the same tab's breadcrumb, and so does this.
    */
   async function openSubmodule(relative: string) {
-    const parent = tabs.active?.path;
-    if (!parent) return;
-    await tabs.open(`${parent.replace(/\/+$/u, '')}/${relative}`);
+    const tab = tabs.active;
+    if (!tab) return;
+    // A submodule that has never been checked out has nothing to open; offering to fetch one
+    // is more use than a row that does nothing when clicked.
+    const known = refs.submodules.find((s) => s.path === relative);
+    if (known && !known.initialised) {
+      await initSubmodule(relative);
+      return;
+    }
+    if (tab.submodule === relative) await tabs.leaveSubmodule(tab.id);
+    else await tabs.enterSubmodule(tab.id, relative);
+  }
+
+  /** Fetches a working copy for one submodule, or for all of them when `relative` is null. */
+  async function initSubmodule(relative: string | null) {
+    if (!info) return;
+    const { choice } = await ask({
+      title: relative === null ? 'Fetch every missing submodule?' : `Fetch ${relative}?`,
+      detail:
+        'Its working copy is cloned from the URL the repository records, at the commit it ' +
+        'points to. This reaches the network.',
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'go', label: 'Fetch it', primary: true }],
+    });
+    if (choice === null) return;
+    await act({ kind: 'submoduleInit', path: relative, recursive: false });
+    await refs.load(info.path);
+  }
+
+  async function leaveSubmodule() {
+    const tab = tabs.active;
+    if (tab) await tabs.leaveSubmodule(tab.id);
   }
 
   /**
@@ -518,6 +1035,31 @@
   });
 
   /**
+   * Which of a row's refs are worth the two slots there are.
+   *
+   * The checked-out branch first, then other local branches, then tags, then tracking branches:
+   * a row can carry a dozen labels and the ones cut have to be the ones that say least. A
+   * tracking branch beside the local branch it tracks is the commonest pair, and it is the
+   * tracking one that repeats what is already there.
+   */
+  function orderRefs(labels: PlacedRef[]): PlacedRef[] {
+    const rank = (r: PlacedRef): number => {
+      if (r.short === headName) return 0;
+      switch (r.kind.kind) {
+        case 'local_branch':
+          return 1;
+        case 'tag':
+          return 2;
+        case 'stash':
+          return 3;
+        default:
+          return 4;
+      }
+    };
+    return [...labels].sort((a, b) => rank(a) - rank(b));
+  }
+
+  /**
    * The body as one dimmed line after the summary, as the reference shows it. Newlines become
    * a separator rather than being dropped, so a bullet list still reads as several points.
    */
@@ -552,19 +1094,29 @@
         </span>
       {/if}
     {/if}
+    <button
+      class="theme"
+      onclick={() => openPreferences()}
+      title="SSH keys, signing and preferences"
+      aria-label="Settings"
+    >⚙</button>
     <button class="theme" onclick={() => theme.toggle()} title="Switch theme">
       {theme.current === 'light' ? 'Dark' : 'Light'}
     </button>
   </header>
 
-  <TabBar {tabs} onOpen={openAnother} />
+  <TabBar {tabs} onOpen={openAnother} onAsk={askText} />
 
   {#if info}
     <Toolbar
-      repo={info.path.split('/').pop() ?? info.path}
+      repo={TabsState.title(tabs.active ?? { id: 0, path: info.path, submodule: null, group: null, missing: false })}
+      submodule={tabs.active?.submodule ?? null}
       branch={headName ?? 'detached'}
       busy={worktree.busy || actions.busy}
+      terminalOpen={terminal.open}
       onAction={toolbarAction}
+      onLeaveSubmodule={() => void leaveSubmodule()}
+      onPullMenu={pullMenu}
     />
   {/if}
 
@@ -578,13 +1130,11 @@
   {/if}
 
   {#if graph.loading && !graph.frame}
-    <div class="empty">
-      <p class="lead">Walking the graph</p>
-      <p class="muted">
-        Reading every commit and assigning it a lane. A large repository takes a few seconds;
-        the first screen appears before the walk finishes.
-      </p>
-    </div>
+    <Splash
+      repo={loadedPath.split('/').filter(Boolean).at(-1) ?? loadedPath}
+      path={loadedPath}
+      stage={!info ? 'opening' : graph.provisional ? 'ordering' : 'walking'}
+    />
   {:else if graph.frame}
     <div
       class="workspace"
@@ -602,8 +1152,12 @@
         groups={refs.groups}
         head={headName}
         submodules={refs.submodules}
+        remotes={remotes.list}
+        openSubmodule={tabs.active?.submodule ?? null}
         onSelect={reveal}
         onOpenSubmodule={openSubmodule}
+        onRemoteMenu={remoteMenu}
+        onInitAllSubmodules={() => void initSubmodule(null)}
         onDropRef={dropRef}
         pullRequests={hosting.pullRequests}
         pullRequestLabel={hosting.view?.host?.kind === 'gitlab' ? 'Merge requests' : 'Pull requests'}
@@ -619,7 +1173,23 @@
       />
     {/if}
     {#if showPrefs}
-      <Preferences {signing} onClose={() => (showPrefs = false)} />
+      <Preferences
+        {signing}
+        {ssh}
+        onClose={() => (showPrefs = false)}
+        onCopied={(ok, what) =>
+          ok
+            ? toasts.push('ok', `Copied the ${what}`)
+            : toasts.push('error', `Could not copy the ${what}`)}
+      />
+    {/if}
+    {#if showRemotes && info}
+      <Remotes
+        {remotes}
+        focus={showRemotes.focus}
+        onClose={() => (showRemotes = null)}
+        onChanged={() => info && void refs.load(info.path)}
+      />
     {/if}
     {#if merge.inProgress}
       <!-- A stopped merge or rebase is the only thing that matters until it is settled, so it
@@ -633,6 +1203,7 @@
       class:hidden={diff.path !== null || merge.inProgress}
       bind:this={scroller}
       onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}
+      onwheel={wheel}
       bind:clientHeight={viewport}
       bind:clientWidth={paneWidth}
     >
@@ -692,25 +1263,38 @@
               wrong end of a typed array, which would show another commit's date and hash.
             -->
             {@const local = localRow(graph.frame, row)}
+            {@const labels = orderRefs(refs.byRow.get(row) ?? [])}
             <li
               class="row"
               class:merge={hasFlag(graph.frame.rowFlags[local ?? -1] ?? 0, RowFlag.Merge)}
               class:selected={selection.row === row}
+              oncontextmenu={(e) => rightClickRow(e, row)}
             >
               <button class="hit" onclick={() => pick(row)} aria-label="Select commit"></button>
+              <!--
+                Stacked, not side by side. Two pills abreast in a 190px column clip the second
+                one, and a clipped ref name is every branch that starts the same way; stacked,
+                each gets the column's whole width. Two is what the row's height allows.
+              -->
               <span class="cell refs">
-                {#each (refs.byRow.get(row) ?? []).slice(0, 2) as label (label.name)}
-                  <span
-                    class="pill {label.kind.kind}"
-                    class:head={label.short === headName}
-                    title={label.name}
-                  >
-                    <span class="pip" aria-hidden="true"></span>{label.short}
+                {#each labels.slice(0, 2) as label, i (label.name)}
+                  <span class="line">
+                    <span
+                      class="pill {label.kind.kind}"
+                      class:head={label.short === headName}
+                      title={label.name}
+                    >
+                      <span class="pip" aria-hidden="true"></span>{elideRef(label.short, 22)}
+                    </span>
+                    {#if i === 1 && labels.length > 2}
+                      <button
+                        class="pill more"
+                        title="Show the other refs on this commit"
+                        onclick={(e) => refsMenu(e, labels.slice(2))}
+                      >+{labels.length - 2}</button>
+                    {/if}
                   </span>
                 {/each}
-                {#if (refs.byRow.get(row) ?? []).length > 2}
-                  <span class="pill more">+{(refs.byRow.get(row) ?? []).length - 2}</span>
-                {/if}
               </span>
               <span class="cell graph-col"></span>
               <span class="cell message">
@@ -812,6 +1396,12 @@
   <Shortcuts live={LIVE} onClose={() => (showHelp = false)} />
 {/if}
 
+{#if menu}
+  <Menu x={menu.x} y={menu.y} items={menu.items} onClose={() => (menu = null)} />
+{/if}
+
+<Toasts {toasts} />
+
 <style>
   :root { --refs-col: 190px; --graph-col: 170px; }
   main { display: flex; flex-direction: column; height: 100%; }
@@ -835,12 +1425,15 @@
     background: var(--bg-2); color: var(--fg-1); flex: 0 0 auto;
   }
   .chip.warn { background: var(--warn-soft); color: var(--warn); }
+  /* The window's own controls, which act on the application rather than on the repository.
+     Only the first is pushed away from the path; the rest sit against it. */
   .theme {
-    margin-left: auto; font: inherit; font-size: 11px; cursor: pointer;
+    font: inherit; font-size: 11px; cursor: pointer;
     padding: 2px var(--space-2); border-radius: 3px;
     border: 1px solid var(--border); background: var(--bg-2); color: var(--fg-1);
   }
-  .theme:hover { background: var(--bg-3); }
+  .theme:first-of-type { margin-left: auto; }
+  .theme:hover { background: var(--bg-3); color: var(--fg-0); }
   .banner { margin: 0; padding: var(--space-2) var(--space-4); background: var(--bg-2); color: var(--fg-1); font-size: 12px; }
   .banner.error { color: var(--danger); }
   .muted { color: var(--fg-2); }
@@ -852,8 +1445,6 @@
     flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;
     gap: var(--space-2); padding: var(--space-5); text-align: center;
   }
-  .empty .lead { margin: 0; font-size: 14px; font-weight: 600; color: var(--fg-1); }
-  .empty .muted { margin: 0; max-width: 34em; line-height: 1.5; font-size: 12px; }
 
   /* Positioned, so the preferences screen can cover the panes without covering the
      window's own chrome. */
@@ -942,8 +1533,18 @@
     background: none; border: 0; padding: 0; margin: 0; cursor: pointer;
   }
   .cell { min-width: 0; display: flex; align-items: center; gap: var(--space-2); }
-  /* Pills are clipped to their own column rather than spilling over the lanes. */
-  .cell.refs { justify-content: flex-end; padding-right: var(--space-2); overflow: hidden; }
+  /*
+   * Pills sit against the graph, which is the thing they label, and are clipped to their own
+   * column rather than spilling over the lanes. Right-aligning them looked tidier and read
+   * worse: the ends of the names lined up, so what varied down the list was the left edge,
+   * which is where the eye starts.
+   */
+  .cell.refs {
+    flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px;
+    padding-left: var(--space-1); padding-right: var(--space-2);
+    overflow: hidden;
+  }
+  .line { display: flex; align-items: center; gap: var(--space-1); max-width: 100%; min-width: 0; }
   .cell.message { gap: var(--space-3); }
 
   /*
@@ -951,13 +1552,16 @@
    * text stays near-black, because a whole pill in colour at 11px is unreadable and there can
    * be three of them on one row.
    */
+  /* Sized so two stack inside one row: 12px of text and a hairline either side is 12.5px, and
+     the row is 28px. Any larger and the second pill is cut off by the row below. */
   .pill {
-    display: inline-flex; align-items: center; gap: 5px;
-    flex: 0 1 auto; min-width: 0; font-size: 11px; line-height: 17px; padding: 0 7px;
-    border-radius: 9px; border: 1px solid var(--border);
+    display: inline-flex; align-items: center; gap: 4px;
+    flex: 0 1 auto; min-width: 0; font-size: 10px; line-height: 12px; padding: 0 6px;
+    border-radius: 7px; border: 1px solid var(--border);
     background: var(--bg-1); color: var(--fg-1);
-    max-width: 11em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  .pip { width: 5px; height: 5px; }
   .pip {
     flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%;
     background: var(--fg-2);
@@ -973,9 +1577,13 @@
     color: var(--accent-fg); font-weight: 600;
   }
   .pill.head .pip { background: var(--accent-fg); }
+  /* A control, not a label: the count opens the refs it stands for. */
   .pill.more {
-    color: var(--fg-2); background: none; border-style: dashed; padding: 0 5px;
+    color: var(--fg-2); background: none; border-style: dashed; padding: 0 4px;
+    flex: 0 0 auto; font: inherit; font-size: 10px; line-height: 12px; cursor: pointer;
+    position: relative; z-index: 1;
   }
+  .pill.more:hover { color: var(--fg-0); border-color: var(--border-strong); }
 
   /* The summary takes its natural width and the dimmed body absorbs what is left. Letting
      both shrink equally gave the body most of the row, so summaries were cut to a few

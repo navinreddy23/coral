@@ -1,17 +1,35 @@
 <script lang="ts">
-  const { repo, branch, busy, onAction }: {
+  const {
+    repo,
+    submodule,
+    branch,
+    busy,
+    terminalOpen,
+    onAction,
+    onLeaveSubmodule,
+    onPullMenu,
+  }: {
     repo: string;
+    /** The submodule being looked at inside this tab, or null for the repository itself. */
+    submodule: string | null;
     branch: string;
     busy: boolean;
+    terminalOpen: boolean;
     onAction: (name: string) => void;
+    onLeaveSubmodule: () => void;
+    /** Opens the choice of how a pull should integrate, at the caret. */
+    onPullMenu: (event: MouseEvent) => void;
   } = $props();
 
   /**
-   * Grouped as the reference groups them: history, then the remote, then the working copy.
-   * A rule is drawn between groups rather than extra space, because the toolbar has to stay
-   * one row wide on a narrow window.
+   * Grouped as the reference groups them: history, then the remote, then the working copy,
+   * then the terminal. A rule is drawn between groups rather than extra space, because the
+   * toolbar has to stay one row wide on a narrow window.
+   *
+   * Everything here acts on the repository. Preferences do not, which is why they sit in the
+   * window's own chrome beside the theme switch instead.
    */
-  const groups = [
+  const groups = $derived([
     [
       { name: 'undo', label: 'Undo', glyph: '↶', hint: 'Undo the last ref change' },
       { name: 'redo', label: 'Redo', glyph: '↷', hint: 'Redo what was undone' },
@@ -26,53 +44,119 @@
       { name: 'stash', label: 'Stash', glyph: '⤓', hint: 'Stash the working copy' },
       { name: 'pop', label: 'Pop', glyph: '⤒', hint: 'Apply the latest stash and drop it' },
     ],
-  ];
+    [
+      {
+        name: 'terminal',
+        label: 'Terminal',
+        glyph: '>_',
+        hint: terminalOpen ? 'Hide the terminal (Ctrl+`)' : 'Open a terminal here (Ctrl+`)',
+      },
+    ],
+  ]);
+
+  /** The last path segment, which is what a submodule is called. */
+  const crumb = $derived(submodule?.split('/').filter(Boolean).at(-1) ?? null);
 </script>
 
 <div class="toolbar">
+  <!--
+    The breadcrumb, as the reference shows it: the repository, then the submodule being looked
+    at inside it, then the branch. The submodule carries its own way out, since it is a step
+    into the tab rather than a tab of its own.
+  -->
   <div class="where">
-    <span class="label">repository</span>
-    <span class="value">{repo}</span>
-    <span class="sep">›</span>
-    <span class="label">branch</span>
-    <span class="value">{branch}</span>
+    <span class="step">
+      <span class="label">repository</span>
+      <span class="value">{repo}</span>
+    </span>
+    {#if crumb}
+      <span class="sep" aria-hidden="true">›</span>
+      <span class="step sub">
+        <button class="leave" onclick={onLeaveSubmodule} title="Back to {repo}">×</button>
+        <span class="col">
+          <span class="label">submodule</span>
+          <span class="value" title={submodule}>{crumb}</span>
+        </span>
+      </span>
+    {/if}
+    <span class="sep" aria-hidden="true">›</span>
+    <span class="step">
+      <span class="label">branch</span>
+      <span class="value">{branch}</span>
+    </span>
   </div>
 
   <div class="actions">
     {#each groups as group, i (i)}
       {#if i > 0}<span class="rule" aria-hidden="true"></span>{/if}
       {#each group as action (action.name)}
+        <!--
+          The label sits above the glyph, as the reference sets them: a row of unlabelled
+          symbols is unreadable, and reading the word first is what makes the symbol mean
+          something the second time.
+        -->
         <button
           class="action"
-          disabled={busy}
+          class:on={action.name === 'terminal' && terminalOpen}
+          disabled={busy && action.name !== 'terminal'}
           title={action.hint}
           onclick={() => onAction(action.name)}
         >
-          <span class="glyph">{action.glyph}</span>
           <span class="name">{action.label}</span>
+          <span class="glyph">{action.glyph}</span>
         </button>
+        {#if action.name === 'pull'}
+          <!-- How a pull integrates is a real choice, and the reference puts it here rather
+               than only in a menu somewhere else. -->
+          <button class="caret" disabled={busy} title="Choose how to pull" onclick={onPullMenu}>
+            ▾
+          </button>
+        {/if}
       {/each}
     {/each}
   </div>
+
+  <!-- Balances the breadcrumb, so the actions sit on the window's centre line. -->
+  <div class="trailing"></div>
 </div>
 
 <style>
+  /*
+   * Three columns, the outer two of equal weight, so the actions land on the centre of the
+   * window rather than on the centre of whatever the breadcrumb left over. With `margin: auto`
+   * in a two-item flex row they drift right by half the breadcrumb's width, and by more as the
+   * repository's name grows.
+   */
   .toolbar {
-    display: flex; align-items: center; gap: var(--space-5);
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+    gap: var(--space-4);
     height: 46px; box-sizing: border-box; padding: 0 var(--space-4);
     border-bottom: 1px solid var(--border); background: var(--bg-1);
   }
-  .where { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
+  .where { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+  .trailing { min-width: 0; }
+  .step, .col { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+  .step.sub { flex-direction: row; align-items: center; gap: var(--space-1); }
   .label {
     font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-2);
   }
   .value {
     font-size: 13px; font-weight: 600; color: var(--fg-0);
-    max-width: 16em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 14em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .sep { color: var(--fg-2); }
+  .sep { color: var(--fg-2); flex: 0 0 auto; }
+  /* The way out of the submodule sits on the crumb itself, which is where the reference puts
+     it and the only place it reads as belonging to that step rather than to the toolbar. */
+  .leave {
+    flex: 0 0 auto; font: inherit; font-size: 13px; line-height: 1; cursor: pointer;
+    padding: 1px 4px; border-radius: var(--radius-1);
+    background: none; border: 0; color: var(--fg-2);
+  }
+  .leave:hover { background: var(--bg-3); color: var(--danger); }
 
-  .actions { display: flex; align-items: center; gap: 2px; margin: 0 auto; }
+  /* Centred in the window, not pushed to one end: this is the row of things the user reaches
+     for, and it belongs where the eye already is. */
+  .actions { display: flex; align-items: center; gap: 2px; }
   .rule {
     width: 1px; height: 22px; margin: 0 var(--space-2);
     background: var(--border); flex: 0 0 auto;
@@ -90,10 +174,22 @@
   /* Pressed reads as pressed rather than as another hover: the surface goes under the page
      instead of above it. */
   .action:active:not(:disabled) { background: var(--bg-3); }
+  /* A toggle that is on stays lit, so the terminal button says whether the pane is showing. */
+  .action.on {
+    background: var(--accent-soft); border-color: var(--accent); color: var(--fg-0);
+  }
   .action:disabled { color: var(--fg-2); cursor: default; opacity: 0.5; }
   .name {
     font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
   }
   .glyph { font-size: 15px; line-height: 1; color: var(--accent); }
+  /* Sits against the button it belongs to rather than in the gap between two. */
+  .caret {
+    align-self: flex-end; margin: 0 var(--space-1) 5px -4px;
+    font: inherit; font-size: 10px; line-height: 1; cursor: pointer;
+    padding: 2px; background: none; border: 0; color: var(--fg-2);
+  }
+  .caret:hover:not(:disabled) { color: var(--fg-0); }
+  .caret:disabled { opacity: 0.4; cursor: default; }
   .action:disabled .glyph { color: inherit; }
 </style>

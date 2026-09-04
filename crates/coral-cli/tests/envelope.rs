@@ -278,3 +278,72 @@ async fn blame_maps_lines_to_the_commits_that_wrote_them() {
     assert_eq!(r["chunks"].as_array().unwrap().len(), 2);
     assert_eq!(r["commits"].as_object().unwrap().len(), 2);
 }
+
+#[tokio::test]
+async fn worktrees_lists_the_one_every_repository_has() {
+    let fixture = TestRepo::new().write("a.txt", "a\n").commit("first");
+    let out = coral_cli::run(argv(&[
+        "--json",
+        "--repo",
+        fixture.path().to_str().unwrap(),
+        "worktrees",
+    ]))
+    .await;
+
+    let list = &out.json["result"]["worktrees"];
+    assert_eq!(list.as_array().map(Vec::len), Some(1), "{}", out.json);
+    assert_eq!(list[0]["branch"], "main");
+    assert_eq!(out.json["ok"], true);
+}
+
+#[tokio::test]
+async fn patch_writes_the_commit_it_was_asked_for() {
+    let fixture = TestRepo::new()
+        .write("a.txt", "a\n")
+        .commit("first")
+        .write("b.txt", "b\n")
+        .commit("second");
+    let out_dir = tempfile::tempdir().unwrap();
+    let out = coral_cli::run(argv(&[
+        "--json",
+        "--repo",
+        fixture.path().to_str().unwrap(),
+        "patch",
+        "--out",
+        out_dir.path().to_str().unwrap(),
+    ]))
+    .await;
+
+    let files = out.json["result"]["files"].as_array().cloned().unwrap();
+    assert_eq!(files.len(), 1, "{}", out.json);
+    let written = files[0].as_str().unwrap();
+    assert!(
+        std::path::Path::new(written)
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("patch")),
+        "{written}"
+    );
+    assert!(std::fs::read_to_string(written).unwrap().contains("second"));
+}
+
+#[tokio::test]
+async fn a_rewrite_of_a_commit_off_the_branch_is_refused_with_a_code() {
+    // The envelope's `code` is what the UI switches on, so it matters as much as the message.
+    let fixture = TestRepo::new().write("a.txt", "a\n").commit("first");
+    fixture.git(["checkout", "--quiet", "-b", "side"]);
+    let elsewhere = fixture.git(["commit-tree", "-m", "orphan", "HEAD^{tree}"]);
+
+    let out = coral_cli::run(argv(&[
+        "--json",
+        "--repo",
+        fixture.path().to_str().unwrap(),
+        "rewrite",
+        &elsewhere,
+        "--kind",
+        "drop",
+    ]))
+    .await;
+
+    assert_eq!(out.json["ok"], false, "{}", out.json);
+    assert_eq!(out.json["error"]["code"], "refused");
+}

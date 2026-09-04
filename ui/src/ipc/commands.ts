@@ -1,7 +1,7 @@
 import { invoke } from './invoke';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import type { Session } from '../state/tabs.svelte';
+import type { GroupColour, Session } from '../state/tabs.svelte';
 import type {
   Blocks,
   CommitDetail,
@@ -16,8 +16,13 @@ import type {
   SigningKey,
   SigningOverrides,
   SigningScopes,
+  SshConfig,
+  SshKey,
+  SshOverrides,
+  SshScopes,
   Status,
   Submodule,
+  Remote,
   RepoInfo,
 } from './types';
 
@@ -112,13 +117,23 @@ export type Action =
   | { kind: 'stashDrop'; index: number }
   | { kind: 'tagCreate'; name: string; at: string | null; message: string | null }
   | { kind: 'tagDelete'; name: string }
+  | { kind: 'reset'; rev: string; mode: 'soft' | 'mixed' | 'hard' }
+  | { kind: 'rewrite'; rev: string; how: RewriteKind; message: string | null }
+  | { kind: 'worktreeAdd'; path: string; rev: string; branch: string | null }
+  | { kind: 'submoduleInit'; path: string | null; recursive: boolean }
+  | { kind: 'patch'; rev: string; directory: string }
   | { kind: 'undo' }
   | { kind: 'redo' };
+
+/** The history edits the commit menu offers, each an interactive rebase underneath. */
+export type RewriteKind = 'drop' | 'reword' | 'moveNewer' | 'moveOlder';
 
 export interface ActionOutcome {
   what: string;
   /** The operation stopped on conflicts and the worktree needs attention. */
   conflicted: boolean;
+  /** git's own words, when there are any. "Already up to date" is the one worth showing. */
+  message: string;
 }
 
 export function runAction(path: string, action: Action): Promise<ActionOutcome> {
@@ -239,7 +254,56 @@ export const session = {
     invoke<Session>('tab_move', { id, group, before }),
   collapse: (id: number, collapsed: boolean): Promise<Session> =>
     invoke<Session>('group_collapse', { id, collapsed }),
+  /** Shows a submodule inside the tab that declares it, rather than in a tab of its own. */
+  enterSubmodule: (id: number, path: string): Promise<Session> =>
+    invoke<Session>('tab_enter_submodule', { id, path }),
+  leaveSubmodule: (id: number): Promise<Session> =>
+    invoke<Session>('tab_leave_submodule', { id }),
+  rename: (id: number, name: string): Promise<Session> =>
+    invoke<Session>('group_rename', { id, name }),
+  recolour: (id: number, colour: GroupColour): Promise<Session> =>
+    invoke<Session>('group_recolour', { id, colour }),
+  /** Dissolves a group, leaving its tabs open. */
+  dissolve: (id: number): Promise<Session> => invoke<Session>('group_dissolve', { id }),
+  closeGroup: (id: number): Promise<Session> => invoke<Session>('group_close', { id }),
 };
+
+/* Remotes. Editing one changes configuration rather than a ref, so none of it goes through the
+   undo journal, and every edit answers with the whole list. */
+export type RemoteEdit =
+  | { kind: 'add'; name: string; url: string }
+  | { kind: 'remove'; name: string }
+  | { kind: 'rename'; name: string; to: string }
+  | { kind: 'setUrl'; name: string; url: string }
+  | { kind: 'prune'; name: string };
+
+export function remoteList(path: string): Promise<Remote[]> {
+  return invoke<Remote[]>('remote_list', { path });
+}
+
+export function remoteEdit(path: string, edit: RemoteEdit): Promise<Remote[]> {
+  return invoke<Remote[]>('remote_edit', { path, edit });
+}
+
+/**
+ * Where a commit is served on the web, or null when the remote is not a host we recognise.
+ *
+ * Null rather than an error: an internal git server has no web address to offer, and that is
+ * not worth a dialog.
+ */
+export function commitUrl(
+  path: string,
+  oid: string,
+  remote: string | null,
+): Promise<string | null> {
+  return invoke<string | null>('commit_url', { path, oid, remote });
+}
+
+/** Asks where a patch file should be written. */
+export async function pickDirectory(title: string): Promise<string | null> {
+  const chosen = await openDialog({ directory: true, multiple: false, title });
+  return typeof chosen === 'string' ? chosen : null;
+}
 
 /** The worktree, and the two things that change it. */
 export function repoStatus(path: string): Promise<Status> {
@@ -286,4 +350,35 @@ export function signingGenerate(
   passphrase: string,
 ): Promise<SigningKey> {
   return invoke<SigningKey>('signing_generate', { path, program, passphrase });
+}
+
+/* How git reaches an ssh server, layered the same way signing is: an app-level default that
+   every repository inherits, and a per-repository override. */
+export function sshRead(path: string): Promise<SshScopes> {
+  return invoke<SshScopes>('ssh_read', { path });
+}
+
+export function sshSetApp(path: string, config: SshConfig): Promise<SshScopes> {
+  return invoke<SshScopes>('ssh_set_app', { path, config });
+}
+
+export function sshSetRepo(path: string, overrides: SshOverrides): Promise<SshScopes> {
+  return invoke<SshScopes>('ssh_set_repo', { path, overrides });
+}
+
+export function sshKeys(): Promise<SshKey[]> {
+  return invoke<SshKey[]>('ssh_keys');
+}
+
+export function sshGenerate(
+  name: string,
+  comment: string,
+  passphrase: string,
+): Promise<SshKey> {
+  return invoke<SshKey>('ssh_generate', { name, comment, passphrase });
+}
+
+/** A public key's own text, which is what a host asks to be pasted in. */
+export function sshPublicKey(path: string): Promise<string> {
+  return invoke<string>('ssh_public_key', { path });
 }

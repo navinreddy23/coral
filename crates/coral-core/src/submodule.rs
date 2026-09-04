@@ -156,3 +156,38 @@ pub fn parse_gitlinks(bytes: &[u8]) -> BTreeMap<String, String> {
     }
     out
 }
+
+impl RepoLocation {
+    /// Clones and checks out a submodule's working copy.
+    ///
+    /// `git submodule update --init` rather than a bare `clone`: the URL, the branch and the
+    /// commit to check out all come from the parent's configuration and its gitlink, and
+    /// cloning by hand would have to reproduce every one of them.
+    ///
+    /// A submodule with no path given initialises all of them, which is what the reference
+    /// offers on the section itself.
+    ///
+    /// # Errors
+    /// Propagates git failures, including a URL that cannot be reached.
+    pub async fn submodule_init(
+        &self,
+        runner: &GitRunner,
+        path: Option<&str>,
+        recursive: bool,
+    ) -> Result<(), CoralError> {
+        let mut cmd = GitCommand::network("submodule", self.display_path()).args([
+            "submodule",
+            "update",
+            "--init",
+            "--progress",
+        ]);
+        if recursive {
+            cmd = cmd.arg("--recursive");
+        }
+        if let Some(p) = path {
+            // `--` so a submodule whose path starts with a dash is not read as a flag.
+            cmd = cmd.arg("--").arg(p);
+        }
+        runner.output(cmd).await.map(|_| ())
+    }
+}

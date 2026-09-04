@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { elidePath } from '../src/app/path';
+import { elidePath, elideRef } from '../src/app/path';
 
 describe('elidePath', () => {
   it('leaves a path that fits alone', () => {
@@ -38,5 +38,50 @@ describe('elidePath', () => {
     expect(elidePath('ui/src/app/App.svelte', 60)).toBe('ui/src/app/App.svelte');
     // A bare name with no room keeps its end, which is where a suffix lives.
     expect(elidePath('README', 3)).toBe('…ME');
+  });
+});
+
+describe('elideRef', () => {
+  it('leaves a name that fits alone', () => {
+    expect(elideRef('main', 20)).toBe('main');
+    expect(elideRef('origin/main', 20)).toBe('origin/main');
+  });
+
+  it('keeps the branch and the remote, dropping what is between them', () => {
+    // Cut from the right, `origin/feature/audio-ringbuffer` becomes `origin/feature/audio-r…`,
+    // which is every branch on that feature. This keeps the half that names exactly one.
+    const short = elideRef('origin/feature/audio-ringbuffer', 26);
+    expect(short).toBe('origin/…/audio-ringbuffer');
+  });
+
+  it('gives up the remote before it gives up the branch', () => {
+    // One character narrower than the pair needs. The branch is what identifies the ref, so
+    // it is the half that survives.
+    expect(elideRef('origin/feature/audio-ringbuffer', 24)).toBe('…/audio-ringbuffer');
+  });
+
+  it('drops the remote too when even that will not fit', () => {
+    const short = elideRef('someverylongremote/feature/audio-ringbuffer', 20);
+    expect(short).toBe('…/audio-ringbuffer');
+    expect(short.length).toBeLessThanOrEqual(20);
+  });
+
+  it('cuts a single long segment from the right, since it has no parts to drop', () => {
+    const short = elideRef('averyveryverylongbranchnamewithnoslashes', 12);
+    expect(short.length).toBeLessThanOrEqual(12);
+    expect(short.endsWith('…')).toBe(true);
+  });
+
+  it('never returns more than it was asked for', () => {
+    for (const name of [
+      'origin/main',
+      'origin/feature/a/b/c/d/e/audio',
+      'v1.24.0-preview',
+      'refs/remotes/upstream/release/2026.1',
+    ]) {
+      for (const max of [6, 10, 18, 24]) {
+        expect(elideRef(name, max).length).toBeLessThanOrEqual(max);
+      }
+    }
   });
 });

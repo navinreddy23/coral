@@ -22,6 +22,8 @@ export class GraphState {
   /** Author and summary for rows that have been on screen, keyed by row number. */
   meta = $state<Map<number, CommitMeta>>(new Map());
   #path = '';
+  /** Which repository the held frame came from, so a switch can blank it and a reload cannot. */
+  #framePath = '';
   #inFlight = new Set<number>();
   /** Start row of the frame being fetched, so a scroll does not queue the same one twice. */
   #wantedStart = -1;
@@ -93,6 +95,11 @@ export class GraphState {
     this.loading = true;
     this.error = null;
     this.meta = new Map();
+    // A frame belonging to the repository being left has to go, or the window shows one
+    // repository's commits under another's name for as long as the walk takes — and the
+    // loading screen, which asks whether there is a frame, never appears at all. Reopening
+    // the same repository keeps it, so a reload after an action does not blank the graph.
+    if (path !== this.#framePath) this.frame = null;
     this.#path = path;
     this.#wantedStart = 0;
     try {
@@ -100,6 +107,7 @@ export class GraphState {
       this.transportWarning = check.binary ? null : check.detail;
 
       this.frame = await graphFrame(path, 0, true);
+      this.#framePath = path;
       this.provisional = true;
 
       this.frame = await graphFrame(path, 0, false);
@@ -107,6 +115,7 @@ export class GraphState {
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
       this.frame = null;
+      this.#framePath = '';
     } finally {
       this.loading = false;
     }

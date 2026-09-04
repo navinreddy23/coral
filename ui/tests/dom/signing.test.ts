@@ -5,7 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const invoke = vi.hoisted(() => vi.fn());
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
-vi.mock('../../src/ipc/invoke', () => ({ invoke }));
+vi.mock('../../src/ipc/invoke', () => ({ invoke, isPreview: () => false }));
+// The window subscribes to terminal output and to repository changes. Neither channel
+// exists without the Tauri shell, and the real `listen` throws rather than returning.
+vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => undefined }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn() }));
 
@@ -61,7 +64,11 @@ function field<T extends HTMLElement>(container: HTMLElement, selector: string):
 describe('the commit signing pane', () => {
   beforeEach(() => {
     invoke.mockReset();
-    invoke.mockImplementation(async () => scopes());
+    // Answered per command, not with one shape for all of them: `signing_keys` returns a list,
+    // and handing the scopes object back for it made the pane throw while rendering.
+    invoke.mockImplementation(async (command: string) =>
+      command === 'signing_keys' ? KEYS : scopes(),
+    );
   });
 
   it('starts on this repository, because a key belongs to one', async () => {

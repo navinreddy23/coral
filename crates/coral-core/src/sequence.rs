@@ -331,3 +331,182 @@ impl crate::repo::RepoLocation {
             .map(|_| ())
     }
 }
+
+/// A change to one named commit, expressed as the interactive rebase it becomes.
+///
+/// Each of these is a menu item in the reference's commit menu. They are one type rather than
+/// four methods because the work either side of the edit — resolving the commit, refusing an
+/// unsafe range, running the rebase — is the same for all of them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Rewrite {
+    /// Remove the commit, replaying its children onto its parent.
+    Drop,
+    /// Replace the commit's message.
+    Reword(String),
+    /// Swap the commit with its child, moving it towards HEAD.
+    MoveNewer,
+    /// Swap the commit with its parent, moving it away from HEAD.
+    MoveOlder,
+}
+
+impl Rewrite {
+    /// How far back the rebase has to start for this edit to have both commits it needs.
+    const fn depth(&self) -> u32 {
+        match self {
+            // Only the commit itself is touched, so its parent is enough.
+            Self::Drop | Self::Reword(_) | Self::MoveNewer => 1,
+            // The commit below has to be in the list too, so the base is one further back.
+            Self::MoveOlder => 2,
+        }
+    }
+}
+
+impl crate::repo::RepoLocation {
+    /// Rewrites one commit in place, replaying everything above it.
+    ///
+    /// Every one of these rewrites history, so it is refused for a commit that is not an
+    /// ancestor of HEAD: replaying a commit that is not on this branch would either do nothing
+    /// or silently take unrelated work with it.
+    ///
+    /// A range containing a merge is refused as well. The todo list is built with
+    /// `--no-merges`, which is what an interactive rebase does, and replaying such a range
+    /// flattens the merge out of the history without saying so.
+    ///
+    /// # Errors
+    /// [`CoralError::Refused`] when the commit is not on HEAD, when the range holds a merge, or
+    /// when there is nothing to swap with. Otherwise propagates git failures; a rebase that
+    /// stops is reported through [`crate::ops::OpOutcome`].
+    pub async fn rewrite_commit(
+        &self,
+        runner: &crate::process::GitRunner,
+        rev: &str,
+        rewrite: &Rewrite,
+        coral_binary: &std::path::Path,
+    ) -> Result<crate::ops::OpOutcome, CoralError> {
+        let oid = self.rev_parse(runner, rev).await?;
+        if !self.is_ancestor_of_head(runner, &oid).await? {
+            return Err(CoralError::Refused {
+                label: "rewrite",
+                detail: format!("{oid:.8} is not on the current branch"),
+            });
+        }
+
+        let base = format!("{oid}~{}", rewrite.depth());
+        let base = self.rev_parse(runner, &base).await?;
+        let mut todo = self.rebase_todo(runner, &base).await?;
+        self.refuse_merges_in(runner, &base, todo.items.len())
+            .await?;
+
+        let at = todo
+            .items
+            .iter()
+            .position(|i| i.oid == oid)
+            .ok_or_else(|| CoralError::Refused {
+                label: "rewrite",
+                detail: format!("{oid:.8} is not in the range being replayed"),
+            })?;
+        apply_rewrite(&mut todo, at, rewrite)?;
+
+        self.rebase_interactive(runner, &base, &todo, coral_binary)
+            .await
+    }
+
+    /// True when `oid` is reachable from HEAD, which is what makes it safe to replay.
+    async fn is_ancestor_of_head(
+        &self,
+        runner: &crate::process::GitRunner,
+        oid: &str,
+    ) -> Result<bool, CoralError> {
+        // `--is-ancestor` answers by exit status, so a false answer arrives as a git failure
+        // rather than as output.
+        let result = runner
+            .output(
+                crate::process::GitCommand::read("merge-base", self.display_path())
+                    .args(["merge-base", "--is-ancestor"])
+                    .arg(oid)
+                    .arg("HEAD"),
+            )
+            .await;
+        match result {
+            Ok(_) => Ok(true),
+            Err(CoralError::GitExit { code: 1, .. }) => Ok(false),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Refuses when the range holds a merge the todo list would flatten away.
+    async fn refuse_merges_in(
+        &self,
+        runner: &crate::process::GitRunner,
+        base: &str,
+        without_merges: usize,
+    ) -> Result<(), CoralError> {
+        let out = runner
+            .output(
+                crate::process::GitCommand::read("rev-list", self.display_path())
+                    .args(["rev-list", "--count"])
+                    .arg(format!("{base}..HEAD")),
+            )
+            .await?;
+        let total: usize =
+            out.stdout
+                .to_str_lossy()
+                .trim()
+                .parse()
+                .map_err(|_| CoralError::Protocol {
+                    label: "rev-list",
+                    detail: "could not read the commit count".to_owned(),
+                })?;
+        if total == without_merges {
+            return Ok(());
+        }
+        Err(CoralError::Refused {
+            label: "rewrite",
+            detail: "there is a merge between this commit and HEAD; replaying the range would \
+                     flatten it"
+                .to_owned(),
+        })
+    }
+}
+
+/// Edits the todo list in place. Split out so it can be tested without a repository.
+///
+/// # Errors
+/// [`CoralError::Refused`] when a move has nothing to swap with.
+pub fn apply_rewrite(todo: &mut Todo, at: usize, rewrite: &Rewrite) -> Result<(), CoralError> {
+    let Some(item) = todo.items.get_mut(at) else {
+        return Err(CoralError::Refused {
+            label: "rewrite",
+            detail: format!("no commit at position {at}"),
+        });
+    };
+    match rewrite {
+        Rewrite::Drop => item.step = Step::Drop,
+        Rewrite::Reword(message) => {
+            item.step = Step::Reword;
+            item.message = Some(message.clone());
+        }
+        // The list is oldest first and the graph is newest first, so moving a commit towards
+        // HEAD moves it later in the list. This is the one place that conversion matters.
+        Rewrite::MoveNewer => {
+            if at + 1 >= todo.items.len() {
+                return Err(CoralError::Refused {
+                    label: "rewrite",
+                    detail: "this is the newest commit; there is nothing above it".to_owned(),
+                });
+            }
+            todo.items.swap(at, at + 1);
+        }
+        Rewrite::MoveOlder => {
+            if at == 0 {
+                return Err(CoralError::Refused {
+                    label: "rewrite",
+                    detail: "this is the oldest commit being replayed; there is nothing below it"
+                        .to_owned(),
+                });
+            }
+            todo.items.swap(at, at - 1);
+        }
+    }
+    Ok(())
+}

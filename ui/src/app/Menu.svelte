@@ -1,0 +1,175 @@
+<script lang="ts" module>
+  /** One row of a context menu. A separator carries nothing but its kind. */
+  export type MenuItem =
+    | { kind: 'separator' }
+    | {
+        kind: 'item';
+        label: string;
+        /** Shown dimmed after the label, for a keystroke or a hint. */
+        hint?: string;
+        disabled?: boolean;
+        /** Marks a destructive choice, which is drawn in the danger colour. */
+        danger?: boolean;
+        run: () => void;
+      }
+    | {
+        kind: 'submenu';
+        label: string;
+        items: MenuItem[];
+      };
+</script>
+
+<script lang="ts">
+  const { x, y, items, onClose }: {
+    x: number;
+    y: number;
+    items: MenuItem[];
+    onClose: () => void;
+  } = $props();
+
+  let panel = $state<HTMLDivElement | null>(null);
+  /** Which submenu is open, by index, so only one is ever showing. */
+  let open = $state<number | null>(null);
+
+  /**
+   * Where the panel actually sits.
+   *
+   * Measured after it is in the DOM rather than guessed from an assumed size: the menu is as
+   * tall as its longest list, and one opened near the bottom of the window would otherwise
+   * have its last items — the destructive ones — off screen and unreachable.
+   */
+  let fitted = $state<{ left: number; top: number } | null>(null);
+  const at = $derived(fitted ?? { left: x, top: y });
+  $effect(() => {
+    if (!panel) return;
+    const box = panel.getBoundingClientRect();
+    const margin = 8;
+    fitted = {
+      left: Math.max(margin, Math.min(x, window.innerWidth - box.width - margin)),
+      top: Math.max(margin, Math.min(y, window.innerHeight - box.height - margin)),
+    };
+  });
+
+  function choose(item: Extract<MenuItem, { kind: 'item' }>) {
+    if (item.disabled) return;
+    onClose();
+    item.run();
+  }
+
+  function onKey(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      onClose();
+    }
+  }
+</script>
+
+<svelte:window onkeydown={onKey} />
+
+<!--
+  The backdrop takes every pointer event, so one click anywhere dismisses the menu and cannot
+  also press whatever was underneath it.
+-->
+<div
+  class="scrim"
+  role="presentation"
+  onclick={onClose}
+  oncontextmenu={(e) => {
+    e.preventDefault();
+    onClose();
+  }}
+></div>
+
+<div
+  class="menu"
+  bind:this={panel}
+  style:left="{at.left}px"
+  style:top="{at.top}px"
+  role="menu"
+  tabindex="-1"
+>
+  {#each items as item, i (i)}
+    {#if item.kind === 'separator'}
+      <div class="rule" role="separator"></div>
+    {:else if item.kind === 'submenu'}
+      <div
+        class="wrap"
+        role="presentation"
+        onmouseenter={() => (open = i)}
+        onmouseleave={() => (open = open === i ? null : open)}
+      >
+        <button class="row" aria-haspopup="true" aria-expanded={open === i}>
+          <span class="label">{item.label}</span>
+          <span class="more" aria-hidden="true">›</span>
+        </button>
+        {#if open === i}
+          <div class="sub" role="menu">
+            {#each item.items as child, j (j)}
+              {#if child.kind === 'item'}
+                <button
+                  class="row"
+                  class:danger={child.danger}
+                  disabled={child.disabled}
+                  onclick={() => choose(child)}
+                >
+                  <span class="label">{child.label}</span>
+                  {#if child.hint}<span class="hint">{child.hint}</span>{/if}
+                </button>
+              {/if}
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {:else}
+      <button
+        class="row"
+        class:danger={item.danger}
+        disabled={item.disabled}
+        onclick={() => choose(item)}
+      >
+        <span class="label">{item.label}</span>
+        {#if item.hint}<span class="hint">{item.hint}</span>{/if}
+      </button>
+    {/if}
+  {/each}
+</div>
+
+<style>
+  .scrim { position: fixed; inset: 0; z-index: 60; }
+  .menu {
+    position: fixed; z-index: 61; min-width: 15em; max-width: 26em;
+    padding: var(--space-1) 0;
+    background: var(--bg-0); color: var(--fg-0);
+    border: 1px solid var(--border-strong); border-radius: var(--radius-2);
+    /*
+     * The one place a shadow is worth its cost: a menu floats over content it must be legible
+     * against, and a border alone leaves it looking pasted onto the page.
+     */
+    box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+    font-size: 12px;
+  }
+  .wrap { position: relative; }
+  .row {
+    display: flex; align-items: center; gap: var(--space-3);
+    width: 100%; text-align: left; font: inherit; font-size: 12px;
+    padding: 5px var(--space-3); cursor: pointer;
+    background: none; border: 0; color: var(--fg-0);
+  }
+  .row:hover:not(:disabled), .row:focus-visible:not(:disabled) {
+    background: var(--accent-soft);
+  }
+  .row:disabled { color: var(--fg-2); cursor: default; }
+  .row.danger { color: var(--danger); }
+  .row.danger:hover:not(:disabled) { background: var(--danger-soft); }
+  .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hint, .more { flex: 0 0 auto; color: var(--fg-2); font-size: 11px; }
+  .rule { height: 1px; margin: var(--space-1) 0; background: var(--border); }
+  /* Opens to the right of its parent row, overlapping it by a pixel so the pointer can cross
+     between the two without passing over the page and closing it. */
+  .sub {
+    position: absolute; left: calc(100% - 2px); top: -5px; min-width: 12em;
+    padding: var(--space-1) 0;
+    background: var(--bg-0); border: 1px solid var(--border-strong);
+    border-radius: var(--radius-2); box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+  }
+</style>

@@ -1,17 +1,28 @@
 <script lang="ts">
   import CommitSigning from './CommitSigning.svelte';
+  import Ssh from './Ssh.svelte';
   import type { SigningState } from '../state/signing.svelte';
+  import type { SshState } from '../state/ssh.svelte';
 
-  const { signing, onClose }: { signing: SigningState; onClose: () => void } = $props();
+  const { signing, ssh, onClose, onCopied }: {
+    signing: SigningState;
+    ssh: SshState;
+    onClose: () => void;
+    /** Says whether the clipboard took something, which a button cannot tell on its own. */
+    onCopied: (ok: boolean, what: string) => void;
+  } = $props();
 
   /**
-   * Only the pane that exists.
+   * Only the panes that exist.
    *
    * The reference lists a dozen; listing ones that do nothing would be worse than not listing
    * them, so the rest arrive with the settings they hold.
    */
-  const panes = [{ id: 'signing', label: 'Commit Signing', glyph: '✎' }];
-  let active = $state('signing');
+  const panes = [
+    { id: 'ssh', label: 'SSH', glyph: '⛨' },
+    { id: 'signing', label: 'Commit Signing', glyph: '✎' },
+  ];
+  let active = $state('ssh');
 
   function key(event: KeyboardEvent) {
     if (event.key === 'Escape') {
@@ -36,6 +47,8 @@
 
   {#if active === 'signing'}
     <CommitSigning {signing} />
+  {:else if active === 'ssh'}
+    <Ssh {ssh} {onCopied} />
   {/if}
 </div>
 

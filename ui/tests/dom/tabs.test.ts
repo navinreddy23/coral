@@ -19,7 +19,10 @@ const frameBuffer = () =>
 
 const invoke = vi.hoisted(() => vi.fn());
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
-vi.mock('../../src/ipc/invoke', () => ({ invoke }));
+vi.mock('../../src/ipc/invoke', () => ({ invoke, isPreview: () => false }));
+// The window subscribes to terminal output and to repository changes. Neither channel
+// exists without the Tauri shell, and the real `listen` throws rather than returning.
+vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => undefined }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn() }));
 
@@ -56,6 +59,8 @@ function wire() {
         return session(active);
       case 'tab_open':
       case 'tab_close':
+      case 'tab_enter_submodule':
+      case 'tab_leave_submodule':
         return session(active);
       case 'open_repo':
         return {
@@ -222,9 +227,10 @@ describe('two repositories in two tabs', () => {
     expect(container.querySelector('section.diff')).toBeNull();
   });
 
-  it('opens an initialised submodule in a tab of its own', async () => {
-    // A submodule is a repository in its own right, and the path it opens at has to be built
-    // from the parent's — the engine reports it relative to the worktree root.
+  it('shows a submodule inside the tab that declares it, not in a tab of its own', async () => {
+    // A submodule belongs to the repository that declares it, at the commit that repository
+    // records. A second tab loses that relationship and leaves two entries in the bar with no
+    // way to tell which came from which.
     const { container } = await shell();
     const section = await waitFor(() => {
       const found = [...container.querySelectorAll('section')].find((s) =>
@@ -236,16 +242,19 @@ describe('two repositories in two tabs', () => {
 
     const rows = [...section.querySelectorAll('button.ref')] as HTMLButtonElement[];
     expect(rows).toHaveLength(2);
-    // One that has never been cloned has nothing to open.
-    expect(rows[1]?.disabled).toBe(true);
+    // One that has never been cloned is still clickable; it offers to fetch a working copy.
+    expect(rows[1]?.disabled).toBe(false);
 
     await fireEvent.click(rows[0] as HTMLButtonElement);
     await waitFor(() => {
-      // The session is restored with a tab_open at startup, so it is the latest that matters.
-      const opened = invoke.mock.calls.filter(([cmd]) => cmd === 'tab_open').at(-1);
-      if (!opened) throw new Error('no tab opened');
-      expect(opened[1]).toEqual({ path: `${A}/lib/berkeley-db` });
+      const entered = invoke.mock.calls.filter(([cmd]) => cmd === 'tab_enter_submodule').at(-1);
+      if (!entered) throw new Error('no submodule entered');
+      expect(entered[1]).toEqual({ id: 1, path: 'lib/berkeley-db' });
     });
+    // And no tab was opened for it.
+    const opened = invoke.mock.calls.filter(([cmd]) => cmd === 'tab_open');
+    expect(opened.every(([, args]) => (args as { path: string }).path !== `${A}/lib/berkeley-db`))
+      .toBe(true);
   });
 
   it('starts the other repository at the top of its history', async () => {

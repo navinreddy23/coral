@@ -7,6 +7,8 @@ export type GroupColour =
 export interface Tab {
   id: number;
   path: string;
+  /** A submodule being looked at inside this tab, relative to `path`. */
+  submodule: string | null;
   group: number | null;
   missing: boolean;
 }
@@ -64,6 +66,19 @@ export class TabsState {
     return parts.at(-1) ?? tab.path;
   }
 
+  /**
+   * The directory a tab is currently showing.
+   *
+   * A submodule is a step into the tab rather than a tab of its own, so what the window loads
+   * is not always the path the tab was opened for.
+   */
+  static workingPath(tab: Tab): string {
+    return tab.submodule ? `${tab.path.replace(/\/+$/u, '')}/${tab.submodule}` : tab.path;
+  }
+
+  /** What the active tab is showing, which is what every panel loads from. */
+  workingPath = $derived(this.active ? TabsState.workingPath(this.active) : null);
+
   async refresh(): Promise<void> {
     await this.#run(() => ipc.get());
   }
@@ -98,6 +113,32 @@ export class TabsState {
     await this.#run(() => ipc.ungroup(id));
   }
 
+  /** Shows a submodule inside the tab that declares it, rather than in a tab of its own. */
+  async enterSubmodule(id: number, path: string): Promise<void> {
+    await this.#run(() => ipc.enterSubmodule(id, path));
+  }
+
+  async leaveSubmodule(id: number): Promise<void> {
+    await this.#run(() => ipc.leaveSubmodule(id));
+  }
+
+  async rename(id: number, name: string): Promise<void> {
+    await this.#run(() => ipc.rename(id, name));
+  }
+
+  async recolour(id: number, colour: GroupColour): Promise<void> {
+    await this.#run(() => ipc.recolour(id, colour));
+  }
+
+  /** Dissolves a group, leaving its tabs open. */
+  async dissolve(id: number): Promise<void> {
+    await this.#run(() => ipc.dissolve(id));
+  }
+
+  async closeGroup(id: number): Promise<void> {
+    await this.#run(() => ipc.closeGroup(id));
+  }
+
   async setCollapsed(id: number, collapsed: boolean): Promise<void> {
     await this.#run(() => ipc.collapse(id, collapsed));
   }
@@ -105,7 +146,13 @@ export class TabsState {
   async #run(action: () => Promise<Session>): Promise<void> {
     this.error = null;
     try {
-      this.session = await action();
+      const next = await action();
+      // A malformed answer keeps what is on screen. Assigning it anyway empties the bar and
+      // every read of it then throws, which loses the error along with the tabs.
+      if (!next || !Array.isArray(next.tabs)) {
+        throw new Error('the session could not be read');
+      }
+      this.session = next;
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
     }
