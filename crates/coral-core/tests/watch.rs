@@ -12,10 +12,50 @@ async fn located(repo: &TestRepo) -> RepoLocation {
 
 /// Waits for a notification, giving the debounce time to fire.
 async fn next_change(w: &mut RepoWatcher) -> Option<coral_core::watch::RepoChanged> {
-    tokio::time::timeout(Duration::from_secs(5), w.changes.recv())
+    tokio::time::timeout(Duration::from_secs(5), w.recv())
         .await
         .ok()
         .flatten()
+}
+
+/// Starts the reading task and returns, which is what the window's command does.
+///
+/// Returning matters. The bug this covers left the watcher itself behind in the calling
+/// function, so it survived exactly as long as that function did; a test that spawned and then
+/// waited in the same scope kept it alive by accident and saw nothing wrong.
+fn read_in_a_task(
+    mut watcher: RepoWatcher,
+) -> tokio::sync::mpsc::Receiver<coral_core::watch::RepoChanged> {
+    let (tx, rx) = tokio::sync::mpsc::channel(4);
+    tokio::spawn(async move {
+        while let Some(change) = watcher.recv().await {
+            if tx.send(change).await.is_err() {
+                return;
+            }
+        }
+    });
+    rx
+}
+
+#[tokio::test]
+async fn keeps_watching_after_the_call_that_started_it_returns() {
+    // Rust captures an async block field by field, so reading the receiver directly moved only
+    // the receiver: the watcher's own file handles went out of scope with the command that
+    // started it, the debouncer's channel disconnected a millisecond later, and the watch
+    // reported success and then never fired. It reads as "nothing updates until I switch tabs".
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let loc = located(&repo).await;
+    let mut rx = read_in_a_task(RepoWatcher::start(&loc).unwrap());
+
+    // Written after the task is running, so nothing here can be answered from a queued event.
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    std::fs::write(repo.path().join("a.txt"), "2\n").unwrap();
+
+    let change = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .expect("the watcher stopped when the call that started it returned")
+        .expect("the watcher's channel closed");
+    assert!(change.worktree, "{change:?}");
 }
 
 #[tokio::test]
@@ -116,7 +156,7 @@ async fn a_burst_of_edits_coalesces() {
 
     // Whatever else arrives must be a small number of coalesced batches, not one per file.
     let mut extra = 0;
-    while tokio::time::timeout(Duration::from_millis(600), w.changes.recv())
+    while tokio::time::timeout(Duration::from_millis(600), w.recv())
         .await
         .ok()
         .flatten()

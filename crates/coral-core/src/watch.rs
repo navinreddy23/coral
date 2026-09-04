@@ -119,9 +119,17 @@ fn is_op_path(rel: &str) -> bool {
 }
 
 /// Watches one repository and emits coalesced [`RepoChanged`] notifications.
+///
+/// The receiver is private, and reaching it through [`recv`](Self::recv) is the whole reason.
+/// Rust captures closures and async blocks field by field, so `spawn(async move { ...
+/// watcher.changes.recv().await ... })` moved only the receiver and left the watcher itself
+/// behind to be dropped at the end of the enclosing function. Its file handles went with it,
+/// the debouncer's channel disconnected, and the receiver returned `None` a millisecond later
+/// — a watch that reported success and then silently never fired. A method call borrows the
+/// whole struct, so the same code now keeps it alive.
 pub struct RepoWatcher {
     _watcher: notify::RecommendedWatcher,
-    pub changes: mpsc::Receiver<RepoChanged>,
+    changes: mpsc::Receiver<RepoChanged>,
     degraded: Arc<Mutex<Option<String>>>,
 }
 
@@ -166,6 +174,11 @@ impl RepoWatcher {
             changes,
             degraded,
         })
+    }
+
+    /// The next batch of changes, or `None` once nothing is watching any more.
+    pub async fn recv(&mut self) -> Option<RepoChanged> {
+        self.changes.recv().await
     }
 
     /// Set when the worktree could not be watched, with the reason. The UI should refresh on

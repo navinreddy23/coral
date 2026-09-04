@@ -65,7 +65,7 @@ pub async fn watch_repo(
     tauri::async_runtime::spawn(async move {
         // Owning the watcher here is what keeps it alive; the loop ends when a newer watch has
         // taken over, when the sender is dropped, or when the window has gone.
-        while let Some(change) = watcher.changes.recv().await {
+        while let Some(change) = watcher.recv().await {
             if generation.load(Ordering::SeqCst) != me {
                 return;
             }
