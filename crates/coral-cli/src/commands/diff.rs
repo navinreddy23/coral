@@ -2,7 +2,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use coral_core::CoralError;
-use coral_core::diff::{Context, FileDiff};
+use coral_core::diff::{DiffOptions, FileDiff};
 use coral_core::process::GitRunner;
 use coral_core::repo::RepoLocation;
 
@@ -21,7 +21,9 @@ pub async fn run(path: &Path, staged: bool, paths: &[String]) -> Result<DiffSet,
     let loc = RepoLocation::discover(&runner, path).await?;
     let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
     Ok(DiffSet {
-        files: loc.diff(&runner, staged, &refs, Context::Hunks).await?,
+        files: loc
+            .diff(&runner, staged, &refs, DiffOptions::default())
+            .await?,
     })
 }
 

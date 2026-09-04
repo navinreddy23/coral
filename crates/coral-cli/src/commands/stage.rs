@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use coral_core::CoralError;
-use coral_core::diff::Context;
+use coral_core::diff::DiffOptions;
 use coral_core::index::{Direction, Selection, build_patch};
 use coral_core::process::GitRunner;
 use coral_core::repo::RepoLocation;
@@ -60,7 +60,7 @@ pub async fn partial(
     // Staging reads the worktree diff; unstaging reads what is already in the index.
     let staged_side = direction == Direction::Unstage;
     let files = loc
-        .diff(&runner, staged_side, &[file], Context::Hunks)
+        .diff(&runner, staged_side, &[file], DiffOptions::default())
         .await?;
     let target = files
         .iter()

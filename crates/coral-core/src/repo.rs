@@ -263,7 +263,7 @@ impl RepoLocation {
         runner: &GitRunner,
         staged: bool,
         paths: &[&str],
-        context: crate::diff::Context,
+        options: crate::diff::DiffOptions,
     ) -> Result<Vec<crate::diff::FileDiff>, CoralError> {
         let base = |args: &[&str]| {
             let mut c = GitCommand::status("diff", self.display_path())
@@ -289,10 +289,9 @@ impl RepoLocation {
         let names = runner.output(base(&["-z", "--name-status"])).await?;
         crate::diff::apply_name_status(&mut files, &names.stdout)?;
 
-        let patch = runner
-            .output(base(&["--no-color", "-p", context.flag()]))
-            .await?;
+        let patch = runner.output(base(&options.flags())).await?;
         crate::diff::apply_patch(&mut files, &patch.stdout)?;
+        crate::diff::recount(&mut files, options);
         Ok(files)
     }
 
@@ -314,7 +313,7 @@ impl RepoLocation {
         &self,
         runner: &GitRunner,
         path: &str,
-        context: crate::diff::Context,
+        options: crate::diff::DiffOptions,
     ) -> Result<Option<crate::diff::FileDiff>, CoralError> {
         let listed = runner
             .output(
@@ -332,7 +331,9 @@ impl RepoLocation {
         let out = runner
             .output_allowing(
                 GitCommand::status("diff", self.display_path())
-                    .args(["diff", "--no-index", "--no-color", "-p", context.flag()])
+                    .arg("diff")
+                    .arg("--no-index")
+                    .args(options.flags())
                     .args(["--", "/dev/null"])
                     .arg(path),
                 &[1],
@@ -383,7 +384,7 @@ impl RepoLocation {
         runner: &GitRunner,
         rev: &str,
         paths: &[&str],
-        context: crate::diff::Context,
+        options: crate::diff::DiffOptions,
     ) -> Result<Vec<crate::diff::FileDiff>, CoralError> {
         let base = |args: &[&str]| {
             let c = GitCommand::read("diff-tree", self.display_path())
@@ -407,10 +408,9 @@ impl RepoLocation {
         let names = runner.output(base(&["-z", "--name-status"])).await?;
         crate::diff::apply_name_status(&mut files, &names.stdout)?;
 
-        let patch = runner
-            .output(base(&["--no-color", "-p", context.flag()]))
-            .await?;
+        let patch = runner.output(base(&options.flags())).await?;
         crate::diff::apply_patch(&mut files, &patch.stdout)?;
+        crate::diff::recount(&mut files, options);
         Ok(files)
     }
 
@@ -451,6 +451,107 @@ impl RepoLocation {
 
         let out = runner.output(cmd).await?;
         crate::history::parse(&out.stdout)
+    }
+
+    /// Commits whose message, author or object id matches `query`.
+    ///
+    /// Three passes rather than one, because git ANDs `--author` with `--grep` and there is no
+    /// flag that ORs them: a search for a name would otherwise find nothing unless the name
+    /// were also in the message. An abbreviated object id is resolved first and put at the
+    /// front, since someone who pastes a hash means that commit and not a commit that mentions
+    /// it.
+    ///
+    /// Every ref, not just HEAD: the graph shows every branch, so a search that did not would
+    /// report nothing for a commit plainly on screen.
+    ///
+    /// # Errors
+    /// Propagates git failures. A query that resolves to nothing is not one.
+    pub async fn search_commits(
+        &self,
+        runner: &GitRunner,
+        query: &str,
+        limit: u64,
+    ) -> Result<Vec<String>, CoralError> {
+        let query = query.trim();
+        if query.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut passes = Vec::new();
+        if crate::history::looks_like_an_oid(query) {
+            passes.push(self.resolve_oid(runner, query).await);
+        }
+        passes.push(self.matching(runner, "--grep", query, limit).await?);
+        passes.push(self.matching(runner, "--author", query, limit).await?);
+
+        let mut out = crate::history::merged(&passes);
+        out.truncate(usize::try_from(limit).unwrap_or(usize::MAX));
+        Ok(out)
+    }
+
+    /// The commit an abbreviation names, or nothing when it names none.
+    async fn resolve_oid(&self, runner: &GitRunner, query: &str) -> Vec<String> {
+        let out = runner
+            .output(
+                GitCommand::read("rev-parse", self.display_path())
+                    .args(["rev-parse", "--verify", "--quiet"])
+                    .arg(format!("{query}^{{commit}}")),
+            )
+            .await;
+        match out {
+            // Exit 1 with no output is how `--quiet` says the revision is unknown, which is
+            // the ordinary answer for a half-typed hash rather than a failure.
+            Err(_) => Vec::new(),
+            Ok(found) => String::from_utf8_lossy(&found.stdout)
+                .split_whitespace()
+                .map(str::to_owned)
+                .collect(),
+        }
+    }
+
+    async fn matching(
+        &self,
+        runner: &GitRunner,
+        field: &str,
+        query: &str,
+        limit: u64,
+    ) -> Result<Vec<String>, CoralError> {
+        let out = runner
+            .output(
+                GitCommand::read("log", self.display_path())
+                    .args(["log", "--all", "--format=%H", "--fixed-strings", "-i"])
+                    .arg(format!("--max-count={limit}"))
+                    .arg(format!("{field}={query}")),
+            )
+            .await?;
+        Ok(String::from_utf8_lossy(&out.stdout)
+            .split_whitespace()
+            .map(str::to_owned)
+            .collect())
+    }
+
+    /// One file's contents at one revision.
+    ///
+    /// Wanted by the blame view, which has chunks of lines attributed to commits and needs the
+    /// lines themselves to put beside them. Read at the same revision the blame was taken at,
+    /// or the two would not line up.
+    ///
+    /// # Errors
+    /// Propagates git failures, including an unknown path at that revision.
+    pub async fn file_at(
+        &self,
+        runner: &GitRunner,
+        rev: &str,
+        path: &str,
+    ) -> Result<Vec<u8>, CoralError> {
+        let out = runner
+            .output(
+                GitCommand::read("show", self.display_path())
+                    .arg("show")
+                    .arg(format!("{rev}:{path}")),
+            )
+            .await?;
+        Ok(out.stdout)
     }
 
     /// Attributes each line of a file to the commit that last changed it.

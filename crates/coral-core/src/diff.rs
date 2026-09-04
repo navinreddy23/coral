@@ -26,6 +26,68 @@ impl Context {
     }
 }
 
+/// Whether whitespace-only changes count as changes.
+///
+/// A reformatting commit, a tab-to-space conversion, a line ending changed by an editor: each
+/// rewrites a file without changing what it says, and reading the real change out of the noise
+/// is what this is for.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Whitespace {
+    #[default]
+    Keep,
+    Ignore,
+}
+
+/// How to ask git for a patch.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DiffOptions {
+    pub context: Context,
+    pub whitespace: Whitespace,
+}
+
+impl DiffOptions {
+    /// What to pass to every invocation, patch or counts.
+    ///
+    /// `-w`, not `-b`: leading indentation is what a reformatting commit changes, and `-b`
+    /// still reports a line whose indent went from tabs to spaces. The counts take it too, or
+    /// the panel would head a diff of nothing with "+2 −2".
+    #[must_use]
+    pub const fn whitespace_flags(self) -> &'static [&'static str] {
+        match self.whitespace {
+            Whitespace::Keep => &[],
+            Whitespace::Ignore => &["-w"],
+        }
+    }
+
+    /// The flags for the patch itself.
+    #[must_use]
+    pub fn flags(self) -> Vec<&'static str> {
+        let mut out = vec!["--no-color", "-p", self.context.flag()];
+        out.extend_from_slice(self.whitespace_flags());
+        out
+    }
+
+    #[must_use]
+    pub const fn whole_file(mut self, yes: bool) -> Self {
+        self.context = if yes {
+            Context::WholeFile
+        } else {
+            Context::Hunks
+        };
+        self
+    }
+
+    #[must_use]
+    pub const fn ignoring_whitespace(mut self, yes: bool) -> Self {
+        self.whitespace = if yes {
+            Whitespace::Ignore
+        } else {
+            Whitespace::Keep
+        };
+        self
+    }
+}
+
 /// What happened to a file between two trees.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "types.ts"))]
@@ -195,6 +257,30 @@ pub fn apply_name_status(files: &mut [FileDiff], input: &[u8]) -> Result<(), Cor
         i += 1;
     }
     Ok(())
+}
+
+/// Re-counts what changed from the hunks that survived, when whitespace was ignored.
+///
+/// The counts come from `--numstat`, which is asked without `-w` on purpose: with it git omits
+/// a file whose only change is whitespace altogether, and a file the commit plainly touched
+/// would vanish from the list. Kept in the list, its own counts have to agree with the patch
+/// beside them, or the panel heads a diff of nothing with "+2 −2".
+pub fn recount(files: &mut [FileDiff], options: DiffOptions) {
+    if options.whitespace == Whitespace::Keep {
+        return;
+    }
+    for file in files.iter_mut().filter(|f| !f.binary && !f.too_large) {
+        let (mut added, mut removed) = (0, 0);
+        for line in file.hunks.iter().flat_map(|h| h.lines.iter()) {
+            match line.kind {
+                LineKind::Add => added += 1,
+                LineKind::Remove => removed += 1,
+                LineKind::Context => {}
+            }
+        }
+        file.added = Some(added);
+        file.removed = Some(removed);
+    }
 }
 
 /// Splits a `-p` patch into per-file sections and parses their hunks.

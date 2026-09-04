@@ -3,7 +3,7 @@
 
 use std::fmt::Write as _;
 
-use coral_core::diff::{Context, FileChange, LineKind};
+use coral_core::diff::{DiffOptions, FileChange, LineKind};
 use coral_core::process::GitRunner;
 use coral_core::repo::RepoLocation;
 use coral_core::testutil::TestRepo;
@@ -39,7 +39,9 @@ fn every_shape() -> TestRepo {
 async fn staged(repo: &TestRepo) -> Vec<coral_core::diff::FileDiff> {
     let runner = GitRunner::discover().await.unwrap();
     let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
-    loc.diff(&runner, true, &[], Context::Hunks).await.unwrap()
+    loc.diff(&runner, true, &[], DiffOptions::default())
+        .await
+        .unwrap()
 }
 
 #[tokio::test]
@@ -263,7 +265,7 @@ fn a_commit_diff_carries_hunks_for_one_file() {
         let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
 
         let files = loc
-            .commit_diff(&runner, "HEAD", &["a.txt"], Context::Hunks)
+            .commit_diff(&runner, "HEAD", &["a.txt"], DiffOptions::default())
             .await
             .unwrap();
         assert_eq!(files.len(), 1, "narrowed to the one path asked for");
@@ -296,7 +298,7 @@ fn the_first_commit_shows_its_contents_rather_than_nothing() {
         let runner = GitRunner::discover().await.unwrap();
         let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
         let files = loc
-            .commit_diff(&runner, "HEAD", &[], Context::Hunks)
+            .commit_diff(&runner, "HEAD", &[], DiffOptions::default())
             .await
             .unwrap();
         assert_eq!(files.len(), 1);
@@ -319,7 +321,7 @@ fn a_merge_diffs_against_its_first_parent() {
         let runner = GitRunner::discover().await.unwrap();
         let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
         let files = loc
-            .commit_diff(&runner, "HEAD", &[], Context::Hunks)
+            .commit_diff(&runner, "HEAD", &[], DiffOptions::default())
             .await
             .unwrap();
         // What the merge brought in relative to the branch it was merged into, which is the
@@ -349,11 +351,16 @@ fn whole_file_context_carries_the_lines_no_hunk_would_reach() {
         let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
 
         let narrow = loc
-            .commit_diff(&runner, "HEAD", &["a.txt"], Context::Hunks)
+            .commit_diff(&runner, "HEAD", &["a.txt"], DiffOptions::default())
             .await
             .unwrap();
         let wide = loc
-            .commit_diff(&runner, "HEAD", &["a.txt"], Context::WholeFile)
+            .commit_diff(
+                &runner,
+                "HEAD",
+                &["a.txt"],
+                DiffOptions::default().whole_file(true),
+            )
             .await
             .unwrap();
 
@@ -399,13 +406,13 @@ fn an_untracked_file_is_a_diff_against_nothing() {
 
         // `git diff` knows about tracked paths only, which is why this needs its own read.
         let tracked = loc
-            .diff(&runner, false, &["new.sh"], Context::Hunks)
+            .diff(&runner, false, &["new.sh"], DiffOptions::default())
             .await
             .unwrap();
         assert!(tracked.is_empty());
 
         let file = loc
-            .untracked_diff(&runner, "new.sh", Context::Hunks)
+            .untracked_diff(&runner, "new.sh", DiffOptions::default())
             .await
             .unwrap()
             .expect("an untracked file has a diff");
@@ -437,10 +444,73 @@ fn a_tracked_file_has_no_untracked_diff() {
         let runner = GitRunner::discover().await.unwrap();
         let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
         assert!(
-            loc.untracked_diff(&runner, "a.txt", Context::Hunks)
+            loc.untracked_diff(&runner, "a.txt", DiffOptions::default())
                 .await
                 .unwrap()
                 .is_none()
         );
+    });
+}
+
+/// A reformatting commit rewrites a file without changing what it says.
+#[test]
+fn ignoring_whitespace_leaves_a_reformatting_commit_with_nothing_in_it() {
+    let repo = TestRepo::new()
+        .write("a.txt", "one\ntwo\nthree\n")
+        .commit("first")
+        .write("a.txt", "one\n\ttwo   \nthree\n")
+        .commit("reindent");
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+        let counted = loc
+            .commit_diff(&runner, "HEAD", &["a.txt"], DiffOptions::default())
+            .await
+            .unwrap();
+        assert_eq!((counted[0].added, counted[0].removed), (Some(1), Some(1)));
+        assert!(!counted[0].hunks.is_empty());
+
+        let ignored = loc
+            .commit_diff(
+                &runner,
+                "HEAD",
+                &["a.txt"],
+                DiffOptions::default().ignoring_whitespace(true),
+            )
+            .await
+            .unwrap();
+        // The counts as well as the hunks: heading a diff of nothing with "+1 −1" is the panel
+        // disagreeing with itself.
+        assert_eq!((ignored[0].added, ignored[0].removed), (Some(0), Some(0)));
+        assert!(ignored[0].hunks.is_empty());
+    });
+}
+
+/// Ignoring whitespace must not hide a change that only looks like one.
+#[test]
+fn ignoring_whitespace_keeps_a_real_change() {
+    let repo = TestRepo::new()
+        .write("a.txt", "one\ntwo\n")
+        .commit("first")
+        .write("a.txt", "one\n  TWO  \n")
+        .commit("reword and reindent");
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+        let files = loc
+            .commit_diff(
+                &runner,
+                "HEAD",
+                &["a.txt"],
+                DiffOptions::default().ignoring_whitespace(true),
+            )
+            .await
+            .unwrap();
+        assert_eq!((files[0].added, files[0].removed), (Some(1), Some(1)));
     });
 }
