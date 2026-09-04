@@ -168,11 +168,13 @@
   }
   .body {
     margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3);
-    background: var(--bg-2); border-radius: var(--radius-1);
+    /* The page, and the strongest text on it. A grey message on a grey plate is the body of
+       the commit set as though it were a caption on it. */
+    background: var(--bg-0); border-radius: var(--radius-1);
     /* A rule down the leading edge, as a quoted message is set everywhere else. */
     box-shadow: inset 2px 0 0 var(--border-strong);
     font-family: var(--font-mono); font-size: 11px; line-height: 1.5;
-    white-space: pre-wrap; word-break: break-word; color: var(--fg-1);
+    white-space: pre-wrap; word-break: break-word; color: var(--fg-0);
   }
   dl {
     display: grid;

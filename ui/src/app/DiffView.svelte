@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { splitRows, windowAround } from '../diff/split';
+  import { firstChangedRow, splitRows, windowAround } from '../diff/split';
   import { elidePath } from './path';
   import type { DiffState } from '../state/diff.svelte';
 
@@ -45,6 +45,42 @@
     return { rows, from, total: all.length };
   });
 
+  /** Height of one row, matching `--diff-row` in the stylesheet below. */
+  const ROW = 17;
+  /** Rows kept either side of the viewport, so a fast scroll does not show a gap. */
+  const OVERSCAN = 12;
+
+  /**
+   * Only the rows on screen are built.
+   *
+   * A whole file is thousands of rows and four cells each, and a table that size is one
+   * composited layer the engine repaints on every wheel notch — which is what made scrolling
+   * a side-by-side diff crawl. Rows are a fixed height, so which ones are visible is
+   * arithmetic and the rest need not exist.
+   */
+  let scrolled = $state(0);
+  let viewport = $state(400);
+
+  const firstDrawn = $derived(Math.max(0, Math.floor(scrolled / ROW) - OVERSCAN));
+  const drawn = $derived(
+    split.rows.slice(firstDrawn, firstDrawn + Math.ceil(viewport / ROW) + OVERSCAN * 2),
+  );
+
+  /**
+   * Width of a line-number gutter, in digits of the monospace face.
+   *
+   * Fixed rather than sized to its content: with only the visible rows in the document, a
+   * column that fits what it holds would change width as four-digit numbers scrolled into it
+   * and the whole diff would step sideways. Sized from the last line of the file, not the
+   * first: the hunk's own start is line one when the whole file is shown.
+   */
+  const digits = $derived.by(() => {
+    const last = diff.file?.hunks.at(-1);
+    if (last === undefined) return 3;
+    const highest = Math.max(last.oldStart + last.oldLines, last.newStart + last.newLines);
+    return Math.max(3, String(highest).length);
+  });
+
   const sign: Record<string, string> = { add: '+', remove: '-', context: ' ' };
 
   let scroller: HTMLElement | null = $state(null);
@@ -61,22 +97,19 @@
    */
   $effect(() => {
     const key = `${diff.path ?? ''}\u0000${diff.mode}`;
-    const file = diff.file;
+    const rows = split.rows;
     const el = scroller;
-    if (!file || diff.mode !== 'split' || el === null || placed === key) return;
+    if (diff.mode !== 'split' || el === null || rows.length === 0 || placed === key) return;
     placed = key;
-    requestAnimationFrame(() => reveal(el));
+    const at = firstChangedRow(rows);
+    if (at < 0) return;
+    el.scrollTop = Math.max(0, at * ROW - el.clientHeight / 3);
   });
 
-  function reveal(el: HTMLElement) {
-    const cell = el.querySelector('td.add, td.remove');
-    const row = cell?.closest('tr');
-    if (!row) return;
-    // Measured rather than computed from a row height: the table's rows are uniform now and
-    // an assumption that they stay so is one nobody would think to check.
-    const top = row.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
-    el.scrollTop = Math.max(0, top - el.clientHeight / 3);
+  function onScroll(event: Event) {
+    scrolled = (event.currentTarget as HTMLElement).scrollTop;
   }
+
 </script>
 
 <section class="diff">
@@ -99,7 +132,7 @@
     <button class="close" onclick={onClose} aria-label="Close the diff">✕</button>
   </header>
 
-  <div class="scroll" bind:this={scroller}>
+  <div class="scroll" bind:this={scroller} onscroll={onScroll} bind:clientHeight={viewport}>
     {#if diff.loading}
       <p class="muted">Loading…</p>
     {:else if diff.error}
@@ -130,18 +163,24 @@
         </tbody>
       </table>
     {:else}
-      <table class="lines split">
-        <tbody>
-          {#each split.rows as row, i (i)}
-            <tr>
-              <td class="no">{row.left?.oldNo ?? ''}</td>
-              <td class="text {row.left ? row.left.kind : 'blank'}">{row.left?.text ?? ''}</td>
-              <td class="no">{row.right?.newNo ?? ''}</td>
-              <td class="text {row.right ? row.right.kind : 'blank'}">{row.right?.text ?? ''}</td>
-            </tr>
+      <div
+        class="sheet"
+        style:height="{split.rows.length * ROW}px"
+        style:--gutter="calc({digits}ch + var(--space-4))"
+      >
+        <div class="window" style:transform="translateY({firstDrawn * ROW}px)">
+          {#each drawn as row, i (firstDrawn + i)}
+            <div class="line">
+              <span class="no">{row.left?.oldNo ?? ''}</span>
+              <span class="cell {row.left ? row.left.kind : 'blank'}">{row.left?.text ?? ''}</span>
+              <span class="no">{row.right?.newNo ?? ''}</span>
+              <span class="cell {row.right ? row.right.kind : 'blank'}"
+                >{row.right?.text ?? ''}</span
+              >
+            </div>
           {/each}
-        </tbody>
-      </table>
+        </div>
+      </div>
     {/if}
 
     {#if diff.mode === 'split' && split.total > split.rows.length}
@@ -196,7 +235,7 @@
   .scroll { flex: 1; overflow: auto; }
   .lines {
     border-collapse: collapse; width: 100%;
-    font-family: var(--font-mono); font-size: 11px; line-height: 17px;
+    font-family: var(--font-mono); font-size: 11px; font-weight: 400; line-height: 17px;
   }
   .no {
     width: 1%; white-space: nowrap; text-align: right; user-select: none;
@@ -207,15 +246,43 @@
   }
   /* Long lines scroll with the table rather than wrapping: a wrapped diff loses the one-line,
      one-row correspondence that makes the two columns comparable. */
-  .text { white-space: pre; padding: 0 var(--space-2); color: var(--fg-0); }
+  /*
+   * An opaque background of its own, and this is not optional. WebKit antialiases text on a
+   * composited layer with subpixel precision only where it knows what is behind it; left
+   * transparent it falls back to grayscale, which at eleven pixels of a monospace face reads
+   * as bold rather than as soft. The add, remove and blank tints below override it.
+   */
+  .text { white-space: pre; padding: 0 var(--space-2); color: var(--fg-0); background: var(--bg-0); }
+
+  /*
+   * The side-by-side sheet: a spacer as tall as the whole file, with only the visible rows
+   * inside it. See the comment on `drawn` for why it is not a table.
+   */
+  .sheet {
+    position: relative; overflow: hidden;
+    font-family: var(--font-mono); font-size: 11px; font-weight: 400; line-height: 17px;
+  }
+  .window { position: absolute; inset: 0 0 auto 0; will-change: transform; }
+  .line {
+    display: grid; height: 17px;
+    grid-template-columns: var(--gutter) 1fr var(--gutter) 1fr;
+  }
+  .line .no {
+    text-align: right; user-select: none; padding: 0 var(--space-2);
+    color: var(--fg-2); background: var(--bg-1);
+    border-right: 1px solid var(--border); box-sizing: border-box;
+    font-variant-numeric: tabular-nums;
+  }
+  .cell {
+    white-space: pre; overflow: hidden; padding: 0 var(--space-2);
+    color: var(--fg-0); background: var(--bg-0);
+  }
+  .cell.add { background: var(--add-bg); box-shadow: inset 2px 0 0 var(--ok); }
+  .cell.remove { background: var(--remove-bg); box-shadow: inset 2px 0 0 var(--danger); }
+  .cell.blank { background: var(--bg-1); }
   .sign { user-select: none; color: var(--fg-2); }
-  tr.add .text, td.text.add {
-    background: var(--add-bg); box-shadow: inset 2px 0 0 var(--ok);
-  }
-  tr.remove .text, td.text.remove {
-    background: var(--remove-bg); box-shadow: inset 2px 0 0 var(--danger);
-  }
-  td.text.blank { background: var(--bg-1); }
+  tr.add .text { background: var(--add-bg); box-shadow: inset 2px 0 0 var(--ok); }
+  tr.remove .text { background: var(--remove-bg); box-shadow: inset 2px 0 0 var(--danger); }
   /*
    * The hunk header is a divider with a location on it, not a line of the file. Ruled above
    * and below so a long diff reads as a sequence of regions rather than one wall.
@@ -226,7 +293,6 @@
     border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
     font-size: 10px; letter-spacing: 0.02em;
   }
-  .split td.text { width: 50%; max-width: 0; overflow: hidden; }
   .muted { color: var(--fg-2); padding: var(--space-3); font-size: 12px; }
   .error { color: var(--danger); padding: var(--space-3); font-size: 12px; }
 </style>

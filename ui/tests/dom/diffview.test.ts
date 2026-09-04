@@ -70,14 +70,39 @@ describe('the diff viewer', () => {
 
   it('puts the two sides opposite each other when split', () => {
     const { container } = mounted('split');
-    const rows = [...container.querySelectorAll('tbody tr')].filter(
-      (r) => !r.classList.contains('hunk'),
-    );
+    const rows = [...container.querySelectorAll('.line')];
     // Context, the replaced pair, context: three rows, not four.
     expect(rows).toHaveLength(3);
     const middle = rows[1];
-    const texts = [...(middle?.querySelectorAll('td.text') ?? [])].map((c) => c.textContent);
+    const texts = [...(middle?.querySelectorAll('.cell') ?? [])].map((c) => c.textContent);
     expect(texts).toEqual(['two', 'TWO']);
+  });
+
+  it('builds only the rows the viewport can hold', () => {
+    // A whole file is thousands of rows; a table that size is what made scrolling crawl.
+    const lines = Array.from({ length: 4000 }, (_, i) => ({
+      kind: 'context' as const,
+      text: `line ${i}`,
+      oldNo: i + 1,
+      newNo: i + 1,
+      noNewline: false,
+    }));
+    const diff = new DiffState(new ViewsState());
+    diff.setMode('split');
+    diff.path = 'big.txt';
+    diff.file = {
+      ...fileDiff(),
+      path: 'big.txt',
+      hunks: [{ header: '@@', oldStart: 1, oldLines: 4000, newStart: 1, newLines: 4000, lines }],
+    };
+    const { container } = render(DiffView, { props: { diff, onClose: () => {} } });
+
+    const drawn = container.querySelectorAll('.line').length;
+    expect(drawn).toBeGreaterThan(0);
+    expect(drawn).toBeLessThan(200);
+    // The sheet still stands for the whole file, so the scrollbar means what it says.
+    const sheet = container.querySelector('.sheet');
+    expect(sheet?.getAttribute('style')).toContain(`${4000 * 17}px`);
   });
 
   it('shows the hunk header inline, and none side by side', () => {

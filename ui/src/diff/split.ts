@@ -54,7 +54,7 @@ export function windowAround(
 ): { rows: SplitRow[]; from: number } {
   if (rows.length <= limit) return { rows, from: 0 };
 
-  const change = rows.findIndex(isChanged);
+  const change = firstChangedRow(rows);
   if (change < 0) return { rows: rows.slice(0, limit), from: 0 };
 
   const lead = Math.floor(limit / 4);
@@ -62,7 +62,9 @@ export function windowAround(
   return { rows: rows.slice(from, from + limit), from };
 }
 
-/** True for a row that is not the same line on both sides. */
-function isChanged(row: SplitRow): boolean {
-  return row.left?.kind !== 'context' || row.right?.kind !== 'context';
+/** Where the first change is, or -1 when the two sides are identical throughout. */
+export function firstChangedRow(rows: readonly SplitRow[]): number {
+  return rows.findIndex(
+    (row) => row.left?.kind !== 'context' || row.right?.kind !== 'context',
+  );
 }
