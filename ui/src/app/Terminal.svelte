@@ -33,22 +33,30 @@
    */
   function palette(): Record<string, string> {
     const style = getComputedStyle(document.documentElement);
-    const token = (name: string, fallback: string) =>
-      style.getPropertyValue(name).trim() || fallback;
-    return {
-      background: token('--bg-0', '#ffffff'),
-      foreground: token('--fg-0', '#171a20'),
-      cursor: token('--accent', '#0d7a6f'),
-      selectionBackground: token('--accent-soft', '#d6ece9'),
-      black: token('--fg-0', '#171a20'),
-      red: token('--danger', '#b3261e'),
-      green: token('--ok', '#1a7f37'),
-      yellow: token('--lane-3', '#8d6005'),
-      blue: token('--lane-1', '#096cb3'),
-      magenta: token('--lane-2', '#bf2681'),
-      cyan: token('--lane-7', '#16737f'),
-      white: token('--fg-1', '#4a5364'),
+    // No literal fallbacks. A second copy of the palette drifts from the first — two of the
+    // ones that used to be here were still the lighter text colours from before the contrast
+    // pass — and an entry xterm is not given simply keeps its own default, which is a better
+    // outcome than a stale one. An empty value here means the stylesheet has not loaded.
+    const wanted: Record<string, string> = {
+      background: '--bg-0',
+      foreground: '--fg-0',
+      cursor: '--accent',
+      selectionBackground: '--accent-soft',
+      black: '--fg-0',
+      red: '--danger',
+      green: '--ok',
+      yellow: '--lane-3',
+      blue: '--lane-1',
+      magenta: '--lane-2',
+      cyan: '--lane-7',
+      white: '--fg-1',
     };
+    const theme: Record<string, string> = {};
+    for (const [slot, name] of Object.entries(wanted)) {
+      const value = style.getPropertyValue(name).trim();
+      if (value !== '') theme[slot] = value;
+    }
+    return theme;
   }
 
   async function send(size: { cols: number; rows: number }) {

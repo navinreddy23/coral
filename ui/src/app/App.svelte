@@ -938,13 +938,49 @@
     if (headName !== wasHead) await focusHead();
   }
 
+  /**
+   * True when the worktree could not be watched, so file changes will not arrive on their own.
+   *
+   * On Linux inotify has a per-user watch limit that a tree the size of the kernel exhausts.
+   * The engine reports that rather than going quietly stale, and the window has to do something
+   * with the answer: say so once, and refresh when the window is looked at again.
+   */
+  let watchIsPartial = $state(false);
+
   // One watch, following whichever repository the active tab is showing.
   $effect(() => {
     const path = loadedPath;
     if (!path) return;
-    void watchRepo(path).catch(() => undefined);
+    void watchRepo(path)
+      .then((watching) => {
+        watchIsPartial = !watching.complete;
+        if (watching.complete) return;
+        toasts.push(
+          'info',
+          'Watching this working tree only partly',
+          `${watching.detail ?? 'The system refused to watch it.'}\nCoral will refresh when ` +
+            'you come back to the window.',
+        );
+      })
+      .catch(() => {
+        // Nothing is watching, so the same fallback applies.
+        watchIsPartial = true;
+      });
     return () => void unwatchRepo().catch(() => undefined);
   });
+
+  /**
+   * Refreshes what a file change would have told us, when nothing is telling us.
+   *
+   * Status and refs only. Rewalking the graph every time the window is focused would freeze it
+   * for seconds on a large repository, and a commit made elsewhere arrives with the next
+   * action anyway.
+   */
+  async function refreshOnFocus() {
+    if (!watchIsPartial || !info || actions.busy) return;
+    const path = info.path;
+    await Promise.all([worktree.load(path), refs.load(path)]);
+  }
 
   $effect(() => {
     const stop = onRepoChanged((change) => void repoChanged(change));
@@ -1244,7 +1280,7 @@
   }
 </script>
 
-<svelte:window onkeydown={onKey} />
+<svelte:window onkeydown={onKey} onfocus={() => void refreshOnFocus()} />
 
 <main>
   <header>
