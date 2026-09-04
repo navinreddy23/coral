@@ -6,10 +6,18 @@
   import type { SigningState } from '../state/signing.svelte';
   import type { SshState } from '../state/ssh.svelte';
 
-  const { signing, ssh, experimental, onClose, onCopied, onPickGit }: {
+  const { signing, ssh, experimental, hasRepository, onClose, onCopied, onPickGit }: {
     signing: SigningState;
     ssh: SshState;
     experimental: ExperimentalState;
+    /**
+     * Whether a repository is open.
+     *
+     * Two of these panes are about one repository and have nothing to read without it. The
+     * third is about Coral itself, and is exactly what someone whose git is too old to open
+     * anything has come here for.
+     */
+    hasRepository: boolean;
     onClose: () => void;
     /** Says whether the clipboard took something, which a button cannot tell on its own. */
     onCopied: (ok: boolean, what: string) => void;
@@ -22,12 +30,14 @@
    * The reference lists a dozen; listing ones that do nothing would be worse than not listing
    * them, so the rest arrive with the settings they hold.
    */
-  const panes = [
-    { id: 'ssh', label: 'SSH', glyph: '⛨' },
-    { id: 'signing', label: 'Commit Signing', glyph: '✎' },
-    { id: 'experimental', label: 'Experimental', glyph: '⚗' },
-  ];
-  let active = $state('ssh');
+  const panes = $derived([
+    { id: 'ssh', label: 'SSH', glyph: '⛨', needsRepository: true },
+    { id: 'signing', label: 'Commit Signing', glyph: '✎', needsRepository: true },
+    { id: 'experimental', label: 'Experimental', glyph: '⚗', needsRepository: false },
+  ].filter((pane) => hasRepository || !pane.needsRepository));
+
+  // svelte-ignore state_referenced_locally
+  let active = $state(hasRepository ? 'ssh' : 'experimental');
 
   function key(event: KeyboardEvent) {
     if (event.key === 'Escape') {

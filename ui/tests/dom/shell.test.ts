@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
-import { render, waitFor } from '@testing-library/svelte';
+import { cleanup, render, waitFor } from '@testing-library/svelte';
 import { fireEvent } from '@testing-library/dom';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * The shell driven through a real encoded frame.
@@ -18,6 +18,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // URL, which node:fs will not open.
 const frameBytes = readFileSync(resolve(process.cwd(), 'tests/fixtures/frame.bin'));
 
+/** The object ids the fixture frame actually holds, so the metadata stub is about those rows. */
+const frameOids = (() => {
+  const copy = frameBytes.buffer.slice(
+    frameBytes.byteOffset,
+    frameBytes.byteOffset + frameBytes.byteLength,
+  );
+  const frame = decodeFrame(copy);
+  return Array.from({ length: frame.rowCount }, (_, r) => oidOf(frame, r));
+})();
+
 const invoke = vi.hoisted(() => vi.fn());
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 vi.mock('../../src/ipc/invoke', () => ({ invoke, isPreview: () => false }));
@@ -27,6 +37,10 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => undefined })
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 
 import App from '../../src/app/App.svelte';
+
+// Each test mounts its own window. Without this the previous one is still in the document, and
+// a query for something every window has finds one per window.
+afterEach(cleanup);
 import { decodeFrame, oidOf } from '../../src/graph/frame';
 
 /** The same rows the window decodes, to compare what it put on screen against. */
@@ -54,8 +68,10 @@ function answers(over: Record<string, unknown> = {}): Record<string, unknown> {
       frameBytes.byteOffset,
       frameBytes.byteOffset + frameBytes.byteLength,
     ),
-    row_metadata: Array.from({ length: 256 }, (_, i) => ({
-      oid: `${i}`.padStart(40, '0'),
+    // Keyed by object id in the window, so a stub that invented ids would be answering about
+    // commits that are not on those rows.
+    row_metadata: frameOids.map((oid, i) => ({
+      oid,
       author: 'Linus Torvalds',
       email: 'torvalds@linux-foundation.org',
       time: 1_756_000_000,
@@ -89,7 +105,11 @@ function wire(over: Record<string, unknown> = {}) {
   const table = answers(over);
   invoke.mockImplementation(async (cmd: string) => {
     if (!(cmd in table)) throw new Error(`unstubbed command ${cmd}`);
-    return table[cmd];
+    // An answer that is an error is one the engine refuses to give, which is a case the window
+    // has to survive as much as any other.
+    const answer = table[cmd];
+    if (answer instanceof Error) throw answer;
+    return answer;
   });
 }
 
@@ -204,5 +224,75 @@ describe('the shell', () => {
       if (!container.querySelector('section.merge')) throw new Error('no merge tool');
     });
     expect((container.querySelector('.graph') as HTMLElement).className).toContain('hidden');
+  });
+});
+
+describe('a git too old to open anything', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  /** What the engine answers when the machine's git is below the floor. */
+  function tooOld() {
+    return {
+      open_repo: Object.assign(new Error('git 2.20.1 is too old; coral needs 2.40.0 or newer'), {
+        code: 'git_too_old',
+      }),
+      experimental_git: {
+        chosen: { kind: 'system' },
+        candidates: [
+          { choice: { kind: 'system' }, path: 'git', version: null, problem: 'too old' },
+          {
+            choice: { kind: 'custom', path: '/usr/bin/git' },
+            path: '/usr/bin/git',
+            version: '2.43.0',
+            problem: null,
+          },
+        ],
+        inUse: 'git',
+        inUseVersion: null,
+      },
+    };
+  }
+
+  it('still opens the page that can point Coral at a different git', async () => {
+    // The whole reason that page exists. It used to be rendered inside the branch that needs a
+    // loaded graph, so the one machine that needed it was the one machine that could not
+    // reach it.
+    wire(tooOld());
+    const view = render(App);
+    await waitFor(() => {
+      if (!view.container.textContent?.includes('too old')) throw new Error('no error yet');
+    });
+
+    await fireEvent.click(view.getByLabelText('Settings'));
+
+    // The page arrives before its answer does, so wait for the answer: what matters is that a
+    // usable git is offered, not that the heading rendered.
+    await waitFor(() => {
+      if (!view.container.textContent?.includes('2.43.0: /usr/bin/git')) {
+        throw new Error('no git offered yet');
+      }
+    });
+  });
+
+  it('offers only the settings that mean anything without a repository', async () => {
+    // SSH keys and commit signing are per-repository and have nothing to read. Listing them
+    // would be offering two dead ends beside the one thing that works.
+    wire(tooOld());
+    const view = render(App);
+    await waitFor(() => {
+      if (!view.container.textContent?.includes('too old')) throw new Error('no error yet');
+    });
+
+    await fireEvent.click(view.getByLabelText('Settings'));
+    await waitFor(() => {
+      if (!view.container.textContent?.includes('Experimental')) throw new Error('not yet');
+    });
+
+    const panes = [...view.container.querySelectorAll('nav .pane')].map((b) => b.textContent);
+    expect(panes.join(' ')).toContain('Experimental');
+    expect(panes.join(' ')).not.toContain('SSH');
   });
 });

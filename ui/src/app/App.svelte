@@ -81,7 +81,13 @@
   import Shortcuts from './Shortcuts.svelte';
   import TabBar from './TabBar.svelte';
   import Toolbar from './Toolbar.svelte';
-  import type { RepoInfo, StatusEntry, Submodule, SubmoduleRevision } from '../ipc/types';
+  import type {
+    CommitMeta,
+    RepoInfo,
+    StatusEntry,
+    Submodule,
+    SubmoduleRevision,
+  } from '../ipc/types';
   import { submoduleRevision } from '../ipc/commands';
   import type { PlacedRef } from '../state/refs.svelte';
 
@@ -356,7 +362,7 @@
     pick(row);
     const short = oid.slice(0, 8);
     const branch = headName ?? 'HEAD';
-    const summary = graph.meta.get(row)?.summary ?? '';
+    const summary = visibleMeta.get(row)?.summary ?? '';
 
     menu = {
       x: event.clientX,
@@ -1425,12 +1431,37 @@
   const rows = $derived(windowRows(graph.frame));
 
   /**
-   * Reading `graph.meta` here rather than inside the canvas keeps the redraw reactive: the
+   * What is known about each row on screen.
+   *
+   * The engine's map is keyed by object id, because a row is a position in one walk and the
+   * walk is replaced whenever the repository moves. This turns it back into rows for the frame
+   * in hand, which is the only frame those rows mean anything in.
+   *
+   * Derived rather than looked up per use, so a row's object id is built once per repaint
+   * instead of once for its initials, once for its colour, once for its summary and once for
+   * its body.
+   */
+  const visibleMeta = $derived.by(() => {
+    const frame = graph.frame;
+    const meta = graph.meta;
+    const found = new Map<number, CommitMeta>();
+    if (!frame) return found;
+    for (const row of rows) {
+      const local = localRow(frame, row);
+      if (local === null) continue;
+      const entry = meta.get(oidOf(frame, local));
+      if (entry) found.set(row, entry);
+    }
+    return found;
+  });
+
+  /**
+   * Reading the metadata here rather than inside the canvas keeps the redraw reactive: the
    * identity of this function changes whenever a metadata block lands, which is the signal the
    * canvas repaints on.
    */
   const nodeInitials = $derived.by(() => {
-    const meta = graph.meta;
+    const meta = visibleMeta;
     return (row: number) => {
       const author = meta.get(row)?.author;
       return author === undefined ? null : initialsOf(author);
@@ -1445,7 +1476,7 @@
    * defeats the point of colouring it.
    */
   const nodeAuthor = $derived.by(() => {
-    const meta = graph.meta;
+    const meta = visibleMeta;
     return (row: number) => {
       const entry = meta.get(row);
       if (entry === undefined) return null;
@@ -1617,6 +1648,30 @@
     <p class="banner error">{graph.error}</p>
   {/if}
 
+  <!--
+    Preferences and the log sit outside the branch that needs a loaded graph. They were inside
+    it, which meant that a machine whose git is too old for Coral to open anything could not
+    reach the page that exists to point Coral at a different git — nor the log that would have
+    said why.
+  -->
+  {#if showPrefs}
+    <Preferences
+      {signing}
+      {ssh}
+      {experimental}
+      hasRepository={info !== null}
+      onPickGit={() => void chooseGitProgram()}
+      onClose={() => (showPrefs = false)}
+      onCopied={(ok, what) =>
+        ok
+          ? toasts.push('ok', `Copied the ${what}`)
+          : toasts.push('error', `Could not copy the ${what}`)}
+    />
+  {/if}
+  {#if showActivity}
+    <Activity {activity} onClose={() => (showActivity = false)} />
+  {/if}
+
   {#if graph.loading && !graph.frame}
     <Splash
       repo={loadedPath.split('/').filter(Boolean).at(-1) ?? loadedPath}
@@ -1665,19 +1720,6 @@
         onreset={() => panes.reset()}
       />
     {/if}
-    {#if showPrefs}
-      <Preferences
-        {signing}
-        {ssh}
-        {experimental}
-        onPickGit={() => void chooseGitProgram()}
-        onClose={() => (showPrefs = false)}
-        onCopied={(ok, what) =>
-          ok
-            ? toasts.push('ok', `Copied the ${what}`)
-            : toasts.push('error', `Could not copy the ${what}`)}
-      />
-    {/if}
     {#if showSubmodule && info}
       <SubmodulePanel
         submodule={showSubmodule}
@@ -1702,9 +1744,6 @@
         onClose={() => (showRemotes = null)}
         onChanged={() => info && void refs.load(info.path)}
       />
-    {/if}
-    {#if showActivity}
-      <Activity {activity} onClose={() => (showActivity = false)} />
     {/if}
     {#if merge.inProgress}
       <!-- A stopped merge or rebase is the only thing that matters until it is settled, so it
@@ -1844,9 +1883,9 @@
               </span>
               <span class="cell graph-col"></span>
               <span class="cell message">
-                <span class="summary">{graph.meta.get(row)?.summary ?? ''}</span>
+                <span class="summary">{visibleMeta.get(row)?.summary ?? ''}</span>
                 {#if showBody}
-                  <span class="detail">{flatten(graph.meta.get(row)?.body ?? '')}</span>
+                  <span class="detail">{flatten(visibleMeta.get(row)?.body ?? '')}</span>
                 {/if}
                 {#if local !== null}
                   <span class="age">{when(graph.frame.times[local] ?? 0)}</span>
