@@ -2,9 +2,19 @@
   import Menu, { type MenuItem } from './Menu.svelte';
   import { TabsState, type GroupColour, type Tab, type TabGroup } from '../state/tabs.svelte';
 
-  const { tabs, onOpen, onAsk }: {
+  const { tabs, onOpen, onCloseNew, newTab, onAsk }: {
     tabs: TabsState;
     onOpen: () => void;
+    /**
+     * True while the start page is showing.
+     *
+     * It is a tab as far as anyone looking at the bar is concerned, so it is the one marked
+     * as current; leaving the repository behind it filled said the window was showing that
+     * repository, which it was not.
+     */
+    newTab: boolean;
+    /** Puts the start page away, when there is a repository to go back to. */
+    onCloseNew: () => void;
     /** Asks the user for a line of text. Returns null when they cancelled. */
     onAsk: (title: string, detail: string, initial: string) => Promise<string | null>;
   } = $props();
@@ -261,7 +271,7 @@
 {#snippet chip(tab: Tab)}
   <div
     class="tab"
-    class:active={tabs.session.active === tab.id}
+    class:active={!newTab && tabs.session.active === tab.id}
     class:missing={tab.missing}
     class:dragging={dragging === tab.id}
     class:before={insertBefore === tab.id}
@@ -323,6 +333,14 @@
     {/if}
   {/each}
 
+  {#if newTab}
+    <div class="tab active new">
+      <button class="pick" onclick={onOpen} title="Pick a repository to open">New tab</button>
+      {#if tabs.session.tabs.length > 0}
+        <button class="shut" onclick={onCloseNew} title="Close">×</button>
+      {/if}
+    </div>
+  {/if}
   <button class="add" onclick={onOpen} title="Open a repository">+</button>
   {#if tabs.error}<span class="error">{tabs.error}</span>{/if}
 

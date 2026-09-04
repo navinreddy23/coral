@@ -2,8 +2,10 @@
   import type { StartState } from '../state/start.svelte';
   import { elidePath } from './path';
 
-  const { start, onOpen, onPickDirectory, onClose }: {
+  const { start, onOpen, onPickDirectory, onClose, onConfirm }: {
     start: StartState;
+    /** Asks before something that cannot be undone. Returns whether to go ahead. */
+    onConfirm: (title: string, detail: string) => Promise<boolean>;
     /** Opens a repository at a path, in a tab. */
     onOpen: (path: string) => void;
     /** Asks for a directory, since the file picker belongs to the window. */
@@ -11,6 +13,16 @@
     /** Null when there is nothing to go back to, and the page is all there is. */
     onClose: (() => void) | null;
   } = $props();
+
+  /** Emptying the list cannot be undone, so it is asked about first. */
+  async function clearAll() {
+    const yes = await onConfirm(
+      'Clear the recent repositories?',
+      `${start.recents.length} entries are removed from this list. The repositories themselves ` +
+        'are not touched.',
+    );
+    if (yes) await start.forgetAll();
+  }
 
   let cloneUrl = $state('');
   let cloneParent = $state('');
@@ -162,7 +174,14 @@
 
   <input class="filter" placeholder="Search repositories" bind:value={start.filter} />
 
-  <h3>Recent</h3>
+  <div class="recent-head">
+    <h3>Recent</h3>
+    {#if start.recents.length > 0}
+      <!-- The list is a record of which repositories this person works on, which is not
+           always something they want on the page. -->
+      <button class="clear" onclick={() => void clearAll()}>Clear all</button>
+    {/if}
+  </div>
   {#if start.recents.length === 0}
     <p class="none">Nothing yet. Open, clone or create one and it will be listed here.</p>
   {:else if start.shown.length === 0}
@@ -261,6 +280,12 @@
   }
   .filter:focus { border-color: var(--accent); outline: none; }
 
+  .recent-head { display: flex; align-items: baseline; gap: var(--space-3); max-width: 60em; }
+  .clear {
+    margin-left: auto; font: inherit; font-size: 11px; cursor: pointer;
+    background: none; border: 0; color: var(--fg-2); padding: 0;
+  }
+  .clear:hover { color: var(--danger); text-decoration: underline; }
   .recents { list-style: none; margin: 0; padding: 0; max-width: 60em; }
   .recents li { display: flex; align-items: center; border-radius: var(--radius-1); }
   .recents li:hover { background: var(--bg-1); }

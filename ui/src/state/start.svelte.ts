@@ -1,4 +1,12 @@
-import { forgetRecent, lfsAvailable, recentRepos, repoClone, repoInit, type Recent } from '../ipc/start';
+import {
+  forgetAllRecents,
+  forgetRecent,
+  lfsAvailable,
+  recentRepos,
+  repoClone,
+  repoInit,
+  type Recent,
+} from '../ipc/start';
 import { messageOf } from '../ipc/error';
 
 /** Which form the start page is showing, if any. */
@@ -41,6 +49,15 @@ export class StartState {
   async forget(path: string): Promise<void> {
     try {
       this.recents = await forgetRecent(path);
+    } catch (e) {
+      this.error = messageOf(e);
+    }
+  }
+
+  /** Empties the list, for someone who does not want their repositories named on this page. */
+  async forgetAll(): Promise<void> {
+    try {
+      this.recents = await forgetAllRecents();
     } catch (e) {
       this.error = messageOf(e);
     }
