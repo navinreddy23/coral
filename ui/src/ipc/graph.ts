@@ -24,8 +24,9 @@ export async function rowMetadata(
   path: string,
   startRow: number,
   count: number,
+  provisional: boolean,
 ): Promise<CommitMeta[]> {
-  return invoke<CommitMeta[]>('row_metadata', { path, startRow, count });
+  return invoke<CommitMeta[]>('row_metadata', { path, startRow, count, provisional });
 }
 
 export interface TransportCheck {

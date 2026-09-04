@@ -1,41 +1,128 @@
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, PoisonError};
 
 use coral_core::CoralError;
 use coral_core::graph::{GixCommitStream, RowStore, StreamOpts, build, wire};
 use tokio::sync::Mutex;
 
-/// The row store for one open repository, kept between frame requests.
+/// How many repositories keep their walk. A `RowStore` for the kernel is about eighty
+/// megabytes, so this cannot be unbounded; it is comfortably more tabs than anyone switches
+/// between, and the one that goes is the one nobody has looked at for longest.
+const KEEP: usize = 6;
+
+/// The row stores for the repositories that are open, one slot each.
 ///
-/// Rebuilding the graph per frame would cost seconds; the store is built once and sliced.
+/// Rebuilding the graph per frame would cost seconds, so the store is built once and sliced.
+/// One slot for the whole application was worse than no cache at all past the first tab: every
+/// switch evicted the walk it was switching away from, so switching back walked 1.8M commits
+/// again, and — because the slot's lock was held for the whole walk — a fifteen-commit
+/// repository could not be drawn until the kernel had finished being walked.
 #[derive(Default)]
 pub struct GraphCache {
-    inner: Mutex<Option<Cached>>,
+    slots: std::sync::Mutex<HashMap<String, Arc<Slot>>>,
+    /// Counts uses, so the least recently used slot can be named without a clock.
+    tick: AtomicU64,
+}
+
+/// One repository's walk, and its own lock.
+///
+/// Per repository rather than one for all of them: the lock is held across the walk on purpose,
+/// so two requests for the same repository share one walk instead of racing to do it twice.
+/// Sharing it between repositories is what made them wait for each other.
+#[derive(Default)]
+struct Slot {
+    held: Mutex<Option<Cached>>,
+    /// The commit-time walk, kept where it can be read while the topological one is running.
+    ///
+    /// The point of painting in sixteen milliseconds is undone if the rows painted have no
+    /// author and no message. They had none: asking for a row's metadata asked for the
+    /// topological store, and waited the six seconds that store took to build, so a large
+    /// repository showed a column of dots and nothing else for as long as it walked. This is a
+    /// plain lock that is never held across an await, so reading it cannot wait for a walk.
+    quick: std::sync::Mutex<Option<Arc<RowStore>>>,
+    used: AtomicU64,
+    /// What the refs hashed to when the held walk was asked for, so a tab switch back to a
+    /// repository nobody has touched is free rather than another walk of it.
+    refs: AtomicU64,
+}
+
+impl Slot {
+    fn quick_store(&self) -> Option<Arc<RowStore>> {
+        self.quick
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    fn set_quick(&self, store: Option<Arc<RowStore>>) {
+        *self.quick.lock().unwrap_or_else(PoisonError::into_inner) = store;
+    }
 }
 
 struct Cached {
-    path: String,
     /// True when this store came from a commit-time walk and is not topologically sound.
     provisional: bool,
     store: Arc<RowStore>,
 }
 
 impl GraphCache {
-    /// Returns the store for `path`, building it if this is a different repository.
-    /// Drops the walk held for `path`, if it is the one held.
-    async fn forget(&self, path: &str) {
-        let mut held = self.inner.lock().await;
-        if held.as_ref().is_some_and(|cached| cached.path == path) {
-            *held = None;
+    /// The slot for `path`, making one if this repository has not been walked yet.
+    fn slot(&self, path: &str) -> Arc<Slot> {
+        let now = self.tick.fetch_add(1, Ordering::Relaxed);
+        let mut slots = self.slots.lock().unwrap_or_else(PoisonError::into_inner);
+
+        if let Some(slot) = slots.get(path) {
+            slot.used.store(now, Ordering::Relaxed);
+            return Arc::clone(slot);
         }
+        if slots.len() >= KEEP
+            && let Some(oldest) = slots
+                .iter()
+                .min_by_key(|(_, slot)| slot.used.load(Ordering::Relaxed))
+                .map(|(held, _)| held.clone())
+        {
+            slots.remove(&oldest);
+        }
+
+        let slot = Arc::new(Slot {
+            held: Mutex::new(None),
+            quick: std::sync::Mutex::new(None),
+            used: AtomicU64::new(now),
+            refs: AtomicU64::new(0),
+        });
+        slots.insert(path.to_owned(), Arc::clone(&slot));
+        slot
     }
 
+    /// Drops the walk held for `path` when `refs` says the repository has moved since.
+    ///
+    /// Dropping it unconditionally is what made every tab switch cost a full walk: coming back
+    /// to a repository nobody had touched threw away a perfectly good six seconds of work and
+    /// did it again. Returns whether the walk was dropped.
+    async fn forget_if_moved(&self, path: &str, refs: u64) -> bool {
+        let slot = self.slot(path);
+        let mut held = slot.held.lock().await;
+        if slot.refs.swap(refs, Ordering::Relaxed) == refs && held.is_some() {
+            return false;
+        }
+        *held = None;
+        slot.set_quick(None);
+        true
+    }
+
+    /// Returns the store for `path`, building it if it is not held.
     async fn store(&self, path: &str, first_paint: bool) -> Result<Arc<RowStore>, CoralError> {
-        let mut held = self.inner.lock().await;
-        // Keying on the path alone would serve the fast provisional store back to the request
-        // that wants topological rows, so the real walk would never run and the user would be
-        // left on commit-time order for good.
+        let slot = self.slot(path);
+        // Answered without the lock, which the topological walk holds for as long as it runs.
+        if first_paint && let Some(quick) = slot.quick_store() {
+            return Ok(quick);
+        }
+
+        let mut held = slot.held.lock().await;
+        // Serving a provisional store to the request that wants topological rows would mean the
+        // real walk never ran and the user stayed on commit-time order for good.
         if let Some(cached) = held.as_ref()
-            && cached.path == path
             && (cached.provisional == first_paint || !cached.provisional)
         {
             return Ok(Arc::clone(&cached.store));
@@ -58,8 +145,10 @@ impl GraphCache {
         })??;
 
         let store = Arc::new(store);
+        // The commit-time walk stays readable beside the lock; the topological one replaces it,
+        // because from then on it is the walk the window is showing.
+        slot.set_quick(first_paint.then(|| Arc::clone(&store)));
         *held = Some(Cached {
-            path: path.to_owned(),
             provisional: first_paint,
             store: Arc::clone(&store),
         });
@@ -93,6 +182,8 @@ pub async fn graph_frame(
 ///
 /// Kept separate from the frame because the commit-graph carries neither, so these cost an
 /// object read each. Fetching them only for rows on screen is what keeps scrolling cheap.
+///
+/// `provisional` says which walk the rows being asked about came from.
 /// # Errors
 /// Propagates git failures.
 #[tauri::command]
@@ -101,8 +192,11 @@ pub async fn row_metadata(
     path: String,
     start_row: u32,
     count: u32,
+    provisional: bool,
 ) -> Result<Vec<coral_core::commit::CommitMeta>, crate::commands::IpcError> {
-    let store = cache.store(&path, false).await?;
+    // Against the walk the window is showing, not the one it will show next: a row is a
+    // position in a particular walk, and reading it from the other one names a different commit.
+    let store = cache.store(&path, provisional).await?;
     let end = (start_row + count).min(store.len());
     tracing::info!(
         start_row,
@@ -173,21 +267,27 @@ pub async fn repo_refs(
         .collect())
 }
 
-/// Forgets the walk held for `path`, so the next frame walks the repository again.
+/// Walks `path` again if it has moved, so the next frame shows what is there now.
 ///
-/// The cache is one slot keyed by path, which made a rewalk of the repository already in it
-/// impossible: a commit, a stash, a branch — none of them appeared until the user opened
+/// The cache used to be one slot keyed by path, which made a rewalk of the repository already
+/// in it impossible: a commit, a stash, a branch — none of them appeared until the user opened
 /// another repository and came back, because that is what replaced the slot. Asking for a walk
-/// has to mean a walk.
+/// has to mean a walk. It must not mean one when nothing moved, though, which is why this
+/// hashes the refs first: two milliseconds against six seconds on a repository of this size.
 ///
 /// # Errors
-/// Never; the signature is a `Result` because every command in this layer is one.
+/// Propagates git failures from reading the refs.
 #[tauri::command]
 pub async fn graph_rewalk(
     cache: tauri::State<'_, GraphCache>,
     path: String,
 ) -> Result<(), crate::commands::IpcError> {
-    cache.forget(&path).await;
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    let refs = loc.refs_fingerprint(&runner).await?;
+    let dropped = cache.forget_if_moved(&path, refs).await;
+    tracing::info!(path, dropped, "graph_rewalk");
     Ok(())
 }
 
@@ -329,4 +429,146 @@ pub async fn worktree_diff(
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
     let files = loc.diff(&runner, staged, &[file.as_str()]).await?;
     Ok(files.into_iter().next())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{GraphCache, KEEP};
+    use coral_core::testutil::TestRepo;
+    use std::sync::Arc;
+
+    fn a_repo() -> TestRepo {
+        TestRepo::new().write("a.txt", "1\n").commit("base")
+    }
+
+    /// Switching to another repository and back must not walk the first one again.
+    ///
+    /// It did, because there was one slot: opening the second evicted the first, and coming
+    /// back to a tab meant waiting out a full walk of it. On a kernel-sized repository that is
+    /// six seconds of an empty window, every time.
+    #[tokio::test]
+    async fn a_second_repository_does_not_evict_the_first() {
+        let one = a_repo();
+        let two = a_repo();
+        let cache = GraphCache::default();
+
+        let first = cache
+            .store(&one.path().to_string_lossy(), false)
+            .await
+            .unwrap();
+        let _ = cache
+            .store(&two.path().to_string_lossy(), false)
+            .await
+            .unwrap();
+        let again = cache
+            .store(&one.path().to_string_lossy(), false)
+            .await
+            .unwrap();
+
+        assert!(
+            Arc::ptr_eq(&first, &again),
+            "the first walk was thrown away"
+        );
+    }
+
+    /// A held walk is eighty megabytes on a large repository, so they cannot all be kept.
+    #[tokio::test]
+    async fn the_least_recently_used_walk_is_the_one_that_goes() {
+        let repos: Vec<TestRepo> = (0..=KEEP).map(|_| a_repo()).collect();
+        let paths: Vec<String> = repos
+            .iter()
+            .map(|r| r.path().to_string_lossy().into_owned())
+            .collect();
+        let cache = GraphCache::default();
+
+        let oldest = cache.store(&paths[0], false).await.unwrap();
+        for path in &paths[1..] {
+            let _ = cache.store(path, false).await.unwrap();
+        }
+
+        let after = cache.store(&paths[0], false).await.unwrap();
+        assert!(!Arc::ptr_eq(&oldest, &after), "nothing was ever evicted");
+        // The one asked for most recently is still there.
+        let newest = cache.store(&paths[KEEP], false).await.unwrap();
+        let newest_again = cache.store(&paths[KEEP], false).await.unwrap();
+        assert!(Arc::ptr_eq(&newest, &newest_again));
+    }
+
+    /// A commit made in the terminal has to appear, so a repository that moved is walked again.
+    #[tokio::test]
+    async fn a_repository_that_moved_is_walked_again_and_its_neighbour_is_not() {
+        let one = a_repo();
+        let two = a_repo();
+        let cache = GraphCache::default();
+        let one_path = one.path().to_string_lossy().into_owned();
+        let two_path = two.path().to_string_lossy().into_owned();
+
+        cache.forget_if_moved(&one_path, 1).await;
+        let held_one = cache.store(&one_path, false).await.unwrap();
+        cache.forget_if_moved(&two_path, 1).await;
+        let held_two = cache.store(&two_path, false).await.unwrap();
+
+        assert!(cache.forget_if_moved(&one_path, 2).await, "refs moved");
+        assert!(!Arc::ptr_eq(
+            &held_one,
+            &cache.store(&one_path, false).await.unwrap()
+        ));
+        assert!(Arc::ptr_eq(
+            &held_two,
+            &cache.store(&two_path, false).await.unwrap()
+        ));
+    }
+
+    /// The rows painted in the first frame have to be nameable while the real walk runs.
+    ///
+    /// They were not: the metadata request asked for the topological store and waited the whole
+    /// walk for it, so a large repository showed a column of dots with no messages beside them
+    /// for six seconds — which is what the fast first paint exists to avoid.
+    #[tokio::test]
+    async fn the_quick_walk_answers_without_waiting_for_the_real_one() {
+        let repo = a_repo();
+        let path = repo.path().to_string_lossy().into_owned();
+        let cache = GraphCache::default();
+
+        let quick = cache.store(&path, true).await.unwrap();
+        let slot = cache.slot(&path);
+        // Held exactly as the topological walk holds it.
+        let held = slot.held.lock().await;
+
+        let again = cache.store(&path, true).await.unwrap();
+        assert!(Arc::ptr_eq(&quick, &again));
+        drop(held);
+    }
+
+    /// Once the real walk lands it is what the window shows, so it is what a row means.
+    #[tokio::test]
+    async fn the_real_walk_replaces_the_quick_one() {
+        let repo = a_repo();
+        let path = repo.path().to_string_lossy().into_owned();
+        let cache = GraphCache::default();
+
+        let quick = cache.store(&path, true).await.unwrap();
+        let full = cache.store(&path, false).await.unwrap();
+        assert!(!Arc::ptr_eq(&quick, &full));
+
+        let asked = cache.store(&path, true).await.unwrap();
+        assert!(Arc::ptr_eq(&full, &asked), "a row still meant the old walk");
+    }
+
+    /// Coming back to a tab nobody touched must cost nothing.
+    #[tokio::test]
+    async fn a_repository_that_did_not_move_keeps_its_walk() {
+        let repo = a_repo();
+        let path = repo.path().to_string_lossy().into_owned();
+        let cache = GraphCache::default();
+
+        cache.forget_if_moved(&path, 7).await;
+        let first = cache.store(&path, false).await.unwrap();
+
+        assert!(!cache.forget_if_moved(&path, 7).await, "nothing moved");
+        assert!(Arc::ptr_eq(
+            &first,
+            &cache.store(&path, false).await.unwrap()
+        ));
+    }
 }

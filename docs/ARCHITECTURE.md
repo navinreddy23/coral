@@ -89,9 +89,11 @@ UI cannot be handed state from before the user's own edit.
 
 `RepoWatcher` classifies each changed path into a coarse mask — refs, index, worktree, ops,
 graph — rather than a path list, because a kernel build emits tens of thousands of events a
-second. Object churn and lock files are dropped. Bursts coalesce behind a 300 ms trailing
-debounce with a 1 s ceiling. Worktree watching is best-effort and reports when it degrades
-rather than silently going stale.
+second. Object churn, lock files and reads are dropped: opening the commit-graph raises an
+event on every file in the chain, and counting those as changes made a walk ask for itself
+again every four hundred milliseconds. Bursts coalesce behind a 300 ms trailing debounce with a
+1 s ceiling. Worktree watching is best-effort and reports when it degrades rather than silently
+going stale.
 
 ## Writes
 
@@ -210,6 +212,10 @@ The commit list handles its own wheel events rather than leaving them to the pla
 `MAX_SPACER_PX` the scrollable area no longer stands for the row range one pixel per row, so a
 wheel notch covers a different number of commits depending on how large the repository is;
 converting the delta to rows first makes a notch three commits everywhere.
+
+The app holds one walk per repository, up to six, and drops one only when that repository's
+refs have moved. A tab switch is a hash of the refs rather than a walk, so returning to the
+kernel costs milliseconds instead of the six seconds it takes to walk it.
 
 `RepoWatcher` is wired to the window, so anything done in the terminal beside Coral — or in any
 other client — reaches it. Only what the change touched is reloaded: rewalking 1.4M commits

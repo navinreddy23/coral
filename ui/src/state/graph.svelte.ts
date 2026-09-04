@@ -1,6 +1,6 @@
 import { checkBinaryTransport, graphFrame, graphRewalk, rowMetadata } from '../ipc/graph';
 import type { CommitMeta } from '../ipc/types';
-import { covers, frameStartFor, type Frame } from '../graph/frame';
+import { covers, frameStartFor, FrameFlag, type Frame } from '../graph/frame';
 import { messageOf } from '../ipc/error';
 
 /**
@@ -53,6 +53,9 @@ export class GraphState {
     // Which walk this block belongs to. What it reads is keyed by object id and stays true
     // whatever happens next; it is only the record of having read it that a rewalk invalidates.
     const walk = this.#walk;
+    // Which walk the rows on screen came from. The engine holds both for a moment, and a row
+    // means a different commit in each.
+    const provisional = this.provisional;
     const block = 256;
     const first = Math.max(0, Math.floor(startRow / block) * block);
     const last = Math.min(this.totalRows, startRow + count);
@@ -61,7 +64,7 @@ export class GraphState {
       if (this.#loaded.has(at) || this.#inFlight.has(at)) continue;
       this.#inFlight.add(at);
       try {
-        const rows = await rowMetadata(this.#path, at, block);
+        const rows = await rowMetadata(this.#path, at, block, provisional);
         const next = new Map(this.meta);
         for (const m of rows) next.set(m.oid, m);
         this.meta = next;
@@ -140,20 +143,37 @@ export class GraphState {
       // are still up, and the pass would only replace them with commit-time order and then
       // replace that again.
       if (!reopening) {
-        this.frame = await graphFrame(path, 0, true);
+        const first = await graphFrame(path, 0, true);
+        // The repository may have been left while this was being walked. Assigning it anyway
+        // is what put one repository's commits under another repository's name, and made the
+        // loading screen vanish because there was suddenly a frame to show.
+        if (this.#path !== path) return;
+        this.frame = first;
         this.#framePath = path;
-        this.provisional = true;
+        // What arrived, not what was asked for. The engine holds the walk between visits, so
+        // asking for a quick one can be answered with the topological walk it still has, and
+        // saying the rows are out of order when they are not is a badge nobody can dismiss.
+        this.provisional = (first.flags & FrameFlag.Provisional) !== 0;
       }
 
-      this.frame = await graphFrame(path, 0, false);
+      const full = await graphFrame(path, 0, false);
+      if (this.#path !== path) return;
+      this.frame = full;
       this.#framePath = path;
       this.provisional = false;
+      // The rows have been renumbered, so what was read for which row is no longer true. What
+      // was read is kept: it is keyed by object id, so a commit already on screen stays named.
+      this.#walk += 1;
+      this.#inFlight.clear();
+      this.#loaded.clear();
     } catch (e) {
+      if (this.#path !== path) return;
       this.error = messageOf(e);
       this.frame = null;
       this.#framePath = '';
     } finally {
-      this.loading = false;
+      // Only the walk that is still wanted may say the window has stopped loading.
+      if (this.#path === path) this.loading = false;
     }
   }
 }
