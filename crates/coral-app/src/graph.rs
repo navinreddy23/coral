@@ -21,6 +21,14 @@ struct Cached {
 
 impl GraphCache {
     /// Returns the store for `path`, building it if this is a different repository.
+    /// Drops the walk held for `path`, if it is the one held.
+    async fn forget(&self, path: &str) {
+        let mut held = self.inner.lock().await;
+        if held.as_ref().is_some_and(|cached| cached.path == path) {
+            *held = None;
+        }
+    }
+
     async fn store(&self, path: &str, first_paint: bool) -> Result<Arc<RowStore>, CoralError> {
         let mut held = self.inner.lock().await;
         // Keying on the path alone would serve the fast provisional store back to the request
@@ -161,6 +169,72 @@ pub async fn repo_refs(
                 .ok()
                 .and_then(|id| store.row_of(&id));
             PlacedRef { git_ref, row }
+        })
+        .collect())
+}
+
+/// Forgets the walk held for `path`, so the next frame walks the repository again.
+///
+/// The cache is one slot keyed by path, which made a rewalk of the repository already in it
+/// impossible: a commit, a stash, a branch — none of them appeared until the user opened
+/// another repository and came back, because that is what replaced the slot. Asking for a walk
+/// has to mean a walk.
+///
+/// # Errors
+/// Never; the signature is a `Result` because every command in this layer is one.
+#[tauri::command]
+pub async fn graph_rewalk(
+    cache: tauri::State<'_, GraphCache>,
+    path: String,
+) -> Result<(), crate::commands::IpcError> {
+    cache.forget(&path).await;
+    Ok(())
+}
+
+/// A stash entry placed on the row it sits on.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlacedStash {
+    #[serde(flatten)]
+    pub entry: coral_core::stash::StashEntry,
+    /// What to call it, which is not what git calls it: stashing twice from one commit gives
+    /// both entries the same subject, and a list of identical names is a list nobody can act
+    /// on. Computed here rather than in the window, so the two front ends cannot disagree.
+    pub name: String,
+    /// The row it is drawn on, or `None` when its commit is outside the loaded graph.
+    pub row: Option<u32>,
+}
+
+/// The stash stack, each entry resolved to the row it is drawn on.
+///
+/// The stack, not the ref. `refs/stash` is the top of it and the only stash git keeps a ref
+/// for, so listing refs finds one stash however many there are — and calls it "stash", which is
+/// also what it calls the next one.
+///
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn repo_stashes(
+    cache: tauri::State<'_, GraphCache>,
+    path: String,
+) -> Result<Vec<PlacedStash>, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    let entries = loc.stashes(&runner).await?;
+    let store = cache.store(&path, false).await?;
+
+    Ok(entries
+        .into_iter()
+        .map(|entry| {
+            let row = gix::ObjectId::from_hex(entry.oid.as_bytes())
+                .ok()
+                .and_then(|id| store.row_of(&id));
+            PlacedStash {
+                name: entry.name(),
+                entry,
+                row,
+            }
         })
         .collect())
 }

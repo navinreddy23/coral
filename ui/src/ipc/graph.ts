@@ -75,3 +75,13 @@ function toArrayBuffer(raw: unknown): ArrayBuffer {
   if (Array.isArray(raw)) return new Uint8Array(raw as number[]).buffer;
   throw new TypeError('graph command did not return bytes');
 }
+
+/**
+ * Forgets the walk held for a repository, so the next frame walks it again.
+ *
+ * The engine keeps one walk per repository, which is what makes scrolling free. Asking for the
+ * graph again has to say so, or a commit made since is simply not there.
+ */
+export function graphRewalk(path: string): Promise<void> {
+  return invoke<void>('graph_rewalk', { path });
+}
