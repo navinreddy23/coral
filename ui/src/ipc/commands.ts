@@ -3,7 +3,9 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import type { GroupColour, Session } from '../state/tabs.svelte';
 import type {
+  Blame,
   Blocks,
+  Commit,
   CommitDetail,
   Todo,
   ConflictedFile,
@@ -125,8 +127,24 @@ export function fileDiff(
   rev: string,
   file: string,
   wholeFile: boolean,
+  ignoreWhitespace: boolean,
 ): Promise<FileDiff | null> {
-  return invoke<FileDiff | null>('file_diff', { path, rev, file, wholeFile });
+  return invoke<FileDiff | null>('file_diff', { path, rev, file, wholeFile, ignoreWhitespace });
+}
+
+/** Who last changed each line of a file, and in which commit. */
+export function fileBlame(path: string, rev: string, file: string): Promise<Blame> {
+  return invoke<Blame>('file_blame', { path, rev, file });
+}
+
+/** One file's contents at one revision, for the blame view to put its chunks beside. */
+export function fileText(path: string, rev: string, file: string): Promise<string> {
+  return invoke<string>('file_text', { path, rev, file });
+}
+
+/** The commits that touched one file, newest first, following it across renames. */
+export function fileHistory(path: string, file: string, limit: number): Promise<Commit[]> {
+  return invoke<Commit[]>('file_history', { path, file, limit });
 }
 
 /**
@@ -141,8 +159,15 @@ export function worktreeDiff(
   staged: boolean,
   file: string,
   wholeFile: boolean,
+  ignoreWhitespace: boolean,
 ): Promise<FileDiff | null> {
-  return invoke<FileDiff | null>('worktree_diff', { path, staged, file, wholeFile });
+  return invoke<FileDiff | null>('worktree_diff', {
+    path,
+    staged,
+    file,
+    wholeFile,
+    ignoreWhitespace,
+  });
 }
 
 /**

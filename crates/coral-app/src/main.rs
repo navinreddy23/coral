@@ -63,6 +63,28 @@ fn main() {
     window();
 }
 
+/// Reads what is kept between launches: the tabs, the recents, the settings.
+///
+/// Separate from the builder because the command list below it is long and growing, and
+/// clippy's line count is a fair warning that the two are different jobs.
+fn load_state(app: &tauri::App) {
+    use tauri::Manager as _;
+
+    // Beside the app's own config, so it travels with the installation rather than with any
+    // one repository.
+    let dir = app
+        .path()
+        .app_config_dir()
+        .unwrap_or_else(|_| std::env::temp_dir());
+    app.manage(tabs::Tabs::load(dir.join("session.json")));
+    app.manage(recent::Recents::load(dir.join("recent.json")));
+
+    // Before anything can run git, since this is what decides which git that is.
+    let settings = experimental::Experimental::load(dir.join("settings.json"));
+    settings.apply();
+    app.manage(settings);
+}
+
 /// Builds and runs the window.
 ///
 /// Split from `main` because the command list is long and growing: the startup work above it —
@@ -76,22 +98,7 @@ fn window() {
         .manage(terminal::Terminals::default())
         .manage(watcher::Watchers::default())
         .setup(|app| {
-            use tauri::Manager as _;
-            // Beside the app's own config, so it travels with the installation rather than
-            // with any one repository.
-            let dir = app
-                .path()
-                .app_config_dir()
-                .unwrap_or_else(|_| std::env::temp_dir());
-            app.manage(tabs::Tabs::load(dir.join("session.json")));
-
-            // Before anything can run git, since this is what decides which git that is.
-            app.manage(recent::Recents::load(dir.join("recent.json")));
-
-            let settings = experimental::Experimental::load(dir.join("settings.json"));
-            settings.apply();
-            app.manage(settings);
-
+            load_state(app);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -106,6 +113,7 @@ fn window() {
             commands::lfs_available,
             recent::recent_repos,
             recent::forget_recent,
+            recent::forget_all_recents,
             graph::graph_frame,
             graph::row_metadata,
             graph::repo_refs,
@@ -120,6 +128,10 @@ fn window() {
             graph::commit_detail,
             graph::file_diff,
             graph::worktree_diff,
+            graph::file_blame,
+            graph::file_history,
+            graph::file_text,
+            graph::search_commits,
             actions::repo_action,
             remotes::remote_list,
             remotes::remote_edit,

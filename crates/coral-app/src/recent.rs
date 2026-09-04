@@ -60,6 +60,15 @@ impl Recents {
         }
     }
 
+    /// Empties the list. The repositories themselves are not touched.
+    pub fn clear(&self) {
+        let mut held = self.held();
+        held.clear();
+        if let Err(e) = save(&self.path, &held) {
+            tracing::warn!(error = %e, path = %self.path.display(), "could not save the recents");
+        }
+    }
+
     /// Takes one off the list. The repository itself is not touched.
     pub fn forget(&self, path: &str) {
         let mut held = self.held();
@@ -132,6 +141,16 @@ pub fn forget_recent(
     path: String,
 ) -> Result<Vec<Recent>, IpcError> {
     recents.forget(&path);
+    Ok(recents.read())
+}
+
+/// Empties the list, for someone who does not want their repositories named on this page.
+///
+/// # Errors
+/// Never; the signature is a `Result` because every command in this layer is one.
+#[tauri::command]
+pub fn forget_all_recents(recents: tauri::State<'_, Recents>) -> Result<Vec<Recent>, IpcError> {
+    recents.clear();
     Ok(recents.read())
 }
 

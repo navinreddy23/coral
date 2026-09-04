@@ -358,6 +358,53 @@ pub async fn graph_row_of(
         .and_then(|id| store.row_of(&id)))
 }
 
+/// A commit a search matched, placed on the row it sits on.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FoundCommit {
+    pub oid: String,
+    pub row: u32,
+}
+
+/// Commits whose message, author or object id matches `query`, in graph order.
+///
+/// Sorted by row rather than by date, because the answer is stepped through with a next and a
+/// previous button against the list on screen, and a search that jumped about would be no help
+/// at all. Matches on commits the loaded walk does not hold are dropped: there is nowhere to
+/// send the reader.
+///
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn search_commits(
+    cache: tauri::State<'_, GraphCache>,
+    path: String,
+    query: String,
+    limit: u64,
+) -> Result<Vec<FoundCommit>, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    let found = loc.search_commits(&runner, &query, limit).await?;
+    tracing::info!(query, matched = found.len(), "search_commits");
+    if found.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let store = cache.store(&path, false).await?;
+    let mut out: Vec<FoundCommit> = found
+        .into_iter()
+        .filter_map(|oid| {
+            let row = gix::ObjectId::from_hex(oid.as_bytes())
+                .ok()
+                .and_then(|id| store.row_of(&id))?;
+            Some(FoundCommit { oid, row })
+        })
+        .collect();
+    out.sort_by_key(|f| f.row);
+    Ok(out)
+}
+
 /// A frame of known content, used once at startup to prove the binary path works.
 ///
 /// Tauri's JavaScript falls back to `postMessage` permanently if the custom-protocol fetch
@@ -406,23 +453,91 @@ pub async fn file_diff(
     rev: String,
     file: String,
     whole_file: bool,
+    ignore_whitespace: bool,
 ) -> Result<Option<coral_core::diff::FileDiff>, crate::commands::IpcError> {
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
     let files = loc
-        .commit_diff(&runner, &rev, &[file.as_str()], context(whole_file))
+        .commit_diff(
+            &runner,
+            &rev,
+            &[file.as_str()],
+            options(whole_file, ignore_whitespace),
+        )
         .await?;
     Ok(files.into_iter().next())
 }
 
-/// How much of the file to carry with the change.
-const fn context(whole_file: bool) -> coral_core::diff::Context {
-    if whole_file {
-        coral_core::diff::Context::WholeFile
-    } else {
-        coral_core::diff::Context::Hunks
-    }
+/// How to ask for the patch: how much of the file, and whether whitespace counts.
+fn options(whole_file: bool, ignore_whitespace: bool) -> coral_core::diff::DiffOptions {
+    coral_core::diff::DiffOptions::default()
+        .whole_file(whole_file)
+        .ignoring_whitespace(ignore_whitespace)
+}
+
+/// Who last changed each line of a file, and in which commit.
+///
+/// A whole-file answer rather than a window: git resolves a blame by walking the file's whole
+/// history whatever is asked for, so narrowing it saves nothing and costs a second walk when
+/// the reader scrolls.
+///
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn file_blame(
+    path: String,
+    rev: String,
+    file: String,
+) -> Result<coral_core::blame::Blame, crate::commands::IpcError> {
+    tracing::info!(path, rev, file, "file_blame");
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc.blame(&runner, &rev, &file).await?)
+}
+
+/// One file's contents at one revision, for the blame view to put its chunks beside.
+///
+/// # Errors
+/// Propagates git failures, including an unknown path at that revision.
+#[tauri::command]
+pub async fn file_text(
+    path: String,
+    rev: String,
+    file: String,
+) -> Result<String, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    let bytes = loc.file_at(&runner, &rev, &file).await?;
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// The commits that touched one file, newest first.
+///
+/// Follows renames: a file's history stops at the commit that created it under its current
+/// name, and for anything that has ever been moved that is a fraction of what changed it.
+///
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn file_history(
+    path: String,
+    file: String,
+    limit: u64,
+) -> Result<Vec<coral_core::commit::Commit>, crate::commands::IpcError> {
+    tracing::info!(path, file, limit, "file_history");
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    let query = coral_core::history::LogQuery {
+        path: Some(file),
+        follow: true,
+        limit: Some(limit),
+        ..Default::default()
+    };
+    Ok(loc.log(&runner, &query).await?)
 }
 
 /// One file's diff in the working tree, staged or not.
@@ -439,12 +554,18 @@ pub async fn worktree_diff(
     staged: bool,
     file: String,
     whole_file: bool,
+    ignore_whitespace: bool,
 ) -> Result<Option<coral_core::diff::FileDiff>, crate::commands::IpcError> {
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
     let files = loc
-        .diff(&runner, staged, &[file.as_str()], context(whole_file))
+        .diff(
+            &runner,
+            staged,
+            &[file.as_str()],
+            options(whole_file, ignore_whitespace),
+        )
         .await?;
     if let Some(found) = files.into_iter().next() {
         return Ok(Some(found));
@@ -456,7 +577,7 @@ pub async fn worktree_diff(
         return Ok(None);
     }
     Ok(loc
-        .untracked_diff(&runner, &file, context(whole_file))
+        .untracked_diff(&runner, &file, options(whole_file, ignore_whitespace))
         .await?)
 }
 

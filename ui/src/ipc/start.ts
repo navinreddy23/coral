@@ -18,6 +18,11 @@ export function forgetRecent(path: string): Promise<Recent[]> {
   return invoke<Recent[]>('forget_recent', { path });
 }
 
+/** Empties the list. The repositories themselves are not touched. */
+export function forgetAllRecents(): Promise<Recent[]> {
+  return invoke<Recent[]>('forget_all_recents', {});
+}
+
 /**
  * Creates an empty repository and answers with where it is.
  *

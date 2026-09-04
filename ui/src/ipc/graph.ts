@@ -86,3 +86,18 @@ function toArrayBuffer(raw: unknown): ArrayBuffer {
 export function graphRewalk(path: string): Promise<void> {
   return invoke<void>('graph_rewalk', { path });
 }
+
+/** A commit a search matched, and the row it sits on. */
+export interface FoundCommit {
+  oid: string;
+  row: number;
+}
+
+/** Commits whose message, author or object id matches, in graph order. */
+export function searchCommits(
+  path: string,
+  query: string,
+  limit: number,
+): Promise<FoundCommit[]> {
+  return invoke<FoundCommit[]>('search_commits', { path, query, limit });
+}
