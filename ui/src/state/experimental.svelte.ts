@@ -1,9 +1,4 @@
-import {
-  experimentalGit,
-  experimentalSetGit,
-  type GitChoice,
-  type GitView,
-} from '../ipc/experimental';
+import { experimentalGit, experimentalSetGit, type GitChoice, type GitView } from '../ipc/experimental';
 import { messageOf } from '../ipc/error';
 
 /** Which git Coral runs, and what else is available to run. */
@@ -18,11 +13,6 @@ export class ExperimentalState {
 
   async chooseGit(choice: GitChoice): Promise<void> {
     await this.#run(() => experimentalSetGit(choice));
-  }
-
-  /** True when a candidate is the one stored, whatever else it carries. */
-  static isChosen(view: GitView | null, candidate: GitChoice): boolean {
-    return view !== null && view.chosen.kind === candidate.kind;
   }
 
   async #run(action: () => Promise<GitView>): Promise<void> {

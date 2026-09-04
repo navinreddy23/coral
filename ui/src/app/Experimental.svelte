@@ -48,11 +48,17 @@
     if (found) void experimental.chooseGit(found.choice);
   }
 
-  /** The candidate the engine is actually running, which is not always the one chosen. */
-  const running = $derived(view?.candidates.find((c) => c.path === view.inUse) ?? null);
-  const fellBack = $derived(
-    view !== null && running !== null && running.choice.kind !== view.chosen.kind,
-  );
+  /**
+   * True when the engine is running something other than what is stored.
+   *
+   * Compared by the whole choice rather than by its kind: two custom paths are two different
+   * answers, and a page that called them the same would report a fallback as a success.
+   */
+  const fellBack = $derived.by(() => {
+    if (view === null || view.inUseVersion === null) return false;
+    const chosen = view.candidates.find((c) => id(c.choice) === id(view.chosen));
+    return chosen !== undefined && chosen.path !== view.inUse;
+  });
 </script>
 
 <section>

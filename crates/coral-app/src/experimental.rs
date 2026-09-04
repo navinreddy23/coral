@@ -141,6 +141,60 @@ fn install_for(choice: &GitChoice) -> Option<GitInstall> {
     }
 }
 
+/// Absolute paths worth offering, when git is really at them.
+///
+/// Suggested, not searched. `PATH` is already the first entry on the screen, and these are the
+/// handful of places a machine keeps a second git — a distribution's own beside one installed
+/// later, or the other way round. Offering a path that is not there would be worse than
+/// offering nothing, so what is not there is not listed.
+fn well_known() -> &'static [&'static str] {
+    if cfg!(target_os = "macos") {
+        &[
+            "/usr/bin/git",
+            "/opt/homebrew/bin/git",
+            "/usr/local/bin/git",
+        ]
+    } else if cfg!(windows) {
+        &[
+            r"C:\Program Files\Git\cmd\git.exe",
+            r"C:\Program Files (x86)\Git\cmd\git.exe",
+        ]
+    } else {
+        &["/usr/bin/git", "/bin/git", "/usr/local/bin/git"]
+    }
+}
+
+/// The suggestions that exist, without listing one binary twice.
+///
+/// `/bin` is a symlink to `/usr/bin` on every current Linux, so both spellings name the same
+/// file and offering both would be a choice between two identical things.
+fn suggestions() -> Vec<PathBuf> {
+    let found = well_known()
+        .iter()
+        .map(PathBuf::from)
+        .filter(|path| path.is_file())
+        .map(|path| {
+            let real = path.canonicalize().unwrap_or_else(|_| path.clone());
+            (path, real)
+        })
+        .collect();
+    one_per_binary(found)
+}
+
+/// Keeps the first spelling of each distinct binary, in the order they were offered.
+fn one_per_binary(found: Vec<(PathBuf, PathBuf)>) -> Vec<PathBuf> {
+    let mut seen = Vec::new();
+    let mut out = Vec::new();
+    for (path, real) in found {
+        if seen.contains(&real) {
+            continue;
+        }
+        seen.push(real);
+        out.push(path);
+    }
+    out
+}
+
 /// Runs a candidate to find out what it is, without letting a bad one fail the whole screen.
 async fn describe(choice: GitChoice, install: Option<GitInstall>) -> GitCandidate {
     let install = install.unwrap_or_else(GitInstall::on_path);
@@ -176,7 +230,16 @@ pub async fn experimental_git(
     if let Some(bundled) = GitInstall::bundled() {
         candidates.push(describe(GitChoice::Bundled, Some(bundled)).await);
     }
-    if matches!(chosen, GitChoice::Custom { .. }) {
+    for path in suggestions() {
+        let choice = GitChoice::Custom {
+            path: path.display().to_string(),
+        };
+        candidates.push(describe(choice.clone(), install_for(&choice)).await);
+    }
+    // A git the user named that is not one of the suggestions. Listed last, and only once: a
+    // choice that appears twice in the list is a control the user cannot trust.
+    if matches!(chosen, GitChoice::Custom { .. }) && !candidates.iter().any(|c| c.choice == chosen)
+    {
         candidates.push(describe(chosen.clone(), install_for(&chosen)).await);
     }
 
@@ -209,4 +272,52 @@ pub async fn experimental_set_git(
     settings.write(Settings { git: choice });
     settings.apply();
     experimental_git(settings).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{one_per_binary, well_known};
+    use std::path::PathBuf;
+
+    #[test]
+    fn offers_each_binary_once_under_the_name_it_was_offered_by() {
+        // `/bin` is a symlink to `/usr/bin` on every current Linux, so both spellings name the
+        // same file. A dropdown with two entries that do the same thing is a dropdown nobody
+        // can answer.
+        let found = vec![
+            (PathBuf::from("/usr/bin/git"), PathBuf::from("/usr/bin/git")),
+            (PathBuf::from("/bin/git"), PathBuf::from("/usr/bin/git")),
+            (
+                PathBuf::from("/usr/local/bin/git"),
+                PathBuf::from("/usr/local/bin/git"),
+            ),
+        ];
+        assert_eq!(
+            one_per_binary(found),
+            vec![
+                PathBuf::from("/usr/bin/git"),
+                PathBuf::from("/usr/local/bin/git")
+            ]
+        );
+    }
+
+    #[test]
+    fn keeps_nothing_when_there_is_nothing() {
+        assert!(one_per_binary(Vec::new()).is_empty());
+    }
+
+    #[test]
+    fn every_suggestion_is_an_absolute_path_to_a_git() {
+        // A relative one would resolve against whatever directory the process happened to be
+        // in, which for a desktop application is not a place anyone chose.
+        for path in well_known() {
+            let path = PathBuf::from(path);
+            assert!(path.is_absolute(), "{}", path.display());
+            assert!(
+                path.file_stem().is_some_and(|name| name == "git"),
+                "{}",
+                path.display()
+            );
+        }
+    }
 }
