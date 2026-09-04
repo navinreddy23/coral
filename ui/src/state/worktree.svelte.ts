@@ -1,6 +1,7 @@
 import { commitStaged, repoStatus, stagePaths } from '../ipc/commands';
 
 import type { Status, StatusEntry } from '../ipc/types';
+import { messageOf } from '../ipc/error';
 
 /**
  * The working tree: what the WIP row summarises and the staging panel acts on.
@@ -57,7 +58,7 @@ export class WorktreeState {
     try {
       this.status = await action();
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = messageOf(e);
     } finally {
       this.busy = false;
     }

@@ -1,5 +1,6 @@
 import { repoRefs, repoSubmodules, type PlacedRef } from '../ipc/commands';
 import type { Submodule } from '../ipc/types';
+import { messageOf } from '../ipc/error';
 
 export type { PlacedRef };
 
@@ -46,7 +47,7 @@ export class RefsState {
     try {
       this.all = await repoRefs(path);
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = messageOf(e);
       this.all = [];
     }
     // Submodules are a separate read and a separate failure: a repository whose .gitmodules

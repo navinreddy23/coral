@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { messageOf } from '../ipc/error';
   import { covers, hasFlag, localRow, oidOf, RowFlag, type Frame } from '../graph/frame';
   import GraphCanvas from '../graph/GraphCanvas.svelte';
   import { initialsOf } from '../graph/initials';
@@ -851,7 +852,7 @@
       // window, and the section simply appears when the answer arrives.
       void hosting.load(info.path);
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      error = messageOf(e);
     }
   }
 

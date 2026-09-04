@@ -1,5 +1,6 @@
 import { remoteEdit, remoteList, type RemoteEdit } from '../ipc/commands';
 import type { Remote } from '../ipc/types';
+import { messageOf } from '../ipc/error';
 
 /**
  * The repository's remotes.
@@ -32,7 +33,7 @@ export class RemotesState {
       this.list = await action();
       return true;
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = messageOf(e);
       return false;
     } finally {
       this.busy = false;

@@ -1,4 +1,5 @@
 import { runAction, type Action, type ActionOutcome } from '../ipc/commands';
+import { messageOf } from '../ipc/error';
 
 /** What the status line is showing about the last thing that ran. */
 export interface Report {
@@ -33,7 +34,7 @@ export class ActionsState {
         : { text: outcome.what, tone: 'ok' };
       return outcome;
     } catch (e) {
-      this.report = { text: e instanceof Error ? e.message : String(e), tone: 'error' };
+      this.report = { text: messageOf(e), tone: 'error' };
       return null;
     } finally {
       this.busy = false;

@@ -7,6 +7,7 @@ import {
   sshSetRepo,
 } from '../ipc/commands';
 import type { SshConfig, SshKey, SshOverrides, SshScopes } from '../ipc/types';
+import { messageOf } from '../ipc/error';
 
 /** Which level the settings screen is editing. */
 export type Level = 'app' | 'repo';
@@ -50,7 +51,7 @@ export class SshState {
       this.scopes = await sshRead(path);
       this.keys = await sshKeys();
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = messageOf(e);
     }
   }
 
@@ -81,7 +82,7 @@ export class SshState {
       this.done = `Created ${key.path}`;
       return key;
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = messageOf(e);
       return null;
     } finally {
       this.busy = false;
@@ -93,7 +94,7 @@ export class SshState {
     try {
       return await sshPublicKey(path);
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = messageOf(e);
       return '';
     }
   }
@@ -106,7 +107,7 @@ export class SshState {
       this.scopes = await action();
       this.done = said;
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = messageOf(e);
     } finally {
       this.busy = false;
     }

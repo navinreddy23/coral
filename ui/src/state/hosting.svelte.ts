@@ -1,3 +1,4 @@
+import { messageOf } from '../ipc/error';
 import {
   hostingLogin,
   hostingLogout,
@@ -48,7 +49,7 @@ export class HostingState {
     try {
       this.pullRequests = await hostingPullRequests(this.#path);
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = messageOf(e);
       this.pullRequests = [];
     } finally {
       this.loading = false;
@@ -61,7 +62,7 @@ export class HostingState {
       this.view = await hostingLogin(this.#path, tokenValue);
       if (this.available) await this.refresh();
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = messageOf(e);
     }
   }
 
@@ -70,7 +71,7 @@ export class HostingState {
       this.view = await hostingLogout(this.#path);
       this.pullRequests = [];
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = messageOf(e);
     }
   }
 }

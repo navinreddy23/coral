@@ -7,6 +7,7 @@ import {
 } from '../ipc/terminal';
 
 import type { Dock, ViewsState } from './views.svelte';
+import { messageOf } from '../ipc/error';
 
 export type { Dock };
 
@@ -75,7 +76,7 @@ export class TerminalState {
       this.shell = opened.shell;
       return opened.id;
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = messageOf(e);
       return null;
     }
   }

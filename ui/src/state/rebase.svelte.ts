@@ -1,5 +1,6 @@
 import { rebaseStart, rebaseTodo } from '../ipc/commands';
 import type { Step, Todo, TodoItem } from '../ipc/types';
+import { messageOf } from '../ipc/error';
 
 /**
  * An interactive rebase being composed.
@@ -41,7 +42,7 @@ export class RebaseState {
       this.items = todo.items;
       if (todo.items.length === 0) this.error = `Nothing to rebase onto ${onto}.`;
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = messageOf(e);
     } finally {
       this.loading = false;
     }
@@ -97,7 +98,7 @@ export class RebaseState {
       this.close();
       return !outcome.conflicted;
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = messageOf(e);
       return false;
     } finally {
       this.busy = false;

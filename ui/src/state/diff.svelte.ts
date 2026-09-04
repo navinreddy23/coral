@@ -1,6 +1,7 @@
 import { fileDiff, worktreeDiff } from '../ipc/commands';
 import type { FileDiff } from '../ipc/types';
 import type { DiffMode, ViewsState } from './views.svelte';
+import { messageOf } from '../ipc/error';
 
 export type { DiffMode };
 
@@ -76,7 +77,7 @@ export class DiffState {
       if (got === null) this.error = absent;
     } catch (e) {
       if (token !== this.#token) return;
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = messageOf(e);
     } finally {
       if (token === this.#token) this.loading = false;
     }

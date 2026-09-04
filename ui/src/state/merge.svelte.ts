@@ -7,6 +7,7 @@ import {
   type Choice,
 } from '../ipc/commands';
 import type { Block, Blocks, ConflictedFile, Operation } from '../ipc/types';
+import { messageOf } from '../ipc/error';
 
 /** Which side a conflicting region should take. */
 export type Side = 'ours' | 'theirs' | 'base';
@@ -52,7 +53,7 @@ export class MergeState {
       this.files = files;
       if (this.active !== null && !files.some((f) => f.path === this.active)) this.close();
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = messageOf(e);
     }
   }
 
@@ -64,7 +65,7 @@ export class MergeState {
     try {
       this.blocks = await conflictBlocks(this.#path, file);
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = messageOf(e);
     }
   }
 
@@ -110,7 +111,7 @@ export class MergeState {
       await this.#reload();
       return true;
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = messageOf(e);
       return false;
     } finally {
       this.busy = false;
@@ -126,7 +127,7 @@ export class MergeState {
       await this.#reload();
       return out.completed;
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = messageOf(e);
       await this.#reload();
       return false;
     } finally {

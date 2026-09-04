@@ -5,6 +5,7 @@ import {
   signingSetApp,
   signingSetRepo,
 } from '../ipc/commands';
+import { messageOf } from '../ipc/error';
 import type {
   SigningConfig,
   SigningFormat,
@@ -147,7 +148,7 @@ function emptyOverrides(): SigningOverrides {
 }
 
 function message(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
+  return messageOf(e);
 }
 
 /** The program git uses for a format when none is configured. */

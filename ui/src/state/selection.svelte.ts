@@ -1,6 +1,7 @@
 import { commitDetail } from '../ipc/commands';
 
 import type { CommitDetail } from '../ipc/types';
+import { messageOf } from '../ipc/error';
 
 /**
  * The selected commit and its details.
@@ -35,7 +36,7 @@ export class SelectionState {
       if (token === this.#token) this.detail = detail;
     } catch (e) {
       if (token === this.#token) {
-        this.error = e instanceof Error ? e.message : String(e);
+        this.error = messageOf(e);
         this.detail = null;
       }
     } finally {

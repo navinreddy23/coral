@@ -1,4 +1,5 @@
 import { session as ipc } from '../ipc/commands';
+import { messageOf } from '../ipc/error';
 
 export type GroupColour =
   | 'lane1' | 'lane2' | 'lane3' | 'lane4'
@@ -154,7 +155,7 @@ export class TabsState {
       }
       this.session = next;
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = messageOf(e);
     }
   }
 }

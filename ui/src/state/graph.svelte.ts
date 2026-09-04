@@ -1,6 +1,7 @@
 import { checkBinaryTransport, graphFrame, rowMetadata } from '../ipc/graph';
 import type { CommitMeta } from '../ipc/types';
 import { covers, frameStartFor, type Frame } from '../graph/frame';
+import { messageOf } from '../ipc/error';
 
 /**
  * The graph for one repository.
@@ -87,7 +88,7 @@ export class GraphState {
       if (this.#wantedStart === start && this.#path === path) this.frame = next;
     } catch (e) {
       if (this.#wantedStart === start) this.#wantedStart = -1;
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = messageOf(e);
     }
   }
 
@@ -113,7 +114,7 @@ export class GraphState {
       this.frame = await graphFrame(path, 0, false);
       this.provisional = false;
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = messageOf(e);
       this.frame = null;
       this.#framePath = '';
     } finally {
