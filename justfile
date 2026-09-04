@@ -1,15 +1,65 @@
+# Recipes are bash everywhere, which on Windows means Git Bash — already present wherever
+# Coral can be built at all, since it ships with git.
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
-# cargo is not on the non-interactive PATH on every machine; see docs/DECISIONS.md.
-export PATH := env_var("HOME") + "/.cargo/bin:" + env_var("PATH")
+# `HOME` outside a Unix shell is `USERPROFILE`, and neither is guaranteed. `env_var` fails the
+# whole justfile when its variable is missing, so every recipe stopped working on Windows —
+# not merely the build ones.
+home := env_var_or_default("HOME", env_var_or_default("USERPROFILE", "."))
+
+# cargo is not on the non-interactive PATH on every machine; see docs/DECISIONS.md. Windows is
+# the exception: rustup puts it there itself, and the separator is `;` rather than `:`, so
+# prepending a Unix path there would corrupt the PATH rather than extend it.
+export PATH := if os_family() == "windows" { env_var("PATH") } else { home + "/.cargo/bin:" + env_var("PATH") }
 export RUST_BACKTRACE := "1"
 
-kernel := env_var_or_default("CORAL_KERNEL_REPO", env_var("HOME") + "/.cache/coral-bench/linux")
+# How many jobs cargo may run at once. It already defaults to one per core; this exists so a
+# machine doing something else can be told to leave some, and so CI can pin it.
+export CARGO_BUILD_JOBS := env_var_or_default("CORAL_JOBS", num_cpus())
+
+kernel := env_var_or_default("CORAL_KERNEL_REPO", home + "/.cache/coral-bench/linux")
 
 default: check
 
 # The gate. Everything must be green before a commit.
-check: fmt-check lint test ui-check licenses-drift
+#
+# Two lanes at once. Every cargo command takes an exclusive lock on the target directory, so
+# those cannot overlap each other — measured: running two of them concurrently only makes the
+# second wait, and says so. Nothing in the npm half touches that lock, and the npm half is the
+# whole of `ui-check`, so that is the lane worth running alongside.
+#
+# The generated bindings are the one thing that crosses between the lanes: `cargo test`
+# regenerates `ui/src/ipc/types.ts`, and `svelte-check` reads it. Running them at once would
+# type-check against whichever copy happened to be on disk, so the Rust lane also asserts the
+# committed copy is the current one — which is what makes checking against it valid.
+#
+# The Rust lane streams, because it is the long one and the one worth watching. The npm lane is
+# held back and printed when it finishes, so the two cannot interleave into nonsense.
+check:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    ui_log="$(mktemp)"
+    trap 'rm -f "$ui_log"' EXIT
+
+    just ui-check >"$ui_log" 2>&1 &
+    ui=$!
+
+    rust=0
+    just fmt-check && just lint && just test && just bindings-current && just licenses-drift \
+        || rust=$?
+
+    wait "$ui"; ui_status=$?
+    echo
+    echo "── ui-check ─────────────────────────────────────────────"
+    cat "$ui_log"
+
+    [ "$rust" -ne 0 ] && echo "the rust lane failed" >&2
+    [ "$ui_status" -ne 0 ] && echo "the ui lane failed" >&2
+    [ "$rust" -eq 0 ] && [ "$ui_status" -eq 0 ]
+
+# The same checks one after another, for when interleaved output is in the way of reading a
+# failure.
+check-serial: fmt-check lint test bindings-current ui-check licenses-drift
 
 fmt:
     cargo fmt --all
@@ -47,8 +97,12 @@ ui-check:
         exit 1
     fi
 
-# Fails if the generated bindings drift from the Rust types.
-bindings-drift: test
+# Fails if the generated bindings drift from the Rust types. Runs the tests first, which is
+# what regenerates them.
+bindings-drift: test bindings-current
+
+# The same assertion without rerunning the tests, for a caller that has just run them.
+bindings-current:
     git diff --exit-code -- ui/src/ipc/types.ts
 
 dev:
@@ -67,10 +121,13 @@ dev:
 build *ARGS:
     #!/usr/bin/env bash
     set -euo pipefail
-    export PATH="$HOME/.cargo/bin:$PATH"
-    cd ui && npm ci && cd ..
+    # The two halves need nothing from each other, and both are slow from cold: `npm ci`
+    # fetches the whole dependency tree while cargo compiles the CLI.
+    ( cd ui && npm ci ) &
+    npm_pid=$!
     # The CLI ships beside the application, so it has to exist before the bundle is assembled.
     cargo build --release -p coral-cli
+    wait $npm_pid
     cd crates/coral-app && cargo tauri build {{ARGS}}
 
 # A universal macOS build, which is what a .dmg should carry: an Intel-only bundle runs under
