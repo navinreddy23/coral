@@ -33,6 +33,10 @@
   }
 </script>
 
+<!-- Escape closes it, as it closes every other panel that covers the window: a reader who has
+     finished with a log should not have to find the cross. -->
+<svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />
+
 <div class="sheet">
   <header>
     <h2>Activity logs</h2>
