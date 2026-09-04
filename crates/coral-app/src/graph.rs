@@ -446,7 +446,18 @@ pub async fn worktree_diff(
     let files = loc
         .diff(&runner, staged, &[file.as_str()], context(whole_file))
         .await?;
-    Ok(files.into_iter().next())
+    if let Some(found) = files.into_iter().next() {
+        return Ok(Some(found));
+    }
+    // A file git has never seen has no diff, and the panel said it had no changes — about a
+    // file that is nothing but change. Staged is not asked: a file staged for addition is in
+    // the index, so the diff above already found it.
+    if staged {
+        return Ok(None);
+    }
+    Ok(loc
+        .untracked_diff(&runner, &file, context(whole_file))
+        .await?)
 }
 
 #[cfg(test)]

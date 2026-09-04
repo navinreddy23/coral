@@ -509,6 +509,21 @@ impl GitRunner {
     /// [`CoralError::GitSpawn`] if the child cannot start, [`CoralError::GitExit`] on a
     /// non-zero exit, [`CoralError::GitSignal`] if it was killed.
     pub async fn output(&self, cmd: GitCommand) -> Result<GitOutput, CoralError> {
+        self.output_allowing(cmd, &[]).await
+    }
+
+    /// Runs a command whose non-zero exit is an answer rather than a failure.
+    ///
+    /// `diff --no-index` exits 1 to say the two paths differ, which is the whole reason for
+    /// running it. Anything outside `ok` is still an error.
+    ///
+    /// # Errors
+    /// As [`GitRunner::output`], for every code but those in `ok`.
+    pub async fn output_allowing(
+        &self,
+        cmd: GitCommand,
+        ok: &[i32],
+    ) -> Result<GitOutput, CoralError> {
         let argv = cmd.redacted_argv(&self.git.program);
         let mut child = self.spawn(&cmd, &argv)?;
 
@@ -532,7 +547,7 @@ impl GitRunner {
         if let Some(handle) = writer {
             let _ = handle.await;
         }
-        if out.status.success() {
+        if out.status.success() || out.status.code().is_some_and(|code| ok.contains(&code)) {
             return Ok(GitOutput {
                 stdout: out.stdout,
                 stderr: out.stderr,

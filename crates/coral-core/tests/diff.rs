@@ -383,3 +383,64 @@ fn whole_file_context_carries_the_lines_no_hunk_would_reach() {
         assert_eq!(changed, 2, "one line out, one line in");
     });
 }
+
+/// A file git has never seen is all change, and the panel has to show it as such.
+#[test]
+fn an_untracked_file_is_a_diff_against_nothing() {
+    let repo = TestRepo::new()
+        .write("tracked.txt", "same\n")
+        .commit("first");
+    std::fs::write(repo.path().join("new.sh"), "one\ntwo\nthree\n").unwrap();
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+        // `git diff` knows about tracked paths only, which is why this needs its own read.
+        let tracked = loc
+            .diff(&runner, false, &["new.sh"], Context::Hunks)
+            .await
+            .unwrap();
+        assert!(tracked.is_empty());
+
+        let file = loc
+            .untracked_diff(&runner, "new.sh", Context::Hunks)
+            .await
+            .unwrap()
+            .expect("an untracked file has a diff");
+        assert_eq!(file.path, "new.sh");
+        assert_eq!(file.change, FileChange::Added);
+        assert_eq!((file.added, file.removed), (Some(3), Some(0)));
+        let texts: Vec<_> = file.hunks[0]
+            .lines
+            .iter()
+            .map(|l| (l.kind, l.text.to_string()))
+            .collect();
+        assert_eq!(
+            texts,
+            [
+                (LineKind::Add, "one".to_owned()),
+                (LineKind::Add, "two".to_owned()),
+                (LineKind::Add, "three".to_owned()),
+            ]
+        );
+    });
+}
+
+/// Answering for a tracked file would claim every line of it was new.
+#[test]
+fn a_tracked_file_has_no_untracked_diff() {
+    let repo = TestRepo::new().write("a.txt", "same\n").commit("first");
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+        assert!(
+            loc.untracked_diff(&runner, "a.txt", Context::Hunks)
+                .await
+                .unwrap()
+                .is_none()
+        );
+    });
+}

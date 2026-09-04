@@ -296,6 +296,74 @@ impl RepoLocation {
         Ok(files)
     }
 
+    /// The whole of an untracked file, as a diff against nothing.
+    ///
+    /// `git diff` knows about tracked paths only, so a file git has never seen produces no
+    /// diff at all — and the panel said the file had no changes, about a file that is nothing
+    /// but change. `--no-index` compares two paths on disk instead of consulting the index,
+    /// which is what shows the file added end to end.
+    ///
+    /// `Ok(None)` for a path git already tracks, or one it is ignoring: the caller cannot know
+    /// which it has, and answering with the whole file for a tracked one would claim every
+    /// line of it was new.
+    ///
+    /// # Errors
+    /// Propagates git failures. Exit 1 is not one: `--no-index` uses it to say the two paths
+    /// differ, which is the reason it was run.
+    pub async fn untracked_diff(
+        &self,
+        runner: &GitRunner,
+        path: &str,
+        context: crate::diff::Context,
+    ) -> Result<Option<crate::diff::FileDiff>, CoralError> {
+        let listed = runner
+            .output(
+                GitCommand::read("ls-files", self.display_path())
+                    .args(["ls-files", "-z", "--others", "--exclude-standard", "--"])
+                    .arg(path),
+            )
+            .await?;
+        if listed.stdout.is_empty() {
+            return Ok(None);
+        }
+
+        // "/dev/null" is a literal git recognises on every platform it builds for, not a path
+        // it opens, so this works on Windows too.
+        let out = runner
+            .output_allowing(
+                GitCommand::status("diff", self.display_path())
+                    .args(["diff", "--no-index", "--no-color", "-p", context.flag()])
+                    .args(["--", "/dev/null"])
+                    .arg(path),
+                &[1],
+            )
+            .await?;
+
+        let binary = bstr::ByteSlice::find(out.stdout.as_slice(), b"\nBinary files ").is_some();
+        let mut file = crate::diff::FileDiff {
+            path: path.into(),
+            old_path: None,
+            change: crate::diff::FileChange::Added,
+            binary,
+            added: None,
+            removed: None,
+            hunks: Vec::new(),
+            too_large: false,
+        };
+        crate::diff::apply_patch(std::slice::from_mut(&mut file), &out.stdout)?;
+        if !binary {
+            let added = file
+                .hunks
+                .iter()
+                .flat_map(|h| h.lines.iter())
+                .filter(|l| l.kind == crate::diff::LineKind::Add)
+                .count();
+            file.added = Some(u32::try_from(added).unwrap_or(u32::MAX));
+            file.removed = Some(0);
+        }
+        Ok(Some(file))
+    }
+
     /// Diffs one commit against its first parent, optionally limited to `paths`.
     ///
     /// Same three invocations and the same reasoning as [`RepoLocation::diff`], against
