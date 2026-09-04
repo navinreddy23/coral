@@ -1,7 +1,7 @@
 // The desktop build must not open a console window on Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use coral_app_lib::{actions, commands, conflicts, graph, hosting, signing, tabs};
+use coral_app_lib::{actions, commands, conflicts, graph, hosting, signing, tabs, terminal};
 
 fn main() {
     // git invokes the running binary as its sequence editor during an interactive rebase, so
@@ -40,6 +40,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(graph::GraphCache::default())
+        .manage(terminal::Terminals::default())
         .setup(|app| {
             use tauri::Manager as _;
             // Beside the app's own config, so it travels with the installation rather than
@@ -86,11 +87,16 @@ fn main() {
             signing::signing_set_repo,
             signing::signing_keys,
             signing::signing_generate,
+            terminal::terminal_open,
+            terminal::terminal_write,
+            terminal::terminal_resize,
+            terminal::terminal_close,
             tabs::session_get,
             tabs::tab_open,
             tabs::tab_close,
             tabs::tab_activate,
             tabs::tab_group,
+            tabs::tab_move,
             tabs::tab_ungroup,
             tabs::group_collapse,
             graph::binary_self_test

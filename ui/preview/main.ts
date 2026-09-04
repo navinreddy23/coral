@@ -18,6 +18,8 @@ import Palette from '../src/app/Palette.svelte';
 import RebasePicker from '../src/app/RebasePicker.svelte';
 import Ask from '../src/app/Ask.svelte';
 import Preferences from '../src/app/Preferences.svelte';
+import TabBar from '../src/app/TabBar.svelte';
+import { TabsState } from '../src/state/tabs.svelte';
 import { SigningState } from '../src/state/signing.svelte';
 import { DiffState } from '../src/state/diff.svelte';
 import { MergeState } from '../src/state/merge.svelte';
@@ -136,6 +138,40 @@ mount(Palette, {
     ],
     onClose: () => {},
   },
+});
+
+/*
+ * The tab bar mid-drag. The highlight only exists while a pointer is down, so the events are
+ * dispatched here rather than waited for: this is the one state of the bar nobody can
+ * photograph by holding still.
+ */
+const tabs = new TabsState();
+tabs.session = {
+  tabs: [
+    { id: 1, path: '/repos/coral', group: 5, missing: false },
+    { id: 2, path: '/repos/linux', group: 5, missing: false },
+    { id: 3, path: '/repos/notes', group: null, missing: false },
+    { id: 4, path: '/repos/zephyr', group: null, missing: false },
+  ],
+  groups: [{ id: 5, name: 'work', colour: 'lane1', collapsed: false }],
+  active: 1,
+};
+const barTarget = panel('Tab bar — dragging a loose tab onto a group', '70px');
+mount(TabBar, { target: barTarget, props: { tabs, onOpen: () => {} } });
+queueMicrotask(() => {
+  const chips = [...barTarget.querySelectorAll('.tab')] as HTMLElement[];
+  const band = barTarget.querySelector('.band');
+  const dragged = chips.find((c) => c.textContent?.includes('notes'));
+  if (!dragged || !band) return;
+  const transfer = { setData: () => {}, effectAllowed: '', dropEffect: '' };
+  const fire = (el: Element, type: string) =>
+    el.dispatchEvent(
+      Object.assign(new Event(type, { bubbles: true, cancelable: true }), {
+        dataTransfer: transfer,
+      }),
+    );
+  fire(dragged, 'dragstart');
+  fire(band, 'dragover');
 });
 
 const signing = new SigningState();

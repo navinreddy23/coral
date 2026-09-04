@@ -26,6 +26,7 @@ gix        = { workspace = true }
 tauri      = { workspace = true }
 tauri-plugin-dialog = { workspace = true }
 tauri-plugin-opener = { workspace = true }
+portable-pty = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = { workspace = true }

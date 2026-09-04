@@ -162,6 +162,48 @@ impl Session {
         id
     }
 
+    /// Moves a tab into a group, out of one, or to a new position.
+    ///
+    /// `group` is where it lands: `Some` to join that group, `None` to sit loose. `before` is
+    /// the tab it should end up in front of, which is how a drop between two tabs is
+    /// expressed; `None` puts it last in its band.
+    ///
+    /// This is what dragging does, and it is one operation rather than an ungroup followed by
+    /// a group: the two would leave the bar rearranged twice, and a group emptied in between
+    /// would be collected before the tab arrived.
+    pub fn move_tab(&mut self, tab: u32, group: Option<u32>, before: Option<u32>) {
+        // Dropping a tab on itself asks for nothing. Taking it out and putting it back would
+        // land it after its own former neighbour instead of where it started.
+        if before == Some(tab) {
+            return;
+        }
+        // A group that no longer exists would strand the tab in a band nothing draws.
+        let group = group.filter(|id| self.groups.iter().any(|g| g.id == *id));
+        let Some(at) = self.tabs.iter().position(|t| t.id == tab) else {
+            return;
+        };
+        let mut moved = self.tabs.remove(at);
+        moved.group = group;
+
+        let insert = before
+            .and_then(|id| self.tabs.iter().position(|t| t.id == id))
+            // Otherwise after the last tab of the group it is joining, so it lands beside its
+            // new neighbours rather than at the end of the whole bar.
+            .or_else(|| {
+                group.and_then(|id| {
+                    self.tabs
+                        .iter()
+                        .rposition(|t| t.group == Some(id))
+                        .map(|i| i + 1)
+                })
+            })
+            .unwrap_or(self.tabs.len());
+        self.tabs.insert(insert.min(self.tabs.len()), moved);
+
+        self.regroup();
+        self.drop_empty_groups();
+    }
+
     /// Removes a tab from its group without closing it.
     pub fn ungroup(&mut self, tab: u32) {
         if let Some(t) = self.tabs.iter_mut().find(|t| t.id == tab) {

@@ -11,6 +11,7 @@
     max,
     label,
     grows = 'right',
+    vertical = false,
     onresize,
     onreset,
   }: {
@@ -18,6 +19,8 @@
     min: number;
     max: number;
     label: string;
+    /** True for a handle between stacked panes, which is dragged up and down. */
+    vertical?: boolean;
     /** Which way the pane being sized grows when the handle moves right. */
     grows?: 'right' | 'left';
     onresize: (px: number) => void;
@@ -25,14 +28,14 @@
   } = $props();
 
   let dragging = $state(false);
-  let startX = 0;
+  let start = 0;
   let startValue = 0;
 
   // -1 for a pane anchored to the right edge: dragging the handle left makes it wider.
   const sign = $derived(grows === 'left' ? -1 : 1);
 
   function down(event: PointerEvent & { currentTarget: HTMLDivElement }) {
-    startX = event.clientX;
+    start = vertical ? event.clientY : event.clientX;
     startValue = value;
     dragging = true;
     // Capture, or the drag stops the moment the pointer outruns a 9px-wide target.
@@ -42,7 +45,8 @@
 
   function move(event: PointerEvent) {
     if (!dragging) return;
-    onresize(startValue + (event.clientX - startX) * sign);
+    const at = vertical ? event.clientY : event.clientX;
+    onresize(startValue + (at - start) * sign);
   }
 
   function up(event: PointerEvent & { currentTarget: HTMLDivElement }) {
@@ -54,8 +58,9 @@
 
   function key(event: KeyboardEvent) {
     const step = event.shiftKey ? 32 : 8;
-    if (event.key === 'ArrowLeft') onresize(value - step * sign);
-    else if (event.key === 'ArrowRight') onresize(value + step * sign);
+    const [less, more] = vertical ? ['ArrowUp', 'ArrowDown'] : ['ArrowLeft', 'ArrowRight'];
+    if (event.key === less) onresize(value - step * sign);
+    else if (event.key === more) onresize(value + step * sign);
     else return;
     event.preventDefault();
   }
@@ -73,9 +78,10 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   class="splitter"
+  class:vertical
   class:dragging
   role="separator"
-  aria-orientation="vertical"
+  aria-orientation={vertical ? 'horizontal' : 'vertical'}
   aria-label={label}
   aria-valuenow={Math.round(value)}
   aria-valuemin={min}
@@ -100,5 +106,15 @@
   .splitter:hover, .splitter.dragging, .splitter:focus-visible {
     background-image: linear-gradient(to right, transparent 3px, var(--accent) 3px 6px, transparent 6px);
     outline: none;
+  }
+  /* A handle between stacked panes: the same strip turned through a right angle. */
+  .splitter.vertical {
+    width: auto; height: 9px; margin: -4px 0; cursor: row-resize;
+    background-image: linear-gradient(to bottom, transparent 4px, var(--border) 4px 5px, transparent 5px);
+  }
+  .splitter.vertical:hover,
+  .splitter.vertical.dragging,
+  .splitter.vertical:focus-visible {
+    background-image: linear-gradient(to bottom, transparent 3px, var(--accent) 3px 6px, transparent 6px);
   }
 </style>

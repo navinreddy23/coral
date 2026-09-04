@@ -105,6 +105,10 @@ export const BINDINGS: Binding[] = [
     context: 'global', match: (e) => primary(e) && !e.shift && is(e, 'k') },
   { id: 'toolbar', label: 'Toggle toolbar', keys: 'Ctrl U', group: 'UI',
     context: 'global', match: (e) => primary(e) && !e.shift && is(e, 'u') },
+  // The backtick, as every editor with a terminal binds it. Not `Ctrl T`, which is a new tab
+  // everywhere else and would be the wrong reflex here.
+  { id: 'terminal', label: 'Toggle the terminal', keys: 'Ctrl `', group: 'UI',
+    context: 'global', match: (e) => primary(e) && is(e, '`') },
   { id: 'help', label: 'Show keyboard shortcuts', keys: 'Ctrl /', group: 'UI',
     context: 'global', match: (e) => primary(e) && is(e, '/') },
 ];

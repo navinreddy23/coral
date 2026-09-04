@@ -25,6 +25,6 @@ export async function invoke<T>(
 }
 
 /** True when the window is running in a plain browser rather than in the Tauri shell. */
-function isPreview(): boolean {
+export function isPreview(): boolean {
   return typeof window !== 'undefined' && !('__TAURI_INTERNALS__' in window);
 }

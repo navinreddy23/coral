@@ -378,6 +378,46 @@ const DIFF = {
   ],
 };
 
+/**
+ * Plays a short session into a terminal pane.
+ *
+ * There is no shell in a browser, and an empty black rectangle says nothing about whether the
+ * pane works. This writes what one looks like a few seconds into use.
+ */
+export function previewTerminal(onData: (text: string) => void): () => void {
+  const dim = '\u001b[2m';
+  const off = '\u001b[0m';
+  const green = '\u001b[32m';
+  const yellow = '\u001b[33m';
+  const cyan = '\u001b[36m';
+  const prompt = `${green}dev${off}:${cyan}~/projects/coral${off}${yellow} master${off} $ `;
+
+  const lines = [
+    `${prompt}git status -sb\r\n`,
+    `## ${green}master${off}...${dim}origin/master${off} [ahead 3, behind 1]\r\n`,
+    ` M ui/src/app/TabBar.svelte\r\n`,
+    ` M crates/coral-app/src/session.rs\r\n`,
+    `?? crates/coral-app/tests/terminal.rs\r\n`,
+    `${prompt}git log --oneline -3\r\n`,
+    `${yellow}9e7702f${off} ui: finish the polish pass on the tabs and the diff\r\n`,
+    `${yellow}1669548${off} ui: colour a commit node by its author\r\n`,
+    `${yellow}733d9d5${off} core: answer a credential request that carries no username\r\n`,
+    prompt,
+  ];
+
+  let at = 0;
+  const timer = setInterval(() => {
+    const line = lines[at];
+    at += 1;
+    if (line === undefined) {
+      clearInterval(timer);
+      return;
+    }
+    onData(line);
+  }, 90);
+  return () => clearInterval(timer);
+}
+
 /** Answers one command with fixture data. */
 export function preview(command: string, args: Record<string, unknown>): unknown {
   switch (command) {
@@ -391,6 +431,12 @@ export function preview(command: string, args: Record<string, unknown>): unknown
       return detail(String(args['rev'] ?? oidOf(0)));
     case 'file_diff':
       return DIFF;
+    case 'terminal_open':
+      return { id: 1, shell: '/usr/bin/zsh' };
+    case 'terminal_write':
+    case 'terminal_resize':
+    case 'terminal_close':
+      return null;
     default:
       return FIXTURES[command] ?? null;
   }

@@ -234,6 +234,9 @@ export const session = {
   group: (name: string, ids: number[]): Promise<Session> =>
     invoke<Session>('tab_group', { name, ids }),
   ungroup: (id: number): Promise<Session> => invoke<Session>('tab_ungroup', { id }),
+  /** Moves a tab into a group, out of one, or in front of another. */
+  move: (id: number, group: number | null, before: number | null): Promise<Session> =>
+    invoke<Session>('tab_move', { id, group, before }),
   collapse: (id: number, collapsed: boolean): Promise<Session> =>
     invoke<Session>('group_collapse', { id, collapsed }),
 };

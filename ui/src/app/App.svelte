@@ -17,6 +17,8 @@
   import StatusBar from './StatusBar.svelte';
   import Ask, { type Choice } from './Ask.svelte';
   import Preferences from './Preferences.svelte';
+  import Terminal from './Terminal.svelte';
+  import { TerminalState } from '../state/terminal.svelte';
   import { SigningState } from '../state/signing.svelte';
   import { elidePath } from './path';
   import type { Action } from '../ipc/commands';
@@ -59,7 +61,7 @@
   const LIVE = new Set([
     'select.next', 'select.previous', 'select.first', 'select.last',
     'stage.all', 'unstage.all', 'tab.new', 'tab.close', 'tab.next', 'tab.previous',
-    'palette', 'repo.open',
+    'palette', 'repo.open', 'terminal',
     'panel.left', 'panel.detail', 'help',
   ]);
 
@@ -106,6 +108,7 @@
       case 'panel.detail': showDetails = !showDetails; break;
       case 'help': showHelp = !showHelp; break;
       case 'palette': showPalette = !showPalette; break;
+      case 'terminal': terminal.toggle(); break;
       case 'repo.open': void openAnother(); break;
       default: break;
     }
@@ -132,6 +135,7 @@
   const rebase = new RebaseState();
   const signing = new SigningState();
   let showPrefs = $state(false);
+  const terminal = new TerminalState();
   let showPalette = $state(false);
 
   /**
@@ -230,6 +234,18 @@
       { id: 'undo', label: 'Undo', group: 'History', run: () => void act({ kind: 'undo' }) },
       { id: 'redo', label: 'Redo', group: 'History', run: () => void act({ kind: 'redo' }) },
       { id: 'theme', label: 'Toggle dark mode', group: 'View', run: () => theme.toggle() },
+      {
+        id: 'terminal',
+        label: terminal.open ? 'Hide the terminal' : 'Show the terminal',
+        group: 'View',
+        run: () => terminal.toggle(),
+      },
+      {
+        id: 'terminal-dock',
+        label: `Move the terminal to the ${terminal.dock === 'bottom' ? 'right' : 'bottom'}`,
+        group: 'View',
+        run: () => terminal.setDock(terminal.dock === 'bottom' ? 'right' : 'bottom'),
+      },
       {
         id: 'signing',
         label: 'Commit signing settings',
@@ -571,6 +587,10 @@
     </div>
   {:else if graph.frame}
     <div
+      class="workspace"
+      class:beside={terminal.open && terminal.dock === 'right'}
+    >
+    <div
       class="body"
       style:--refs-col="{panes.widths.refs}px"
       style:--graph-col="{panes.widths.graph}px"
@@ -731,6 +751,27 @@
       {/if}
     {/if}
     </div>
+
+    {#if terminal.open && info}
+      <Splitter
+        label="Resize the terminal"
+        value={terminal.size}
+        min={120}
+        max={900}
+        grows={terminal.dock === 'right' ? 'left' : 'left'}
+        vertical={terminal.dock === 'bottom'}
+        onresize={(px) => terminal.setSize(px)}
+        onreset={() => terminal.setDock(terminal.dock)}
+      />
+      <div
+        class="term"
+        style:height={terminal.dock === 'bottom' ? `${terminal.size}px` : undefined}
+        style:width={terminal.dock === 'right' ? `${terminal.size}px` : undefined}
+      >
+        <Terminal session={terminal} path={info.path} onClose={() => (terminal.open = false)} />
+      </div>
+    {/if}
+    </div>
   {/if}
 
   {#if info}
@@ -814,6 +855,14 @@
   .empty .lead { margin: 0; font-size: 14px; font-weight: 600; color: var(--fg-1); }
   .empty .muted { margin: 0; max-width: 34em; line-height: 1.5; font-size: 12px; }
 
+  /* Positioned, so the preferences screen can cover the panes without covering the
+     window's own chrome. */
+  /* The workspace and the terminal. Side by side when it is docked right, stacked when it is
+     docked at the bottom, which is the only difference between the two positions. */
+  .workspace { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+  .workspace.beside { flex-direction: row; }
+  .term { flex: 0 0 auto; display: flex; min-height: 0; min-width: 0; }
+  .term > :global(.terminal) { flex: 1; min-width: 0; }
   /* Positioned, so the preferences screen can cover the panes without covering the
      window's own chrome. */
   .body { display: flex; flex: 1; min-height: 0; position: relative; }

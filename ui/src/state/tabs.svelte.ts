@@ -84,6 +84,16 @@ export class TabsState {
     await this.#run(() => ipc.group(name, ids));
   }
 
+  /**
+   * Moves a tab: into `group`, out of every group when it is null, and in front of `before`.
+   *
+   * The whole move in one call. Ungrouping and regrouping instead would rearrange the bar
+   * twice, and a group left empty in between would be collected before the tab arrived.
+   */
+  async move(id: number, group: number | null, before: number | null): Promise<void> {
+    await this.#run(() => ipc.move(id, group, before));
+  }
+
   async ungroup(id: number): Promise<void> {
     await this.#run(() => ipc.ungroup(id));
   }

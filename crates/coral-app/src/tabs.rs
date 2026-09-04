@@ -85,6 +85,21 @@ pub fn tab_group(tabs: tauri::State<'_, Tabs>, name: String, ids: Vec<u32>) -> S
     })
 }
 
+/// Moves a tab: into a group, out of one, or in front of another.
+///
+/// One command rather than an ungroup followed by a group, because the two would rearrange the
+/// bar twice and a group emptied in between would be collected before the tab arrived.
+#[tauri::command]
+#[must_use]
+pub fn tab_move(
+    tabs: tauri::State<'_, Tabs>,
+    id: u32,
+    group: Option<u32>,
+    before: Option<u32>,
+) -> Session {
+    tabs.update(|s| s.move_tab(id, group, before))
+}
+
 #[tauri::command]
 #[must_use]
 pub fn tab_ungroup(tabs: tauri::State<'_, Tabs>, id: u32) -> Session {

@@ -195,3 +195,140 @@ fn ids_are_not_reused_after_a_restart() {
     let b = restored.open("/b".into());
     assert_ne!(b, a, "the new tab must not inherit the closed one's id");
 }
+
+/// Three loose tabs, with the first two grouped as "work".
+fn grouped() -> (Session, u32) {
+    let mut s = Session::default();
+    for path in ["/a", "/b", "/c"] {
+        s.open(std::path::PathBuf::from(path));
+    }
+    let ids: Vec<u32> = s.tabs.iter().map(|t| t.id).collect();
+    let group = s.group("work".to_owned(), &[ids[0], ids[1]]);
+    (s, group)
+}
+
+fn order(s: &Session) -> Vec<(String, Option<u32>)> {
+    s.tabs
+        .iter()
+        .map(|t| (t.path.to_string_lossy().into_owned(), t.group))
+        .collect()
+}
+
+#[test]
+fn a_tab_can_be_dragged_into_an_existing_group() {
+    // There was no way to do this at all: a group could be created and a tab removed from one,
+    // but nothing put a tab into a group that already existed.
+    let (mut s, group) = grouped();
+    let c = s.tabs.iter().find(|t| t.path.ends_with("c")).unwrap().id;
+
+    s.move_tab(c, Some(group), None);
+
+    assert_eq!(
+        order(&s),
+        vec![
+            ("/a".to_owned(), Some(group)),
+            ("/b".to_owned(), Some(group)),
+            ("/c".to_owned(), Some(group)),
+        ]
+    );
+}
+
+#[test]
+fn a_tab_dropped_on_a_group_lands_beside_its_new_neighbours() {
+    // Not at the end of the whole bar, which is where it would go if the group were ignored.
+    let mut s = Session::default();
+    for path in ["/a", "/b", "/c", "/d"] {
+        s.open(std::path::PathBuf::from(path));
+    }
+    let ids: Vec<u32> = s.tabs.iter().map(|t| t.id).collect();
+    let group = s.group("work".to_owned(), &[ids[0], ids[1]]);
+
+    s.move_tab(ids[3], Some(group), None);
+
+    let paths: Vec<String> = s
+        .tabs
+        .iter()
+        .map(|t| t.path.to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(paths, ["/a", "/b", "/d", "/c"]);
+}
+
+#[test]
+fn a_tab_dragged_out_of_a_group_becomes_loose() {
+    let (mut s, group) = grouped();
+    let b = s.tabs.iter().find(|t| t.path.ends_with("b")).unwrap().id;
+
+    s.move_tab(b, None, None);
+
+    let moved = s.tabs.iter().find(|t| t.id == b).unwrap();
+    assert_eq!(moved.group, None);
+    // The group survives, because one tab is still in it.
+    assert!(s.groups.iter().any(|g| g.id == group));
+}
+
+#[test]
+fn emptying_a_group_by_dragging_removes_it() {
+    let (mut s, group) = grouped();
+    let ids: Vec<u32> = s
+        .tabs
+        .iter()
+        .filter(|t| t.group == Some(group))
+        .map(|t| t.id)
+        .collect();
+    for id in ids {
+        s.move_tab(id, None, None);
+    }
+    assert!(
+        s.groups.is_empty(),
+        "a band with nothing in it is not drawn"
+    );
+}
+
+#[test]
+fn a_tab_can_be_dropped_in_front_of_another() {
+    // Reordering, which is the other half of what dragging a tab is expected to do.
+    let (mut s, _) = grouped();
+    let ids: Vec<u32> = s.tabs.iter().map(|t| t.id).collect();
+    let (a, c) = (ids[0], ids[2]);
+
+    s.move_tab(c, None, Some(a));
+
+    let paths: Vec<String> = s
+        .tabs
+        .iter()
+        .map(|t| t.path.to_string_lossy().into_owned())
+        .collect();
+    // /c is loose and /a is grouped, so contiguity puts the loose one first.
+    assert_eq!(paths[0], "/c");
+}
+
+#[test]
+fn dropping_a_tab_on_itself_changes_nothing() {
+    let (mut s, group) = grouped();
+    let a = s.tabs.iter().find(|t| t.path.ends_with("a")).unwrap().id;
+    let before = order(&s);
+
+    s.move_tab(a, Some(group), Some(a));
+
+    assert_eq!(order(&s), before, "and above all it is still there");
+}
+
+#[test]
+fn a_group_that_no_longer_exists_leaves_the_tab_loose() {
+    // Rather than stranded in a band nothing draws.
+    let (mut s, group) = grouped();
+    let c = s.tabs.iter().find(|t| t.path.ends_with("c")).unwrap().id;
+    s.groups.clear();
+
+    s.move_tab(c, Some(group), None);
+
+    assert_eq!(s.tabs.iter().find(|t| t.id == c).unwrap().group, None);
+}
+
+#[test]
+fn moving_a_tab_that_is_not_there_does_nothing() {
+    let (mut s, group) = grouped();
+    let before = order(&s);
+    s.move_tab(9999, Some(group), None);
+    assert_eq!(order(&s), before);
+}
