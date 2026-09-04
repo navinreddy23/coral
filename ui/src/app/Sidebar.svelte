@@ -9,6 +9,7 @@
   const {
     groups,
     head,
+    detachedHead,
     stashes,
     submodules,
     remotes,
@@ -29,6 +30,14 @@
   }: {
     groups: RefGroups;
     head: string | null;
+    /**
+     * Where HEAD is when it is on no branch, so the list has something to say about it.
+     *
+     * Checking a commit out detaches HEAD at it, and until now the panel showed nothing at
+     * all: the branch list was of branches HEAD was not on, and where it actually was could
+     * only be found by looking down the graph for the pill.
+     */
+    detachedHead: { oid: string; row: number | null } | null;
     /** The stash stack. Listed on its own, because `refs/stash` is only ever the top of it. */
     stashes: PlacedStash[];
     submodules: Submodule[];
@@ -217,10 +226,30 @@
         <span class="caret">{collapsed[section.key] ? '›' : '⌄'}</span>
         <span class="icon" aria-hidden="true">{section.icon}</span>
         {section.title}
-        <span class="count">{section.refs.length}</span>
+        <span class="count">
+          {section.refs.length + (section.key === 'local' && detachedHead !== null ? 1 : 0)}
+        </span>
       </button>
       {#if !collapsed[section.key]}
         <ul>
+          {#if section.key === 'local' && detachedHead !== null}
+            <li>
+              <div class="row">
+                <button
+                  class="ref current"
+                  disabled={detachedHead.row === null}
+                  onclick={() => detachedHead?.row !== null && onSelect(detachedHead.row)}
+                  title={detachedHead.row === null
+                    ? `HEAD is detached at ${detachedHead.oid}\nnot in the loaded graph`
+                    : `HEAD is detached at ${detachedHead.oid}`}
+                >
+                  <span class="tick" aria-hidden="true">✓</span>
+                  <span class="text">HEAD</span>
+                  <span class="track mono">{detachedHead.oid.slice(0, 8)}</span>
+                </button>
+              </div>
+            </li>
+          {/if}
           {#each showingAll[section.key] ? section.refs : section.refs.slice(0, CAP) as r (r.name)}
             {@render refRow(r, r.short, section.key === 'local')}
           {/each}

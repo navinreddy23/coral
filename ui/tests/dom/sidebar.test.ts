@@ -73,12 +73,48 @@ function mount(over: Record<string, unknown> = {}) {
       onSubmoduleMenu: () => {},
       onStashMenu: () => {},
       onRefMenu: () => {},
+      detachedHead: null,
       ...over,
     },
   });
 }
 
 describe('the sidebar', () => {
+  it('says where HEAD is when it is on no branch, and goes there when asked', async () => {
+    // Checking a commit out detaches HEAD at it, and the branch list is then a list of
+    // branches HEAD is not on: without this there is nothing saying where it went.
+    const went: number[] = [];
+    const { container } = mount({
+      head: null,
+      detachedHead: { oid: 'c0ffee1234567890', row: 42 },
+      onSelect: (row: number) => went.push(row),
+    });
+
+    const local = [...container.querySelectorAll('section')].find((sec) =>
+      sec.textContent?.includes('Local'),
+    );
+    const head = [...(local?.querySelectorAll('button.ref') ?? [])].find((b) =>
+      b.textContent?.includes('HEAD'),
+    ) as HTMLButtonElement;
+    expect(head).toBeTruthy();
+    expect(head.textContent).toContain('c0ffee12');
+
+    await fireEvent.click(head);
+    expect(went).toEqual([42]);
+  });
+
+  it('offers no way to HEAD when its commit is outside the loaded graph', () => {
+    const { container } = mount({ detachedHead: { oid: 'c0ffee1234567890', row: null } });
+    const head = [...container.querySelectorAll('button.ref')].find((b) =>
+      b.textContent?.includes('HEAD'),
+    ) as HTMLButtonElement;
+    expect(head.disabled).toBe(true);
+  });
+
+  it('says nothing about HEAD while it is on a branch', () => {
+    expect(mount().container.textContent).not.toContain('HEAD');
+  });
+
   it('caps a long list but lets the cap be lifted', async () => {
     // The kernel carries 944 tags; the ones past the cap were unreachable.
     const tags = Array.from({ length: 944 }, (_, i) => tag(`v${i}`));

@@ -1975,6 +1975,9 @@
       <Sidebar
         groups={refs.groups}
         head={headName}
+        detachedHead={info?.head.kind === 'detached'
+          ? { oid: info.head.oid, row: detachedRow }
+          : null}
         stashes={stashes.list}
         submodules={refs.submodules}
         remotes={remotes.list}
