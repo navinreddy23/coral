@@ -200,9 +200,21 @@ stoppedAt: string | null,
 interactive: boolean, };
 
 /**
- * How far through a multi-step operation git has got.
+ * One phase of a transfer, as git reports it on stderr.
  */
-export type Progress = { current: number, total: number, };
+export type Progress = { 
+/**
+ * "Counting objects", "Receiving objects", and so on.
+ */
+phase: string, current: bigint, total: bigint, percent: number, 
+/**
+ * True when the phase is running on the server rather than locally.
+ */
+remote: boolean, 
+/**
+ * True for the final line of a phase.
+ */
+done: boolean, };
 
 /**
  * What happened to one ref during a push.

@@ -345,6 +345,7 @@
 
   async function load(path: string) {
     error = null;
+    forgetTheLastRepository();
     try {
       info = await open(path);
       await graph.open(info.path);
@@ -359,6 +360,25 @@
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
+  }
+
+  /**
+   * Drops everything that meant something only in the repository being left.
+   *
+   * A commit, the diff opened from it, a half-composed rebase, a scroll position: none of them
+   * name anything in the next repository, and leaving them up shows one repository's contents
+   * under another's name. The engine state is reloaded per repository anyway; this is the view
+   * state that has no owner to reload it.
+   */
+  function forgetTheLastRepository() {
+    selection.clear();
+    diff.close();
+    rebase.close();
+    merge.close();
+    actions.clear();
+    showWip = false;
+    scrollTop = 0;
+    if (scroller) scroller.scrollTop = 0;
   }
 
   /**
