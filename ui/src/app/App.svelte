@@ -32,10 +32,12 @@
   import RefMark from './RefMark.svelte';
   import Toasts from './Toasts.svelte';
   import Splash from './Splash.svelte';
+  import Start from './Start.svelte';
   import Remotes from './Remotes.svelte';
   import Activity from './Activity.svelte';
   import { ActivityState } from '../state/activity.svelte';
   import { StashesState } from '../state/stashes.svelte';
+  import { StartState } from '../state/start.svelte';
   import type { PlacedStash } from '../ipc/stash';
   import { ExperimentalState } from '../state/experimental.svelte';
   import SubmodulePanel from './Submodule.svelte';
@@ -184,6 +186,8 @@
   const toasts = new ToastsState();
   const remotes = new RemotesState();
   const stashes = new StashesState();
+  const startPage = new StartState();
+  let showStart = $state(false);
   let showRemotes = $state<{ focus: string | null } | null>(null);
   const activity = new ActivityState();
   const experimental = new ExperimentalState();
@@ -1108,8 +1112,10 @@
   async function start() {
     await tabs.refresh();
     const requested = await initialRepo();
+    // `.` means nothing was asked for. Opening it would open whatever directory the process
+    // happens to have been launched from, which on a packaged application is somebody's home
+    // or the root of the disk; the start page is the honest answer to "nothing yet".
     if (requested !== '.') await tabs.open(requested);
-    else if (!tabs.active && tabs.session.tabs.length === 0) await tabs.open(requested);
     // The effect below loads whatever ends up active; loading here as well would walk the
     // graph twice on launch, which on a large repository is two five-second walks.
   }
@@ -1233,9 +1239,29 @@
     return () => void stop.then((off) => off());
   });
 
-  async function openAnother() {
-    const path = await pickRepository();
-    if (path) await tabs.open(path);
+  /**
+   * The start page, which is what a new tab is.
+   *
+   * It used to be a directory picker, which is fine when the repository is already on the
+   * machine and no help at all when it is not. Opening, cloning and creating are the three
+   * ways to arrive at one, and this is where they are.
+   */
+  function openAnother() {
+    showStart = true;
+  }
+
+  /*
+   * The page reads what it shows when it appears, whether it was asked for or is simply what
+   * is left when nothing is open.
+   */
+  $effect(() => {
+    if (showStart || tabs.session.tabs.length === 0) void startPage.load();
+  });
+
+  /** Opens a repository from the start page, and puts the page away. */
+  async function openFromStart(path: string) {
+    showStart = false;
+    await tabs.open(path);
   }
 
   /**
@@ -1598,6 +1624,20 @@
 
 <main>
   <header>
+    <!-- The application's own mark, the same one the icon carries: one commit and the two
+         branches that leave it. -->
+    <svg class="logo" viewBox="0 0 512 512" width="18" height="18" aria-hidden="true">
+      <g fill="none" stroke="currentColor" stroke-width="52" stroke-linecap="round">
+        <path d="M256 392 L256 300" />
+        <path d="M256 300 Q256 212 152 172" />
+        <path d="M256 300 Q256 212 360 172" />
+      </g>
+      <g fill="currentColor">
+        <circle cx="256" cy="396" r="52" />
+        <circle cx="152" cy="164" r="52" />
+        <circle cx="360" cy="164" r="52" />
+      </g>
+    </svg>
     <h1>Coral</h1>
     {#if info}
       <span class="path mono" title={info.path}>{elidePath(info.path, 64)}</span>
@@ -1626,7 +1666,7 @@
 
   <TabBar {tabs} onOpen={openAnother} onAsk={askText} />
 
-  {#if info}
+  {#if info && !showStart}
     <Toolbar
       repo={TabsState.title(tabs.active ?? { id: 0, path: info.path, submodule: null, group: null, missing: false })}
       submodule={tabs.active?.submodule ?? null}
@@ -1672,7 +1712,20 @@
     <Activity {activity} onClose={() => (showActivity = false)} />
   {/if}
 
-  {#if graph.loading && !graph.frame}
+  <!--
+    Shown when asked for, and whenever there is nothing else to show. It takes the place of the
+    workspace rather than covering the window, so the tab bar it was reached from is still
+    there — and a window with no repository in it is no longer an empty grey rectangle that
+    says nothing about what to do next.
+  -->
+  {#if showStart || tabs.session.tabs.length === 0}
+    <Start
+      start={startPage}
+      onOpen={(path) => void openFromStart(path)}
+      onPickDirectory={pickDirectory}
+      onClose={tabs.session.tabs.length === 0 ? null : () => (showStart = false)}
+    />
+  {:else if graph.loading && !graph.frame}
     <Splash
       repo={loadedPath.split('/').filter(Boolean).at(-1) ?? loadedPath}
       path={loadedPath}
@@ -2003,6 +2056,7 @@
 <style>
   :root { --refs-col: 190px; --graph-col: 170px; }
   main { display: flex; flex-direction: column; height: 100%; }
+  .logo { flex: 0 0 auto; color: var(--accent); }
   header {
     display: flex; align-items: center; gap: var(--space-3);
     height: 44px; box-sizing: border-box; padding: 0 var(--space-4);
