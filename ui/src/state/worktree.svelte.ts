@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { commitStaged, repoStatus, stagePaths } from '../ipc/commands';
 
 import type { Status, StatusEntry } from '../ipc/types';
 
@@ -35,18 +35,18 @@ export class WorktreeState {
 
   async load(path: string): Promise<void> {
     this.#path = path;
-    await this.#run(() => invoke<Status>('repo_status', { path }));
+    await this.#run(() => repoStatus(path));
   }
 
   async stage(paths: string[], stage: boolean): Promise<void> {
     if (paths.length === 0) return;
-    await this.#run(() => invoke<Status>('stage_paths', { path: this.#path, paths, stage }));
+    await this.#run(() => stagePaths(this.#path, paths, stage));
   }
 
   async commit(message: string, amend = false): Promise<void> {
     if (message.trim().length === 0) return;
     await this.#run(() =>
-      invoke<Status>('commit_staged', { path: this.#path, message, amend }),
+      commitStaged(this.#path, message, amend),
     );
   }
 

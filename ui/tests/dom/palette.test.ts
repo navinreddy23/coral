@@ -4,6 +4,7 @@ import { fireEvent } from '@testing-library/dom';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
+vi.mock('../../src/ipc/invoke', () => ({ invoke: vi.fn() }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 
 import Palette, { type Command } from '../../src/app/Palette.svelte';

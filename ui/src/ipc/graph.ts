@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from './invoke';
 
 import { decodeFrame, type Frame } from '../graph/frame';
 import type { CommitMeta } from './types';

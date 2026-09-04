@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { commitDetail } from '../ipc/commands';
 
 import type { CommitDetail } from '../ipc/types';
 
@@ -31,7 +31,7 @@ export class SelectionState {
     // otherwise a slow earlier one lands last and shows the wrong commit.
     const token = ++this.#token;
     try {
-      const detail = await invoke<CommitDetail>('commit_detail', { path, rev: oid });
+      const detail = await commitDetail(path, oid);
       if (token === this.#token) this.detail = detail;
     } catch (e) {
       if (token === this.#token) {

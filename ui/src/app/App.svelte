@@ -16,6 +16,7 @@
   import Palette, { type Command } from './Palette.svelte';
   import StatusBar from './StatusBar.svelte';
   import Ask, { type Choice } from './Ask.svelte';
+  import { elidePath } from './path';
   import type { Action } from '../ipc/commands';
   import {
     DEFAULT_METRICS,
@@ -119,6 +120,8 @@
   let error = $state<string | null>(null);
   let scrollTop = $state(0);
   let viewport = $state(600);
+  /** Width of the graph pane, which is what decides whether a body preview has room. */
+  let paneWidth = $state(0);
   const panes = new PanesState();
   const diff = new DiffState();
   const actions = new ActionsState();
@@ -401,6 +404,17 @@
     await tabs.open(`${parent.replace(/\/+$/u, '')}/${relative}`);
   }
 
+  /**
+   * Whether there is room for the dimmed body preview after the summary.
+   *
+   * Decided here rather than with a container query: `container-type` collapses the message
+   * cell of the WIP row, which is a button, and the row loses its text entirely. Three
+   * characters of a continuation is noise anyway — below this the summary takes the width.
+   */
+  const showBody = $derived(
+    paneWidth - panes.widths.refs - panes.widths.graph > 560,
+  );
+
   /** Rows currently worth putting in the DOM. Never the whole graph. */
   function windowRows(frame: Frame | null): number[] {
     if (!frame) return [];
@@ -482,7 +496,7 @@
   <header>
     <h1>Coral</h1>
     {#if info}
-      <span class="path mono" title={info.path}>{info.path}</span>
+      <span class="path mono" title={info.path}>{elidePath(info.path, 64)}</span>
       {#if graph.provisional}
         <span class="chip warn" title="Commit-time order, being replaced by the topological walk">
           provisional order
@@ -564,6 +578,7 @@
       bind:this={scroller}
       onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}
       bind:clientHeight={viewport}
+      bind:clientWidth={paneWidth}
     >
       <div class="columns">
         <span class="col refs">
@@ -644,7 +659,9 @@
               <span class="cell graph-col"></span>
               <span class="cell message">
                 <span class="summary">{graph.meta.get(row)?.summary ?? ''}</span>
-                <span class="detail">{flatten(graph.meta.get(row)?.body ?? '')}</span>
+                {#if showBody}
+                  <span class="detail">{flatten(graph.meta.get(row)?.body ?? '')}</span>
+                {/if}
                 {#if local !== null}
                   <span class="age">{when(graph.frame.times[local] ?? 0)}</span>
                   <span class="sha mono">{oidOf(graph.frame, local).slice(0, 8)}</span>
@@ -730,12 +747,11 @@
     font-size: 14px; font-weight: 700; margin: 0; color: var(--accent);
     letter-spacing: 0.01em;
   }
-  /* The path shrinks from the left, so the directory that identifies the repository — the
-     last segment — is the part that survives a narrow window. */
+  /* Shortened in script, not by `direction: rtl`: see `elidePath` for why that trick draws
+     `/home/x` as `home/x/`. */
   .path {
     flex: 1; min-width: 0; color: var(--fg-2); font-size: 12px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl;
-    text-align: left;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .chip {
     font-size: 11px; padding: 1px var(--space-2); border-radius: 999px;
@@ -877,15 +893,28 @@
   /* The summary takes its natural width and the dimmed body absorbs what is left. Letting
      both shrink equally gave the body most of the row, so summaries were cut to a few
      characters while their continuation ran on — the wrong half was being kept. */
+  /*
+   * The summary takes its natural width and the body absorbs what is left. No percentage cap:
+   * a percentage resolves against a containing block whose width is not obvious inside a grid
+   * cell inside a button, and it cost the WIP row most of its text.
+   *
+   * The body has a zero basis, so it can never be the reason the summary has to shrink; it
+   * only ever grows into space nothing else wanted. That is what stops the continuation
+   * winning the row from the summary it continues.
+   */
   .summary {
-    flex: 0 1 auto; min-width: 4em; max-width: 62%; color: var(--fg-0);
+    flex: 0 1 auto; min-width: 0; color: var(--fg-0);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .detail {
     flex: 1 1 0; min-width: 0; color: var(--fg-2);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .age { flex: 0 0 3.5em; color: var(--fg-2); text-align: right; font-size: 11px; }
+  /* Pushed to the trailing edge, so the two columns line up down the list whatever the
+     summary before them happens to be. */
+  .age {
+    flex: 0 0 auto; margin-left: auto; color: var(--fg-2); text-align: right; font-size: 11px;
+  }
   /*
    * The object id, set apart rather than just dimmed: it is the one field on the row nobody
    * reads as prose, and a tinted plate says so faster than a lighter grey does.

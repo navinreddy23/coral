@@ -1,14 +1,17 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from './invoke';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import type { Session } from '../state/tabs.svelte';
 import type {
   Blocks,
+  CommitDetail,
   Todo,
   ConflictedFile,
   FileDiff,
   GitRef,
   Operation,
   OpOutcome,
+  Status,
   Submodule,
   RepoInfo,
 } from './types';
@@ -199,4 +202,36 @@ export function rebaseTodo(path: string, onto: string): Promise<Todo> {
 /** Runs an interactive rebase against a todo the user has decided. */
 export function rebaseStart(path: string, onto: string, todo: Todo): Promise<ActionOutcome> {
   return invoke<ActionOutcome>('rebase_start', { path, onto, todo });
+}
+
+/* The tab session. Every one of these answers with the whole session, so the caller replaces
+   what it holds rather than trying to apply a change to it. */
+export const session = {
+  get: (): Promise<Session> => invoke<Session>('session_get'),
+  open: (path: string): Promise<Session> => invoke<Session>('tab_open', { path }),
+  close: (id: number): Promise<Session> => invoke<Session>('tab_close', { id }),
+  activate: (id: number): Promise<Session> => invoke<Session>('tab_activate', { id }),
+  group: (name: string, ids: number[]): Promise<Session> =>
+    invoke<Session>('tab_group', { name, ids }),
+  ungroup: (id: number): Promise<Session> => invoke<Session>('tab_ungroup', { id }),
+  collapse: (id: number, collapsed: boolean): Promise<Session> =>
+    invoke<Session>('group_collapse', { id, collapsed }),
+};
+
+/** The worktree, and the two things that change it. */
+export function repoStatus(path: string): Promise<Status> {
+  return invoke<Status>('repo_status', { path });
+}
+
+export function stagePaths(path: string, paths: string[], stage: boolean): Promise<Status> {
+  return invoke<Status>('stage_paths', { path, paths, stage });
+}
+
+export function commitStaged(path: string, message: string, amend: boolean): Promise<Status> {
+  return invoke<Status>('commit_staged', { path, message, amend });
+}
+
+/** Everything the detail panel shows for one commit. */
+export function commitDetail(path: string, rev: string): Promise<CommitDetail> {
+  return invoke<CommitDetail>('commit_detail', { path, rev });
 }

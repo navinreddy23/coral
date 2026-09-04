@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { elidePath } from './path';
   import type { MergeState, Side } from '../state/merge.svelte';
 
   const { merge, onDone }: { merge: MergeState; onDone: () => void } = $props();
@@ -73,7 +74,7 @@
               : `${file.path} — binary or deleted on one side, so only a whole-file choice applies`}
             onclick={() => merge.open(file.path)}
           >
-            <span class="name">{file.path}</span>
+            <span class="name">{elidePath(file.path, 40)}</span>
             {#if !blockwise}<span class="tag">whole file</span>{/if}
           </button>
           <span class="wholesale">
@@ -104,7 +105,9 @@
       {:else}
         <div class="bar">
           <span class="path mono">{merge.active}</span>
-          <span class="muted">{merge.conflicts.length} regions</span>
+          <span class="muted">
+            {merge.conflicts.length} region{merge.conflicts.length === 1 ? '' : 's'}
+          </span>
           <span class="spacer"></span>
           <button onclick={() => merge.chooseAll('ours')}>All {labels.ours}</button>
           <button onclick={() => merge.chooseAll('theirs')}>All {labels.theirs}</button>
@@ -183,14 +186,21 @@
     width: 260px; flex: 0 0 auto; list-style: none; margin: 0; padding: var(--space-2) 0;
     overflow-y: auto; border-right: 1px solid var(--border); background: var(--bg-1);
   }
-  .files li { display: flex; align-items: center; gap: var(--space-1); padding: 0 var(--space-2); }
+  /* The path on its own line and the wholesale choices beneath it: side by side, two branch
+     names left the path about eighty pixels, which is not enough to tell two files apart. */
+  .files li {
+    display: flex; flex-direction: column; align-items: stretch; gap: 2px;
+    padding: var(--space-1) var(--space-2);
+  }
+  .files li + li { border-top: 1px solid var(--border); }
   .file {
     flex: 1; min-width: 0; text-align: left; border: 0; background: none;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .file.on { background: var(--accent-soft); color: var(--fg-0); }
   .tag { font-size: 10px; color: var(--fg-2); }
-  .wholesale { display: flex; gap: 2px; flex: 0 0 auto; }
+  .wholesale { display: flex; gap: 2px; flex: 0 0 auto; padding-left: var(--space-3); }
+  .wholesale button { font-size: 10px; padding: 0 var(--space-2); }
   .done { padding: var(--space-3); font-size: 12px; color: var(--fg-2); }
 
   .blocks { flex: 1; min-width: 0; overflow: auto; padding-bottom: var(--space-4); }

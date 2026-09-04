@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { session as ipc } from '../ipc/commands';
 
 export type GroupColour =
   | 'lane1' | 'lane2' | 'lane3' | 'lane4'
@@ -65,31 +65,31 @@ export class TabsState {
   }
 
   async refresh(): Promise<void> {
-    await this.#run(() => invoke<Session>('session_get'));
+    await this.#run(() => ipc.get());
   }
 
   async open(path: string): Promise<void> {
-    await this.#run(() => invoke<Session>('tab_open', { path }));
+    await this.#run(() => ipc.open(path));
   }
 
   async close(id: number): Promise<void> {
-    await this.#run(() => invoke<Session>('tab_close', { id }));
+    await this.#run(() => ipc.close(id));
   }
 
   async activate(id: number): Promise<void> {
-    await this.#run(() => invoke<Session>('tab_activate', { id }));
+    await this.#run(() => ipc.activate(id));
   }
 
   async group(name: string, ids: number[]): Promise<void> {
-    await this.#run(() => invoke<Session>('tab_group', { name, ids }));
+    await this.#run(() => ipc.group(name, ids));
   }
 
   async ungroup(id: number): Promise<void> {
-    await this.#run(() => invoke<Session>('tab_ungroup', { id }));
+    await this.#run(() => ipc.ungroup(id));
   }
 
   async setCollapsed(id: number, collapsed: boolean): Promise<void> {
-    await this.#run(() => invoke<Session>('group_collapse', { id, collapsed }));
+    await this.#run(() => ipc.collapse(id, collapsed));
   }
 
   async #run(action: () => Promise<Session>): Promise<void> {

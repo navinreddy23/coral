@@ -1,5 +1,6 @@
 <script lang="ts">
   import { splitRows } from '../diff/split';
+  import { elidePath } from './path';
   import type { DiffState } from '../state/diff.svelte';
 
   const { diff, onClose }: { diff: DiffState; onClose: () => void } = $props();
@@ -35,7 +36,7 @@
 
 <section class="diff">
   <header>
-    <span class="path mono" title={diff.path ?? ''}>{diff.path ?? ''}</span>
+    <span class="path mono" title={diff.path ?? ''}>{elidePath(diff.path ?? '', 72)}</span>
     {#if diff.file && !diff.file.binary}
       <span class="tally">
         <span class="added">+{diff.file.added ?? 0}</span>
@@ -118,8 +119,7 @@
   }
   .path {
     flex: 1; min-width: 0; font-size: 12px; color: var(--fg-0);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl;
-    text-align: left;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .tally { flex: 0 0 auto; font-size: 11px; display: flex; gap: var(--space-2); }
   .added { color: var(--ok); font-weight: 600; }

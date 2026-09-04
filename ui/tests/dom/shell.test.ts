@@ -20,6 +20,7 @@ const frameBytes = readFileSync(resolve(process.cwd(), 'tests/fixtures/frame.bin
 
 const invoke = vi.hoisted(() => vi.fn());
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
+vi.mock('../../src/ipc/invoke', () => ({ invoke }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 
 import App from '../../src/app/App.svelte';

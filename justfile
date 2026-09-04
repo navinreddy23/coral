@@ -39,6 +39,13 @@ ui-check:
         echo "ui build resolved Svelte's server entry; the window would open blank" >&2
         exit 1
     fi
+    # The browser fixtures must never reach a release. They are behind a branch the bundler
+    # compiles away, but a static import kept the module anyway and a build once shipped with
+    # invented commit messages in it. The name of a fixture author is the marker.
+    if grep -rql "Ada Lovelace" dist/assets; then
+        echo "ui build contains the preview fixtures" >&2
+        exit 1
+    fi
 
 # Fails if the generated bindings drift from the Rust types.
 bindings-drift: test
