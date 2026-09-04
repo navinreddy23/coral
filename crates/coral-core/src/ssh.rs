@@ -166,9 +166,15 @@ pub async fn generate(path: &Path, comment: &str, passphrase: &str) -> Result<Ss
         std::fs::create_dir_all(dir)?;
     }
 
-    let out = tokio::process::Command::new("ssh-keygen")
+    // Hidden the same way every git child is; on Windows a console subsystem child opens a
+    // window whether or not it writes to it.
+    let mut built = std::process::Command::new("ssh-keygen");
+    built
         .args(["-t", "ed25519", "-N", passphrase, "-C", comment, "-f"])
-        .arg(path)
+        .arg(path);
+    crate::process::hide_console(&mut built);
+
+    let out = tokio::process::Command::from(built)
         .output()
         .await
         .map_err(|e| CoralError::Refused {

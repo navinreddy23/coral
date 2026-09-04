@@ -456,12 +456,16 @@ async fn run(
 ) -> Result<Vec<u8>, CoralError> {
     use tokio::io::AsyncWriteExt as _;
 
-    let mut command = tokio::process::Command::new(program);
-    command
+    // Built as a std command so it can be hidden the same way every git child is, then handed
+    // to tokio: on Windows a console subsystem child opens a window whether or not it writes.
+    let mut built = std::process::Command::new(program);
+    built
         .args(args)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
+    crate::process::hide_console(&mut built);
+    let mut command = tokio::process::Command::from(built);
 
     let mut child = command.spawn().map_err(|e| CoralError::Protocol {
         label: "signing",

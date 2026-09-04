@@ -579,6 +579,7 @@ impl GitRunner {
             })
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        hide_console(&mut c);
         apply_env(&mut c);
         if matches!(cmd.class, GitClass::Network)
             && let Some((_, session)) = crate::credential::helper_config()
@@ -778,6 +779,26 @@ fn signal_of(status: std::process::ExitStatus) -> i32 {
 #[cfg(not(unix))]
 fn signal_of(_status: std::process::ExitStatus) -> i32 {
     0
+}
+
+/// Stops a child opening a console window of its own.
+///
+/// On Windows a process with a console subsystem gets one whether or not anything is written to
+/// it, and Coral runs git for everything it shows: opening a repository alone is a status, a
+/// ref listing and a graph walk, and the file watcher runs them again on every change. Without
+/// this the window is a stream of black rectangles appearing and vanishing.
+///
+/// `CREATE_NO_WINDOW` rather than `DETACHED_PROCESS`: the child keeps its standard handles,
+/// which are the pipes every one of these reads its answer from.
+pub fn hide_console(c: &mut std::process::Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt as _;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        c.creation_flags(CREATE_NO_WINDOW);
+    }
+    // Nothing to do anywhere else; the parameter is used only on Windows.
+    let _ = c;
 }
 
 /// Pins the locale so stderr fingerprinting is sound, and clears every git environment

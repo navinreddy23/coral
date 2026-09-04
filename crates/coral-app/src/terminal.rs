@@ -73,6 +73,35 @@ pub struct Spawned {
     pub shell: String,
 }
 
+/// Which shell to open when the caller names none.
+///
+/// `$SHELL` is a Unix convention and is unset on Windows, where the fallback was `/bin/sh` —
+/// a path that does not exist there, so the pane could not open at all. PowerShell is present
+/// on every supported Windows and is far more use to a git user than `cmd`, which is the last
+/// resort rather than the first.
+fn default_shell() -> String {
+    #[cfg(windows)]
+    {
+        for candidate in ["pwsh.exe", "powershell.exe"] {
+            if which(candidate) {
+                return candidate.to_owned();
+            }
+        }
+        return std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_owned());
+    }
+    #[cfg(not(windows))]
+    {
+        std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_owned())
+    }
+}
+
+/// Whether a program can be found on the PATH.
+#[cfg(windows)]
+fn which(program: &str) -> bool {
+    std::env::var_os("PATH")
+        .is_some_and(|path| std::env::split_paths(&path).any(|dir| dir.join(program).is_file()))
+}
+
 /// Starts the user's shell on a pseudo-terminal, in a directory.
 ///
 /// Separate from the command so it can be tested without a window: everything that decides how
@@ -97,15 +126,17 @@ pub fn spawn_shell(
         .openpty(size)
         .map_err(|e| protocol(format!("could not open a terminal: {e}")))?;
 
-    let shell = shell
-        .map(str::to_owned)
-        .or_else(|| std::env::var("SHELL").ok())
-        .unwrap_or_else(|| "/bin/sh".to_owned());
+    let shell = shell.map_or_else(default_shell, str::to_owned);
     let mut command = CommandBuilder::new(&shell);
     command.cwd(path);
     // An interactive shell, so the user's own prompt, aliases and completions are there.
     // Without it the shell reads none of its startup files and behaves like nobody's terminal.
-    command.arg("-i");
+    //
+    // Only a Unix shell takes this flag. `powershell -i` is not a switch it has, and cmd reads
+    // it as a command to run, so on Windows the pane would open on an error and exit.
+    if cfg!(not(windows)) {
+        command.arg("-i");
+    }
     // Everything git's own output decides from the environment. TERM must name a terminal
     // xterm.js can actually render, and COLORTERM is what makes git use 24-bit colour.
     command.env("TERM", "xterm-256color");
