@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Coral</title>
+  <!--
+    The mark is one commit and the two branches that leave it, which is also the shape coral
+    grows in. Three nodes and two edges and nothing else: an application icon is read at
+    sixteen pixels more often than at five hundred, and anything finer than this is a smudge
+    there.
+
+    Drawn here rather than fetched, so there is nobody to credit and nothing to license. The
+    PNG, ICO and ICNS beside it are generated from this file by `cargo tauri icon`.
+  -->
+  <defs>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#14a596" />
+      <stop offset="1" stop-color="#0a6157" />
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="112" ry="112" fill="url(#sea)" />
+
+  <g fill="none" stroke="#ffffff" stroke-width="44" stroke-linecap="round">
+    <path d="M256 392 L256 300" />
+    <path d="M256 300 Q256 212 152 172" />
+    <path d="M256 300 Q256 212 360 172" />
+  </g>
+  <g fill="#ffffff">
+    <circle cx="256" cy="396" r="46" />
+    <circle cx="152" cy="164" r="46" />
+    <circle cx="360" cy="164" r="46" />
+  </g>
+</svg>
