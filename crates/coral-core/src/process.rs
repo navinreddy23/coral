@@ -277,28 +277,158 @@ pub struct GitStream {
     pub stopped_early: bool,
 }
 
+/// Where a git installation is, when it is not simply `git` on `PATH`.
+///
+/// Not one file. git dispatches to helper programs in `libexec/git-core` and seeds a new
+/// repository from `share/git-core/templates`, and a copy carried somewhere unusual finds
+/// neither unless it is told where they are.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GitInstall {
+    /// The `git` binary to run.
+    pub program: PathBuf,
+    /// `libexec/git-core`, passed as `GIT_EXEC_PATH`.
+    pub exec_path: Option<PathBuf>,
+    /// `share/git-core/templates`, passed as `GIT_TEMPLATE_DIR`.
+    pub templates: Option<PathBuf>,
+}
+
+/// Names a git to use instead of the one on `PATH`: either the binary itself, or the prefix a
+/// full installation sits under.
+pub const GIT_VAR: &str = "CORAL_GIT";
+
+impl GitInstall {
+    /// Whatever `git` resolves to on `PATH`, with nothing else configured.
+    #[must_use]
+    pub fn on_path() -> Self {
+        Self {
+            program: PathBuf::from("git"),
+            exec_path: None,
+            templates: None,
+        }
+    }
+
+    /// The installation under `prefix`, or `None` when there is no git there.
+    ///
+    /// The layout is the one `make prefix=… install` produces, which is what the bundle is.
+    #[must_use]
+    pub fn at_prefix(prefix: &Path) -> Option<Self> {
+        let program = prefix.join("bin").join(git_binary());
+        if !program.is_file() {
+            return None;
+        }
+        Some(Self {
+            program,
+            exec_path: directory(prefix.join("libexec").join("git-core")),
+            templates: directory(prefix.join("share").join("git-core").join("templates")),
+        })
+    }
+
+    /// The git this build carries with it, if it carries one.
+    ///
+    /// `CORAL_GIT` wins, so a machine whose own git is too old can be pointed at a newer one
+    /// without rebuilding anything.
+    #[must_use]
+    pub fn bundled() -> Option<Self> {
+        if let Some(named) = std::env::var_os(GIT_VAR) {
+            let named = PathBuf::from(named);
+            if named.is_dir() {
+                return Self::at_prefix(&named);
+            }
+            if !named.is_file() {
+                return None;
+            }
+            return Some(Self {
+                program: named,
+                exec_path: None,
+                templates: None,
+            });
+        }
+        bundle_prefixes(
+            std::env::current_exe().ok().as_deref(),
+            std::env::var_os("APPDIR").map(PathBuf::from).as_deref(),
+        )
+        .iter()
+        .find_map(|prefix| Self::at_prefix(prefix))
+    }
+}
+
+/// Where a bundled git could be, given where this binary is and what packaged it.
+///
+/// Two layouts and no search. An `AppImage` says where it was mounted, and everything inside
+/// it is at a fixed place under that; anything unpacked from an archive keeps git beside the
+/// binary. Guessing more widely would mean a Coral that silently ran some other git.
+fn bundle_prefixes(exe: Option<&Path>, appdir: Option<&Path>) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    if let Some(appdir) = appdir {
+        out.push(appdir.join("usr").join("lib").join("coral").join("git"));
+    }
+    if let Some(dir) = exe.and_then(Path::parent) {
+        out.push(dir.join("git"));
+    }
+    out
+}
+
+const fn git_binary() -> &'static str {
+    if cfg!(windows) { "git.exe" } else { "git" }
+}
+
+fn directory(path: PathBuf) -> Option<PathBuf> {
+    path.is_dir().then_some(path)
+}
+
 /// Locates `git` once at startup, checks its version, and runs commands through it.
 #[derive(Clone, Debug)]
 pub struct GitRunner {
-    git: PathBuf,
+    git: GitInstall,
     version: GitVersion,
 }
 
 impl GitRunner {
-    /// Resolves git from `PATH` and enforces [`MIN_GIT`].
+    /// Resolves git and enforces [`MIN_GIT`].
+    ///
+    /// A git carried in the bundle is preferred to the one on `PATH`, since it is there
+    /// precisely because the machine's own may be too old. If it cannot be run at all the
+    /// search falls back rather than leaving the user with an application that does nothing:
+    /// a broken bundle is our fault, and `PATH` may still hold a git that works.
     ///
     /// # Errors
     /// [`CoralError::GitMissing`] if git cannot be spawned, [`CoralError::GitTooOld`] if it is
     /// older than [`MIN_GIT`].
     pub async fn discover() -> Result<Self, CoralError> {
-        Self::at(PathBuf::from("git")).await
+        let Some(bundled) = GitInstall::bundled() else {
+            return Self::install(GitInstall::on_path()).await;
+        };
+        match Self::install(bundled.clone()).await {
+            Ok(runner) => Ok(runner),
+            Err(e) => {
+                tracing::warn!(
+                    git = %bundled.program.display(),
+                    error = %e,
+                    "the git shipped with Coral could not be used; falling back to the one on PATH"
+                );
+                Self::install(GitInstall::on_path()).await
+            }
+        }
     }
 
-    /// Same as [`GitRunner::discover`] but for an explicitly configured git.
+    /// Same as [`GitRunner::discover`] but for an explicitly named git binary.
     ///
     /// # Errors
     /// As [`GitRunner::discover`].
     pub async fn at(git: PathBuf) -> Result<Self, CoralError> {
+        Self::install(GitInstall {
+            program: git,
+            exec_path: None,
+            templates: None,
+        })
+        .await
+    }
+
+    /// Same as [`GitRunner::discover`] but for an installation already located.
+    ///
+    /// # Errors
+    /// As [`GitRunner::discover`].
+    pub async fn install(git: GitInstall) -> Result<Self, CoralError> {
         let probe = Self {
             git,
             version: GitVersion {
@@ -334,6 +464,12 @@ impl GitRunner {
 
     #[must_use]
     pub fn path(&self) -> &Path {
+        &self.git.program
+    }
+
+    /// The whole installation, for anything that has to describe where git came from.
+    #[must_use]
+    pub const fn located(&self) -> &GitInstall {
         &self.git
     }
 
@@ -344,7 +480,7 @@ impl GitRunner {
     /// [`CoralError::GitSpawn`] if the child cannot start, [`CoralError::GitExit`] on a
     /// non-zero exit, [`CoralError::GitSignal`] if it was killed.
     pub async fn output(&self, cmd: GitCommand) -> Result<GitOutput, CoralError> {
-        let argv = cmd.redacted_argv(&self.git);
+        let argv = cmd.redacted_argv(&self.git.program);
         let mut child = self.spawn(&cmd, &argv)?;
 
         // stdin is written on its own task rather than before reading stdout. Writing it all
@@ -392,7 +528,7 @@ impl GitRunner {
     {
         use tokio::io::AsyncReadExt;
 
-        let argv = cmd.redacted_argv(&self.git);
+        let argv = cmd.redacted_argv(&self.git.program);
         let mut child = self.spawn(&cmd, &argv)?;
         let Some(mut out) = child.stdout.take() else {
             return Err(CoralError::Protocol {
@@ -509,7 +645,7 @@ impl GitRunner {
     {
         use tokio::io::AsyncReadExt;
 
-        let argv = cmd.redacted_argv(&self.git);
+        let argv = cmd.redacted_argv(&self.git.program);
         let mut child = self.spawn(&cmd, &argv)?;
         let (Some(mut out), Some(mut err)) = (child.stdout.take(), child.stderr.take()) else {
             return Err(CoralError::Protocol {
@@ -569,7 +705,7 @@ impl GitRunner {
         })
     }
     fn std_command(&self, cmd: &GitCommand) -> std::process::Command {
-        let mut c = std::process::Command::new(&self.git);
+        let mut c = std::process::Command::new(&self.git.program);
         c.args(cmd.base_args())
             .args(&cmd.args)
             .stdin(if cmd.stdin.is_some() {
@@ -581,6 +717,16 @@ impl GitRunner {
             .stderr(Stdio::piped());
         hide_console(&mut c);
         apply_env(&mut c);
+        // A git that is not the system's has to be told where its own helpers and templates
+        // are; one that is must not inherit someone else's answer to the same question.
+        match &self.git.exec_path {
+            Some(path) => c.env("GIT_EXEC_PATH", path),
+            None => c.env_remove("GIT_EXEC_PATH"),
+        };
+        match &self.git.templates {
+            Some(path) => c.env("GIT_TEMPLATE_DIR", path),
+            None => c.env_remove("GIT_TEMPLATE_DIR"),
+        };
         if matches!(cmd.class, GitClass::Network)
             && let Some((_, session)) = crate::credential::helper_config()
         {
@@ -611,7 +757,7 @@ impl GitRunner {
     {
         use std::io::Read;
 
-        let argv = cmd.redacted_argv(&self.git);
+        let argv = cmd.redacted_argv(&self.git.program);
         let mut child = self
             .std_command(cmd)
             .spawn()
@@ -838,6 +984,88 @@ fn apply_env(c: &mut std::process::Command) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A prefix laid out the way `make prefix=… install` lays one out.
+    fn fake_install(root: &Path, with_extras: bool) -> PathBuf {
+        let prefix = root.join("git");
+        std::fs::create_dir_all(prefix.join("bin")).unwrap();
+        std::fs::write(prefix.join("bin").join(git_binary()), b"#!/bin/sh\n").unwrap();
+        if with_extras {
+            std::fs::create_dir_all(prefix.join("libexec").join("git-core")).unwrap();
+            std::fs::create_dir_all(prefix.join("share").join("git-core").join("templates"))
+                .unwrap();
+        }
+        prefix
+    }
+
+    #[test]
+    fn reads_a_prefix_as_a_whole_installation() {
+        // The helpers and the templates matter as much as the binary: without `GIT_EXEC_PATH`
+        // a git carried somewhere unusual cannot find `git-remote-https`, and every fetch over
+        // https fails with a message about an unsupported protocol.
+        let root = tempfile::tempdir().unwrap();
+        let prefix = fake_install(root.path(), true);
+
+        let found = GitInstall::at_prefix(&prefix).expect("a prefix with a git in it");
+        assert_eq!(found.program, prefix.join("bin").join(git_binary()));
+        assert_eq!(
+            found.exec_path,
+            Some(prefix.join("libexec").join("git-core"))
+        );
+        assert_eq!(
+            found.templates,
+            Some(prefix.join("share").join("git-core").join("templates"))
+        );
+    }
+
+    #[test]
+    fn a_prefix_without_the_extras_still_names_the_binary() {
+        let root = tempfile::tempdir().unwrap();
+        let prefix = fake_install(root.path(), false);
+
+        let found = GitInstall::at_prefix(&prefix).expect("a prefix with a git in it");
+        assert_eq!(found.exec_path, None);
+        assert_eq!(found.templates, None);
+    }
+
+    #[test]
+    fn a_directory_with_no_git_in_it_is_not_an_installation() {
+        let root = tempfile::tempdir().unwrap();
+        assert_eq!(GitInstall::at_prefix(root.path()), None);
+        assert_eq!(GitInstall::at_prefix(&root.path().join("nowhere")), None);
+    }
+
+    #[test]
+    fn looks_where_the_two_packagings_put_it_and_nowhere_else() {
+        // Two fixed places, not a search. A Coral that hunted for a git would eventually find
+        // one that is not the one it shipped, and the user would have no way to tell.
+        let exe = PathBuf::from("/opt/coral/bin/coral-app");
+        let appdir = PathBuf::from("/tmp/.mount_Coral");
+
+        let both = bundle_prefixes(Some(&exe), Some(&appdir));
+        assert_eq!(
+            both,
+            vec![
+                PathBuf::from("/tmp/.mount_Coral/usr/lib/coral/git"),
+                PathBuf::from("/opt/coral/bin/git"),
+            ]
+        );
+        // The AppImage's answer comes first, because inside one both are true and only that
+        // one is the copy this build shipped.
+        assert_eq!(bundle_prefixes(None, Some(&appdir)).len(), 1);
+        assert_eq!(bundle_prefixes(Some(&exe), None).len(), 1);
+        assert!(bundle_prefixes(None, None).is_empty());
+    }
+
+    #[test]
+    fn on_path_asks_for_nothing_in_particular() {
+        // The system's git knows where its own helpers are, and telling it would only be a way
+        // of getting it wrong.
+        let plain = GitInstall::on_path();
+        assert_eq!(plain.program, PathBuf::from("git"));
+        assert_eq!(plain.exec_path, None);
+        assert_eq!(plain.templates, None);
+    }
 
     #[test]
     fn parses_plain_and_vendor_versions() {
