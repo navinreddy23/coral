@@ -53,8 +53,31 @@ export class DiffState {
       staged ? 'staged' : 'unstaged',
       path,
       () => worktreeDiff(repo, staged, path),
-      staged ? 'Nothing is staged for that file.' : 'That file has no unstaged changes.',
+      absent(staged),
     );
+  }
+
+  /**
+   * Re-reads the working-tree diff on screen, for a file that changed underneath it.
+   *
+   * Keeps what is showing until the new answer arrives, unlike opening one: this runs whenever
+   * the working tree moves, and blanking the panel first would make an editor's autosave flash
+   * it. A commit's diff is not re-read, because a commit does not change.
+   */
+  async reload(repo: string): Promise<void> {
+    const path = this.path;
+    if (path === null || this.source === 'commit') return;
+    const staged = this.source === 'staged';
+    const token = ++this.#token;
+    try {
+      const got = await worktreeDiff(repo, staged, path);
+      if (token !== this.#token) return;
+      this.file = got;
+      this.error = got === null ? absent(staged) : null;
+    } catch (e) {
+      if (token !== this.#token) return;
+      this.error = messageOf(e);
+    }
   }
 
   async #load(
@@ -91,4 +114,9 @@ export class DiffState {
     this.loading = false;
     this.source = 'commit';
   }
+}
+
+/** What to say when the side being shown has nothing in it for that file. */
+function absent(staged: boolean): string {
+  return staged ? 'Nothing is staged for that file.' : 'That file has no unstaged changes.';
 }
