@@ -414,15 +414,16 @@
     border-radius: var(--radius-1) var(--radius-1) 0 0; background: transparent;
   }
   /*
-   * The active tab is the page continuing upward: same surface, and a line of accent along
-   * its top edge. Its own bottom border is covered by the bar's, which is what joins it to
-   * the window below rather than leaving it floating in the strip.
+   * The active tab is filled, not underlined.
+   *
+   * A two-pixel line along the top edge is what the reference used to do and it is easy to
+   * lose: with a dozen tabs open, all the same shade, finding which one is showing meant
+   * reading them. A solid fill is findable without reading anything.
    */
-  .tab.active { background: var(--bg-0); }
-  .tab.active::before {
-    content: ''; position: absolute; inset: 0 0 auto; height: 2px;
-    background: var(--accent); border-radius: var(--radius-1) var(--radius-1) 0 0;
-  }
+  .tab.active, .tab.active .pick, .tab.active .shut { background: var(--accent); }
+  .tab.active .pick { color: var(--accent-fg); font-weight: 600; }
+  .tab.active .shut { color: var(--accent-fg); }
+  .tab.active .shut:hover { background: var(--accent-line); }
   .tab:hover:not(.active) { background: var(--bg-3); }
   .tab.dragging { opacity: 0.4; }
   /* Where it would land, drawn as an insertion line down the tab's leading edge rather than a
@@ -437,14 +438,13 @@
     font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap;
     max-width: 14em; overflow: hidden; text-overflow: ellipsis;
     padding: var(--space-2) var(--space-1) var(--space-2) var(--space-3);
-    background: none; border: 0; color: var(--fg-1);
+    background: var(--bg-2); border: 0; color: var(--fg-1);
   }
-  .tab.active .pick { color: var(--fg-0); }
   /* The close button appears on the tab being pointed at, and on the active one always: a row
      of crosses is noise, and a tab with no visible way to close it is a trap. */
   .shut {
     font: inherit; cursor: pointer; padding: 0 var(--space-2);
-    background: none; border: 0; color: var(--fg-2); align-self: stretch;
+    background: var(--bg-2); border: 0; color: var(--fg-2); align-self: stretch;
     visibility: hidden;
   }
   .tab:hover .shut, .tab.active .shut { visibility: visible; }
@@ -453,7 +453,7 @@
   .add {
     font: inherit; font-size: 15px; line-height: 1; cursor: pointer; align-self: center;
     padding: 3px var(--space-2); margin-left: var(--space-1);
-    background: none; border: 0; border-radius: var(--radius-1); color: var(--fg-2);
+    background: var(--bg-2); border: 0; border-radius: var(--radius-1); color: var(--fg-2);
   }
   .add:hover { color: var(--fg-0); background: var(--bg-3); }
   .error { align-self: center; color: var(--danger); font-size: 11px; }
@@ -501,7 +501,7 @@
     display: flex; align-items: center; gap: var(--space-2);
     flex: 1; min-width: 0; text-align: left; font: inherit; font-size: 12px;
     padding: var(--space-2); border-radius: var(--radius-1); cursor: pointer;
-    background: none; border: 0; color: var(--fg-0);
+    background: var(--bg-2); border: 0; color: var(--fg-0);
   }
   .hit:hover { background: var(--bg-2); }
   .hit.active { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent-line); }
@@ -519,7 +519,7 @@
   }
   .drop {
     flex: 0 0 auto; font: inherit; font-size: 14px; line-height: 1; cursor: pointer;
-    padding: 0 var(--space-2); background: none; border: 0; color: var(--fg-2);
+    padding: 0 var(--space-2); background: var(--bg-2); border: 0; color: var(--fg-2);
   }
   .drop:hover { color: var(--danger); }
   .none { padding: var(--space-3); color: var(--fg-2); font-size: 12px; }
