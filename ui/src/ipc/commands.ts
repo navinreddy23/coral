@@ -22,6 +22,7 @@ import type {
   SshScopes,
   Status,
   Submodule,
+  SubmoduleRevision,
   Remote,
   RepoInfo,
 } from './types';
@@ -86,6 +87,19 @@ export function repoSubmodules(path: string): Promise<Submodule[]> {
 }
 
 /**
+ * The commit a submodule is pinned at, described.
+ *
+ * Read from inside the submodule, because that is the only place the message lives: the
+ * superproject records an object id and nothing else. Null when it has no working copy.
+ */
+export function submoduleRevision(
+  path: string,
+  submodule: string,
+): Promise<SubmoduleRevision | null> {
+  return invoke<SubmoduleRevision | null>('submodule_revision', { path, submodule });
+}
+
+/**
  * Hunks for one file in one commit, or null when the commit did not touch it.
  *
  * One file at a time: a large merge touches thousands, and their patches together are far
@@ -93,6 +107,21 @@ export function repoSubmodules(path: string): Promise<Submodule[]> {
  */
 export function fileDiff(path: string, rev: string, file: string): Promise<FileDiff | null> {
   return invoke<FileDiff | null>('file_diff', { path, rev, file });
+}
+
+/**
+ * One file's diff in the working tree, staged or not.
+ *
+ * A different question from `fileDiff`: that asks what a commit changed, this what has changed
+ * since. A file can be in both answers with different hunks, which is why the staging panel has
+ * two lists.
+ */
+export function worktreeDiff(
+  path: string,
+  staged: boolean,
+  file: string,
+): Promise<FileDiff | null> {
+  return invoke<FileDiff | null>('worktree_diff', { path, staged, file });
 }
 
 /**
@@ -120,7 +149,9 @@ export type Action =
   | { kind: 'reset'; rev: string; mode: 'soft' | 'mixed' | 'hard' }
   | { kind: 'rewrite'; rev: string; how: RewriteKind; message: string | null }
   | { kind: 'worktreeAdd'; path: string; rev: string; branch: string | null }
-  | { kind: 'submoduleInit'; path: string | null; recursive: boolean }
+  | { kind: 'submoduleInit'; path: string | null; recursive: boolean; remote: boolean }
+  | { kind: 'submoduleSetUrl'; path: string; url: string }
+  | { kind: 'submoduleRemove'; path: string; force: boolean }
   | { kind: 'patch'; rev: string; directory: string }
   | { kind: 'undo' }
   | { kind: 'redo' };

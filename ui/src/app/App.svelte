@@ -18,9 +18,11 @@
   import Ask, { type Choice } from './Ask.svelte';
   import Preferences from './Preferences.svelte';
   import Menu, { type MenuItem } from './Menu.svelte';
+  import HostMark, { hostOf } from './HostMark.svelte';
   import Toasts from './Toasts.svelte';
   import Splash from './Splash.svelte';
   import Remotes from './Remotes.svelte';
+  import SubmodulePanel from './Submodule.svelte';
   import { RemotesState } from '../state/remotes.svelte';
   import { describe, ToastsState } from '../state/toasts.svelte';
   import { copyText } from './clipboard';
@@ -49,13 +51,18 @@
   import Details from './Details.svelte';
   import Sidebar from './Sidebar.svelte';
   import { TabsState } from '../state/tabs.svelte';
+  import { ViewsState } from '../state/views.svelte';
   import { isTextTarget, resolve, tabJump } from '../state/shortcuts';
   import Shortcuts from './Shortcuts.svelte';
   import TabBar from './TabBar.svelte';
   import Toolbar from './Toolbar.svelte';
-  import type { RepoInfo } from '../ipc/types';
+  import type { RepoInfo, Submodule, SubmoduleRevision } from '../ipc/types';
+  import { submoduleRevision } from '../ipc/commands';
   import type { PlacedRef } from '../state/refs.svelte';
 
+  // Every remembered view choice lives here, so a toggle is a preference rather than a mode
+  // the window forgets on the next launch.
+  const views = new ViewsState();
   const graph = new GraphState();
   const theme = new ThemeState();
   const refs = new RefsState();
@@ -64,8 +71,6 @@
   let showWip = $state(false);
   const tabs = new TabsState();
   let showHelp = $state(false);
-  let showSidebar = $state(true);
-  let showDetails = $state(true);
 
   /** Which shortcuts actually do something today; the help overlay dims the rest. */
   const LIVE = new Set([
@@ -114,8 +119,8 @@
       case 'tab.close': if (tabs.active) void tabs.close(tabs.active.id); break;
       case 'tab.next': cycleTab(1); break;
       case 'tab.previous': cycleTab(-1); break;
-      case 'panel.left': showSidebar = !showSidebar; break;
-      case 'panel.detail': showDetails = !showDetails; break;
+      case 'panel.left': views.set('sidebar', !views.current.sidebar); break;
+      case 'panel.detail': views.set('details', !views.current.details); break;
       case 'help': showHelp = !showHelp; break;
       case 'palette': showPalette = !showPalette; break;
       case 'terminal': terminal.toggle(); break;
@@ -138,7 +143,7 @@
   /** Width of the graph pane, which is what decides whether a body preview has room. */
   let paneWidth = $state(0);
   const panes = new PanesState();
-  const diff = new DiffState();
+  const diff = new DiffState(views);
   const actions = new ActionsState();
   const merge = new MergeState();
   const hosting = new HostingState();
@@ -148,10 +153,13 @@
   const toasts = new ToastsState();
   const remotes = new RemotesState();
   let showRemotes = $state<{ focus: string | null } | null>(null);
+  /** The submodule whose panel is open, and its recorded commit once that has been read. */
+  let showSubmodule = $state<Submodule | null>(null);
+  let submoduleAt = $state<SubmoduleRevision | null>(null);
   /** The context menu on screen, if any. */
   let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   let showPrefs = $state(false);
-  const terminal = new TerminalState();
+  const terminal = new TerminalState(views);
   let showPalette = $state(false);
 
   /**
@@ -601,6 +609,12 @@
     }
   }
 
+  /** Opens a working-tree file's diff, from whichever half of the panel it was clicked in. */
+  function openWorkingFile(file: string, staged: boolean) {
+    if (!info) return;
+    void diff.openWorking(info.path, staged, file);
+  }
+
   /** Opens one of the selected commit's files in the diff viewer. */
   function openFile(file: string) {
     const rev = selection.detail?.commit.oid;
@@ -731,8 +745,22 @@
     if (info) void worktree.load(info.path);
   }
 
-  /** What the WIP row summarises: how many files are waiting, staged or not. */
-  const wipCount = $derived(worktree.status?.entries.length ?? 0);
+  /**
+   * What the WIP row summarises: how many files are waiting, by kind.
+   *
+   * Split into edits and additions rather than one total, as the reference does — nine new
+   * files and nine changed ones are very different amounts of work to review.
+   */
+  const wip = $derived.by(() => {
+    let edits = 0;
+    let adds = 0;
+    for (const entry of worktree.status?.entries ?? []) {
+      const change = entry.index !== 'unmodified' ? entry.index : entry.worktree;
+      if (change === 'added' || change === 'untracked') adds += 1;
+      else edits += 1;
+    }
+    return { edits, adds };
+  });
 
   /** Scrolls a row into view, used when a ref is picked in the sidebar. */
   /**
@@ -835,6 +863,8 @@
     actions.clear();
     menu = null;
     showRemotes = null;
+    showSubmodule = null;
+    submoduleAt = null;
     showWip = false;
     scrollTop = 0;
     if (scroller) scroller.scrollTop = 0;
@@ -937,32 +967,153 @@
   async function openSubmodule(relative: string) {
     const tab = tabs.active;
     if (!tab) return;
-    // A submodule that has never been checked out has nothing to open; offering to fetch one
-    // is more use than a row that does nothing when clicked.
+    // One that has never been checked out has nothing to open; the menu offers to fetch it.
     const known = refs.submodules.find((s) => s.path === relative);
     if (known && !known.initialised) {
-      await initSubmodule(relative);
+      await initSubmodule(relative, false);
       return;
     }
     if (tab.submodule === relative) await tabs.leaveSubmodule(tab.id);
     else await tabs.enterSubmodule(tab.id, relative);
   }
 
-  /** Fetches a working copy for one submodule, or for all of them when `relative` is null. */
-  async function initSubmodule(relative: string | null) {
+  /**
+   * Updates one submodule, or all of them when `relative` is null.
+   *
+   * `remote` is a different operation, not a variation: without it the working copy moves to
+   * the commit the superproject records, with it git fetches the configured branch and moves
+   * to its tip — which changes what the superproject will record next.
+   */
+  async function initSubmodule(relative: string | null, remote: boolean) {
     if (!info) return;
+    const what = relative ?? 'every submodule';
     const { choice } = await ask({
-      title: relative === null ? 'Fetch every missing submodule?' : `Fetch ${relative}?`,
-      detail:
-        'Its working copy is cloned from the URL the repository records, at the commit it ' +
-        'points to. This reaches the network.',
+      title: remote ? `Update ${what} to its branch tip?` : `Update ${what}?`,
+      detail: remote
+        ? 'git fetches the configured branch and checks out its tip. That is a change the ' +
+          'repository will record on the next commit.'
+        : 'The working copy is cloned or moved to the commit the repository records. This ' +
+          'reaches the network.',
       placeholder: '',
       initial: '',
-      choices: [{ id: 'go', label: 'Fetch it', primary: true }],
+      choices: [{ id: 'go', label: 'Update it', primary: true }],
     });
     if (choice === null) return;
-    await act({ kind: 'submoduleInit', path: relative, recursive: false });
+    await act({ kind: 'submoduleInit', path: relative, recursive: false, remote });
     await refs.load(info.path);
+    await refreshSubmodule();
+  }
+
+  /**
+   * What the dots beside a submodule offer, and what a right-click on its row does.
+   *
+   * The row itself is not a control. Opening a submodule is one of four things that can be
+   * done with it, and making it the one a click performs leaves the other three hidden.
+   */
+  function submoduleMenu(event: MouseEvent, submodule: Submodule) {
+    event.preventDefault();
+    event.stopPropagation();
+    const at = event.currentTarget instanceof HTMLElement
+      ? event.currentTarget.getBoundingClientRect()
+      : null;
+    menu = {
+      x: at && event.type === 'click' ? at.right : event.clientX,
+      y: at && event.type === 'click' ? at.bottom + 2 : event.clientY,
+      items: [
+        {
+          kind: 'item',
+          label: 'Edit this submodule…',
+          run: () => void openSubmodulePanel(submodule),
+        },
+        {
+          kind: 'item',
+          label: 'Open this submodule',
+          disabled: !submodule.initialised,
+          run: () => void openSubmodule(submodule.path),
+        },
+        {
+          kind: 'submenu',
+          label: 'Update this submodule',
+          items: [
+            {
+              kind: 'item',
+              label: submodule.initialised
+                ? 'To the commit this repository records'
+                : 'Fetch a working copy',
+              run: () => void initSubmodule(submodule.path, false),
+            },
+            {
+              kind: 'item',
+              label: 'To the tip of its branch',
+              run: () => void initSubmodule(submodule.path, true),
+            },
+          ],
+        },
+        { kind: 'separator' },
+        {
+          kind: 'item',
+          label: 'Copy its URL',
+          disabled: submodule.url === '',
+          run: () => void copyUrl(submodule.url),
+        },
+        {
+          kind: 'item',
+          label: 'Delete this submodule',
+          danger: true,
+          run: () => {
+            showSubmodule = submodule;
+            void removeSubmodule();
+          },
+        },
+      ],
+    };
+  }
+
+  async function copyUrl(url: string) {
+    if (await copyText(url)) toasts.push('ok', 'Copied', url);
+    else toasts.push('error', 'Could not reach the clipboard');
+  }
+
+  /** Opens the submodule panel and reads the commit it is pinned at. */
+  async function openSubmodulePanel(submodule: Submodule) {
+    showSubmodule = submodule;
+    submoduleAt = null;
+    await refreshSubmodule();
+  }
+
+  async function refreshSubmodule() {
+    const at = showSubmodule?.path;
+    if (!info || at === undefined) return;
+    submoduleAt = await submoduleRevision(info.path, at).catch(() => null);
+  }
+
+  async function setSubmoduleUrl(url: string) {
+    const at = showSubmodule?.path;
+    if (!info || at === undefined) return;
+    await act({ kind: 'submoduleSetUrl', path: at, url });
+    await refs.load(info.path);
+    showSubmodule = refs.submodules.find((s) => s.path === at) ?? showSubmodule;
+  }
+
+  async function removeSubmodule() {
+    const submodule = showSubmodule;
+    if (!info || !submodule) return;
+    const { choice } = await ask({
+      title: `Delete the submodule ${submodule.path}?`,
+      detail:
+        'Its working copy, its entry in .gitmodules and its clone under .git/modules all go. ' +
+        'Nothing on the server is touched, and the deletion is staged rather than committed.',
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'go', label: 'Delete it', primary: true }],
+    });
+    if (choice === null) return;
+    // Forced: a submodule with local edits refuses otherwise, and the user has just been told
+    // exactly what is being removed.
+    await act({ kind: 'submoduleRemove', path: submodule.path, force: true });
+    showSubmodule = null;
+    submoduleAt = null;
+    await Promise.all([refs.load(info.path), worktree.load(info.path)]);
   }
 
   async function leaveSubmodule() {
@@ -1033,6 +1184,18 @@
     void graph.ensureRows(first, last);
     void graph.loadMetadata(first, rows.length);
   });
+
+  /**
+   * Which host a tracking branch's remote belongs to.
+   *
+   * From the remote's URL, not from its name: a remote called `origin` says nothing about who
+   * serves it, and a repository can have one on each host.
+   */
+  function hostFor(short: string): 'github' | 'gitlab' | 'other' {
+    const remote = short.split('/')[0] ?? '';
+    const url = remotes.list.find((r) => r.name === remote)?.fetchUrl ?? '';
+    return url === '' ? 'other' : hostOf(url);
+  }
 
   /**
    * Which of a row's refs are worth the two slots there are.
@@ -1147,7 +1310,7 @@
       style:--sidebar-w="{panes.widths.sidebar}px"
       style:--details-w="{panes.widths.details}px"
     >
-    {#if showSidebar}
+    {#if views.current.sidebar}
       <Sidebar
         groups={refs.groups}
         head={headName}
@@ -1157,10 +1320,13 @@
         onSelect={reveal}
         onOpenSubmodule={openSubmodule}
         onRemoteMenu={remoteMenu}
-        onInitAllSubmodules={() => void initSubmodule(null)}
+        onInitAllSubmodules={() => void initSubmodule(null, false)}
+        onSubmoduleMenu={submoduleMenu}
         onDropRef={dropRef}
         pullRequests={hosting.pullRequests}
         pullRequestLabel={hosting.view?.host?.kind === 'gitlab' ? 'Merge requests' : 'Pull requests'}
+        collapsed={views.current.collapsed}
+        onCollapse={(section, closed) => views.setCollapsed(section, closed)}
         onOpenPullRequest={(pr: PullRequest) => void openInBrowser(pr.webUrl)}
       />
       <Splitter
@@ -1181,6 +1347,23 @@
           ok
             ? toasts.push('ok', `Copied the ${what}`)
             : toasts.push('error', `Could not copy the ${what}`)}
+      />
+    {/if}
+    {#if showSubmodule && info}
+      <SubmodulePanel
+        submodule={showSubmodule}
+        revision={submoduleAt}
+        busy={actions.busy}
+        error={actions.report?.tone === 'error' ? actions.report.text : null}
+        onClose={() => (showSubmodule = null)}
+        onSetUrl={(url) => void setSubmoduleUrl(url)}
+        onOpen={() => {
+          const at = showSubmodule?.path;
+          showSubmodule = null;
+          if (at) void openSubmodule(at);
+        }}
+        onUpdate={(remote) => void initSubmodule(showSubmodule?.path ?? null, remote)}
+        onRemove={() => void removeSubmodule()}
       />
     {/if}
     {#if showRemotes && info}
@@ -1238,7 +1421,8 @@
           <span class="cell graph-col"><span class="wip-node"></span></span>
           <span class="cell message">
             <span class="summary">WIP on {headName ?? 'HEAD'}</span>
-            <span class="detail">{wipCount} file{wipCount === 1 ? '' : 's'}</span>
+            {#if wip.edits > 0}<span class="tally edit">✎ {wip.edits}</span>{/if}
+            {#if wip.adds > 0}<span class="tally add">+ {wip.adds}</span>{/if}
           </span>
         </button>
       {/if}
@@ -1284,7 +1468,11 @@
                       class:head={label.short === headName}
                       title={label.name}
                     >
-                      <span class="pip" aria-hidden="true"></span>{elideRef(label.short, 22)}
+                      {#if label.kind.kind === 'remote_branch'}
+                        <HostMark kind={hostFor(label.short)} />
+                      {:else}
+                        <span class="pip" aria-hidden="true"></span>
+                      {/if}{elideRef(label.short, 22)}
                     </span>
                     {#if i === 1 && labels.length > 2}
                       <button
@@ -1312,7 +1500,7 @@
         </ul>
       </div>
     </div>
-    {#if showDetails}
+    {#if views.current.details}
       <Splitter
         label="Resize the detail panel"
         value={panes.widths.details}
@@ -1323,13 +1511,24 @@
         onreset={() => panes.reset()}
       />
       {#if showWip}
-        <aside class="wip-panel"><Staging {worktree} /></aside>
+        <aside class="wip-panel">
+          <Staging
+            {worktree}
+            branch={headName}
+            openPath={diff.path}
+            grouping={views.current.changes}
+            onGrouping={(g) => views.set('changes', g)}
+            onOpenFile={openWorkingFile}
+          />
+        </aside>
       {:else}
         <Details
           detail={selection.detail}
           loading={selection.loading}
           error={selection.error}
           openPath={diff.path}
+          grouping={views.current.commitFiles}
+          onGrouping={(g) => views.set('commitFiles', g)}
           onOpenFile={openFile}
         />
       {/if}
@@ -1619,6 +1818,11 @@
     background: var(--bg-2); border-radius: var(--radius-1); padding: 0 5px; line-height: 16px;
   }
 
+  /* The counts on the WIP row, in the same two colours the staging panel uses for them. */
+  .tally { flex: 0 0 auto; font-size: 11px; font-variant-numeric: tabular-nums; }
+  .tally.edit { color: var(--lane-1); }
+  .tally.add { color: var(--ok); }
+
   .wip-node {
     width: 10px; height: 10px; border-radius: 50%;
     border: 2px dashed var(--fg-2); margin-left: var(--space-1);
@@ -1628,5 +1832,7 @@
     width: var(--details-w, 340px); flex: 0 0 auto; overflow-y: auto;
     border-left: 1px solid var(--border); background: var(--bg-1);
     padding: var(--space-3);
+    /* The compose box is sticky against this, so the panel is what scrolls. */
+    display: flex; flex-direction: column;
   }
 </style>

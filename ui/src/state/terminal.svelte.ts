@@ -6,11 +6,9 @@ import {
   terminalWrite,
 } from '../ipc/terminal';
 
-/** Where the terminal is docked. */
-export type Dock = 'bottom' | 'right';
+import type { Dock, ViewsState } from './views.svelte';
 
-const DOCK_KEY = 'coral.terminal.dock';
-const SIZE_KEY = 'coral.terminal.size';
+export type { Dock };
 
 /**
  * The in-app terminal.
@@ -25,25 +23,42 @@ export class TerminalState {
    * `import.meta.env.DEV` is replaced with false in a release build, so the branch is dropped.
    */
   open = $state(import.meta.env.DEV && !('__TAURI_INTERNALS__' in globalThis));
-  dock = $state<Dock>(read(DOCK_KEY) === 'right' ? 'right' : 'bottom');
-  /** Height when docked at the bottom, width when docked to the right. */
-  size = $state(sizeOrDefault());
   id = $state<number | null>(null);
   shell = $state('');
   error = $state<string | null>(null);
 
+  /**
+   * Where it sits and how big it is, held with the window's other view choices rather than in
+   * a store of this module's own: they are all the same kind of preference and all belong to
+   * the person at the window.
+   */
+  #views: ViewsState;
+
+  constructor(views: ViewsState) {
+    this.#views = views;
+  }
+
+  // Getters rather than `$derived` fields: a field initialiser runs before the constructor
+  // body, so it would read `#views` before there is one. Reading through the getter is just as
+  // reactive.
+  get dock(): Dock {
+    return this.#views.current.terminalDock;
+  }
+
+  /** Height when docked at the bottom, width when docked to the right. */
+  get size(): number {
+    return this.#views.current.terminalSize;
+  }
+
   setDock(dock: Dock): void {
-    this.dock = dock;
-    write(DOCK_KEY, dock);
+    this.#views.set('terminalDock', dock);
     // The two docks are different axes; a height that was right at the bottom is a silly
     // width at the side.
-    this.size = dock === 'right' ? 420 : 260;
-    write(SIZE_KEY, String(this.size));
+    this.#views.set('terminalSize', dock === 'right' ? 420 : 260);
   }
 
   setSize(px: number): void {
-    this.size = Math.min(900, Math.max(120, Math.round(px)));
-    write(SIZE_KEY, String(this.size));
+    this.#views.set('terminalSize', Math.min(900, Math.max(120, Math.round(px))));
   }
 
   toggle(): void {
@@ -74,25 +89,3 @@ export class TerminalState {
 }
 
 export { terminalListen, terminalResize, terminalWrite };
-
-function sizeOrDefault(): number {
-  const stored = Number(read(SIZE_KEY));
-  return Number.isFinite(stored) && stored > 0 ? stored : 260;
-}
-
-function read(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    // A webview with storage disabled must still open.
-    return null;
-  }
-}
-
-function write(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // Losing the preference is not worth failing over.
-  }
-}

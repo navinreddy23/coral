@@ -240,12 +240,17 @@ describe('two repositories in two tabs', () => {
       return found;
     });
 
-    const rows = [...section.querySelectorAll('button.ref')] as HTMLButtonElement[];
+    const rows = [...section.querySelectorAll('.row')] as HTMLElement[];
     expect(rows).toHaveLength(2);
-    // One that has never been cloned is still clickable; it offers to fetch a working copy.
-    expect(rows[1]?.disabled).toBe(false);
 
-    await fireEvent.click(rows[0] as HTMLButtonElement);
+    // Through the menu, since the row itself is not a control.
+    await fireEvent.click(rows[0]?.querySelector('.dots') as HTMLElement);
+    const open = [...document.querySelectorAll('.menu .label')].find(
+      (e) => e.textContent?.trim() === 'Open this submodule',
+    ) as HTMLElement;
+    expect(open, 'the menu offers to open it').toBeTruthy();
+    await fireEvent.click(open);
+
     await waitFor(() => {
       const entered = invoke.mock.calls.filter(([cmd]) => cmd === 'tab_enter_submodule').at(-1);
       if (!entered) throw new Error('no submodule entered');

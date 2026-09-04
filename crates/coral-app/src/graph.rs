@@ -216,3 +216,24 @@ pub async fn file_diff(
     let files = loc.commit_diff(&runner, &rev, &[file.as_str()]).await?;
     Ok(files.into_iter().next())
 }
+
+/// One file's diff in the working tree, staged or not.
+///
+/// Separate from [`file_diff`] because it is a different question: that one asks what a commit
+/// changed, this one what has changed since. A file can be in both answers with different
+/// hunks, which is the whole reason the staging panel has two lists.
+///
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn worktree_diff(
+    path: String,
+    staged: bool,
+    file: String,
+) -> Result<Option<coral_core::diff::FileDiff>, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    let files = loc.diff(&runner, staged, &[file.as_str()]).await?;
+    Ok(files.into_iter().next())
+}

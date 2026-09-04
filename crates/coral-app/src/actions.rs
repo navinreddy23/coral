@@ -85,11 +85,23 @@ pub enum Action {
         /// Create this branch there rather than detaching.
         branch: Option<String>,
     },
-    /// Clone and check out a submodule's working copy.
+    /// Clone and check out a submodule's working copy, or move it to its branch tip.
     SubmoduleInit {
         /// The submodule's path within the repository. All of them when absent.
         path: Option<String>,
         recursive: bool,
+        /// Move it to the tip of its configured branch rather than to the recorded commit.
+        remote: bool,
+    },
+    /// Change where a submodule is cloned from.
+    SubmoduleSetUrl {
+        path: String,
+        url: String,
+    },
+    /// Remove a submodule: its working copy, its configuration, and its clone.
+    SubmoduleRemove {
+        path: String,
+        force: bool,
     },
     /// Write a commit out as a patch file.
     Patch {
@@ -212,8 +224,15 @@ impl Action {
                 RewriteKind::MoveOlder => format!("move {rev:.8} down"),
             },
             Self::WorktreeAdd { path, .. } => format!("worktree at {path}"),
-            Self::SubmoduleInit { path: Some(p), .. } => format!("initialise {p}"),
-            Self::SubmoduleInit { path: None, .. } => "initialise the submodules".to_owned(),
+            Self::SubmoduleInit {
+                path: Some(p),
+                remote: true,
+                ..
+            } => format!("update {p} to its branch tip"),
+            Self::SubmoduleInit { path: Some(p), .. } => format!("update {p}"),
+            Self::SubmoduleInit { path: None, .. } => "update the submodules".to_owned(),
+            Self::SubmoduleSetUrl { path, .. } => format!("re-point {path}"),
+            Self::SubmoduleRemove { path, .. } => format!("remove {path}"),
             Self::Patch { rev, .. } => format!("patch for {rev:.8}"),
             Self::Undo => "undo".to_owned(),
             Self::Redo => "redo".to_owned(),
@@ -263,7 +282,35 @@ pub async fn repo_action(path: String, action: Action) -> Result<ActionOutcome, 
 }
 
 /// Performs the action, reporting whether it stopped and what git said.
+///
+/// Split by what the action is about rather than by size: the three groups below touch the
+/// network, the refs, and the working tree respectively, and nothing crosses between them.
 async fn run(
+    loc: &RepoLocation,
+    runner: &GitRunner,
+    action: Action,
+) -> Result<Done, coral_core::CoralError> {
+    match action {
+        Action::Fetch { .. } | Action::Pull { .. } | Action::Push { .. } => {
+            run_remote(loc, runner, action).await
+        }
+        Action::Checkout { .. }
+        | Action::BranchCreate { .. }
+        | Action::BranchDelete { .. }
+        | Action::Merge { .. }
+        | Action::Rebase { .. }
+        | Action::CherryPick { .. }
+        | Action::Revert { .. }
+        | Action::Reset { .. }
+        | Action::Rewrite { .. }
+        | Action::TagCreate { .. }
+        | Action::TagDelete { .. } => run_refs(loc, runner, action).await,
+        _ => run_tree(loc, runner, action).await,
+    }
+}
+
+/// The three that reach the network.
+async fn run_remote(
     loc: &RepoLocation,
     runner: &GitRunner,
     action: Action,
@@ -273,10 +320,11 @@ async fn run(
             // Prune: a fetch that leaves deleted remote branches in the sidebar is a fetch
             // that makes the sidebar wrong, which is the thing it was run to correct.
             loc.fetch(runner, remote.as_deref(), true, |_| {}).await?;
+            Ok(Done::quiet())
         }
         Action::Pull { remote, mode } => {
             let out = loc.pull(runner, remote.as_deref(), mode.into()).await?;
-            return Ok(Done::from(&out));
+            Ok(Done::from(&out))
         }
         Action::Push {
             remote,
@@ -295,11 +343,22 @@ async fn run(
                 .map(|r| format!("{} -> {} {}", r.local, r.remote, r.summary))
                 .collect::<Vec<_>>()
                 .join("\n");
-            return Ok(Done {
+            Ok(Done {
                 conflicted: results.iter().any(|r| r.flag.is_failure()),
                 message,
-            });
+            })
         }
+        _ => unreachable!("routed by `run`"),
+    }
+}
+
+/// Everything that moves a ref, including the three that rewrite history.
+async fn run_refs(
+    loc: &RepoLocation,
+    runner: &GitRunner,
+    action: Action,
+) -> Result<Done, coral_core::CoralError> {
+    match action {
         Action::Checkout { rev } => loc.checkout(runner, &rev).await?,
         Action::BranchCreate { name, at, checkout } => {
             loc.branch_create(runner, &name, at.as_deref(), checkout)
@@ -326,18 +385,6 @@ async fn run(
             let out = loc.revert(runner, &refs).await?;
             return Ok(Done::from(&out));
         }
-        Action::StashPush { message } => {
-            // Untracked files are included: a stash that leaves them behind is a stash that
-            // does not let the branch be switched, which is what it was asked for.
-            loc.stash_push(runner, message.as_deref(), true).await?;
-        }
-        Action::StashApply { index, pop } => loc.stash_apply(runner, index, pop).await?,
-        Action::StashDrop { index } => loc.stash_drop(runner, index).await?,
-        Action::TagCreate { name, at, message } => {
-            loc.tag_create(runner, &name, at.as_deref(), message.as_deref())
-                .await?;
-        }
-        Action::TagDelete { name } => loc.tag_delete(runner, &name).await?,
         Action::Reset { rev, mode } => loc.reset(runner, &rev, mode.into()).await?,
         Action::Rewrite { rev, how, message } => {
             let rewrite = match how {
@@ -353,19 +400,54 @@ async fn run(
                 .await?;
             return Ok(Done::from(&out));
         }
+        Action::TagCreate { name, at, message } => {
+            loc.tag_create(runner, &name, at.as_deref(), message.as_deref())
+                .await?;
+        }
+        Action::TagDelete { name } => loc.tag_delete(runner, &name).await?,
+        _ => unreachable!("routed by `run`"),
+    }
+    Ok(Done::quiet())
+}
+
+/// The stash, the submodules, a linked worktree, and a patch file.
+async fn run_tree(
+    loc: &RepoLocation,
+    runner: &GitRunner,
+    action: Action,
+) -> Result<Done, coral_core::CoralError> {
+    match action {
+        Action::StashPush { message } => {
+            // Untracked files are included: a stash that leaves them behind is a stash that
+            // does not let the branch be switched, which is what it was asked for.
+            loc.stash_push(runner, message.as_deref(), true).await?;
+        }
+        Action::StashApply { index, pop } => loc.stash_apply(runner, index, pop).await?,
+        Action::StashDrop { index } => loc.stash_drop(runner, index).await?,
         Action::WorktreeAdd { path, rev, branch } => {
             loc.worktree_add(runner, std::path::Path::new(&path), &rev, branch.as_deref())
                 .await?;
         }
-        Action::SubmoduleInit { path, recursive } => {
-            loc.submodule_init(runner, path.as_deref(), recursive)
+        Action::SubmoduleInit {
+            path,
+            recursive,
+            remote,
+        } => {
+            loc.submodule_init(runner, path.as_deref(), recursive, remote)
                 .await?;
+        }
+        Action::SubmoduleSetUrl { path, url } => {
+            loc.submodule_set_url(runner, &path, &url).await?;
+        }
+        Action::SubmoduleRemove { path, force } => {
+            loc.submodule_remove(runner, &path, force).await?;
         }
         Action::Patch { rev, directory } => {
             loc.format_patch(runner, &rev, std::path::Path::new(&directory))
                 .await?;
         }
         Action::Undo | Action::Redo => unreachable!("stepped above"),
+        _ => unreachable!("routed by `run`"),
     }
     Ok(Done::quiet())
 }

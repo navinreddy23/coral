@@ -43,10 +43,17 @@ function mount(over: Record<string, unknown> = {}) {
       submodules: [],
       pullRequests: [],
       pullRequestLabel: 'Pull requests',
+      remotes: [],
+      openSubmodule: null,
       onSelect: () => {},
       onOpenSubmodule: () => {},
       onDropRef: () => {},
       onOpenPullRequest: () => {},
+      onRemoteMenu: () => {},
+      collapsed: {},
+      onCollapse: () => {},
+      onInitAllSubmodules: () => {},
+      onSubmoduleMenu: () => {},
       ...over,
     },
   });
@@ -83,18 +90,33 @@ describe('the sidebar', () => {
     const section = [...container.querySelectorAll('section')].find((s) =>
       s.textContent?.includes('Submodules'),
     );
-    const rows = [...(section?.querySelectorAll('button.ref') ?? [])] as HTMLButtonElement[];
+    const rows = [...(section?.querySelectorAll('.row') ?? [])] as HTMLElement[];
     expect(rows).toHaveLength(2);
-    // One that has never been cloned is marked but still clickable: offering to fetch a
-    // working copy is more use than a row that does nothing.
-    expect(rows[1]?.disabled).toBe(false);
-    expect(rows[1]?.className).toContain('absent');
-    await fireEvent.click(rows[0] as HTMLButtonElement);
-    expect(opened).toEqual(['external/dev-scripts']);
+    // One that has never been cloned is marked, but the mark is all it is.
+    expect(rows[1]?.querySelector('.ref')?.className).toContain('absent');
 
-    // And the shell is told about the missing one too, so it can ask.
-    await fireEvent.click(rows[1] as HTMLButtonElement);
-    expect(opened).toEqual(['external/dev-scripts', 'vendor/other']);
+    // The row is not a control. Opening is one of four things that can be done with a
+    // submodule, and making it the one a click performs hides the other three.
+    await fireEvent.click(rows[0]?.querySelector('.ref') as HTMLElement);
+    expect(opened).toEqual([]);
+  });
+
+  it('offers the submodule menu from the dots and from a right-click', async () => {
+    const asked: string[] = [];
+    const submodules: Submodule[] = [
+      { name: 'dev', path: 'external/dev-scripts', url: 'g://x', pinned: 'abc', initialised: true },
+    ];
+    const { container } = mount({
+      submodules,
+      onSubmoduleMenu: (_e: MouseEvent, s: Submodule) => asked.push(s.path),
+    });
+
+    const row = container.querySelector('section .row') as HTMLElement;
+    await fireEvent.click(row.querySelector('.dots') as HTMLElement);
+    expect(asked).toEqual(['external/dev-scripts']);
+
+    await fireEvent.contextMenu(row.closest('li') as HTMLElement);
+    expect(asked).toEqual(['external/dev-scripts', 'external/dev-scripts']);
   });
 
   it('shows proposals only when the host gave some, and opens one', async () => {

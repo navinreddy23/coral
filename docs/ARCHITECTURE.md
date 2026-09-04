@@ -210,6 +210,22 @@ because a build wrote an object file would freeze the window repeatedly. A ref c
 one that can move HEAD, and it is the one that also moves the selection, so checking a branch
 out from either side lands the view on that branch.
 
+## Packaging
+
+Bundles are built per platform and never cross-compiled: a Tauri bundle links the platform's
+own webview — WebKitGTK on Linux, WebKit on macOS, WebView2 on Windows. `just build` produces
+whatever the machine it runs on can, and `.github/workflows/release.yml` does all three on
+three runners.
+
+`cargo build --release -p coral-app` is *not* a build. The frontend is embedded by the Tauri
+CLI's build step, so a plain cargo release build produces a binary that starts, opens a window,
+and never loads a page. Verified both ways with the same freshly built `ui/dist` in place.
+
+macOS is built universal. An Intel-only bundle runs under Rosetta on Apple silicon and a
+native-only one will not start on an Intel Mac at all. The `coral` CLI is installed onto the
+PATH only by the Linux `.deb`, which maps it to `/usr/bin/coral`; on macOS and Windows it is
+built beside the application but not installed.
+
 ## Hosting
 
 The remote URL identifies the host; the origin is where its API is served, which is not the

@@ -81,6 +81,7 @@ fn window() {
             graph::repo_submodules,
             graph::commit_detail,
             graph::file_diff,
+            graph::worktree_diff,
             actions::repo_action,
             remotes::remote_list,
             remotes::remote_edit,

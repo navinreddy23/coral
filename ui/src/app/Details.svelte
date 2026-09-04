@@ -2,13 +2,17 @@
   import FileTree from './FileTree.svelte';
   import { buildTree } from '../diff/tree';
   import type { CommitDetail } from '../ipc/types';
+  import type { Grouping } from '../state/views.svelte';
 
-  const { detail, loading, error, openPath, onOpenFile }: {
+  const { detail, loading, error, openPath, grouping, onGrouping, onOpenFile }: {
     detail: CommitDetail | null;
     loading: boolean;
     error: string | null;
     /** Path whose diff is on screen, so the list can mark it. */
     openPath: string | null;
+    /** How the file list is arranged. Remembered by the window, not by this component. */
+    grouping: Grouping;
+    onGrouping: (grouping: Grouping) => void;
     onOpenFile: (path: string) => void;
   } = $props();
 
@@ -23,8 +27,6 @@
         detail.commit.author.time !== detail.commit.committer.time),
   );
 
-  type Grouping = 'path' | 'tree';
-  let grouping = $state<Grouping>('path');
   let showAll = $state(false);
 
   /** How many files are listed before the rest are summarised. */
@@ -97,8 +99,8 @@
     <h3>{files.length} file{files.length === 1 ? '' : 's'}</h3>
     <div class="filebar">
       <div class="toggle">
-        <button class:on={grouping === 'path'} onclick={() => (grouping = 'path')}>Path</button>
-        <button class:on={grouping === 'tree'} onclick={() => (grouping = 'tree')}>Tree</button>
+        <button class:on={grouping === 'path'} onclick={() => onGrouping('path')}>Path</button>
+        <button class:on={grouping === 'tree'} onclick={() => onGrouping('tree')}>Tree</button>
       </div>
       <label class="all">
         <input type="checkbox" bind:checked={showAll} />

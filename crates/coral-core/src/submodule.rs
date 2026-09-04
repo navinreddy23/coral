@@ -157,7 +157,146 @@ pub fn parse_gitlinks(bytes: &[u8]) -> BTreeMap<String, String> {
     out
 }
 
+/// A submodule's recorded commit, read from inside the submodule itself.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "types.ts"))]
+#[serde(rename_all = "camelCase")]
+pub struct SubmoduleRevision {
+    pub oid: String,
+    pub summary: String,
+    /// Seconds since the epoch, as git reports author time.
+    pub time: i64,
+    /// True when the working copy sits exactly where the superproject pins it.
+    pub in_sync: bool,
+}
+
 impl RepoLocation {
+    /// The commit a submodule is pinned at, described.
+    ///
+    /// Read from inside the submodule, because that is the only place the commit's message
+    /// lives — the superproject records an object id and nothing else.
+    ///
+    /// # Errors
+    /// Propagates git failures. Returns `Ok(None)` for a submodule with no working copy, which
+    /// has no object store to read the message out of.
+    pub async fn submodule_revision(
+        &self,
+        runner: &GitRunner,
+        path: &str,
+    ) -> Result<Option<SubmoduleRevision>, CoralError> {
+        let Some(workdir) = self.workdir.as_ref() else {
+            return Ok(None);
+        };
+        let at = workdir.join(path);
+        if !at.join(".git").exists() {
+            return Ok(None);
+        }
+
+        let out = runner
+            .output(GitCommand::read("submodule-log", &at).args([
+                "log",
+                "-1",
+                "--format=%H%x00%s%x00%at",
+                "HEAD",
+            ]))
+            .await?;
+        let text = out.stdout.to_str_lossy();
+        let mut fields = text.trim().split('\0');
+        let oid = fields.next().unwrap_or_default().to_owned();
+        if oid.is_empty() {
+            return Ok(None);
+        }
+        let summary = fields.next().unwrap_or_default().to_owned();
+        let time = fields
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .parse()
+            .unwrap_or(0);
+
+        let pinned = self
+            .submodules(runner)
+            .await?
+            .into_iter()
+            .find(|s| s.path == path)
+            .and_then(|s| s.pinned);
+        Ok(Some(SubmoduleRevision {
+            in_sync: pinned.as_deref() == Some(oid.as_str()),
+            oid,
+            summary,
+            time,
+        }))
+    }
+
+    /// Changes where a submodule is cloned from.
+    ///
+    /// `set-url` writes `.gitmodules`, which is version-controlled, and `sync` copies it into
+    /// the working configuration. Without the second step the new URL is committed but the
+    /// next fetch still goes to the old one.
+    ///
+    /// # Errors
+    /// Propagates git failures, including an unknown submodule path.
+    pub async fn submodule_set_url(
+        &self,
+        runner: &GitRunner,
+        path: &str,
+        url: &str,
+    ) -> Result<(), CoralError> {
+        runner
+            .output(
+                GitCommand::write("submodule", self.display_path())
+                    .args(["submodule", "set-url", "--"])
+                    .arg(path)
+                    .arg(url),
+            )
+            .await?;
+        runner
+            .output(
+                GitCommand::write("submodule", self.display_path())
+                    .args(["submodule", "sync", "--"])
+                    .arg(path),
+            )
+            .await
+            .map(|_| ())
+    }
+
+    /// Removes a submodule: its working copy, its configuration, and its clone.
+    ///
+    /// Three steps, and all three are needed. `deinit` empties the working copy and drops the
+    /// entry from `.git/config`; `rm` removes the gitlink and the `.gitmodules` stanza; the
+    /// clone under `.git/modules` is left by both, and leaving it behind is what makes adding a
+    /// submodule back at the same path fail with "already exists in the index".
+    ///
+    /// # Errors
+    /// Propagates git failures, including uncommitted changes inside the submodule without
+    /// `force`.
+    pub async fn submodule_remove(
+        &self,
+        runner: &GitRunner,
+        path: &str,
+        force: bool,
+    ) -> Result<(), CoralError> {
+        let mut deinit =
+            GitCommand::write("submodule", self.display_path()).args(["submodule", "deinit"]);
+        if force {
+            deinit = deinit.arg("--force");
+        }
+        runner.output(deinit.arg("--").arg(path)).await?;
+
+        let mut remove = GitCommand::write("rm", self.display_path()).arg("rm");
+        if force {
+            remove = remove.arg("--force");
+        }
+        runner.output(remove.arg("--").arg(path)).await?;
+
+        // The clone itself, which neither of the above touches.
+        let module = self.git_path("modules").join(path);
+        if module.exists() {
+            std::fs::remove_dir_all(&module)?;
+        }
+        Ok(())
+    }
+
     /// Clones and checks out a submodule's working copy.
     ///
     /// `git submodule update --init` rather than a bare `clone`: the URL, the branch and the
@@ -165,7 +304,8 @@ impl RepoLocation {
     /// cloning by hand would have to reproduce every one of them.
     ///
     /// A submodule with no path given initialises all of them, which is what the reference
-    /// offers on the section itself.
+    /// offers on the section itself. `remote` moves it to the tip of its configured branch
+    /// rather than to the commit the superproject records.
     ///
     /// # Errors
     /// Propagates git failures, including a URL that cannot be reached.
@@ -174,6 +314,7 @@ impl RepoLocation {
         runner: &GitRunner,
         path: Option<&str>,
         recursive: bool,
+        remote: bool,
     ) -> Result<(), CoralError> {
         let mut cmd = GitCommand::network("submodule", self.display_path()).args([
             "submodule",
@@ -183,6 +324,13 @@ impl RepoLocation {
         ]);
         if recursive {
             cmd = cmd.arg("--recursive");
+        }
+        // Without this the submodule is checked out at the commit the superproject records,
+        // which is what "update" means most of the time. With it, git fetches the configured
+        // branch and moves to its tip — a different operation, and one that changes what the
+        // superproject will record next.
+        if remote {
+            cmd = cmd.arg("--remote");
         }
         if let Some(p) = path {
             // `--` so a submodule whose path starts with a dash is not read as a flag.

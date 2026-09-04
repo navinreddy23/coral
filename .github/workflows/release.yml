@@ -1,0 +1,82 @@
+name: Release
+
+# Bundles are built per platform and never cross-compiled: a Tauri bundle links the platform's
+# own webview — WebKitGTK, WebKit, WebView2 — so each has to be built where it runs.
+on:
+  push:
+    tags: ['v*']
+  # So a release can be rehearsed without cutting a tag.
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  bundle:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux
+            # A universal build makes no sense here; the .deb and .AppImage are per-arch.
+            args: ''
+          - os: macos-latest
+            name: macos
+            # Both architectures in one bundle: an Intel-only app runs under Rosetta on Apple
+            # silicon, and a native-only one will not start on an Intel Mac at all.
+            args: '--target universal-apple-darwin'
+          - os: windows-latest
+            name: windows
+            args: ''
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev \
+            libayatana-appindicator3-dev librsvg2-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Add the macOS targets
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - run: cd ui && npm ci
+
+      # The CLI ships beside the application, so it has to exist before the bundle is
+      # assembled: the Linux .deb maps it onto /usr/bin/coral.
+      - run: cargo build --release -p coral-cli ${{ matrix.args }}
+
+      - uses: tauri-apps/tauri-action@v0
+        with:
+          projectPath: crates/coral-app
+          args: ${{ matrix.args }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coral-${{ matrix.name }}
+          if-no-files-found: error
+          path: |
+            target/release/bundle/**/*.deb
+            target/release/bundle/**/*.AppImage
+            target/release/bundle/**/*.dmg
+            target/release/bundle/**/*.app
+            target/release/bundle/**/*.exe
+            target/release/bundle/**/*.msi
+            target/universal-apple-darwin/release/bundle/**/*.dmg

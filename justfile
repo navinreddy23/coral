@@ -54,18 +54,43 @@ bindings-drift: test
 dev:
     cd crates/coral-app && cargo tauri dev
 
-# Builds the shippable application. Note that `cargo build --release -p coral-app` does NOT:
-# the frontend is embedded by the Tauri CLI's build step, and a plain cargo release build
-# produces a binary that starts, opens a window, and never loads a page. Verified both ways,
-# with the same freshly built ui/dist in place.
-build:
+# Builds the shippable application for whichever platform this is.
+#
+# Note that `cargo build --release -p coral-app` does NOT: the frontend is embedded by the
+# Tauri CLI's build step, and a plain cargo release build produces a binary that starts, opens
+# a window, and never loads a page. Verified both ways, with the same freshly built ui/dist in
+# place.
+#
+# The bundle targets come from tauri.conf.json and are filtered by the Tauri CLI to the ones
+# this platform can actually produce, so one recipe covers all three. `build-mac` and
+# `build-windows` exist for the cross-details that recipe cannot express.
+build *ARGS:
     #!/usr/bin/env bash
     set -euo pipefail
     export PATH="$HOME/.cargo/bin:$PATH"
     cd ui && npm ci && cd ..
     # The CLI ships beside the application, so it has to exist before the bundle is assembled.
     cargo build --release -p coral-cli
-    cd crates/coral-app && cargo tauri build
+    cd crates/coral-app && cargo tauri build {{ARGS}}
+
+# A universal macOS build, which is what a .dmg should carry: an Intel-only bundle runs under
+# Rosetta on Apple silicon and a native-only one will not start on an Intel Mac at all. Both
+# targets have to be installed — `rustup target add aarch64-apple-darwin x86_64-apple-darwin`.
+build-mac:
+    just build --target universal-apple-darwin
+
+# Windows produces an NSIS installer from the same configuration. WebView2 is assumed present:
+# it ships with Windows 11 and with every supported Windows 10, and bundling the bootstrapper
+# would add a download to an installer that does not need one on any current system.
+build-windows:
+    just build
+
+# Every platform's bundles, one machine each. There is no cross-compiling here: a Tauri bundle
+# links the platform's own webview, so each has to be built where it runs. This is what the
+# release workflow does on its three runners.
+build-all:
+    @echo 'Bundles are built per platform; run `just build` on Linux, macOS and Windows.'
+    @echo 'CI does this on three runners: see .github/workflows/release.yml.'
 
 cli *ARGS:
     cargo run -q -p coral-cli -- {{ARGS}}

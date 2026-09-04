@@ -44,10 +44,10 @@
       </span>
     {/if}
     <div class="toggle" role="group" aria-label="Diff layout">
-      <button class:on={diff.mode === 'inline'} onclick={() => (diff.mode = 'inline')}>
+      <button class:on={diff.mode === 'inline'} onclick={() => diff.setMode('inline')}>
         Inline
       </button>
-      <button class:on={diff.mode === 'split'} onclick={() => (diff.mode = 'split')}>
+      <button class:on={diff.mode === 'split'} onclick={() => diff.setMode('split')}>
         Side by side
       </button>
     </div>

@@ -298,6 +298,12 @@ const FIXTURES: Record<string, unknown> = {
     },
   ],
   ssh_public_key: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI0000000000 dev@workstation',
+  submodule_revision: {
+    oid: '3e88757dd4883b678cf708eaf79c02fc358cf18b',
+    summary: 'Add backwards-compatibility with older QAPI version',
+    time: 1_763_060_220,
+    inSync: true,
+  },
   watch_repo: { complete: true, detail: null },
   unwatch_repo: null,
   repo_refs: [
@@ -502,6 +508,8 @@ export function preview(command: string, args: Record<string, unknown>): unknown
     case 'commit_detail':
       return detail(String(args['rev'] ?? oidOf(0)));
     case 'file_diff':
+      return DIFF;
+    case 'worktree_diff':
       return DIFF;
     case 'commit_url':
       return `https://github.com/coral-dev/coral/commit/${String(args['oid'] ?? '')}`;

@@ -2,6 +2,7 @@
   import type { PullRequest } from '../ipc/commands';
   import type { Remote, Submodule } from '../ipc/types';
   import type { PlacedRef, RefGroups } from '../state/refs.svelte';
+  import HostMark, { hostOf } from './HostMark.svelte';
   import { elideRef } from './path';
 
   const {
@@ -18,6 +19,9 @@
     onOpenPullRequest,
     onRemoteMenu,
     onInitAllSubmodules,
+    onSubmoduleMenu,
+    collapsed,
+    onCollapse,
   }: {
     groups: RefGroups;
     head: string | null;
@@ -40,6 +44,14 @@
     onRemoteMenu: (event: MouseEvent, remote: string | null) => void;
     /** Fetches a working copy for every submodule that has none. */
     onInitAllSubmodules: () => void;
+    /** The dots, or a right-click, on one submodule. */
+    onSubmoduleMenu: (event: MouseEvent, submodule: Submodule) => void;
+    /**
+     * Which sections are closed, by key. Held by the window rather than here, so a panel
+     * closed on purpose is still closed after a restart.
+     */
+    collapsed: Record<string, boolean>;
+    onCollapse: (section: string, closed: boolean) => void;
   } = $props();
 
   /** Ref being dragged, and the one under the pointer, so both can be marked. */
@@ -80,9 +92,6 @@
    */
   let showingAll = $state<Record<string, boolean>>({});
   const CAP = 200;
-  // Remote and tag lists run to hundreds on a real repository, so they start closed as they do
-  // in the reference; local branches are what people look at.
-  let collapsed = $state<Record<string, boolean>>({ remote: true, tags: true });
 
   function shown(refs: PlacedRef[]): PlacedRef[] {
     const q = filter.trim().toLowerCase();
@@ -122,6 +131,18 @@
   function urlOf(name: string): string {
     return remotes.find((r) => r.name === name)?.fetchUrl ?? '';
   }
+
+  /**
+   * The section's own mark: the host every remote shares, or the cloud when they differ.
+   *
+   * A repository with a GitHub origin and a GitLab mirror belongs to neither, and claiming one
+   * of them at the section level would be wrong half the time.
+   */
+  const sectionHost = $derived.by(() => {
+    const kinds = new Set(remotes.map((r) => hostOf(r.fetchUrl)));
+    const only = kinds.size === 1 ? [...kinds][0] : undefined;
+    return only ?? 'other';
+  });
 
   // Section order follows the reference's left panel: Local, Remote, Stashes, then Tags. The
   // remote section is rendered on its own because a remote is a thing with a menu, not a row.
@@ -171,7 +192,7 @@
 
   {#each above as section (section.key)}
     <section>
-      <button class="head" onclick={() => (collapsed[section.key] = !collapsed[section.key])}>
+      <button class="head" onclick={() => onCollapse(section.key, !collapsed[section.key])}>
         <span class="caret">{collapsed[section.key] ? '›' : '⌄'}</span>
         <span class="icon" aria-hidden="true">{section.icon}</span>
         {section.title}
@@ -201,12 +222,12 @@
   <section>
     <button
       class="head"
-      onclick={() => (collapsed['remote'] = !collapsed['remote'])}
+      onclick={() => onCollapse('remote', !collapsed['remote'])}
       oncontextmenu={(e) => onRemoteMenu(e, null)}
       title="Right-click to add or manage remotes"
     >
       <span class="caret">{collapsed['remote'] ? '›' : '⌄'}</span>
-      <span class="icon" aria-hidden="true">☁</span>
+      <span class="icon"><HostMark kind={sectionHost} /></span>
       Remote
       <span class="count">{groups.remote.length}</span>
     </button>
@@ -220,12 +241,14 @@
         {@const key = `remote:${name}`}
         <button
           class="head remote"
-          onclick={() => (collapsed[key] = !collapsed[key])}
+          onclick={() => onCollapse(key, !collapsed[key])}
           oncontextmenu={(e) => onRemoteMenu(e, name)}
           title={`${name}\n${urlOf(name)}\nRight-click for details`}
         >
           <span class="caret">{collapsed[key] ? '›' : '⌄'}</span>
-          <span class="icon" aria-hidden="true">⌂</span>
+          <span class="icon">
+            <HostMark kind={urlOf(name) === '' ? 'other' : hostOf(urlOf(name))} />
+          </span>
           <span class="text">{name}</span>
           <span class="count">{refs.length}</span>
         </button>
@@ -249,7 +272,7 @@
 
   {#each below as section (section.key)}
     <section>
-      <button class="head" onclick={() => (collapsed[section.key] = !collapsed[section.key])}>
+      <button class="head" onclick={() => onCollapse(section.key, !collapsed[section.key])}>
         <span class="caret">{collapsed[section.key] ? '›' : '⌄'}</span>
         <span class="icon" aria-hidden="true">{section.icon}</span>
         {section.title}
@@ -274,7 +297,7 @@
 
   {#if pullRequests.length > 0}
     <section>
-      <button class="head" onclick={() => (collapsed['prs'] = !collapsed['prs'])}>
+      <button class="head" onclick={() => onCollapse('prs', !collapsed['prs'])}>
         <span class="caret">{collapsed['prs'] ? '›' : '⌄'}</span>
         <span class="icon" aria-hidden="true">⇄</span>
         {pullRequestLabel}
@@ -302,7 +325,7 @@
 
   {#if submodules.length > 0}
     <section>
-      <button class="head" onclick={() => (collapsed['submodules'] = !collapsed['submodules'])}>
+      <button class="head" onclick={() => onCollapse('submodules', !collapsed['submodules'])}>
         <span class="caret">{collapsed['submodules'] ? '›' : '⌄'}</span>
         <span class="icon" aria-hidden="true">◱</span>
         Submodules
@@ -316,23 +339,28 @@
       {#if !collapsed['submodules']}
         <ul>
           {#each matchingSubmodules as sub (sub.path)}
-            <li>
+            <li oncontextmenu={(e) => onSubmoduleMenu(e, sub)}>
               <!--
-                An uninitialised submodule is still worth clicking: it has no working copy yet,
-                and offering to fetch one is more use than a row that does nothing.
+                A submodule row is not a link. Clicking one used to open it, which is a choice
+                nobody asked for on a row that also has to offer editing, updating and deleting
+                — so every one of those is behind the same menu, reachable by the dots or by a
+                right-click.
               -->
-              <button
-                class="ref"
-                class:current={sub.path === openSubmodule}
-                class:absent={!sub.initialised}
-                onclick={() => onOpenSubmodule(sub.path)}
-                title={sub.initialised
-                  ? `${sub.url || sub.name}\nOpen it here`
-                  : `${sub.url || sub.name}\nNo working copy yet — click to fetch one`}
-              >
-                <span class="tick" aria-hidden="true">{sub.initialised ? '✓' : '↓'}</span>
-                <span class="text">{sub.path}</span>
-              </button>
+              <div class="row" class:current={sub.path === openSubmodule}>
+                <span class="ref static" class:absent={!sub.initialised}
+                  title={sub.initialised
+                    ? `${sub.url || sub.name}\nRight-click, or use the dots, for what can be done with it`
+                    : `${sub.url || sub.name}\nNo working copy yet`}
+                >
+                  <span class="tick" aria-hidden="true">{sub.initialised ? '✓' : '↓'}</span>
+                  <span class="text">{sub.path}</span>
+                </span>
+                <button
+                  class="dots"
+                  title="What can be done with this submodule"
+                  onclick={(e) => onSubmoduleMenu(e, sub)}
+                >⋮</button>
+              </div>
             </li>
           {/each}
         </ul>
@@ -352,7 +380,10 @@
     font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-2);
   }
   .viewing strong { color: var(--fg-0); font-weight: 700; font-size: 12px; }
-  .icon { width: 1.1em; color: var(--fg-2); flex: 0 0 auto; }
+  .icon {
+    width: 1.1em; color: var(--fg-2); flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
   .filter {
     width: 100%; box-sizing: border-box; font: inherit; font-size: 12px;
     padding: 3px var(--space-2); margin-bottom: var(--space-2);
@@ -402,6 +433,19 @@
   /* Declared but not fetched. Dimmed, but still a live target: clicking it fetches one. */
   .ref.absent { color: var(--fg-2); }
   .ref.absent .tick { color: var(--fg-2); }
+  /* A submodule row is not a control: it names a thing, and everything that can be done with
+     it lives behind the dots beside it. */
+  .row { display: flex; align-items: center; border-radius: var(--radius-1); }
+  .row:hover { background: var(--bg-2); }
+  .row.current { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent-line); }
+  .ref.static { cursor: default; }
+  .dots {
+    flex: 0 0 auto; font: inherit; font-size: 14px; line-height: 1; cursor: pointer;
+    padding: 0 var(--space-2); background: none; border: 0; color: var(--fg-2);
+    visibility: hidden;
+  }
+  .row:hover .dots, .row.current .dots { visibility: visible; }
+  .dots:hover { color: var(--fg-0); }
   /*
    * The checked-out branch, marked by a bar down its leading edge as well as a tint. The tint
    * alone is easy to lose against a hover, and this is the one row in the panel that has to

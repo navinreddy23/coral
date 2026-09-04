@@ -474,6 +474,19 @@ pinned: string | null,
 initialised: boolean, };
 
 /**
+ * A submodule's recorded commit, read from inside the submodule itself.
+ */
+export type SubmoduleRevision = { oid: string, summary: string, 
+/**
+ * Seconds since the epoch, as git reports author time.
+ */
+time: bigint, 
+/**
+ * True when the working copy sits exactly where the superproject pins it.
+ */
+inSync: boolean, };
+
+/**
  * A rebase todo list, in the order the commits will be replayed.
  *
  * Note that this is the reverse of how the graph shows them: git replays oldest first, while

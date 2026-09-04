@@ -12,6 +12,7 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 import DiffView from '../../src/app/DiffView.svelte';
 import { DiffState } from '../../src/state/diff.svelte';
 import type { FileDiff, Line, LineKind } from '../../src/ipc/types';
+import { ViewsState } from '../../src/state/views.svelte';
 
 function line(kind: LineKind, text: string, oldNo: number | null, newNo: number | null): Line {
   return { kind, text, oldNo, newNo, noNewline: false };
@@ -45,10 +46,10 @@ function fileDiff(): FileDiff {
 }
 
 function mounted(mode: 'inline' | 'split') {
-  const diff = new DiffState();
+  const diff = new DiffState(new ViewsState());
   diff.path = 'kernel/sched/core.c';
   diff.file = fileDiff();
-  diff.mode = mode;
+  diff.setMode(mode);
   return render(DiffView, { props: { diff, onClose: () => {} } });
 }
 
@@ -89,7 +90,7 @@ describe('the diff viewer', () => {
   });
 
   it('says so for a binary file rather than showing an empty table', () => {
-    const diff = new DiffState();
+    const diff = new DiffState(new ViewsState());
     diff.path = 'logo.png';
     diff.file = { ...fileDiff(), path: 'logo.png', binary: true, hunks: [], added: null, removed: null };
     const { container } = render(DiffView, { props: { diff, onClose: () => {} } });
@@ -98,7 +99,7 @@ describe('the diff viewer', () => {
   });
 
   it('reports the error instead of a blank pane', () => {
-    const diff = new DiffState();
+    const diff = new DiffState(new ViewsState());
     diff.path = 'gone.c';
     diff.error = 'This commit did not change that file.';
     const { container } = render(DiffView, { props: { diff, onClose: () => {} } });

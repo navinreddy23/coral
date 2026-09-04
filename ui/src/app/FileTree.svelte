@@ -1,9 +1,10 @@
 <script lang="ts">
   import FileTree from './FileTree.svelte';
   import type { TreeNode } from '../diff/tree';
+  import type { ChangedFile } from '../ipc/types';
 
   const { nodes, openPath, onOpenFile, depth = 0 }: {
-    nodes: TreeNode[];
+    nodes: TreeNode<ChangedFile>[];
     openPath: string | null;
     onOpenFile: (path: string) => void;
     depth?: number;
@@ -23,7 +24,7 @@
 </script>
 
 <ul class="tree">
-  {#each nodes as node (node.kind === 'dir' ? `d:${node.path}` : `f:${node.file.path}`)}
+  {#each nodes as node (`${node.kind}:${node.path}`)}
     <li>
       {#if node.kind === 'dir'}
         <button
@@ -39,12 +40,12 @@
       {:else}
         <button
           class="file"
-          class:open={node.file.path === openPath}
+          class:open={node.path === openPath}
           style:padding-left="{depth * 12 + 4}px"
-          onclick={() => onOpenFile(node.file.path)}
-          title={node.file.oldPath ? `${node.file.path}\nfrom ${node.file.oldPath}` : node.file.path}
+          onclick={() => onOpenFile(node.path)}
+          title={node.item.oldPath ? `${node.path}\nfrom ${node.item.oldPath}` : node.path}
         >
-          <span class="mark {node.file.change}">{mark[node.file.change] ?? '?'}</span>
+          <span class="mark {node.item.change}">{mark[node.item.change] ?? '?'}</span>
           {node.name}
         </button>
       {/if}
