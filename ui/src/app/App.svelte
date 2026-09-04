@@ -1723,6 +1723,22 @@
     };
   });
 
+  /**
+   * What fixes a node's fill.
+   *
+   * The email, not the display name: the same person commits as "Linus Torvalds" and
+   * "torvalds" over a long history, and a node that changes colour partway down the graph
+   * defeats the point of colouring it.
+   */
+  const nodeAuthor = $derived.by(() => {
+    const meta = visibleMeta;
+    return (row: number) => {
+      const entry = meta.get(row);
+      if (entry === undefined) return null;
+      return entry.email.trim().toLowerCase() || entry.author;
+    };
+  });
+
   // Only rows that are on screen are worth an object read, or a frame.
   $effect(() => {
     if (rows.length === 0) return;
@@ -2075,6 +2091,7 @@
             width={panes.widths.graph}
             theme={theme.current}
             initials={nodeInitials}
+            author={nodeAuthor}
           />
         </div>
         <ul class="rows" style:top="{listTop(scrollTop)}px">

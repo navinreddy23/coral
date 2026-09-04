@@ -31,3 +31,22 @@ function firstLetter(word: string): string | null {
   }
   return null;
 }
+
+/**
+ * A stable colour for an author, as an index into the node palette.
+ *
+ * The same person is the same colour in every repository and across restarts, which is what
+ * makes a wall of nodes readable at all — the eye picks up "this run is all one person"
+ * without reading a single name. Hashed from the identity rather than assigned in order of
+ * appearance, or scrolling would renumber everyone.
+ */
+export function authorColourIndex(identity: string, palette: number): number {
+  if (palette <= 0) return 0;
+  // FNV-1a: a few lines, no dependency, and well enough distributed for a dozen buckets.
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < identity.length; i++) {
+    hash ^= identity.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash % palette;
+}

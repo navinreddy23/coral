@@ -72,6 +72,23 @@
   --lane-8: #686d1c;
 
   /*
+   * What a commit node is filled with, keyed by its author rather than by its lane.
+   *
+   * Deliberately not redefined for the dark theme, and this is the whole point of them being
+   * their own set: the letters inside a node are white in both themes, and white needs a
+   * colour deep enough to sit on. The dark lane palette is light — white on `--lane-3` there
+   * is 1.5:1 — so a node filled from it would have an unreadable label.
+   */
+  --node-1: #096cb3;
+  --node-2: #bf2681;
+  --node-3: #8d6005;
+  --node-4: #2b7737;
+  --node-5: #7245ef;
+  --node-6: #b94000;
+  --node-7: #16737f;
+  --node-8: #686d1c;
+
+  /*
    * The same eight, mixed into the page behind them, for anything that has to be *labelled*
    * with a lane rather than drawn in it — a branch pill, a row band. A stroke colour at full
    * strength behind 10px text leaves the text unreadable; these carry the same identity at a

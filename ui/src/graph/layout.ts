@@ -135,16 +135,19 @@ export function visibleRows(
 
 /** The eight lane colours from tokens.css, resolved once rather than per frame. */
 export function laneColours(root: HTMLElement): string[] {
-  const style = getComputedStyle(root);
-  const read = (n: number) => style.getPropertyValue(`--lane-${n}`).trim();
-  const colours = [1, 2, 3, 4, 5, 6, 7, 8].map(read).filter((c) => c.length > 0);
-  return colours.length > 0 ? colours : ['#3fa9f5'];
+  return palette(root, 'lane');
 }
 
-/** The page background, so a commit ring can be drawn hollow rather than transparent. */
-export function backgroundColour(root: HTMLElement): string {
-  const value = getComputedStyle(root).getPropertyValue('--bg-0').trim();
-  return value.length > 0 ? value : '#ffffff';
+/** The eight node fills, which are what the white initials inside a node sit on. */
+export function nodeColours(root: HTMLElement): string[] {
+  return palette(root, 'node');
+}
+
+function palette(root: HTMLElement, name: string): string[] {
+  const style = getComputedStyle(root);
+  const read = (n: number) => style.getPropertyValue(`--${name}-${n}`).trim();
+  const colours = [1, 2, 3, 4, 5, 6, 7, 8].map(read).filter((c) => c.length > 0);
+  return colours.length > 0 ? colours : ['#3fa9f5'];
 }
 
 export function laneColour(lane: number, colours: string[]): string {

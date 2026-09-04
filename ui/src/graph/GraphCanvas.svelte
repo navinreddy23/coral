@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
 
   import type { Frame } from './frame';
-  import { backgroundColour, DEFAULT_METRICS, GRAPH_COLUMN_PX, laneColours } from './layout';
+  import { DEFAULT_METRICS, GRAPH_COLUMN_PX, laneColours, nodeColours } from './layout';
   import { drawLanes, resizeCanvas } from './render';
   import type { Theme } from '../state/theme.svelte';
 
@@ -18,6 +18,7 @@
     width = GRAPH_COLUMN_PX,
     theme,
     initials = () => null,
+    author = () => null,
   }: {
     frame: Frame | null;
     firstRow?: number;
@@ -34,16 +35,18 @@
     theme: Theme;
     /** Author initials for a row, or null while its metadata is still loading. */
     initials?: (row: number) => string | null;
+    /** The author's identity, which fixes the node's fill. Null while it is loading. */
+    author?: (row: number) => string | null;
   } = $props();
 
   let canvas: HTMLCanvasElement;
   let colours: string[] = $state([]);
-  let background = $state('#ffffff');
+  let fills: string[] = $state([]);
   let pending = false;
 
   function readTokens() {
     colours = laneColours(document.documentElement);
-    background = backgroundColour(document.documentElement);
+    fills = nodeColours(document.documentElement);
   }
 
   onMount(readTokens);
@@ -80,7 +83,7 @@
       // plus its length, not its length alone.
       last: Math.min(frame.startRow + frame.rowCount - 1, firstRow + perScreen + 2),
     };
-    drawLanes(ctx, frame, win, metrics, colours, width, height, background, initials);
+    drawLanes(ctx, frame, win, metrics, colours, width, height, fills, initials, author);
   }
 
   $effect(() => {
@@ -88,10 +91,11 @@
     void frame;
     void firstRow;
     void initials;
+    void author;
     void width;
     void height;
     void colours;
-    void background;
+    void fills;
     schedule();
   });
 </script>

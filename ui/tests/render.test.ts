@@ -31,6 +31,7 @@ interface Label {
   text: string;
   x: number;
   y: number;
+  fill: string;
 }
 
 /**
@@ -94,7 +95,7 @@ function recorder(): {
       if (pendingArc) pendingArc.fill = String(ctx.fillStyle);
     },
     fillText(text: string, x: number, y: number) {
-      labels.push({ text, x, y });
+      labels.push({ text, x, y, fill: String(ctx.fillStyle) });
     },
     stroke() {
       if (pendingArc) {
@@ -159,7 +160,7 @@ describe('drawLanes', () => {
     const window: Window = { first: 150, last: 170 };
     const { ctx, segments } = recorder();
 
-    drawLanes(ctx, frame, window, DEFAULT_METRICS, ['#a', '#b', '#c', '#d'], 120, 600, '#fff');
+    drawLanes(ctx, frame, window, DEFAULT_METRICS, ['#a', '#b', '#c', '#d'], 120, 600, ['#fill']);
 
     const run = verticalsIn(3, segments);
     expect(run.length).toBeGreaterThan(0);
@@ -179,7 +180,7 @@ describe('drawLanes', () => {
 
     const window: Window = { first: 80, last: 100 };
     const { ctx, segments } = recorder();
-    drawLanes(ctx, frame, window, DEFAULT_METRICS, Array(12).fill('#000'), 200, 600, '#fff');
+    drawLanes(ctx, frame, window, DEFAULT_METRICS, Array(12).fill('#000'), 200, 600, ['#fill']);
 
     for (const lane of [2, 5, 6, 9]) {
       const covered = verticalsIn(lane, segments).reduce((n, s) => n + (s.y1 - s.y0), 0);
@@ -198,7 +199,7 @@ describe('drawLanes', () => {
 
     const window: Window = { first: 40, last: 60 };
     const { ctx, segments } = recorder();
-    drawLanes(ctx, frame, window, DEFAULT_METRICS, Array(8).fill('#000'), 200, 600, '#fff');
+    drawLanes(ctx, frame, window, DEFAULT_METRICS, Array(8).fill('#000'), 200, 600, ['#fill']);
 
     const bottom = Math.max(...verticalsIn(4, segments).map((s) => s.y1));
     // The node's own row centre, and not a pixel below it.
@@ -208,18 +209,18 @@ describe('drawLanes', () => {
 
 
 describe('drawing a node', () => {
-  it('is a ring in the lane colour, hollowed out with the page behind it', () => {
+  it('is a disc from the node palette, ringed in the lane colour', () => {
     const frame = longRunFrame(20, 2);
     const window: Window = { first: 0, last: 3 };
     const { ctx, discs } = recorder();
 
-    drawLanes(ctx, frame, window, DEFAULT_METRICS, ['#a', '#b', '#c'], 200, 200, '#fff');
+    drawLanes(ctx, frame, window, DEFAULT_METRICS, ['#a', '#b', '#c'], 200, 200, ['#fill']);
 
     // One per visible row, on its own lane.
     expect(discs.length).toBe(4);
     expect(discs.every((d) => d.x === laneX(0, DEFAULT_METRICS))).toBe(true);
-    // The fill is the page, so the lane running through the node does not show inside it.
-    expect(discs.every((d) => d.fill === '#fff')).toBe(true);
+    // Filled from the node palette, ringed in the lane's own colour.
+    expect(discs.every((d) => d.fill === '#fill')).toBe(true);
     expect(discs.every((d) => d.stroke === '#a')).toBe(true);
   });
 
@@ -227,8 +228,16 @@ describe('drawing a node', () => {
     const frame = longRunFrame(20, 2);
     const { ctx, labels } = recorder();
 
-    drawLanes(ctx, frame, { first: 0, last: 3 }, DEFAULT_METRICS, ['#a'], 200, 200, '#fff', (row) =>
-      row === 1 ? 'LT' : null,
+    drawLanes(
+      ctx,
+      frame,
+      { first: 0, last: 3 },
+      DEFAULT_METRICS,
+      ['#a'],
+      200,
+      200,
+      ['#fill'],
+      (row) => (row === 1 ? 'LT' : null),
     );
 
     expect(labels).toHaveLength(1);
@@ -236,11 +245,37 @@ describe('drawing a node', () => {
     expect(labels[0]?.x).toBe(laneX(0, DEFAULT_METRICS));
   });
 
+  it('colours the disc by author, and the letters on it white', () => {
+    const frame = longRunFrame(20, 2);
+    const fills = ['#f0', '#f1', '#f2', '#f3'];
+    const { ctx, discs, labels } = recorder();
+
+    drawLanes(
+      ctx,
+      frame,
+      { first: 0, last: 1 },
+      DEFAULT_METRICS,
+      ['#lane'],
+      200,
+      200,
+      fills,
+      () => 'LT',
+      (row) => (row === 0 ? 'a@example.com' : 'b@example.com'),
+    );
+
+    // Two authors, two fills; the same author would give the same one on every row.
+    expect(discs).toHaveLength(2);
+    expect(fills).toContain(discs[0]?.fill);
+    expect(discs[0]?.fill).not.toBe(discs[1]?.fill);
+    expect(labels.every((l) => l.text === 'LT')).toBe(true);
+    expect(labels.every((l) => l.fill === '#ffffff')).toBe(true);
+  });
+
   it('leaves a node blank while its metadata is still loading', () => {
     const frame = longRunFrame(20, 2);
     const { ctx, labels, discs } = recorder();
-    drawLanes(ctx, frame, { first: 0, last: 3 }, DEFAULT_METRICS, ['#a'], 200, 200, '#fff');
-    // The ring is drawn at full size either way, so a node does not change under the pointer
+    drawLanes(ctx, frame, { first: 0, last: 3 }, DEFAULT_METRICS, ['#a'], 200, 200, ['#fill']);
+    // The disc is drawn at full size either way, so a node does not change under the pointer
     // as a scroll settles.
     expect(labels).toHaveLength(0);
     expect(discs).toHaveLength(4);
@@ -251,7 +286,7 @@ describe('drawing a node', () => {
     // half its width outside what `graphWidthFor` allows for, against the message beside it.
     const frame = longRunFrame(20, 2);
     const { ctx, discs } = recorder();
-    drawLanes(ctx, frame, { first: 0, last: 3 }, DEFAULT_METRICS, ['#a'], 200, 200, '#fff');
+    drawLanes(ctx, frame, { first: 0, last: 3 }, DEFAULT_METRICS, ['#a'], 200, 200, ['#fill']);
 
     expect(discs.length).toBe(4);
     expect(discs.every((d) => d.radius < DEFAULT_METRICS.nodeRadius)).toBe(true);
@@ -263,7 +298,7 @@ describe('an edge that changes lane', () => {
   it('turns through a rounded corner rather than a lazy diagonal', () => {
     const frame = longRunFrame(20, 3);
     const { ctx, corners } = recorder();
-    drawLanes(ctx, frame, { first: 0, last: 3 }, DEFAULT_METRICS, ['#a', '#b', '#c', '#d'], 200, 200, '#fff');
+    drawLanes(ctx, frame, { first: 0, last: 3 }, DEFAULT_METRICS, ['#a', '#b', '#c', '#d'], 200, 200, ['#fill']);
 
     // Row 0 opens lane 3 for its second parent; that is the only lane change in the window.
     expect(corners).toHaveLength(1);
@@ -281,7 +316,7 @@ describe('an edge that changes lane', () => {
     const frame = longRunFrame(20, 3);
     const { ctx, corners } = recorder();
     // A window past row 0 has only the straight first-parent run in it.
-    drawLanes(ctx, frame, { first: 5, last: 8 }, DEFAULT_METRICS, ['#a', '#b', '#c', '#d'], 200, 200, '#fff');
+    drawLanes(ctx, frame, { first: 5, last: 8 }, DEFAULT_METRICS, ['#a', '#b', '#c', '#d'], 200, 200, ['#fill']);
     expect(corners).toHaveLength(0);
   });
 });

@@ -1,8 +1,17 @@
 import { parentLanesOf, type Frame } from './frame';
+import { authorColourIndex } from './initials';
 import { laneColour, laneX, rowY, type Metrics, type Window } from './layout';
 
 /** Thickness of a node's ring. Two whole pixels, for the reason `lineWidth` is set to two. */
 const NODE_STROKE = 2;
+
+/**
+ * The letters inside a node.
+ *
+ * White in both themes, which is why the fills they sit on are their own palette rather than
+ * the lane one: see `--node-1` in tokens.css.
+ */
+const NODE_LABEL = '#ffffff';
 
 /**
  * Draws the lane column onto a canvas.
@@ -20,8 +29,9 @@ export function drawLanes(
   colours: string[],
   width: number,
   height: number,
-  background: string,
+  fills: string[],
   initials: (row: number) => string | null = () => null,
+  author: (row: number) => string | null = () => null,
 ): void {
   ctx.clearRect(0, 0, width, height);
   // An even width centred on an integer coordinate covers whole pixels; 1.5px straddles two
@@ -67,10 +77,11 @@ export function drawLanes(
   // Vertical runs for lanes that pass through a row without a node in it.
   drawThroughLanes(ctx, frame, window, metrics, colours, first);
 
-  // A ring in the lane's colour, hollowed out with the page behind it, with the author's
-  // initials inside. The fill is what hides the lane running through the node, so the ring
-  // reads as a bead on the line rather than as a circle drawn over it. Merges are left
-  // unmarked: the two edges leaving the node already say it.
+  // A disc in the author's colour, ringed in its lane's, with the author's initials on it in
+  // white. The ring says which line the commit is on, the fill and the letters say who wrote
+  // it. Both are drawn at full size whether or not the row's metadata has arrived, so a node
+  // does not change size under the pointer as a scroll settles. Merges are left unmarked: the
+  // two edges leaving the node already say it.
   ctx.lineWidth = NODE_STROKE;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -88,21 +99,21 @@ export function drawLanes(
     // Stroked inside the radius, so the outer edge is where the metrics say it is whatever the
     // ring is drawn at.
     const radius = metrics.nodeRadius - NODE_STROKE / 2;
-    const colour = laneColour(lane, colours);
+    const who = author(row);
 
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = background;
+    ctx.fillStyle =
+      who === null
+        ? laneColour(lane, fills)
+        : fills[authorColourIndex(who, fills.length)] ?? laneColour(lane, fills);
     ctx.fill();
-    ctx.strokeStyle = colour;
+    ctx.strokeStyle = laneColour(lane, colours);
     ctx.stroke();
 
     const label = initials(row);
     if (label !== null) {
-      // The ring's own colour, so the node reads as one mark. Every lane colour is tuned to
-      // 5.5:1 against the page, which is what the letters are sitting on now that the disc
-      // they used to be reversed out of is gone.
-      ctx.fillStyle = colour;
+      ctx.fillStyle = NODE_LABEL;
       ctx.fillText(label, x, y + 0.5);
     }
   }
