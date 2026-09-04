@@ -111,6 +111,22 @@ bindings-current:
 dev:
     cd crates/coral-app && cargo tauri dev
 
+# Throws away everything this project builds, and keeps everything it downloads.
+#
+# Every build runs this first. A bundle is the one artefact nobody can look inside to check
+# what went into it, and an application that behaves like the build before it — because that is
+# partly what it is — costs far more to work out than the minute this takes. Dependencies are
+# left alone: they are pinned, and rebuilding them proves nothing.
+clean-artefacts dir="target":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root='{{ justfile_directory() }}'
+    cargo clean --manifest-path "$root/Cargo.toml" --target-dir "$root/{{ dir }}" \
+        -p coral-core -p coral-hosting -p coral-cli -p coral-app 2>/dev/null || true
+    # The frontend is embedded into the binary at compile time, so a stale bundle is a stale
+    # application however fresh the Rust is.
+    rm -rf "$root/ui/dist" "$root/{{ dir }}/release/bundle"
+
 # Builds the shippable application for whichever platform this is.
 #
 # Note that `cargo build --release -p coral-app` does NOT: the frontend is embedded by the
@@ -124,6 +140,7 @@ dev:
 build *ARGS:
     #!/usr/bin/env bash
     set -euo pipefail
+    just clean-artefacts
     # The two halves need nothing from each other, and both are slow from cold: `npm ci`
     # fetches the whole dependency tree while cargo compiles the CLI.
     ( cd ui && npm ci ) &
@@ -150,6 +167,9 @@ build-linux-portable git="system":
     set -euo pipefail
     # Absolute, so the recipe works whatever directory `just` was invoked from.
     root='{{ justfile_directory() }}'
+    # Cleared here rather than inside the container, so a build that fails to start still
+    # leaves nothing behind that a later one could pick up.
+    just clean-artefacts target/portable
     docker build -t coral-linux-build "$root/packaging"
     # As the invoking user, never as root. A container writing into a bind-mounted repository
     # as root leaves files nothing on the host can delete without sudo — `ui/node_modules`
