@@ -35,6 +35,8 @@
   import Remotes from './Remotes.svelte';
   import Activity from './Activity.svelte';
   import { ActivityState } from '../state/activity.svelte';
+  import { StashesState } from '../state/stashes.svelte';
+  import type { PlacedStash } from '../ipc/stash';
   import { ExperimentalState } from '../state/experimental.svelte';
   import SubmodulePanel from './Submodule.svelte';
   import { RemotesState } from '../state/remotes.svelte';
@@ -175,6 +177,7 @@
   const ssh = new SshState();
   const toasts = new ToastsState();
   const remotes = new RemotesState();
+  const stashes = new StashesState();
   let showRemotes = $state<{ focus: string | null } | null>(null);
   const activity = new ActivityState();
   const experimental = new ExperimentalState();
@@ -578,7 +581,8 @@
     const untracked = entries.filter((e) => e.worktree === 'untracked').map((e) => e.path);
     const tracked = entries.filter((e) => e.worktree !== 'untracked').map((e) => e.path);
 
-    const choices: Choice[] = [{ id: 'keep', label: 'Cancel', primary: true }];
+    // Nothing here is primary, so Enter dismisses rather than discarding.
+    const choices: Choice[] = [];
     if (tracked.length > 0) {
       choices.push({
         id: 'tracked',
@@ -604,7 +608,7 @@
       initial: '',
       choices,
     });
-    if (choice === null || choice === 'keep') return;
+    if (choice === null) return;
 
     await worktree.discard(tracked, choice === 'all' ? untracked : []);
     if (!worktree.error) toasts.push('ok', 'Changes discarded.');
@@ -629,6 +633,61 @@
     }
     parts.push('This cannot be undone.');
     return parts.join(' ');
+  }
+
+  /**
+   * What can be done with one stash.
+   *
+   * Three separate things, and only applying is reversible: popping removes the entry once it
+   * has landed, and dropping removes it without landing it at all. So dropping asks first and
+   * says what it is about to lose, and neither destructive one is the primary.
+   */
+  function stashMenu(event: MouseEvent, stash: PlacedStash) {
+    event.preventDefault();
+    menu = {
+      x: event.clientX,
+      y: event.clientY,
+      items: [
+        {
+          kind: 'item',
+          label: 'Apply it, and keep it',
+          hint: 'the stash stays on the stack',
+          disabled: worktree.busy || actions.busy,
+          run: () => void act({ kind: 'stashApply', index: stash.index, pop: false }),
+        },
+        {
+          kind: 'item',
+          label: 'Pop it',
+          hint: 'apply it and take it off the stack',
+          disabled: worktree.busy || actions.busy,
+          run: () => void act({ kind: 'stashApply', index: stash.index, pop: true }),
+        },
+        { kind: 'separator' },
+        {
+          kind: 'item',
+          label: 'Drop it…',
+          hint: 'throw it away without applying it',
+          disabled: worktree.busy || actions.busy,
+          run: () => void dropStash(stash),
+        },
+      ],
+    };
+  }
+
+  async function dropStash(stash: PlacedStash) {
+    const { choice } = await ask({
+      title: `Drop ${stash.name}?`,
+      detail:
+        `${stash.message}\n\nThe changes in this stash are not in any commit and not in the ` +
+        'working copy. Dropping it is the only copy gone. This cannot be undone.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      // Nothing is primary, so Enter does not drop it.
+      choices: [{ id: 'drop', label: `Drop ${stash.name}` }],
+    });
+    if (choice !== 'drop') return;
+    await act({ kind: 'stashDrop', index: stash.index });
   }
 
   function openActivity() {
@@ -993,6 +1052,7 @@
       info = await open(path);
       await graph.open(info.path);
       await refs.load(info.path);
+      await stashes.load(info.path);
       await worktree.load(info.path);
       // A repository can be opened mid-merge, so the tool has to be there on arrival rather
       // than only after an action of ours stopped.
@@ -1023,6 +1083,7 @@
     menu = null;
     showRemotes = null;
     showActivity = false;
+    stashes.clear();
     showSubmodule = null;
     submoduleAt = null;
     showWip = false;
@@ -1104,8 +1165,14 @@
     if (!change.refs && !change.graph) return;
 
     info = await open(path).catch(() => info);
-    await refs.load(path);
+    // The walk first, then the things that are placed on it. Refs and stashes are resolved to
+    // the row they sit on by the graph store, so loading them against the previous walk left
+    // anything new — a stash above all, whose commit no branch reaches — with no row and a row
+    // is what makes it clickable. Switching tabs appeared to fix it because that path has
+    // always been in this order.
     if (change.refs || change.graph) await graph.open(path);
+    await refs.load(path);
+    await stashes.load(path);
     // Only when it actually moved: following HEAD on every commit would drag the view away
     // from whatever the user was reading.
     if (headMark !== wasHead) await focusHead();
@@ -1572,12 +1639,14 @@
       <Sidebar
         groups={refs.groups}
         head={headName}
+        stashes={stashes.list}
         submodules={refs.submodules}
         remotes={remotes.list}
         openSubmodule={tabs.active?.submodule ?? null}
         onSelect={reveal}
         onOpenSubmodule={openSubmodule}
         onRemoteMenu={remoteMenu}
+        onStashMenu={stashMenu}
         onInitAllSubmodules={() => void initSubmodule(null, false)}
         onSubmoduleMenu={submoduleMenu}
         onDropRef={dropRef}

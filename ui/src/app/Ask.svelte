@@ -44,7 +44,14 @@
   let text = $state(initial);
   let input = $state<HTMLInputElement | null>(null);
 
-  const primary = $derived(choices.find((c) => c.primary) ?? choices[0]);
+  /**
+   * The choice the Enter key takes, if any.
+   *
+   * No fallback to the first choice. A question whose answer destroys something should have no
+   * key that answers it: Enter is pressed to dismiss things, and a dialog that reads "this
+   * cannot be undone" must not be one of them. Every caller that wants Enter says so.
+   */
+  const primary = $derived(choices.find((c) => c.primary) ?? null);
 
   $effect(() => {
     input?.focus();
@@ -110,7 +117,12 @@
     border-radius: var(--radius-2);
   }
   h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--fg-0); }
-  .detail { margin: var(--space-2) 0 0; font-size: 12px; color: var(--fg-2); line-height: 1.5; }
+  /* `pre-line`, so a detail can put the thing being destroyed on a line of its own and the
+     warning on another. Run together they read as one sentence that says neither. */
+  .detail {
+    margin: var(--space-2) 0 0; font-size: 12px; color: var(--fg-2); line-height: 1.5;
+    white-space: pre-line;
+  }
   input {
     width: 100%; box-sizing: border-box; font: inherit; font-size: 13px;
     margin-top: var(--space-3); padding: var(--space-2);

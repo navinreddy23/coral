@@ -1,7 +1,11 @@
 // @vitest-environment happy-dom
-import { render } from '@testing-library/svelte';
+import { cleanup, render } from '@testing-library/svelte';
 import { fireEvent } from '@testing-library/dom';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+// Each test mounts its own sidebar. Without this the previous one is still in the document and
+// a query for a name that both rendered finds two of it.
+afterEach(cleanup);
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 vi.mock('../../src/ipc/invoke', () => ({ invoke: vi.fn(), isPreview: () => false }));
@@ -35,11 +39,24 @@ function tag(short: string): PlacedRef {
   return { ...ref(short), name: `refs/tags/${short}`, kind: { kind: 'tag', annotated: false } };
 }
 
+function stash(name: string, oid: string, row: number | null = 0) {
+  return {
+    index: 0,
+    oid,
+    branch: 'master',
+    message: 'WIP on master: 1a2b3c4 a commit',
+    time: 1_756_000_000,
+    name,
+    row,
+  };
+}
+
 function mount(over: Record<string, unknown> = {}) {
   return render(Sidebar, {
     props: {
       groups: { local: [ref('master')], remote: [], tags: [], stashes: [] },
       head: 'master',
+      stashes: [],
       submodules: [],
       pullRequests: [],
       pullRequestLabel: 'Pull requests',
@@ -54,6 +71,7 @@ function mount(over: Record<string, unknown> = {}) {
       onCollapse: () => {},
       onInitAllSubmodules: () => {},
       onSubmoduleMenu: () => {},
+      onStashMenu: () => {},
       ...over,
     },
   });
@@ -212,5 +230,54 @@ describe('the file tree', () => {
     expect(container.textContent).not.toContain('ice_main.c');
     // The file at the root is not inside it and must stay.
     expect(container.textContent).toContain('README');
+  });
+});
+
+describe('the stash list', () => {
+  it('lists the whole stack, not the one ref git keeps for it', () => {
+    // `refs/stash` is the top of the stack and the only stash with a ref, so listing refs found
+    // one stash however many there were — and called it "stash", which is also what it called
+    // the next one.
+    const view = mount({
+      stashes: [
+        stash('master@78d0a2d', '78d0a2dd1a00b8e06286b02bac7ca3811a7041fc'),
+        stash('master@21b55eb', '21b55ebccffb3a1b09c67b16ef4b009cce430e5e'),
+      ],
+    });
+    expect(view.getByText('master@78d0a2d')).toBeTruthy();
+    expect(view.getByText('master@21b55eb')).toBeTruthy();
+  });
+
+  it('offers what can be done with one from the dots and from a right-click', () => {
+    const asked: string[] = [];
+    const view = mount({
+      stashes: [stash('master@78d0a2d', 'a'.repeat(40))],
+      onStashMenu: (_e: MouseEvent, s: { name: string }) => asked.push(s.name),
+    });
+
+    const dots = view.getByTitle('What can be done with master@78d0a2d');
+    void fireEvent.click(dots);
+    void fireEvent.contextMenu(view.getByText('master@78d0a2d'));
+
+    expect(asked).toEqual(['master@78d0a2d', 'master@78d0a2d']);
+  });
+
+  it('will not send you to a stash it cannot show you', () => {
+    // A stash whose commit is outside the loaded walk has no row to reveal. Clicking one used
+    // to do nothing at all, with nothing to say why.
+    const picked: number[] = [];
+    const view = mount({
+      stashes: [stash('master@78d0a2d', 'a'.repeat(40), null)],
+      onSelect: (row: number) => picked.push(row),
+    });
+
+    const row = view.getByText('master@78d0a2d').closest('button');
+    expect(row?.hasAttribute('disabled')).toBe(true);
+    void fireEvent.click(row as HTMLElement);
+    expect(picked).toEqual([]);
+  });
+
+  it('says so when there is nothing stashed', () => {
+    expect(mount().getByText('Nothing stashed.')).toBeTruthy();
   });
 });

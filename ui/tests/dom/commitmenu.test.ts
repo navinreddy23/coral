@@ -59,6 +59,8 @@ function answers(): Record<string, unknown> {
       body: '',
     })),
     repo_refs: [],
+    repo_stashes: [],
+    graph_rewalk: null,
     repo_submodules: [],
     repo_status: { entries: [], conflicted: [] },
     repo_operation: {

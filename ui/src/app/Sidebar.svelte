@@ -2,12 +2,14 @@
   import type { PullRequest } from '../ipc/commands';
   import type { Remote, Submodule } from '../ipc/types';
   import type { PlacedRef, RefGroups } from '../state/refs.svelte';
+  import type { PlacedStash } from '../ipc/stash';
   import HostMark, { hostOf } from './HostMark.svelte';
   import { elideRef } from './path';
 
   const {
     groups,
     head,
+    stashes,
     submodules,
     remotes,
     openSubmodule,
@@ -18,6 +20,7 @@
     onDropRef,
     onOpenPullRequest,
     onRemoteMenu,
+    onStashMenu,
     onInitAllSubmodules,
     onSubmoduleMenu,
     collapsed,
@@ -25,6 +28,8 @@
   }: {
     groups: RefGroups;
     head: string | null;
+    /** The stash stack. Listed on its own, because `refs/stash` is only ever the top of it. */
+    stashes: PlacedStash[];
     submodules: Submodule[];
     /** The configured remotes, so each can carry its own name and menu. */
     remotes: Remote[];
@@ -35,6 +40,8 @@
     /** What the host calls them: GitHub says pull, GitLab says merge. */
     pullRequestLabel: string;
     onSelect: (row: number) => void;
+    /** What can be done with one stash, asked for at the dots or by right-clicking. */
+    onStashMenu: (event: MouseEvent, stash: PlacedStash) => void;
     /** Shows a submodule inside this tab. */
     onOpenSubmodule: (path: string) => void;
     /** `source` was dragged onto `target`; the shell decides what that means. */
@@ -147,13 +154,17 @@
   // Section order follows the reference's left panel: Local, Remote, Stashes, then Tags. The
   // remote section is rendered on its own because a remote is a thing with a menu, not a row.
   const above = $derived([{ key: 'local', title: 'Local', icon: '🖿', refs: shown(groups.local) }]);
-  const below = $derived([
-    { key: 'stashes', title: 'Stashes', icon: '⤓', refs: shown(groups.stashes) },
-    { key: 'tags', title: 'Tags', icon: '🏷', refs: shown(groups.tags) },
-  ]);
+  const below = $derived([{ key: 'tags', title: 'Tags', icon: '🏷', refs: shown(groups.tags) }]);
+
+  /** The stack, filtered by the same box as everything else in this panel. */
+  const stashRows = $derived(
+    filter.trim() === ''
+      ? stashes
+      : stashes.filter((s) => `${s.name} ${s.message}`.toLowerCase().includes(filter.trim().toLowerCase())),
+  );
 
   const total = $derived(
-    groups.local.length + groups.remote.length + groups.tags.length + groups.stashes.length,
+    groups.local.length + groups.remote.length + groups.tags.length + stashes.length,
   );
 </script>
 
@@ -279,6 +290,48 @@
           </ul>
         {/if}
       {/each}
+    {/if}
+  </section>
+
+  <!--
+    Stashes are listed from the stack rather than from the refs, and each row carries its own
+    menu: applying one, popping it and dropping it are three different things and only one of
+    them can be undone.
+  -->
+  <section>
+    <button class="head" onclick={() => onCollapse('stashes', !collapsed['stashes'])}>
+      <span class="caret">{collapsed['stashes'] ? '›' : '⌄'}</span>
+      <span class="icon" aria-hidden="true">⤓</span>
+      Stashes
+      <span class="count">{stashes.length}</span>
+    </button>
+    {#if !collapsed['stashes']}
+      {#if stashRows.length === 0}
+        <p class="none">Nothing stashed.</p>
+      {/if}
+      <ul>
+        {#each stashRows as stash (stash.oid)}
+          <li>
+            <div class="row" oncontextmenu={(e) => onStashMenu(e, stash)} role="presentation">
+              <button
+                class="ref"
+                disabled={stash.row === null}
+                onclick={() => stash.row !== null && onSelect(stash.row)}
+                title={stash.row === null
+                  ? `${stash.name}\n${stash.message}\nnot in the loaded graph`
+                  : `${stash.name}\n${stash.message}`}
+              >
+                <span class="text">{elideRef(stash.name, 24)}</span>
+              </button>
+              <button
+                class="dots"
+                title="What can be done with {stash.name}"
+                onclick={(e) => onStashMenu(e, stash)}
+              >⋮</button>
+            </div>
+          </li>
+        {/each}
+      </ul>
     {/if}
   </section>
 
