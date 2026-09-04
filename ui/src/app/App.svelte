@@ -1974,8 +1974,28 @@
     font-size: 12px; color: var(--fg-1);
     border: 0; background: none; font-family: inherit; text-align: left;
   }
-  .wip { position: sticky; top: 22px; z-index: 1; cursor: pointer; background: var(--bg-0); }
-  .row:hover .cell.message, .wip:hover { background: var(--bg-1); }
+  /*
+   * The working copy, tinted so that uncommitted work is visible without reading the row.
+   *
+   * Amber rather than the accent: the accent means "this is the row you picked", and a row
+   * that looks selected before anyone has clicked it is worse than no tint at all. The bar
+   * down the leading edge survives a hover passing over the row below.
+   */
+  .wip {
+    position: sticky; top: 22px; z-index: 1; cursor: pointer;
+    background: var(--warn-soft); box-shadow: inset 2px 0 0 var(--warn);
+    /* It is a button, and a button is shrink-to-fit even as a grid container. Every other row
+       is a list item and stretches on its own, which is why the difference only showed once
+       this row had a colour of its own to stop halfway across. */
+    width: 100%; box-sizing: border-box;
+  }
+  /* The cells paint their own opaque background for antialiasing, so the tint has to be named
+     on them too or the band stops halfway across the row. */
+  .wip .cell.refs, .wip .cell.message { background: var(--warn-soft); }
+  .wip .summary { color: var(--fg-0); font-weight: 600; }
+  .wip .wip-node { border-color: var(--warn); }
+  .wip:hover { box-shadow: inset 3px 0 0 var(--warn); }
+  .row:hover .cell.message { background: var(--bg-1); }
   /*
    * The selected commit, tinted and given a bar down its leading edge. On a screen of rows
    * that all look alike a tint alone is easy to lose, and the bar survives a hover passing
@@ -1985,6 +2005,10 @@
     background: var(--accent-soft);
     box-shadow: inset 2px 0 0 var(--accent-line);
   }
+  /* Selected beats dirty: whichever row the panel on the right is showing has to be the one
+     that looks picked, and the working copy is still the only amber-noded row on the list. */
+  .wip.selected .cell.refs, .wip.selected .cell.message { background: var(--accent-soft); }
+  .wip.selected:hover { box-shadow: inset 3px 0 0 var(--accent-line); }
   .row.selected .cell.message .summary { color: var(--fg-0); font-weight: 600; }
   /*
    * Every text surface paints an opaque background of its own, and this is not optional.
