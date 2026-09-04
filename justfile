@@ -80,6 +80,9 @@ ui-check:
     export PATH="$HOME/.cargo/bin:$PATH"
     cd ui
     npm run check
+    # The tests, which this recipe did not run for far too long: 258 of them sat outside the
+    # gate, and a broken one was committed because nothing here would have said so.
+    npm test
     npm run build
     # A bundle that resolved Svelte's server build instead of its browser one compiles without
     # complaint and then throws the moment it loads, leaving the window blank. Nothing else in

@@ -46,6 +46,7 @@ jobs:
         run: git diff --exit-code -- ui/src/ipc/types.ts
 
       - run: cd ui && npm run check
+      - run: cd ui && npm test
       - run: cd ui && npm run build
 
   licenses:

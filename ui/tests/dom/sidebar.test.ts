@@ -111,7 +111,12 @@ describe('the sidebar', () => {
       onSubmoduleMenu: (_e: MouseEvent, s: Submodule) => asked.push(s.path),
     });
 
-    const row = container.querySelector('section .row') as HTMLElement;
+    // Scoped to the submodules section. Remotes grew rows of their own, and an unscoped
+    // `section .row` finds the remote section's header first.
+    const section = [...container.querySelectorAll('section')].find((el) =>
+      el.textContent?.includes('Submodules'),
+    );
+    const row = section?.querySelector('.row') as HTMLElement;
     await fireEvent.click(row.querySelector('.dots') as HTMLElement);
     expect(asked).toEqual(['external/dev-scripts']);
 
