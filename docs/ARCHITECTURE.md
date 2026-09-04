@@ -212,17 +212,24 @@ out from either side lands the view on that branch.
 
 ## Packaging
 
-Bundles are built per platform and never cross-compiled: a Tauri bundle links the platform's
-own webview — WebKitGTK on Linux, WebKit on macOS, WebView2 on Windows. `just build` produces
-whatever the machine it runs on can, and `.github/workflows/release.yml` does all three on
-three runners.
+A Tauri bundle links the platform's own webview — WebKitGTK on Linux, WebKit on macOS,
+WebView2 on Windows — so each is built on its own machine. `just build` produces whatever the
+machine it runs on can, and `.github/workflows/release.yml` does all three on three runners.
+
+Windows is the one that can also be cross-compiled, and `just build-windows-cross` does it:
+`cargo-xwin` fetches the MSVC CRT and the Windows SDK and links with lld, no Windows machine
+involved. Only NSIS comes out — the MSI bundler is WiX, which needs Windows — and the result
+cannot be signed from Linux. It earns its place anyway as the only check that the code still
+compiles for Windows at all: every dependency of `coral-app` but `webkit2gtk` was once
+declared Linux-only, and nothing short of building for another platform would have said so.
 
 `cargo build --release -p coral-app` is *not* a build. The frontend is embedded by the Tauri
 CLI's build step, so a plain cargo release build produces a binary that starts, opens a window,
 and never loads a page. Verified both ways with the same freshly built `ui/dist` in place.
 
-macOS is built universal. An Intel-only bundle runs under Rosetta on Apple silicon and a
-native-only one will not start on an Intel Mac at all. The `coral` CLI is installed onto the
+macOS is built universal, and only on macOS: the SDK is not redistributable, so there is no
+equivalent of `cargo-xwin` for it. An Intel-only bundle runs under Rosetta on Apple silicon and
+a native-only one will not start on an Intel Mac at all. The `coral` CLI is installed onto the
 PATH only by the Linux `.deb`, which maps it to `/usr/bin/coral`; on macOS and Windows it is
 built beside the application but not installed.
 

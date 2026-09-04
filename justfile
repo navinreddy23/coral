@@ -139,18 +139,50 @@ build *ARGS:
 build-mac:
     just build --target universal-apple-darwin
 
-# Windows produces an NSIS installer from the same configuration. WebView2 is assumed present:
-# it ships with Windows 11 and with every supported Windows 10, and bundling the bootstrapper
-# would add a download to an installer that does not need one on any current system.
+# Windows, built on Windows. WebView2 is assumed present: it ships with Windows 11 and with
+# every supported Windows 10, and bundling the bootstrapper would add a download to an
+# installer that does not need one on any current system.
 build-windows:
     just build
 
-# Every platform's bundles, one machine each. There is no cross-compiling here: a Tauri bundle
-# links the platform's own webview, so each has to be built where it runs. This is what the
-# release workflow does on its three runners.
+# Windows, cross-compiled from Linux.
+#
+# `cargo-xwin` fetches the MSVC CRT and the Windows SDK and links with lld, so no Windows
+# machine is involved. Only NSIS comes out: the MSI bundler is WiX, which needs Windows.
+#
+# Tauri itself calls this experimental, and the installer cannot be signed from here — signing
+# is a Windows host or a `sign_command` in the bundle configuration. For a release, prefer the
+# workflow's Windows runner; this is for checking that the code still compiles for Windows
+# without waiting on CI, which is worth a great deal on its own: every dependency of
+# `coral-app` but `webkit2gtk` was once declared Linux-only, and nothing else would have said.
+build-windows-cross:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    missing=()
+    command -v cargo-xwin  >/dev/null || missing+=("cargo install cargo-xwin --locked")
+    command -v lld-link    >/dev/null || missing+=("apt install lld llvm")
+    # Ubuntu ships clang-cl as a driver mode of clang rather than as its own binary, so a
+    # symlink named for it is all that is wanted.
+    command -v clang-cl    >/dev/null || missing+=("ln -s \"\$(command -v clang)\" ~/.local/bin/clang-cl")
+    command -v makensis    >/dev/null || missing+=("apt install nsis")
+    rustup target list --installed | grep -qx x86_64-pc-windows-msvc \
+        || missing+=("rustup target add x86_64-pc-windows-msvc")
+    if [ ${#missing[@]} -ne 0 ]; then
+        echo "cross-compiling for Windows needs:" >&2
+        printf '  %s\n' "${missing[@]}" >&2
+        exit 1
+    fi
+    cd ui && npm ci && cd ..
+    cd crates/coral-app
+    cargo tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis
+
+# Every platform's bundles. macOS cannot be cross-compiled — the SDK is not redistributable —
+# and Linux packaging wants the distribution it targets, so this is one machine each. Windows
+# is the exception: see `build-windows-cross`.
 build-all:
-    @echo 'Bundles are built per platform; run `just build` on Linux, macOS and Windows.'
-    @echo 'CI does this on three runners: see .github/workflows/release.yml.'
+    @echo 'One machine each: run `just build` on Linux, macOS and Windows.'
+    @echo 'Windows can also be cross-compiled from Linux: `just build-windows-cross`.'
+    @echo 'CI does all three on its own runners: see .github/workflows/release.yml.'
 
 cli *ARGS:
     cargo run -q -p coral-cli -- {{ARGS}}

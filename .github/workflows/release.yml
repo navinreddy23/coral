@@ -1,7 +1,9 @@
 name: Release
 
-# Bundles are built per platform and never cross-compiled: a Tauri bundle links the platform's
-# own webview — WebKitGTK, WebKit, WebView2 — so each has to be built where it runs.
+# One runner per platform. A Tauri bundle links the platform's own webview — WebKitGTK, WebKit,
+# WebView2 — and while Windows can be cross-compiled from Linux with cargo-xwin, a release is
+# built on Windows: only a Windows host produces an MSI, and only a Windows host can sign the
+# installer.
 on:
   push:
     tags: ['v*']
