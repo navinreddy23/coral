@@ -131,7 +131,7 @@
     display: flex; align-items: center; gap: var(--space-2);
     flex: 1; min-width: 0; text-align: left; cursor: pointer;
     font: inherit; font-size: 12px; padding: 2px var(--space-2) 2px 4px;
-    background: none; border: 0; color: var(--fg-1);
+    background: var(--bg-1); border: 0; color: var(--fg-1);
   }
   .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dir { color: var(--fg-1); font-weight: 600; }

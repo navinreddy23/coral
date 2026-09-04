@@ -33,11 +33,6 @@ tokio      = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tracing    = { workspace = true }
 tracing-subscriber = { workspace = true }
 
-# Only this one is. Everything else above was here too, which made the crate unbuildable for
-# any target but Linux — found by cross-compiling for Windows, which is the only thing that
-# would ever have said so.
-[target.'cfg(target_os = "linux")'.dependencies]
-webkit2gtk = { workspace = true }
 
 [dev-dependencies]
 coral-core = { workspace = true, features = ["testutil"] }

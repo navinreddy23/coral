@@ -59,7 +59,7 @@
     display: flex; align-items: center; gap: var(--space-2);
     width: 100%; text-align: left; cursor: pointer;
     font: inherit; font-size: 12px; padding: 1px var(--space-2) 1px 4px;
-    background: none; border: 0; color: var(--fg-1);
+    background: var(--bg-1); border: 0; color: var(--fg-1);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   button:hover { background: var(--bg-2); }

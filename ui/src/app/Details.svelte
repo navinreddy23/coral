@@ -141,6 +141,15 @@
     border-left: 1px solid var(--border); background: var(--bg-1);
     padding: var(--space-3); font-size: 12px;
   }
+  /*
+   * Every element that carries text in this panel paints its own opaque background.
+   *
+   * The panel's own `background` is not enough. It scrolls, and WebKit paints a scrolling
+   * container's background into one layer and its contents into another; the contents layer is
+   * transparent, so text on it drops from subpixel to grayscale antialiasing and the whole
+   * column reads soft. Naming the colour on the text elements themselves is what fixes it.
+   */
+  h2, h3, dt, dd, .muted, .error, .all { background: var(--bg-1); }
   h2 {
     font-size: 14px; font-weight: 600; line-height: 1.35;
     margin: 0 0 var(--space-3); color: var(--fg-0);
@@ -212,7 +221,7 @@
     display: flex; align-items: center; gap: var(--space-2);
     width: 100%; text-align: left; font: inherit; font-size: 12px;
     padding: 2px var(--space-2); margin: 0 calc(-1 * var(--space-2));
-    background: none; border: 0; border-radius: var(--radius-1); cursor: pointer;
+    background: var(--bg-1); border: 0; border-radius: var(--radius-1); cursor: pointer;
     color: var(--fg-1); overflow: hidden;
   }
   .file:hover { background: var(--bg-2); }

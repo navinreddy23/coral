@@ -153,7 +153,7 @@
     display: flex; align-items: center; gap: var(--space-3);
     width: 100%; text-align: left; font: inherit; font-size: 12px;
     padding: 5px var(--space-3); cursor: pointer;
-    background: none; border: 0; color: var(--fg-0);
+    background: var(--bg-0); border: 0; color: var(--fg-0);
   }
   .row:hover:not(:disabled), .row:focus-visible:not(:disabled) {
     background: var(--accent-soft);

@@ -194,7 +194,7 @@
   }
   .files li + li { border-top: 1px solid var(--border); }
   .file {
-    flex: 1; min-width: 0; text-align: left; border: 0; background: none;
+    flex: 1; min-width: 0; text-align: left; border: 0; background: var(--bg-0);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .file.on { background: var(--accent-soft); color: var(--fg-0); }

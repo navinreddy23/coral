@@ -205,7 +205,7 @@
   h2 { margin: 0; font-size: 14px; font-weight: 600; flex: 1; }
   .shut {
     font: inherit; font-size: 18px; line-height: 1; cursor: pointer;
-    background: none; border: 0; color: var(--fg-2); padding: 0 var(--space-2);
+    background: var(--bg-1); border: 0; color: var(--fg-2); padding: 0 var(--space-2);
   }
   .shut:hover { color: var(--fg-0); }
 
@@ -219,7 +219,7 @@
     display: flex; flex-direction: column; gap: 1px; align-items: flex-start;
     width: 100%; text-align: left; font: inherit; cursor: pointer;
     padding: var(--space-2); border-radius: var(--radius-1);
-    background: none; border: 0; color: var(--fg-1); overflow: hidden;
+    background: var(--bg-1); border: 0; color: var(--fg-1); overflow: hidden;
   }
   .pick:hover { background: var(--bg-2); }
   .pick.on { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent-line); }

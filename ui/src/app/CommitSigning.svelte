@@ -289,7 +289,7 @@
 
   .link {
     font: inherit; font-size: inherit; cursor: pointer; padding: 0;
-    background: none; border: 0; color: var(--accent); text-decoration: underline;
+    background: var(--bg-1); border: 0; color: var(--accent); text-decoration: underline;
   }
 
   footer {

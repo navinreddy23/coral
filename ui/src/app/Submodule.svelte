@@ -122,7 +122,7 @@
   h2 { margin: 0; font-size: 14px; font-weight: 600; flex: 1; }
   .shut {
     font: inherit; font-size: 18px; line-height: 1; cursor: pointer;
-    background: none; border: 0; color: var(--fg-2); padding: 0 var(--space-2);
+    background: var(--bg-1); border: 0; color: var(--fg-2); padding: 0 var(--space-2);
   }
   .shut:hover { color: var(--fg-0); }
 

@@ -406,11 +406,20 @@
   .filter:focus { border-color: var(--accent); }
 
   section + section { border-top: 1px solid var(--border); }
+  /*
+   * Every row that carries text paints its own opaque background.
+   *
+   * WebKit antialiases text on a composited layer with subpixel precision only where it knows
+   * what is behind it. `background: none` leaves it guessing, so it falls back to grayscale and
+   * the row reads soft — which is why hovering one used to sharpen it: the hover background was
+   * the only thing telling WebKit what the backdrop was. The whole page is composited, because
+   * that is what makes the wheel scroll at all.
+   */
   .head {
     display: flex; align-items: center; gap: var(--space-2);
     width: 100%; font: inherit; font-size: 10px; font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.07em; color: var(--fg-2);
-    background: none; border: 0; padding: var(--space-2) var(--space-1); cursor: pointer;
+    background: var(--bg-1); border: 0; padding: var(--space-2) var(--space-1); cursor: pointer;
     border-radius: var(--radius-1);
   }
   .head:hover { color: var(--fg-1); }
@@ -435,7 +444,7 @@
     display: flex; align-items: center; gap: var(--space-2);
     width: 100%; text-align: left; font: inherit; font-size: 12px;
     padding: 3px var(--space-2) 3px var(--space-4);
-    background: none; border: 0; border-radius: var(--radius-1); cursor: pointer;
+    background: var(--bg-1); border: 0; border-radius: var(--radius-1); cursor: pointer;
     color: var(--fg-1); overflow: hidden;
   }
   .text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
@@ -456,7 +465,7 @@
   .ref.static { cursor: default; }
   .dots {
     flex: 0 0 auto; font: inherit; font-size: 14px; line-height: 1; cursor: pointer;
-    padding: 0 var(--space-2); background: none; border: 0; color: var(--fg-2);
+    padding: 0 var(--space-2); background: var(--bg-1); border: 0; color: var(--fg-2);
     visibility: hidden;
   }
   .row:hover .dots, .row.current .dots { visibility: visible; }
@@ -490,7 +499,7 @@
   .more, .link {
     display: block; text-align: left; cursor: pointer;
     padding: 3px var(--space-4); font-size: 11px; color: var(--accent);
-    background: none; border: 0; font-family: inherit;
+    background: var(--bg-1); border: 0; font-family: inherit;
   }
   .link { display: inline; padding: 0; }
   .more { width: 100%; }

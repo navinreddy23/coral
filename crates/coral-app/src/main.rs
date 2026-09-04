@@ -62,11 +62,6 @@ fn window() {
                 .app_config_dir()
                 .unwrap_or_else(|_| std::env::temp_dir());
             app.manage(tabs::Tabs::load(dir.join("session.json")));
-
-            #[cfg(target_os = "linux")]
-            if let Some(window) = app.get_webview_window("main") {
-                sharpen_text(&window);
-            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -195,33 +190,5 @@ fn rebase_editor() -> Option<i32> {
             eprintln!("coral rebase-editor: {e}");
             Some(1)
         }
-    }
-}
-
-/// Turns off GPU compositing so text keeps subpixel antialiasing.
-///
-/// `WebKitGTK` renders text with grayscale antialiasing on any composited layer, and in
-/// accelerated mode that is the whole page. The desktop here asks for `rgba` antialiasing with
-/// slight hinting, which every other application honours, so Coral's text alone came out
-/// visibly softer — the effect people describe as blurry, and the reason it is much harder to
-/// see against a dark theme.
-///
-/// The graph canvas is a couple of hundred pixels wide and repaints on a frame callback, so
-/// software rasterisation costs nothing measurable here. `CORAL_GPU=1` puts acceleration back
-/// for anyone whose machine disagrees.
-#[cfg(target_os = "linux")]
-fn sharpen_text(window: &tauri::WebviewWindow) {
-    if std::env::var_os("CORAL_GPU").is_some() {
-        return;
-    }
-    let applied = window.with_webview(|webview| {
-        use webkit2gtk::{SettingsExt as _, WebViewExt};
-        if let Some(settings) = WebViewExt::settings(&webview.inner()) {
-            settings
-                .set_hardware_acceleration_policy(webkit2gtk::HardwareAccelerationPolicy::Never);
-        }
-    });
-    if let Err(e) = applied {
-        tracing::warn!(error = %e, "could not reach the webview; text stays grayscale-antialiased");
     }
 }

@@ -133,5 +133,5 @@
     font-weight: 600;
   }
   button.primary:hover:not(:disabled) { background: var(--accent-hover); }
-  .cancel { margin-right: auto; border-color: transparent; background: none; }
+  .cancel { margin-right: auto; border-color: transparent; background: var(--bg-0); }
 </style>

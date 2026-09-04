@@ -184,12 +184,19 @@ corrupt or hand-edited session is repaired on load rather than refused.
 
 ## The window
 
-Text is antialiased by the desktop's own setting, which on Linux is usually subpixel. WebKitGTK
-renders text with grayscale antialiasing on any composited layer, and with accelerated
-compositing on that is the whole page, so the app's text alone came out visibly softer than
-everything around it. Compositing is disabled at startup through the WebKit settings object;
-`CORAL_GPU=1` puts it back. The lane canvas is a couple of hundred pixels wide and repaints on
-a frame callback, so software rasterisation costs nothing measurable.
+**Every surface carrying text paints its own opaque background.** WebKit antialiases text on a
+composited layer with subpixel precision only where it knows what is behind it; `background:
+none` leaves it guessing and it drops to grayscale, which reads as soft. The giveaway is that
+hovering a row sharpens it — the hover colour is the only thing telling WebKit what the
+backdrop is. The lane column is the deliberate exception, left transparent so the canvas shows
+through.
+
+Compositing itself stays **on**, and turning it off is not an option however good the text
+looks. WebKitGTK delivers wheel events through the compositing path: with
+`HardwareAccelerationPolicy::Never` the commit list received not one wheel event — measured at
+zero against fifty-three with acceleration on — so the graph could only be moved by keyboard.
+Coral disabled compositing for a while to keep subpixel text and shipped an unscrollable commit
+list to do it. The opaque backgrounds get the text back without that trade.
 
 The row list is absolutely positioned inside the scroller and pinned to the raw `scrollTop`,
 never a rounded one: what reaches the screen is `top - scrollTop`, so the raw value puts it at

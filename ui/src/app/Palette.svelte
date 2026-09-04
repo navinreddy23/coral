@@ -100,7 +100,7 @@
   button {
     display: flex; align-items: center; gap: var(--space-3);
     width: 100%; text-align: left; cursor: pointer; font: inherit; font-size: 12px;
-    padding: 4px var(--space-3); background: none; border: 0; color: var(--fg-1);
+    padding: 4px var(--space-3); background: var(--bg-0); border: 0; color: var(--fg-1);
   }
   button.on, button:hover { background: var(--bg-2); color: var(--fg-0); }
   .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

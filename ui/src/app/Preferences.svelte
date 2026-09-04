@@ -64,7 +64,7 @@
   .back {
     display: block; width: 100%; text-align: left; font: inherit; font-size: 12px;
     cursor: pointer; padding: var(--space-2); border-radius: var(--radius-1);
-    background: none; border: 0; color: var(--accent);
+    background: var(--bg-1); border: 0; color: var(--accent);
   }
   .back:hover { background: var(--bg-2); }
   .heading {
@@ -76,7 +76,7 @@
     display: flex; align-items: center; gap: var(--space-2);
     width: 100%; text-align: left; font: inherit; font-size: 12px; cursor: pointer;
     padding: 4px var(--space-2); border-radius: var(--radius-1);
-    background: none; border: 0; color: var(--fg-1);
+    background: var(--bg-1); border: 0; color: var(--fg-1);
   }
   .pane:hover { background: var(--bg-2); }
   .pane.on {
