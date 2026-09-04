@@ -103,6 +103,24 @@ pub fn classify(loc: &RepoLocation, path: &Path) -> Option<RepoChanged> {
     None
 }
 
+/// Whether an event says the repository changed, or only that something read it.
+///
+/// Reading is an event too: opening the commit-graph raises `IN_OPEN`, `IN_ACCESS` and
+/// `IN_CLOSE_NOWRITE` on every file in the chain. Counting those as changes made the window
+/// rewalk because it had just walked — on a repository the size of the kernel, six seconds of
+/// work every four hundred milliseconds, for as long as the tab was open, and a second
+/// repository could not be walked at all while it went on. Closing a file that was written to
+/// is the one access that does mean a change.
+fn reports_a_change(kind: notify::EventKind) -> bool {
+    use notify::event::{AccessKind, AccessMode};
+
+    match kind {
+        notify::EventKind::Access(AccessKind::Close(AccessMode::Write)) => true,
+        notify::EventKind::Access(_) => false,
+        _ => true,
+    }
+}
+
 /// The files git leaves behind while a multi-step operation is in progress.
 fn is_op_path(rel: &str) -> bool {
     const NAMES: [&str; 6] = [
@@ -313,9 +331,11 @@ fn spawn_debouncer(
             };
             match raw.recv_timeout(timeout) {
                 Ok(Ok(event)) => {
-                    for path in &event.paths {
-                        if let Some(c) = classify(&loc, path) {
-                            pending.merge(c);
+                    if reports_a_change(event.kind) {
+                        for path in &event.paths {
+                            if let Some(c) = classify(&loc, path) {
+                                pending.merge(c);
+                            }
                         }
                     }
                     if pending.any() {
@@ -363,4 +383,36 @@ pub fn watched_roots(loc: &RepoLocation) -> Vec<PathBuf> {
         v.push(w.clone());
     }
     v
+}
+
+#[cfg(test)]
+mod tests {
+    use super::reports_a_change;
+    use notify::EventKind;
+    use notify::event::{AccessKind, AccessMode, CreateKind, ModifyKind};
+
+    #[test]
+    fn reading_a_file_is_not_a_change() {
+        // Walking the graph opens every file in the commit-graph chain. Each open, read and
+        // close arrived here as an event, and treating them as changes made the walk ask for
+        // itself again.
+        assert!(!reports_a_change(EventKind::Access(AccessKind::Open(
+            AccessMode::Read
+        ))));
+        assert!(!reports_a_change(EventKind::Access(AccessKind::Read)));
+        assert!(!reports_a_change(EventKind::Access(AccessKind::Close(
+            AccessMode::Read
+        ))));
+    }
+
+    #[test]
+    fn writing_one_is() {
+        assert!(reports_a_change(EventKind::Access(AccessKind::Close(
+            AccessMode::Write
+        ))));
+        assert!(reports_a_change(EventKind::Create(CreateKind::File)));
+        assert!(reports_a_change(EventKind::Modify(ModifyKind::Any)));
+        // Backends that cannot say what happened must be believed rather than dropped.
+        assert!(reports_a_change(EventKind::Any));
+    }
 }

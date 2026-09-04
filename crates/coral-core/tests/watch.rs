@@ -278,3 +278,31 @@ async fn a_burst_of_edits_coalesces() {
         assert!(extra < 20, "500 edits produced more than 20 notifications");
     }
 }
+
+/// Walking the graph reads the git directory, and reading it must not ask for another walk.
+///
+/// This is the loop that made a large repository never settle: every walk opened the
+/// commit-graph, every open raised an event, every event was a change, and the change asked
+/// for a walk. The tab sat at six seconds a cycle and a second tab could not be opened at all.
+#[tokio::test]
+async fn reading_the_git_directory_is_not_a_change() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    repo.git(["commit-graph", "write", "--reachable"]);
+    let loc = located(&repo).await;
+    let mut w = RepoWatcher::start(&loc).unwrap();
+
+    // Whatever the commit made is now behind us.
+    let _ = tokio::time::timeout(Duration::from_secs(1), w.recv()).await;
+
+    for _ in 0..5 {
+        for name in ["HEAD", "packed-refs", "objects/info/commit-graph"] {
+            let _ = std::fs::read(loc.git_dir.join(name));
+        }
+    }
+
+    let after = tokio::time::timeout(Duration::from_millis(1500), w.recv())
+        .await
+        .ok()
+        .flatten();
+    assert_eq!(after, None, "reading files reported a change");
+}
