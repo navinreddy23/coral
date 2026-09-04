@@ -5,7 +5,7 @@
 
 use std::fmt::Write as _;
 
-use coral_core::graph::LaneAssigner;
+use coral_core::graph::{LaneAssigner, MAX_LANES, NO_LANE};
 
 /// Renders a DAG as lane art. `dag[i]` is the list of parent indices for commit `i`, and
 /// commits are listed children-first as a topological walk would emit them.
@@ -211,5 +211,54 @@ fn a_lane_stays_open_across_a_long_run() {
             row.open & (1 << held) != 0,
             "row {i} lost the lane reserved at row 0"
         );
+    }
+}
+
+/// A graph wider than the column can show is a graph nobody can read.
+///
+/// The kernel's stable-tree merges have ninety branches open at once, and the assigner handed
+/// out lane 89 for them: every node was drawn off the side of the column and the graph looked
+/// empty. Capped, every commit lands somewhere that can be drawn.
+#[test]
+fn the_graph_is_never_wider_than_it_can_be_drawn() {
+    let mut assigner: LaneAssigner<u32> = LaneAssigner::new();
+
+    // One commit opening two lanes, a hundred times over: every parent is off in the future,
+    // so nothing is ever freed and the width only grows.
+    let mut next = 1_000_u32;
+    for child in 0..100_u32 {
+        let parents = [next, next + 1];
+        next += 2;
+        let topo = assigner.push(&child, &parents);
+        assert!(topo.lane < MAX_LANES, "a node outside the drawable column");
+        assert!(topo.width <= MAX_LANES, "wider than the column can hold");
+        for lane in &topo.parent_lanes {
+            assert!(
+                *lane == NO_LANE || *lane < MAX_LANES,
+                "an edge to a lane nothing is drawn in"
+            );
+        }
+    }
+    assert!(assigner.max_width() <= MAX_LANES);
+}
+
+/// The spill lane must never hold a reservation, or it would cut another line short.
+///
+/// A run in a lane ends at the row drawn in that lane. Two unrelated commits sharing the spill
+/// lane is fine; a reservation living there while another commit is drawn in it is not.
+#[test]
+fn nothing_is_ever_reserved_in_the_lane_of_last_resort() {
+    let mut assigner: LaneAssigner<u32> = LaneAssigner::new();
+    let mut next = 1_000_u32;
+    for child in 0..200_u32 {
+        let parents = [next, next + 1];
+        next += 2;
+        let topo = assigner.push(&child, &parents);
+        assert!(
+            !topo.parent_lanes.contains(&(MAX_LANES - 1)),
+            "a parent was reserved in the spill lane"
+        );
+        // The open mask covers exactly the drawable lanes, so nothing it reports is unshowable.
+        assert_eq!(topo.open & (1 << (MAX_LANES - 1)), 0);
     }
 }

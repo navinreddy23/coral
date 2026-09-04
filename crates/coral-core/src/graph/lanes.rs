@@ -1,7 +1,23 @@
 use smallvec::SmallVec;
 
-/// No lane assigned.
+/// No lane assigned. A parent's edge is not drawn when its lane is this.
 pub const NO_LANE: u16 = u16::MAX;
+
+/// How many lanes the graph may be wide.
+///
+/// Not a tuning knob: [`RowTopology::open`] is a 32-bit mask, so a lane past 31 has no vertical
+/// run and cannot be drawn as one, and a column wide enough for even this many is already most
+/// of a pane. Left uncapped the assigner handed out lane 89 in the kernel's stable-tree
+/// merges, where ninety branches are open at once — every node there was drawn off the side of
+/// the column and the graph looked empty.
+pub const MAX_LANES: u16 = 32;
+
+/// The lane a commit is drawn in when every other one is taken.
+///
+/// Never carries a reservation, and that is the whole point of setting it aside: a run in a
+/// lane ends at the row drawn in that lane, so a lane holding both a reservation and an
+/// unrelated node would cut the reservation's line short.
+const SPILL: u16 = MAX_LANES - 1;
 
 /// Where a row sits and where its edges go.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -87,7 +103,7 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
                 self.lanes[l as usize] = None;
                 l
             }
-            None => self.alloc(),
+            None => self.alloc().unwrap_or(SPILL),
         };
 
         let mut parent_lanes = SmallVec::new();
@@ -99,11 +115,18 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
                 parent_lanes.push(existing);
                 continue;
             }
-            let pl = if i == 0 && !kept_my_lane {
+            let pl = if i == 0 && !kept_my_lane && lane != SPILL {
                 kept_my_lane = true;
-                lane
+                Some(lane)
             } else {
                 self.alloc()
+            };
+            // Nowhere to put it. The edge is dropped and the parent becomes a tip when its own
+            // row comes: a missing line in a region already too wide to draw is a smaller lie
+            // than a line running to the wrong commit.
+            let Some(pl) = pl else {
+                parent_lanes.push(NO_LANE);
+                continue;
             };
             self.lanes[pl as usize] = Some(p.clone());
             self.reserved.insert(p.clone(), pl);
@@ -115,7 +138,7 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
         // Unless a later parent was allocated into it. Claiming my lane above left its slot
         // free, so `alloc` is entitled to hand it straight back out; freeing it then would
         // destroy a live reservation and leave the map pointing at a trimmed-away slot.
-        if !kept_my_lane && !parent_lanes.contains(&lane) {
+        if !kept_my_lane && !parent_lanes.contains(&lane) && lane != SPILL {
             self.free(lane);
         }
         self.trim();
@@ -145,16 +168,25 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
         mask
     }
 
-    /// Leftmost free lane, skipping any freed on this row.
-    fn alloc(&mut self) -> u16 {
+    /// Leftmost free lane, skipping any freed on this row and the spill lane.
+    ///
+    /// `None` once the graph is as wide as it may be, which the caller answers for: a parent
+    /// loses its edge, a tip is drawn in the spill lane.
+    fn alloc(&mut self) -> Option<u16> {
         for (i, slot) in self.lanes.iter().enumerate() {
             let lane = u16::try_from(i).unwrap_or(u16::MAX);
+            if lane >= SPILL {
+                break;
+            }
             if slot.is_none() && !self.freed_this_row.contains(&lane) {
-                return lane;
+                return Some(lane);
             }
         }
+        if u16::try_from(self.lanes.len()).unwrap_or(u16::MAX) >= SPILL {
+            return None;
+        }
         self.lanes.push(None);
-        u16::try_from(self.lanes.len() - 1).unwrap_or(u16::MAX)
+        u16::try_from(self.lanes.len() - 1).ok()
     }
 
     fn free(&mut self, lane: u16) {
