@@ -6,11 +6,18 @@ export class StashesState {
   list = $state<PlacedStash[]>([]);
   error = $state<string | null>(null);
 
+  /** Which repository is wanted, so an answer for the one being left can be dropped. */
+  #path = '';
+
   async load(path: string): Promise<void> {
+    this.#path = path;
     try {
-      this.list = await repoStashes(path);
+      const list = await repoStashes(path);
+      if (this.#path !== path) return;
+      this.list = list;
       this.error = null;
     } catch (e) {
+      if (this.#path !== path) return;
       // An empty list rather than a stale one: a stash that has been popped must not stay on
       // screen offering to be popped again.
       this.list = [];
@@ -19,6 +26,7 @@ export class StashesState {
   }
 
   clear(): void {
+    this.#path = '';
     this.list = [];
     this.error = null;
   }

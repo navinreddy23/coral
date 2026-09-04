@@ -65,14 +65,27 @@ export class WorktreeState {
 
   async #run(action: () => Promise<Status>): Promise<void> {
     if (!this.#path) return;
+    // Which repository this belongs to. A status for the one being left answers after the
+    // switch and would otherwise be shown under the new one's name.
+    const path = this.#path;
     this.busy = true;
     this.error = null;
     try {
-      this.status = await action();
+      const status = await action();
+      if (this.#path !== path) return;
+      this.status = status;
     } catch (e) {
+      if (this.#path !== path) return;
       this.error = messageOf(e);
     } finally {
-      this.busy = false;
+      if (this.#path === path) this.busy = false;
     }
+  }
+
+  /** Empties the panel, for a repository being left. */
+  clear(): void {
+    this.#path = '';
+    this.status = null;
+    this.error = null;
   }
 }

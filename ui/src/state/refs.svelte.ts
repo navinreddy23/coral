@@ -42,20 +42,37 @@ export class RefsState {
     return map;
   });
 
+  /** Which repository is wanted, so an answer for the one being left can be dropped. */
+  #path = '';
+
   async load(path: string): Promise<void> {
+    this.#path = path;
     this.error = null;
     try {
-      this.all = await repoRefs(path);
+      const all = await repoRefs(path);
+      if (this.#path !== path) return;
+      this.all = all;
     } catch (e) {
+      if (this.#path !== path) return;
       this.error = messageOf(e);
       this.all = [];
     }
     // Submodules are a separate read and a separate failure: a repository whose .gitmodules
     // is unreadable should still show its branches.
     try {
-      this.submodules = await repoSubmodules(path);
+      const submodules = await repoSubmodules(path);
+      if (this.#path !== path) return;
+      this.submodules = submodules;
     } catch {
-      this.submodules = [];
+      if (this.#path === path) this.submodules = [];
     }
+  }
+
+  /** Empties the panel, for a repository being left. */
+  clear(): void {
+    this.#path = '';
+    this.all = [];
+    this.submodules = [];
+    this.error = null;
   }
 }

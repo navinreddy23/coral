@@ -1314,7 +1314,12 @@
     menu = null;
     showRemotes = null;
     showActivity = false;
+    // Everything the panels show belongs to the repository being left. Left up, it is another
+    // repository's branches and another repository's changes under the new one's name — and it
+    // is what the loading screen exists to replace.
     stashes.clear();
+    refs.clear();
+    worktree.clear();
     showSubmodule = null;
     submoduleAt = null;
     showWip = false;
