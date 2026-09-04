@@ -117,13 +117,21 @@
     height: 34px; padding: 0 var(--space-3); flex: 0 0 auto;
     border-bottom: 1px solid var(--border); background: var(--bg-1);
   }
+  /*
+   * Every text surface in the header paints its own background, as everywhere else in the
+   * window: WebKit antialiases with subpixel precision on a composited layer only where it
+   * knows what is behind, and heavy text is where the fallback to grayscale shows first.
+   */
+  .path, .tally, .added, .removed { background: var(--bg-1); }
+  /* Normal weight. The file name is a label on the diff, not a heading over it, and mono at
+     twelve pixels already reads heavier than the interface font beside it. */
   .path {
-    flex: 1; min-width: 0; font-size: 12px; color: var(--fg-0);
+    flex: 1; min-width: 0; font-size: 12px; font-weight: 400; color: var(--fg-1);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .tally { flex: 0 0 auto; font-size: 11px; display: flex; gap: var(--space-2); }
-  .added { color: var(--ok); font-weight: 600; }
-  .removed { color: var(--danger); font-weight: 600; }
+  .added { color: var(--ok); }
+  .removed { color: var(--danger); }
   .toggle { display: flex; border: 1px solid var(--border); border-radius: 3px; overflow: hidden; }
   .toggle button {
     font: inherit; font-size: 11px; cursor: pointer; padding: 1px var(--space-2);
@@ -132,7 +140,7 @@
   .toggle button:hover { color: var(--fg-0); }
   .toggle button.on { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
   .close {
-    font: inherit; cursor: pointer; background: none; border: 0; color: var(--fg-2);
+    font: inherit; cursor: pointer; background: var(--bg-0); border: 0; color: var(--fg-2);
     padding: 2px var(--space-2); border-radius: var(--radius-1);
   }
   .close:hover { color: var(--fg-0); background: var(--bg-2); }

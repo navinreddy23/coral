@@ -137,12 +137,22 @@
   .trailing { min-width: 0; }
   .step, .col { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
   .step.sub { flex-direction: row; align-items: center; gap: var(--space-1); }
+  /*
+   * The two lines of the breadcrumb paint their own background, like every other text surface
+   * in the window: on a composited layer WebKit antialiases with subpixel precision only where
+   * it knows what is behind, and the branch name here is the boldest text in the toolbar, so
+   * it is where the fallback to grayscale shows first.
+   */
+  .label, .value, .sep { background: var(--bg-1); }
   .label {
     font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-2);
   }
+  /* Wide enough for a real branch name. `gitlab-ci-local-support` is 23 characters and came
+     out clipped at 14em; the column is a grid fraction, so a name longer than the window can
+     hold still elides rather than pushing the actions off centre. */
   .value {
     font-size: 13px; font-weight: 600; color: var(--fg-0);
-    max-width: 14em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 24em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .sep { color: var(--fg-2); flex: 0 0 auto; }
   /* The way out of the submodule sits on the crumb itself, which is where the reference puts
@@ -150,7 +160,7 @@
   .leave {
     flex: 0 0 auto; font: inherit; font-size: 13px; line-height: 1; cursor: pointer;
     padding: 1px 4px; border-radius: var(--radius-1);
-    background: none; border: 0; color: var(--fg-2);
+    background: var(--bg-1); border: 0; color: var(--fg-2);
   }
   .leave:hover { background: var(--bg-3); color: var(--danger); }
 
@@ -165,7 +175,7 @@
     display: flex; flex-direction: column; align-items: center; gap: 2px;
     min-width: 54px; padding: 3px var(--space-2); line-height: 13px;
     font: inherit; cursor: pointer;
-    background: none; border: 1px solid transparent; border-radius: var(--radius-1);
+    background: var(--bg-1); border: 1px solid transparent; border-radius: var(--radius-1);
     color: var(--fg-1);
   }
   .action:hover:not(:disabled) {
@@ -187,7 +197,7 @@
   .caret {
     align-self: flex-end; margin: 0 var(--space-1) 5px -4px;
     font: inherit; font-size: 10px; line-height: 1; cursor: pointer;
-    padding: 2px; background: none; border: 0; color: var(--fg-2);
+    padding: 2px; background: var(--bg-1); border: 0; color: var(--fg-2);
   }
   .caret:hover:not(:disabled) { color: var(--fg-0); }
   .caret:disabled { opacity: 0.4; cursor: default; }
