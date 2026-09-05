@@ -393,8 +393,8 @@
    * Refs and status always, the graph only when a ref actually moved: rewalking 1.4M commits
    * after a stash that touched no ref would freeze the window for five seconds for nothing.
    */
-  async function act(action: Action) {
-    if (!info) return;
+  async function act(action: Action): Promise<boolean> {
+    if (!info) return false;
     const path = info.path;
     const before = refSignature();
     const outcome = await actions.run(path, action);
@@ -402,7 +402,7 @@
       // `actions` keeps the message for the status line; the toast is what carries it to
       // someone who is not looking at the bottom of the window.
       if (actions.report) toasts.push('error', 'Something went wrong', actions.report.text);
-      return;
+      return false;
     }
 
     const said = describe(outcome.what, outcome.message, outcome.conflicted);
@@ -418,6 +418,7 @@
       info = await open(path).catch(() => info);
       await focusHead();
     }
+    return true;
   }
 
   /** The row under the pointer, if the loaded frame reaches it. */
@@ -437,7 +438,9 @@
    */
   function checkoutsFor(row: number): MenuItem[] {
     const here = refs.byRow.get(row) ?? [];
-    const locals = new Set(refs.groups.local.map((r) => r.short));
+    const alongside = new Set(
+      here.filter((r) => r.kind.kind === 'local_branch').map((r) => r.short),
+    );
     const out: MenuItem[] = [];
 
     for (const ref of here) {
@@ -446,18 +449,20 @@
         out.push({
           kind: 'item',
           label: `Checkout ${ref.short}`,
-          run: () => void act({ kind: 'checkout', rev: ref.short }),
+          run: () => void goTo(ref),
         });
       } else if (ref.kind.kind === 'remote_branch') {
-        const name = ref.short.slice(ref.short.indexOf('/') + 1);
-        // Not when the local branch of that name is already offered above: two entries that
-        // read the same and do the same is a menu nobody can answer.
-        if (name === '' || name === headName || locals.has(name)) continue;
+        const name = trackingName(ref);
+        // Not when the local branch of that name is on this very row and already offered
+        // above: two entries that read the same and do the same is a menu nobody can answer.
+        // A local of that name sitting elsewhere is a different matter — that entry is how
+        // the two get reconciled, and `goTo` asks which way.
+        if (name === '' || name === headName || alongside.has(name)) continue;
         out.push({
           kind: 'item',
           label: `Checkout ${name}`,
           hint: `tracking ${ref.short}`,
-          run: () => void act({ kind: 'checkout', rev: name }),
+          run: () => void goTo(ref),
         });
       } else if (ref.kind.kind === 'tag') {
         out.push({
@@ -545,8 +550,8 @@
     }
 
     if (!current) {
-      const [label, rev, hint] = checkoutOf(ref);
-      items.push({ kind: 'item', label, hint, disabled: busy, run: () => void act({ kind: 'checkout', rev }) });
+      const [label, hint] = checkoutOf(ref);
+      items.push({ kind: 'item', label, hint, disabled: busy, run: () => void goTo(ref) });
     }
 
     if (!current && ref.kind.kind !== 'stash') {
@@ -631,16 +636,76 @@
     menu = { x: event.clientX, y: event.clientY, items };
   }
 
-  /** How one ref is checked out: what to call it, what to pass git, and what it will do. */
-  function checkoutOf(ref: PlacedRef): [string, string, string | undefined] {
+  /** The branch name a remote-tracking ref checks out as: `origin/topic` becomes `topic`. */
+  function trackingName(ref: PlacedRef): string {
+    return ref.short.slice(ref.short.indexOf('/') + 1);
+  }
+
+  /**
+   * Goes to a ref, asking first when a remote branch already has a local branch of its name.
+   *
+   * `git checkout topic` for `origin/topic` lands on the existing local `topic`, wherever that
+   * happens to be. When the two have diverged that is not what asking for the remote one looks
+   * like it does, and the local branch quietly wins. So the choice is put to the user, as
+   * GitKraken does: go to the local branch as it stands, or move it onto the remote first.
+   */
+  async function goTo(ref: PlacedRef) {
+    const name = trackingName(ref);
+    if (ref.kind.kind !== 'remote_branch' || name === '') {
+      await act({ kind: 'checkout', rev: ref.short });
+      return;
+    }
+    const local = refs.groups.local.find((r) => r.short === name);
+    if (!local || local.target === ref.target) {
+      await act({ kind: 'checkout', rev: name });
+      return;
+    }
+
+    const { choice } = await ask({
+      title: `${name} is already here`,
+      detail: divergence(local, ref),
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [
+        { id: 'checkout', label: `Checkout ${name}`, primary: true },
+        { id: 'reset', label: `Reset ${name} to ${ref.short}` },
+      ],
+    });
+    if (choice === null) return;
+    // The reset only ever runs on a branch the checkout confirmed we are on. Ordering it the
+    // other way, or running it regardless, resets whatever HEAD was left on when the checkout
+    // failed — which is the one outcome nobody asked for.
+    if (!(await act({ kind: 'checkout', rev: name })) || choice !== 'reset') return;
+    await act({ kind: 'reset', rev: ref.short, mode: 'hard' });
+  }
+
+  /** How the local branch and its remote differ, in the words the reset dialog needs. */
+  function divergence(local: PlacedRef, ref: PlacedRef): string {
+    if (local.upstream === ref.short && local.ahead === 0 && local.behind > 0) {
+      const many = local.behind === 1 ? 'commit' : 'commits';
+      return (
+        `${local.short} is ${local.behind} ${many} behind ${ref.short} and has nothing of its ` +
+        'own. Resetting brings it up to date; uncommitted changes in the working copy are ' +
+        'discarded with it.'
+      );
+    }
+    return (
+      `The local ${local.short} and ${ref.short} are on different commits. Checking out goes to ` +
+      'the local branch as it stands. Resetting moves it onto the remote, and any commit only ' +
+      'the local branch reached is left with no name on it.'
+    );
+  }
+
+  /** How one ref is checked out: what to call the menu item, and what it will do. */
+  function checkoutOf(ref: PlacedRef): [string, string | undefined] {
     if (ref.kind.kind === 'remote_branch') {
-      const name = ref.short.slice(ref.short.indexOf('/') + 1);
-      return [`Checkout ${name}`, name, `tracking ${ref.short}`];
+      return [`Checkout ${trackingName(ref)}`, `tracking ${ref.short}`];
     }
     if (ref.kind.kind === 'tag') {
-      return [`Checkout ${ref.short}`, ref.short, 'detaches HEAD'];
+      return [`Checkout ${ref.short}`, 'detaches HEAD'];
     }
-    return [`Checkout ${ref.short}`, ref.short, undefined];
+    return [`Checkout ${ref.short}`, undefined];
   }
 
   async function deleteBranch(name: string) {
@@ -923,8 +988,8 @@
           },
           {
             kind: 'item' as const,
-            label: `Checkout ${r.short}`,
-            run: () => void act({ kind: 'checkout', rev: r.short }),
+            label: checkoutOf(r)[0],
+            run: () => void goTo(r),
           },
         ],
       })),

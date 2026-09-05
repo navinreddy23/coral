@@ -668,3 +668,137 @@ describe('merging and rebasing from the graph', () => {
   });
 });
 
+/**
+ * Checking out a remote branch when a local branch of that name already exists.
+ *
+ * `git checkout topic` lands on the local branch wherever it happens to be, which is not what
+ * asking for `origin/topic` looks like it does. GitKraken asks; so does this.
+ */
+describe('a remote branch with a local of its own name', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  /** `origin/topic` on the row under the pointer, `topic` elsewhere and on another commit. */
+  const diverged = [
+    on('origin/topic', { kind: 'remote_branch', remote: 'origin' }, {
+      name: 'refs/remotes/origin/topic',
+      target: 'b'.repeat(40),
+    }),
+    on('topic', { kind: 'local_branch' }, { row: 3, upstream: 'origin/topic', ahead: 2, behind: 1 }),
+  ];
+
+  /** Clicks the dialog button whose label matches. */
+  async function answer(container: HTMLElement, label: string) {
+    const dialog = await waitFor(() => {
+      const found = container.querySelector('[role="dialog"]');
+      if (!found) throw new Error('no question yet');
+      return found as HTMLElement;
+    });
+    const button = [...dialog.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === label,
+    );
+    if (!button) throw new Error(`no button ${label}`);
+    await fireEvent.click(button);
+  }
+
+  /** Every `repo_action` sent, oldest first. */
+  function actions(): Record<string, unknown>[] {
+    return invoke.mock.calls
+      .filter(([cmd]) => cmd === 'repo_action')
+      .map(([, args]) => (args as { action: Record<string, unknown> }).action);
+  }
+
+  it('still offers the remote branch, though a local of that name exists elsewhere', async () => {
+    const { container } = await shell({ repo_refs: diverged }, 'origin/topic');
+    const labels = await openMenu(container);
+    expect(labels).toContain('Checkout topic');
+  });
+
+  it('asks rather than quietly checking out the local one', async () => {
+    const { container } = await shell({ repo_refs: diverged }, 'origin/topic');
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Checkout topic'));
+
+    const dialog = await waitFor(() => {
+      const found = container.querySelector('[role="dialog"]');
+      if (!found) throw new Error('no question yet');
+      return found as HTMLElement;
+    });
+    expect(dialog.textContent).toContain('origin/topic');
+    expect(actions()).toHaveLength(0);
+  });
+
+  it('checks out the local branch as it stands, when that is the answer', async () => {
+    const { container } = await shell({ repo_refs: diverged }, 'origin/topic');
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Checkout topic'));
+    await answer(container, 'Checkout topic');
+
+    await waitFor(() => {
+      if (actions().length === 0) throw new Error('nothing sent');
+    });
+    expect(actions()).toEqual([{ kind: 'checkout', rev: 'topic' }]);
+  });
+
+  it('resets the local branch onto the remote, when that is the answer', async () => {
+    const { container } = await shell({ repo_refs: diverged }, 'origin/topic');
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Checkout topic'));
+    await answer(container, 'Reset topic to origin/topic');
+
+    // In that order: the reset moves whatever HEAD is on, so it must follow a checkout that
+    // worked. Reversed, or run regardless, it rewrites the branch the user was standing on.
+    await waitFor(() => {
+      if (actions().length < 2) throw new Error('not yet');
+    });
+    expect(actions()).toEqual([
+      { kind: 'checkout', rev: 'topic' },
+      { kind: 'reset', rev: 'origin/topic', mode: 'hard' },
+    ]);
+  });
+
+  it('resets nothing when the checkout fails', async () => {
+    const { container } = await shell(
+      { repo_refs: diverged, repo_action: null },
+      true,
+    );
+    // A failing checkout answers with an error, and the branch must be left where it is.
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'repo_action') throw { code: 'git', message: 'local changes would be lost' };
+      const table = { ...answers(), repo_refs: diverged };
+      if (!(cmd in table)) throw new Error(`unstubbed command ${cmd}`);
+      return table[cmd];
+    });
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Checkout topic'));
+    await answer(container, 'Reset topic to origin/topic');
+
+    await waitFor(() => {
+      if (actions().length === 0) throw new Error('nothing sent');
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(actions()).toEqual([{ kind: 'checkout', rev: 'topic' }]);
+  });
+
+  it('does not ask when the two are on the same commit', async () => {
+    const { container } = await shell(
+      {
+        repo_refs: [
+          on('topic', { kind: 'local_branch' }),
+          on('origin/topic', { kind: 'remote_branch', remote: 'origin' }),
+        ],
+      },
+      true,
+    );
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Checkout topic'));
+
+    await waitFor(() => {
+      if (actions().length === 0) throw new Error('nothing sent');
+    });
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(actions()).toEqual([{ kind: 'checkout', rev: 'topic' }]);
+  });
+});
