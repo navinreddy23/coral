@@ -214,10 +214,18 @@ impl Done {
 /// A revision as a label should read it: an object id shortened, a name left whole.
 ///
 /// Every one of these was formatted with `{rev:.8}`, which is right for the forty characters
-/// of an object id and cuts `origin/dummy-branch` down to `origin/d`.
-fn named(rev: &str) -> &str {
-    let is_oid = rev.len() >= 40 && rev.bytes().all(|b| b.is_ascii_hexdigit());
-    if is_oid { &rev[..8] } else { rev }
+/// of an object id and cuts `origin/dummy-branch` down to `origin/d`. What follows the id is
+/// kept, because `<oid>~1` is a place people recognise and `~1` alone is not.
+fn named(rev: &str) -> std::borrow::Cow<'_, str> {
+    let id = rev
+        .split(|c: char| !c.is_ascii_hexdigit())
+        .next()
+        .unwrap_or(rev);
+    if id.len() >= 40 {
+        format!("{}{}", &id[..8], &rev[id.len()..]).into()
+    } else {
+        rev.into()
+    }
 }
 
 impl Action {
@@ -234,7 +242,7 @@ impl Action {
                 MergeMode::FfOnly => format!("fast-forward to {rev}"),
                 _ => format!("merge {rev}"),
             },
-            Self::Rebase { onto } => format!("rebase onto {onto}"),
+            Self::Rebase { onto } => format!("rebase onto {}", named(onto)),
             Self::CherryPick { revs, commit } => {
                 let what = revs.join(" ");
                 if *commit {
@@ -535,10 +543,13 @@ pub async fn rebase_start(
         .rebase_interactive(&runner, &onto, &todo, &binary)
         .await?;
     let after = loc.snapshot_refs(&runner).await?;
-    loc.journal_change(&format!("rebase onto {onto}"), before, after)?;
+    // Named the way the menu names it. The journal keeps this text for the life of the entry,
+    // so an undo months later read "undid rebase onto <forty characters>~1".
+    let what = format!("rebase onto {}", named(&onto));
+    loc.journal_change(&what, before, after)?;
 
     Ok(ActionOutcome {
-        what: format!("rebase onto {onto}"),
+        what,
         conflicted: !outcome.conflicts.is_empty(),
         message: outcome.message,
     })
@@ -568,6 +579,10 @@ mod tests {
             named("origin/a-very-long-branch-name-goes-here-x"),
             "origin/a-very-long-branch-name-goes-here-x"
         );
+        // What follows the id is kept: an interactive rebase names the parent this way, and
+        // the journal read "rebase onto d38081e90dcfd1183977998a03aed3fe8e324949~1".
+        assert_eq!(named(&format!("{}~1", "b".repeat(40))), "bbbbbbbb~1");
+        assert_eq!(named(&format!("{}^2", "c".repeat(40))), "cccccccc^2");
     }
 
     #[test]

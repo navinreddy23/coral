@@ -121,3 +121,21 @@ describe('reordering', () => {
     expect(rebase.items.map((i) => i.summary)).toEqual(['commit c', 'commit a', 'commit b']);
   });
 });
+
+describe('what the picker calls the target', () => {
+  it('cuts an object id down, and leaves a name alone', () => {
+    const long = 'd38081e90dcfd1183977998a03aed3fe8e324949';
+    const { container } = picker([item('aaa', 'one')]);
+    expect(container.querySelector('header')?.textContent).toContain('main');
+
+    const second = new RebaseState();
+    second.onto = `${long}~1`;
+    second.items = [item('aaa', 'one')];
+    const { container: box } = render(RebasePicker, {
+      props: { rebase: second, onStart: () => {}, onCancel: () => {} },
+    });
+    const said = box.querySelector('header')?.textContent ?? '';
+    expect(said).toContain('d38081e9~1');
+    expect(said).not.toContain(long);
+  });
+});

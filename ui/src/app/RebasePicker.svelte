@@ -1,4 +1,17 @@
 <script lang="ts">
+  /**
+   * A revision as a heading should read it: an object id cut to eight characters, a name left
+   * whole. `d38081e90dcfd1183977998a03aed3fe8e324949~1` is not a heading.
+   */
+  function shorten(rev: string | null): string {
+    if (rev === null) return '';
+    const [id, ...rest] = rev.split('~');
+    const short = id !== undefined && id.length >= 40 && /^[0-9a-f]+$/u.test(id)
+      ? id.slice(0, 8)
+      : (id ?? rev);
+    return [short, ...rest].join('~');
+  }
+
   import type { Step } from '../ipc/types';
   import type { RebaseState } from '../state/rebase.svelte';
 
@@ -23,7 +36,7 @@
 <div class="scrim" role="presentation" onclick={() => rebase.close()}>
   <div class="panel" role="presentation" onclick={(e) => e.stopPropagation()}>
     <header>
-      <span>Rebase onto <strong>{rebase.onto}</strong></span>
+      <span>Rebase onto <strong>{shorten(rebase.onto)}</strong></span>
       <span class="muted">
         {rebase.remaining} of {rebase.items.length} commits kept, oldest first
       </span>
