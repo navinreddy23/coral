@@ -178,7 +178,115 @@ describe('the shell', () => {
 
     const painting = rules.filter((rule) => /background(-color)?:/u.test(rule));
     expect(painting.length, 'something must paint the selection').toBeGreaterThan(0);
-    for (const rule of painting) expect(rule, rule).toContain('cell.message');
+    // The strip counts as reaching it: it is a child of the message cell, drawn in the gap
+    // between the node and the text, so it is inside the same column and covers neither the
+    // lanes nor the pills.
+    for (const rule of painting) {
+      expect(rule, rule).toMatch(/cell\.message|lane-strip/u);
+    }
+  });
+
+  it('puts the lane colour in the strip beside the message, not across it', async () => {
+    // A message cell washed with its lane colour is what made the selected commit hard to
+    // find: every row was tinted something, so the one tint that means "you picked this" was
+    // just another colour in the column.
+    const { container } = await shell();
+    const row = container.querySelectorAll('li.row')[1] as HTMLElement;
+    const cell = row.querySelector('.cell.message') as HTMLElement;
+    const strip = cell.querySelector('.lane-strip');
+    expect(strip, 'every commit row carries a lane strip').not.toBeNull();
+
+    // The lane colour is named on the cell as a custom property and spent by the strip alone.
+    expect(cell.style.getPropertyValue('--row-tint')).toMatch(/lane-\d+-soft/u);
+    const rules = [...document.styleSheets]
+      .flatMap((sheet) => [...(sheet.cssRules ?? [])])
+      .map((rule) => rule.cssText);
+    const cellPaint = rules.filter(
+      (text) => /\.row[^{]*\.cell\.message[^{]*\{/u.test(text) && /--row-tint/u.test(text),
+    );
+    expect(cellPaint, 'the message cell must not wear the lane colour').toEqual([]);
+    expect(
+      rules.some((text) => /lane-strip/u.test(text) && /--row-tint/u.test(text)),
+      'the strip must be what wears it',
+    ).toBe(true);
+  });
+
+  /** One local branch sitting on a row the fixture frame actually holds. */
+  function aBranchOnRow(row: number) {
+    return [
+      {
+        name: 'refs/heads/spike',
+        short: 'spike',
+        kind: { kind: 'local_branch' },
+        target: frameOids[row],
+        peeled: null,
+        upstream: null,
+        ahead: 0,
+        behind: 0,
+        row,
+      },
+    ];
+  }
+
+  it('draws a branch pill for a ref that is shown', async () => {
+    const { container } = await shell({ repo_refs: aBranchOnRow(1) });
+    await waitFor(() => {
+      const names = [...container.querySelectorAll('.pill-text')].map((n) => n.textContent);
+      if (!names.includes('spike')) throw new Error('no pill yet');
+    });
+  });
+
+  it('draws no pill for a ref that is hidden', async () => {
+    // Hiding takes a branch out of the walk, but its commits usually stay: another branch
+    // still reaches them. The label must not stay with them, or the graph goes on naming a
+    // branch the panel beside it is showing as hidden.
+    const { container } = await shell({
+      repo_refs: aBranchOnRow(1),
+      graph_scope: { solo: null, hidden: ['refs/heads/spike'] },
+    });
+    await waitFor(() => {
+      if (container.querySelectorAll('li.row').length === 0) throw new Error('no rows yet');
+    });
+    const names = [...container.querySelectorAll('.pill-text')].map((n) => n.textContent);
+    expect(names).not.toContain('spike');
+  });
+
+  it('keeps drawing the other labels while one branch is soloed', async () => {
+    // Solo restricts the walk, not the labelling: a tag on a commit the soloed branch reaches
+    // is still worth drawing, and only a ref hidden by hand loses its pill.
+    const { container } = await shell({
+      repo_refs: aBranchOnRow(1),
+      graph_scope: { solo: 'refs/heads/other', hidden: [] },
+    });
+    await waitFor(() => {
+      const names = [...container.querySelectorAll('.pill-text')].map((n) => n.textContent);
+      if (!names.includes('spike')) throw new Error('no pill yet');
+    });
+  });
+
+  it('rereads the scope before rewalking when refs move, so a deleted solo cannot strand the graph', async () => {
+    // Deleting the soloed branch in a terminal used to leave an empty graph under a banner
+    // naming it: the walk was redone against a name the repository no longer had, and nothing
+    // asked the engine to prune it. Reading the scope is what prunes, so it has to come first.
+    await shell({ graph_scope: { solo: 'refs/heads/gone', hidden: [] } });
+    await waitFor(() => {
+      if (!listeners.has('repo://changed')) throw new Error('not listening yet');
+    });
+    invoke.mockClear();
+
+    const deliver = listeners.get('repo://changed');
+    expect(deliver).toBeDefined();
+    deliver?.({
+      payload: { refs: true, index: false, worktree: false, ops: false, graph: false },
+    });
+
+    await waitFor(() => {
+      const called = invoke.mock.calls.map((c) => c[0] as string);
+      if (!called.includes('graph_rewalk')) throw new Error('no rewalk yet');
+    });
+    const called = invoke.mock.calls.map((c) => c[0] as string);
+    expect(called).toContain('graph_scope');
+    expect(called.indexOf('graph_scope')).toBeLessThan(called.indexOf('graph_rewalk'));
   });
 
   it('keeps the lanes in their own column, clear of the branch names', async () => {

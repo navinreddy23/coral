@@ -2682,6 +2682,7 @@
           <span class="cell refs"></span>
           <span class="cell graph-col"><span class="wip-node"></span></span>
           <span class="cell message">
+            <span class="lane-strip" aria-hidden="true"></span>
             <span class="summary">WIP on {headName ?? 'HEAD'}</span>
             {#if wip.edits > 0}<span class="tally edit">✎ {wip.edits}</span>{/if}
             {#if wip.adds > 0}<span class="tally add">+ {wip.adds}</span>{/if}
@@ -2782,6 +2783,7 @@
               </span>
               <span class="cell graph-col"></span>
               <span class="cell message" style:--row-tint="var(--lane-{laneOf(row)}-soft)">
+                <span class="lane-strip" aria-hidden="true"></span>
                 <span class="summary">{visibleMeta.get(row)?.summary ?? ''}</span>
                 {#if showBody}
                   <span class="detail">{flatten(visibleMeta.get(row)?.body ?? '')}</span>
@@ -3059,7 +3061,7 @@
    */
   .wip {
     position: sticky; top: 22px; z-index: 1; cursor: pointer;
-    background: var(--warn-soft); box-shadow: inset 2px 0 0 var(--warn);
+    background: var(--warn-soft);
     /* It is a button, and a button is shrink-to-fit even as a grid container. Every other row
        is a list item and stretches on its own, which is why the difference only showed once
        this row had a colour of its own to stop halfway across. */
@@ -3070,31 +3072,43 @@
   .wip .cell.refs, .wip .cell.message { background: var(--warn-soft); }
   .wip .summary { color: var(--fg-0); font-weight: 600; }
   .wip .wip-node { border-color: var(--warn); }
-  .wip:hover { box-shadow: inset 3px 0 0 var(--warn); }
+
   /*
-   * Each row's message wears the colour of the lane its commit sits in, which is what ties a
-   * line of text to a node three columns away. The soft mixes are the same ones the branch
-   * pills use, so a branch reads as one colour from its label to its last commit.
+   * The lane's colour sits in the gap between the node and the text, not across the message.
+   *
+   * It used to wash the whole message cell, and that is what made the selected commit hard to
+   * find: every row was already tinted something, so the one tint that means "this is the row
+   * you picked" was just another colour in a column of colours. A strip at the leading edge
+   * still ties the line of text to a node three columns away, and leaves the cell itself plain
+   * for the accent to land on. The reference client paints the same gap for the same reason.
    */
-  .row .cell.message { background: var(--row-tint, var(--bg-0)); }
+  .row .cell.message { background: var(--bg-0); padding-left: 0; }
   .row:hover .cell.message { background: var(--bg-1); }
+  .lane-strip {
+    flex: 0 0 6px; align-self: stretch;
+    background: var(--row-tint, transparent);
+    border-radius: var(--radius-1) 0 0 var(--radius-1);
+  }
+  /* The strip is the leading edge, so it is also where the row's state is shown: a bar drawn
+     inside the cell would sit behind it and never be seen. */
+  .row.selected .lane-strip { background: var(--accent-line); }
+  .row.here .lane-strip { background: var(--warn); }
+  .wip .lane-strip { background: var(--warn); }
+  .wip.selected .lane-strip { background: var(--accent-line); }
   /* Every match tinted, the one being stood on ruled as well: a screen of identical tints
      says how many matched and nothing about which one the buttons are pointing at. */
   .row.found .cell.message { background: var(--warn-soft); }
-  .row.here .cell.message { box-shadow: inset 2px 0 0 var(--warn); }
+  .row.here .cell.message { box-shadow: inset 0 0 0 1px var(--warn); }
   /*
    * The selected commit, tinted and given a bar down its leading edge. On a screen of rows
    * that all look alike a tint alone is easy to lose, and the bar survives a hover passing
    * over a neighbour.
    */
-  .row.selected .cell.message, .wip.selected {
-    background: var(--accent-soft);
-    box-shadow: inset 2px 0 0 var(--accent-line);
-  }
+  .row.selected .cell.message, .wip.selected { background: var(--accent-soft); }
   /* Selected beats dirty: whichever row the panel on the right is showing has to be the one
      that looks picked, and the working copy is still the only amber-noded row on the list. */
   .wip.selected .cell.refs, .wip.selected .cell.message { background: var(--accent-soft); }
-  .wip.selected:hover { box-shadow: inset 3px 0 0 var(--accent-line); }
+
   .row.selected .cell.message .summary { color: var(--fg-0); font-weight: 600; }
   /*
    * Every text surface paints an opaque background of its own, and this is not optional.
