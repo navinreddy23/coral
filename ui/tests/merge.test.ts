@@ -16,6 +16,10 @@ const conflict = (ours: string[], theirs: string[], base: string[] = []): Block 
   theirs,
 });
 
+/** The lines of one side, as a pick names them: `take('ours', 0, 1)` is its first two. */
+const take = (side: 'ours' | 'theirs' | 'base', ...lines: number[]) =>
+  lines.map((line) => ({ side, line }));
+
 describe('rendering a resolved file', () => {
   it('keeps the agreeing regions verbatim', () => {
     expect(render([common('a', 'b')], {})).toBe('a\nb\n');
@@ -29,55 +33,95 @@ describe('rendering a resolved file', () => {
       conflict(['mine2'], ['yours2']),
       common('end'),
     ];
-    const out = render(blocks, { 0: ['theirs'], 1: ['ours'] });
+    const out = render(blocks, { 0: take('theirs', 0), 1: take('ours', 0) });
     expect(out).toBe('top\nyours\nmiddle\nmine2\nend\n');
   });
 
   it('can take the base, which is how a region is reverted', () => {
     const blocks = [conflict(['mine'], ['yours'], ['original'])];
-    expect(render(blocks, { 0: ['base'] })).toBe('original\n');
+    expect(render(blocks, { 0: take('base', 0) })).toBe('original\n');
   });
 
-  it('keeps our side where no decision was made', () => {
-    // That is what git already staged, so applying early is never worse than not opening it.
-    const blocks = [conflict(['mine'], ['yours'])];
-    expect(render(blocks, {})).toBe('mine\n');
+  it('keeps the base where nobody has taken a side', () => {
+    // The lines as they were before either branch touched them: the one answer that cannot
+    // be said to favour either side, and what the result pane shows for an untouched region.
+    const blocks = [conflict(['mine'], ['yours'], ['original'])];
+    expect(render(blocks, {})).toBe('original\n');
+  });
+
+  it('goes back to the base when every line is taken back out', () => {
+    // Unticking both sides is how a region is put back the way it was, which is the same
+    // thing an untouched region does: there is one meaning for "nothing taken".
+    const blocks = [common('a'), conflict(['mine'], ['yours'], ['was']), common('b')];
+    expect(render(blocks, { 0: [] })).toBe('a\nwas\nb\n');
+  });
+
+  it('drops a region with no base when nothing is taken', () => {
+    // Two branches that each added a file has no "before" to fall back to, so taking neither
+    // side really does leave nothing.
+    const blocks = [common('a'), conflict(['mine'], ['yours']), common('b')];
+    expect(render(blocks, { 0: [] })).toBe('a\nb\n');
   });
 
   it('handles a side that contributes no lines', () => {
     // One side deleted the region entirely; taking it must not leave a blank line behind.
     const blocks = [common('a'), conflict([], ['yours']), common('b')];
-    expect(render(blocks, { 0: ['ours'] })).toBe('a\nb\n');
+    expect(render(blocks, { 0: take('ours', 0) })).toBe('a\nb\n');
   });
 
   it('produces nothing for a file whose every line was dropped', () => {
-    expect(render([conflict([], ['yours'])], { 0: ['ours'] })).toBe('');
+    expect(render([conflict([], ['yours'])], { 0: take('ours', 0) })).toBe('');
   });
 
   it('numbers decisions by conflict, not by block', () => {
-    // The second conflict is index 1 even though it is the fourth block.
-    const blocks = [common('a'), conflict(['x'], ['y']), common('b'), conflict(['p'], ['q'])];
-    expect(render(blocks, { 1: ['theirs'] })).toBe('a\nx\nb\nq\n');
+    // The second conflict is index 1 even though it is the fourth block, so the first one is
+    // untouched and keeps its base.
+    const blocks = [
+      common('a'),
+      conflict(['x'], ['y'], ['was x']),
+      common('b'),
+      conflict(['p'], ['q'], ['was p']),
+    ];
+    expect(render(blocks, { 1: take('theirs', 0) })).toBe('a\nwas x\nb\nq\n');
   });
 });
 
-describe('keeping both sides of a region', () => {
-  it('writes them in the order they were taken', () => {
-    const blocks = [common('top'), conflict(['mine'], ['yours']), common('end')];
-    expect(render(blocks, { 0: ['theirs', 'ours'] })).toBe('top\nyours\nmine\nend\n');
-    expect(render(blocks, { 0: ['ours', 'theirs'] })).toBe('top\nmine\nyours\nend\n');
+describe('taking lines out of a region', () => {
+  /** Two lines on each side of one conflict, which is what line picking is for. */
+  const two = [
+    common('top'),
+    conflict(['mine one', 'mine two'], ['yours one', 'yours two'], ['was one', 'was two']),
+    common('end'),
+  ];
+
+  it('writes the sides in the order they were taken', () => {
+    expect(render(two, { 0: [...take('theirs', 0, 1), ...take('ours', 0, 1)] })).toBe(
+      'top\nyours one\nyours two\nmine one\nmine two\nend\n',
+    );
   });
 
-  it('drops the region when nothing is taken', () => {
-    // Not the same as undecided: an empty list is a decision, and it is how a region that
-    // neither side should have keeps its lines out of the file.
-    const blocks = [common('top'), conflict(['mine'], ['yours']), common('end')];
-    expect(render(blocks, { 0: [] })).toBe('top\nend\n');
+  it('takes one line from each side, which is the point of picking by line', () => {
+    expect(render(two, { 0: [...take('ours', 0), ...take('theirs', 1)] })).toBe(
+      'top\nmine one\nyours two\nend\n',
+    );
   });
 
-  it('can keep all three, base included', () => {
+  it('keeps the lines in the order they were clicked, not in side order', () => {
+    expect(render(two, { 0: [...take('theirs', 1), ...take('ours', 0)] })).toBe(
+      'top\nyours two\nmine one\nend\n',
+    );
+  });
+
+  it('can keep all three sides, base included', () => {
     const blocks = [conflict(['mine'], ['yours'], ['was'])];
-    expect(render(blocks, { 0: ['base', 'ours', 'theirs'] })).toBe('was\nmine\nyours\n');
+    const picks = [...take('base', 0), ...take('ours', 0), ...take('theirs', 0)];
+    expect(render(blocks, { 0: picks })).toBe('was\nmine\nyours\n');
+  });
+
+  it('ignores a line that is no longer there', () => {
+    // Defensive: a pick outlives the blocks it was made against only if something reloaded
+    // underneath, and half a file is worse than a line missing from it.
+    expect(render(two, { 0: take('ours', 0, 9) })).toBe('top\nmine one\nend\n');
   });
 });
 
@@ -97,31 +141,48 @@ describe('picking sides region by region', () => {
     return merge;
   }
 
-  it('adds a side, and takes it back out when it is picked again', () => {
+  it('takes a whole side, and takes it back out when it is picked again', () => {
     const merge = opened();
     merge.toggle(0, 'ours');
     merge.toggle(0, 'theirs');
-    expect(merge.choices[0]).toEqual(['ours', 'theirs']);
+    expect(merge.choices[0]).toEqual([
+      { side: 'ours', line: 0 },
+      { side: 'theirs', line: 0 },
+    ]);
     merge.toggle(0, 'ours');
-    expect(merge.choices[0]).toEqual(['theirs']);
+    expect(merge.choices[0]).toEqual([{ side: 'theirs', line: 0 }]);
   });
 
-  it('is not settled until every region has been decided', () => {
+  it('takes a single line, leaving the rest of that side out', () => {
+    const merge = new MergeState();
+    merge.blocks = {
+      path: 'f.txt',
+      blocks: [conflict(['mine one', 'mine two'], ['yours one', 'yours two'])],
+    };
+    merge.toggleLine(0, 'theirs', 1);
+    merge.toggleLine(0, 'ours', 0);
+
+    expect(merge.output).toBe('yours two\nmine one\n');
+    merge.toggleLine(0, 'theirs', 1);
+    expect(merge.output).toBe('mine one\n');
+  });
+
+  it('counts the regions nobody has touched, since those keep the base', () => {
     const merge = opened();
-    expect(merge.settled).toBe(false);
+    expect(merge.untouched).toBe(2);
     merge.toggle(0, 'ours');
-    expect(merge.settled).toBe(false);
+    expect(merge.untouched).toBe(1);
     merge.toggle(1, 'theirs');
-    expect(merge.settled).toBe(true);
+    expect(merge.untouched).toBe(0);
   });
 
-  it('counts a region that takes nothing as decided', () => {
+  it('leaves a region taking nothing when its lines are all taken back out', () => {
     const merge = opened();
     merge.toggle(0, 'ours');
     merge.toggle(0, 'ours');
     merge.toggle(1, 'ours');
     expect(merge.choices[0]).toEqual([]);
-    expect(merge.settled).toBe(true);
+    expect(merge.untouched).toBe(0);
     expect(merge.output).toBe('top\nmiddle\nmine2\n');
   });
 
@@ -158,8 +219,8 @@ describe('picking sides region by region', () => {
     merge.chooseAll('ours');
     merge.edit('something neither side wrote\n');
     expect(merge.output).toBe('something neither side wrote\n');
-    // Editing settles the file on its own: what is in the box is the answer.
-    expect(merge.settled).toBe(true);
+    // Typed over, the picks no longer decide anything, so none of them are outstanding.
+    expect(merge.untouched).toBe(0);
     merge.unedit();
     expect(merge.output).toBe('top\nmine\nmiddle\nmine2\n');
   });

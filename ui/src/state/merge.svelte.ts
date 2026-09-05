@@ -12,14 +12,21 @@ import { messageOf } from '../ipc/error';
 /** Which side a conflicting region can take. */
 export type Side = 'ours' | 'theirs' | 'base';
 
+/** One line of one side, taken into the result. */
+export interface Take {
+  side: Side;
+  /** Position within that side of the region, from zero. */
+  line: number;
+}
+
 /**
- * What one region resolves to: the sides taken, in the order they were taken.
+ * What one region resolves to: the lines taken, in the order they were taken.
  *
- * A list rather than one side, because plenty of conflicts are settled by keeping both — the
- * line they added and the line you added — and which goes first is part of the answer. An
- * empty list is a decision too: the region takes nothing and the lines go.
+ * Lines rather than sides, because a conflict is often settled by keeping one line of theirs
+ * and one of yours out of a region that holds several — and the order they go in is part of
+ * the answer. An empty list means nobody has taken anything, and the region keeps the base.
  */
-export type Pick = Side[];
+export type Pick = Take[];
 
 /**
  * The merge tool: what is in progress, what still conflicts, and the decisions made so far.
@@ -63,10 +70,11 @@ export class MergeState {
   /** Conflicting regions of the open file, in order. */
   conflicts = $derived((this.blocks?.blocks ?? []).filter((b) => b.kind === 'conflict'));
 
-  /** True once every conflicting region of the open file has been decided. */
-  settled = $derived(
-    this.edited !== null ||
-      (this.conflicts.length > 0 && this.conflicts.every((_, i) => this.choices[i] !== undefined)),
+  /** How many conflicting regions nobody has taken a side on yet. */
+  untouched = $derived(
+    this.edited === null
+      ? this.conflicts.filter((_, i) => this.choices[i] === undefined).length
+      : 0,
   );
 
   /** The file as it will be written: the picks applied, or whatever was typed over them. */
@@ -122,27 +130,50 @@ export class MergeState {
   }
 
   /**
-   * Adds a side to a region, or takes it back out.
+   * Takes one line into the result, or takes it back out.
    *
-   * Picking is a toggle rather than a choice of one, so that both sides can be kept: click
-   * theirs then ours and the region is written in that order.
+   * A toggle rather than a choice of one, so any combination of the two sides can be kept:
+   * their first line and your second, in the order they were clicked.
    */
-  toggle(index: number, side: Side): void {
+  toggleLine(index: number, side: Side, line: number): void {
     const at = this.choices[index] ?? [];
-    const next = at.includes(side) ? at.filter((s) => s !== side) : [...at, side];
+    const has = at.some((t) => t.side === side && t.line === line);
+    const next = has
+      ? at.filter((t) => !(t.side === side && t.line === line))
+      : [...at, { side, line }];
+    this.choices = { ...this.choices, [index]: next };
+  }
+
+  /** Takes a whole side of one region, or takes all of it back out. */
+  toggle(index: number, side: Side): void {
+    const lines = this.linesOf(index, side);
+    const at = this.choices[index] ?? [];
+    const whole = lines.length > 0 && lines.every((_, i) => at.some((t) => t.side === side && t.line === i));
+    const without = at.filter((t) => t.side !== side);
+    const next = whole ? without : [...at, ...lines.map((_, i) => ({ side, line: i }))];
     this.choices = { ...this.choices, [index]: next };
   }
 
   /** Takes one side and nothing else for a region. */
   choose(index: number, side: Side): void {
-    this.choices = { ...this.choices, [index]: [side] };
+    const lines = this.linesOf(index, side);
+    this.choices = { ...this.choices, [index]: lines.map((_, i) => ({ side, line: i })) };
   }
 
   /** Takes one side for every region at once, which is how most conflicts are settled. */
   chooseAll(side: Side): void {
     const all: Record<number, Pick> = {};
-    this.conflicts.forEach((_, i) => (all[i] = [side]));
+    this.conflicts.forEach((block, i) => {
+      const lines = block.kind === 'conflict' ? sideOf(block, side) : [];
+      all[i] = lines.map((_, at) => ({ side, line: at }));
+    });
     this.choices = all;
+  }
+
+  /** The lines one side holds in one region. */
+  private linesOf(index: number, side: Side): readonly string[] {
+    const block = this.conflicts[index];
+    return block !== undefined && block.kind === 'conflict' ? sideOf(block, side) : [];
   }
 
   /** Starts editing the result by hand, seeded with what the picks produce. */
@@ -214,8 +245,9 @@ export class MergeState {
 /**
  * Rebuilds the file from the blocks and the decisions.
  *
- * A region with no decision keeps our side, which is what git already put in the index — so a
- * partially decided file that is applied anyway is no worse than not having opened it.
+ * A region nobody has taken a side on keeps the base: the lines as they were before either
+ * branch touched them. That is what the output pane shows for an untouched conflict, and it
+ * is the one answer that cannot be said to favour either side.
  */
 export function render(blocks: readonly Block[], choices: Record<number, Pick>): string {
   const out: string[] = [];
@@ -225,12 +257,22 @@ export function render(blocks: readonly Block[], choices: Record<number, Pick>):
       out.push(...block.lines);
       continue;
     }
-    const pick = choices[conflict] ?? ['ours'];
+    const pick = choices[conflict] ?? [];
     conflict += 1;
-    for (const side of pick) {
-      out.push(...(side === 'ours' ? block.ours : side === 'theirs' ? block.theirs : block.base));
+    if (pick.length === 0) {
+      out.push(...block.base);
+      continue;
+    }
+    for (const take of pick) {
+      const line = sideOf(block, take.side)[take.line];
+      if (line !== undefined) out.push(line);
     }
   }
   // A trailing newline, because every line git handed over was one line of a text file.
   return out.length === 0 ? '' : `${out.join('\n')}\n`;
+}
+
+/** The lines one side of a conflicting region holds. */
+export function sideOf(block: Block & { kind: 'conflict' }, side: Side): readonly string[] {
+  return side === 'ours' ? block.ours : side === 'theirs' ? block.theirs : block.base;
 }

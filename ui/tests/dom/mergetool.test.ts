@@ -126,33 +126,28 @@ describe('the merge tool', () => {
     expect(container.querySelector('.wholesale')?.textContent).toContain('delete');
   });
 
-  it('marks a region undecided until a side is picked, and blocks resolving', () => {
+  it('draws each side as the whole file, and says how many regions are untouched', () => {
     const merge = state([conflicted()]);
     merge.active = 'f.txt';
     merge.blocks = {
       blocks: [
         { kind: 'common', lines: ['one'] },
         { kind: 'conflict', base: ['two'], ours: ['MAIN'], theirs: ['SIDE'] },
+        { kind: 'common', lines: ['three'] },
       ],
     };
     const { container } = render(MergeTool, { props: { merge, onDone: noop } });
-    expect(container.querySelector('.conflict.undecided')).not.toBeNull();
-    const resolve = [...container.querySelectorAll('.bar button')].find(
-      (b) => b.textContent?.trim() === 'Mark resolved',
-    ) as HTMLButtonElement;
-    expect(resolve.disabled).toBe(true);
-  });
 
-  it('offers the base only where there is one', () => {
-    const merge = state([conflicted()]);
-    merge.active = 'f.txt';
-    merge.blocks = {
-      blocks: [{ kind: 'conflict', base: [], ours: ['MAIN'], theirs: ['SIDE'] }],
-    };
-    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
-    // An add/add conflict has no base; a third empty column would be noise.
-    expect(container.querySelector('.side.base')).toBeNull();
-    expect(container.querySelectorAll('.side')).toHaveLength(2);
+    const [ours, theirs] = [...container.querySelectorAll('.pane')] as HTMLElement[];
+    expect(ours?.textContent).toContain('one');
+    expect(ours?.textContent).toContain('MAIN');
+    expect(ours?.textContent).toContain('three');
+    expect(theirs?.textContent).toContain('SIDE');
+    expect(theirs?.textContent).not.toContain('MAIN');
+
+    // Untouched means the region keeps the base, which is worth saying out loud.
+    expect(container.querySelector('.bar')?.textContent).toContain('1 untouched');
+    expect(container.querySelector('.result')?.textContent).toContain('two');
   });
 
   it('says which commit failed to apply when a step stops on the next one', () => {
@@ -177,91 +172,131 @@ describe('the merge tool', () => {
  * The sides are toggles, not one choice of three: a great many conflicts are resolved by
  * keeping both lines, and the order they are taken in is part of the answer.
  */
-describe('picking sides in the merge tool', () => {
-  /** A state with one file open on a single conflicting region. */
+describe('picking in the merge tool', () => {
+  /** One file open, one conflict, two lines on each side of it. */
   function opened(swapped = false) {
     const merge = state([conflicted()], swapped);
     merge.active = 'f.txt';
     merge.blocks = {
       blocks: [
         { kind: 'common', lines: ['one'] },
-        { kind: 'conflict', base: ['two'], ours: ['MAIN'], theirs: ['SIDE'] },
+        {
+          kind: 'conflict',
+          base: ['was'],
+          ours: ['MAIN a', 'MAIN b'],
+          theirs: ['SIDE a', 'SIDE b'],
+        },
+        { kind: 'common', lines: ['last'] },
       ],
     };
     return merge;
   }
 
-  function sideNamed(container: HTMLElement, which: string): HTMLButtonElement {
-    const found = container.querySelector(`.side.${which}`);
-    if (!found) throw new Error(`no ${which} side`);
-    return found as HTMLButtonElement;
+  /** The checkboxes of one pane, in file order. */
+  function ticks(container: HTMLElement, side: 'ours' | 'theirs'): HTMLInputElement[] {
+    return [...container.querySelectorAll(`.pane.${side} input[type="checkbox"]`)];
   }
 
-  it('keeps both sides when both are clicked, in the order they were clicked', async () => {
+  function resultText(container: HTMLElement): string {
+    return [...container.querySelectorAll('.result .line .text')]
+      .map((e) => e.textContent)
+      .join('\n');
+  }
+
+  it('puts a checkbox on every conflicting line and none on the agreed ones', () => {
     const merge = opened();
     const { container } = render(MergeTool, { props: { merge, onDone: noop } });
-    await fireEvent.click(sideNamed(container, 'theirs'));
-    await fireEvent.click(sideNamed(container, 'ours'));
-
-    expect(merge.choices[0]).toEqual(['theirs', 'ours']);
-    expect(merge.output).toBe('one\nSIDE\nMAIN\n');
+    // Two lines each side, and nothing on `one` or `last`.
+    expect(ticks(container, 'ours')).toHaveLength(2);
+    expect(ticks(container, 'theirs')).toHaveLength(2);
+    expect(container.querySelectorAll('.pane.ours .line')).toHaveLength(4);
   });
 
-  it('numbers the taken sides once more than one is taken', async () => {
+  it('takes one line from each side, in the order they were clicked', async () => {
     const merge = opened();
     const { container } = render(MergeTool, { props: { merge, onDone: noop } });
-    await fireEvent.click(sideNamed(container, 'ours'));
-    // One side taken needs no number: there is no order to show.
-    expect(container.querySelector('.order')).toBeNull();
-    await fireEvent.click(sideNamed(container, 'theirs'));
-    expect([...container.querySelectorAll('.order')].map((e) => e.textContent?.trim()))
-      .toEqual(['1', '2']);
+
+    await fireEvent.click(ticks(container, 'theirs')[1] as HTMLInputElement);
+    await fireEvent.click(ticks(container, 'ours')[0] as HTMLInputElement);
+
+    expect(merge.choices[0]).toEqual([
+      { side: 'theirs', line: 1 },
+      { side: 'ours', line: 0 },
+    ]);
+    expect(resultText(container)).toBe('one\nSIDE b\nMAIN a\nlast');
   });
 
-  it('takes a side back out when it is clicked again, and says the region takes nothing', async () => {
+  it('takes a line back out when its box is cleared', async () => {
     const merge = opened();
     const { container } = render(MergeTool, { props: { merge, onDone: noop } });
-    await fireEvent.click(sideNamed(container, 'ours'));
-    await fireEvent.click(sideNamed(container, 'ours'));
+    await fireEvent.click(ticks(container, 'ours')[0] as HTMLInputElement);
+    await fireEvent.click(ticks(container, 'ours')[1] as HTMLInputElement);
+    expect(resultText(container)).toBe('one\nMAIN a\nMAIN b\nlast');
 
-    expect(merge.choices[0]).toEqual([]);
-    expect(container.querySelector('.neither')).not.toBeNull();
-    // Decided, though it keeps nothing, so the file can be resolved.
-    const resolve = [...container.querySelectorAll('.bar button')].find(
-      (b) => b.textContent?.trim() === 'Mark resolved',
-    ) as HTMLButtonElement;
-    expect(resolve.disabled).toBe(false);
+    await fireEvent.click(ticks(container, 'ours')[0] as HTMLInputElement);
+    expect(resultText(container)).toBe('one\nMAIN b\nlast');
   });
 
-  it('shows the result that will be written, and follows the picks', async () => {
+  it('shows the base in the result until somebody takes a side', () => {
     const merge = opened();
     const { container } = render(MergeTool, { props: { merge, onDone: noop } });
-    await fireEvent.click(sideNamed(container, 'theirs'));
-    expect(container.querySelector('pre.output')?.textContent).toBe('one\nSIDE\n');
+    expect(resultText(container)).toBe('one\nwas\nlast');
+  });
+
+  it('takes a whole side of one conflict from its pane heading', async () => {
+    const merge = opened();
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+    const takeAll = [...container.querySelectorAll('.pane.theirs .head button')][0];
+    await fireEvent.click(takeAll as HTMLButtonElement);
+
+    expect(ticks(container, 'theirs').every((t) => t.checked)).toBe(true);
+    expect(resultText(container)).toBe('one\nSIDE a\nSIDE b\nlast');
+  });
+
+  it('steps between conflicts and says which one it is on', async () => {
+    const merge = state([conflicted()]);
+    merge.active = 'f.txt';
+    merge.blocks = {
+      blocks: [
+        { kind: 'conflict', base: ['w1'], ours: ['A1'], theirs: ['B1'] },
+        { kind: 'common', lines: ['between'] },
+        { kind: 'conflict', base: ['w2'], ours: ['A2'], theirs: ['B2'] },
+      ],
+    };
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+    const bar = () => container.querySelector('.output .bar')?.textContent ?? '';
+    expect(bar()).toContain('conflict 1 of 2');
+
+    const next = container.querySelector('[aria-label="Next conflict"]') as HTMLButtonElement;
+    await fireEvent.click(next);
+    expect(bar()).toContain('conflict 2 of 2');
+    // And it wraps, rather than stopping at the end with no way back round.
+    await fireEvent.click(next);
+    expect(bar()).toContain('conflict 1 of 2');
   });
 
   it('lets the result be typed over, and the picks be gone back to', async () => {
     const merge = opened();
     const { container } = render(MergeTool, { props: { merge, onDone: noop } });
-    await fireEvent.click(sideNamed(container, 'ours'));
+    await fireEvent.click(ticks(container, 'ours')[0] as HTMLInputElement);
 
     const edit = [...container.querySelectorAll('button')].find(
       (b) => b.textContent?.trim() === 'Edit it by hand',
     ) as HTMLButtonElement;
     await fireEvent.click(edit);
 
-    const box = container.querySelector('textarea.output') as HTMLTextAreaElement;
-    expect(box.value).toBe('one\nMAIN\n');
-    await fireEvent.input(box, { target: { value: 'one\nsomething else\n' } });
-    expect(merge.output).toBe('one\nsomething else\n');
+    const box = container.querySelector('textarea.typed') as HTMLTextAreaElement;
+    expect(box.value).toBe('one\nMAIN a\nlast\n');
+    await fireEvent.input(box, { target: { value: 'one\nsomething else\nlast\n' } });
+    expect(merge.output).toBe('one\nsomething else\nlast\n');
     // The picks no longer decide the file, so they are not live either.
-    expect(sideNamed(container, 'ours').disabled).toBe(true);
+    expect((ticks(container, 'ours')[0] as HTMLInputElement).disabled).toBe(true);
 
     const back = [...container.querySelectorAll('button')].find(
       (b) => b.textContent?.trim() === 'Back to picking sides',
     ) as HTMLButtonElement;
     await fireEvent.click(back);
-    expect(merge.output).toBe('one\nMAIN\n');
+    expect(merge.output).toBe('one\nMAIN a\nlast\n');
   });
 
   it('offers to skip a commit during a rebase, and not during a merge', () => {

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { elidePath } from './path';
   import type { ConflictedFile } from '../ipc/types';
-  import type { MergeState, Side } from '../state/merge.svelte';
+  import type { MergeState } from '../state/merge.svelte';
 
   const { merge, onDone }: { merge: MergeState; onDone: () => void } = $props();
 
@@ -42,6 +42,34 @@
 
   async function skip() {
     if (await merge.step('skip')) onDone();
+  }
+
+  /** The two sides, in the order the panes draw them. */
+  const panes = $derived([
+    { side: 'ours' as const, label: labels.ours, tag: 'A' },
+    { side: 'theirs' as const, label: labels.theirs, tag: 'B' },
+  ]);
+
+  /** Which conflict the stepper is on. Reset whenever another file is opened. */
+  let at = $state(0);
+  $effect(() => {
+    void merge.active;
+    at = 0;
+  });
+
+  /**
+   * Moves to another conflict and brings it into view in all three panes.
+   *
+   * A file with a dozen conflicts is a file where scrolling three panes by hand is the work,
+   * which is why every merge tool has this pair of arrows.
+   */
+  function step(by: number) {
+    const total = merge.conflicts.length;
+    if (total === 0) return;
+    at = (at + by + total) % total;
+    for (const id of [`ours-conflict-${at}`, `theirs-conflict-${at}`, `out-conflict-${at}`]) {
+      document.getElementById(id)?.scrollIntoView({ block: 'center' });
+    }
   }
 
   /** What to call the operation. The state is an enum name; `cherry_pick` is not a word. */
@@ -240,65 +268,88 @@
         <div class="bar">
           <span class="path mono">{merge.active}</span>
           <span class="muted">
-            {merge.conflicts.length} region{merge.conflicts.length === 1 ? '' : 's'}
+            {merge.conflicts.length} conflict{merge.conflicts.length === 1 ? '' : 's'}{merge.untouched >
+            0
+              ? `, ${merge.untouched} untouched`
+              : ''}
           </span>
           <span class="spacer"></span>
           <button onclick={() => merge.chooseAll('ours')}>All {labels.ours}</button>
           <button onclick={() => merge.chooseAll('theirs')}>All {labels.theirs}</button>
-          <button class="primary" disabled={merge.busy || !merge.settled} onclick={() => merge.apply()}>
+          <button class="primary" disabled={merge.busy} onclick={() => merge.apply()}>
             Mark resolved
           </button>
         </div>
 
-        <div class="regions" class:frozen={merge.edited !== null}>
-          {#each blocksWithIndex(merge.blocks.blocks) as entry (entry.at)}
-            {#if entry.block.kind === 'common'}
-              <pre class="common">{entry.block.lines.join('\n')}</pre>
-            {:else}
-              {@const picked = merge.choices[entry.conflict]}
-              <div class="conflict" class:undecided={picked === undefined}>
-                {#each sides as { side, label } (side)}
-                  {@const lines =
-                    side === 'ours'
-                      ? entry.block.ours
-                      : side === 'theirs'
-                        ? entry.block.theirs
-                        : entry.block.base}
-                  {@const order = picked?.indexOf(side) ?? -1}
-                  {#if side !== 'base' || lines.length > 0}
-                    <button
-                      class="side {side}"
-                      class:picked={order >= 0}
-                      disabled={merge.edited !== null}
-                      title={order >= 0 ? `Taken. Click to leave it out` : 'Take this side'}
-                      onclick={() => merge.toggle(entry.conflict, side)}
-                    >
-                      <span class="who">
-                        {label}
-                        <!-- Which of the taken sides comes first, when more than one is. -->
-                        {#if order >= 0 && (picked?.length ?? 0) > 1}
-                          <span class="order">{order + 1}</span>
-                        {/if}
-                      </span>
-                      <pre>{lines.length === 0 ? '(nothing)' : lines.join('\n')}</pre>
-                    </button>
-                  {/if}
-                {/each}
-                {#if picked?.length === 0}
-                  <span class="neither">this region takes nothing</span>
-                {/if}
+        <!-- The two sides above, the result below, as every merge tool worth using lays it
+             out: the whole file on each side rather than the conflicting lines alone, because
+             which side to take is a question about the code around them. -->
+        <div class="sheets" class:frozen={merge.edited !== null}>
+          {#each panes as pane (pane.side)}
+            <div class="pane {pane.side}">
+              <div class="head">
+                <span class="tag">{pane.tag}</span>
+                <span class="who">{pane.label}</span>
+                <span class="spacer"></span>
+                <button
+                  disabled={merge.edited !== null}
+                  title="Take every line of this side, for conflict {at + 1}"
+                  onclick={() => merge.toggle(at, pane.side)}
+                >
+                  Take all
+                </button>
               </div>
-            {/if}
+              <div class="code">
+                {#each sideRows(merge.blocks.blocks, pane.side) as row (row.at)}
+                  {@const taken =
+                    row.conflict !== null &&
+                    row.line !== null &&
+                    (merge.choices[row.conflict] ?? []).some(
+                      (t) => t.side === pane.side && t.line === row.line,
+                    )}
+                  <div
+                    class="line"
+                    class:in-conflict={row.conflict !== null}
+                    class:taken
+                    id={row.first && row.conflict !== null
+                      ? `${pane.side}-conflict-${row.conflict}`
+                      : undefined}
+                  >
+                    <span class="tick">
+                      {#if row.conflict !== null && row.line !== null}
+                        {@const conflict = row.conflict}
+                        {@const line = row.line}
+                        <input
+                          type="checkbox"
+                          checked={taken}
+                          disabled={merge.edited !== null}
+                          aria-label="Take line {row.no} of {pane.label}"
+                          onchange={() => merge.toggleLine(conflict, pane.side, line)}
+                        />
+                      {/if}
+                    </span>
+                    <span class="no">{row.no}</span>
+                    <span class="text">{row.text}</span>
+                  </div>
+                {/each}
+              </div>
+            </div>
           {/each}
         </div>
 
-        <!-- What is actually going to be written. Two sides picked in order settles most
-             conflicts but not all, so the result can also be typed over. -->
-        <div class="result">
+        <div class="output">
           <div class="bar">
-            <span class="path">Result</span>
-            <span class="muted">{merge.output.split('\n').length - 1} lines</span>
+            <span class="path">Output</span>
             <span class="spacer"></span>
+            {#if merge.conflicts.length > 0}
+              <span class="muted">conflict {at + 1} of {merge.conflicts.length}</span>
+              <button aria-label="Previous conflict" title="Previous conflict" onclick={() => step(-1)}>
+                ↑
+              </button>
+              <button aria-label="Next conflict" title="Next conflict" onclick={() => step(1)}>
+                ↓
+              </button>
+            {/if}
             {#if merge.edited === null}
               <button onclick={() => merge.edit(merge.output)}>Edit it by hand</button>
             {:else}
@@ -306,10 +357,25 @@
             {/if}
           </div>
           {#if merge.edited === null}
-            <pre class="output">{merge.output}</pre>
+            <div class="code result">
+              {#each outputRows(merge.blocks.blocks, merge.choices) as row (row.at)}
+                <div
+                  class="line"
+                  class:in-conflict={row.conflict !== null}
+                  class:here={row.conflict === at}
+                  id={row.first && row.conflict !== null ? `out-conflict-${row.conflict}` : undefined}
+                >
+                  <span class="no">{row.no}</span>
+                  <span class="text">{row.text}</span>
+                </div>
+              {/each}
+              {#if outputRows(merge.blocks.blocks, merge.choices).length === 0}
+                <p class="muted">The file comes out empty.</p>
+              {/if}
+            </div>
           {:else}
             <textarea
-              class="output"
+              class="typed"
               spellcheck="false"
               aria-label="The resolved file"
               value={merge.edited}
@@ -324,17 +390,76 @@
 
 <script module lang="ts">
   import type { Block } from '../ipc/types';
+  import type { Pick, Side } from '../state/merge.svelte';
+  import { sideOf } from '../state/merge.svelte';
 
-  /** Blocks paired with their index among the conflicts, which is how a decision is keyed. */
-  export function blocksWithIndex(
-    blocks: readonly Block[],
-  ): { at: number; block: Block; conflict: number }[] {
+  /** One line of a file as a pane draws it. */
+  export interface Row {
+    /** Position in the pane, which is what keys the list. */
+    at: number;
+    /** Line number in this version of the file, or null for a placeholder. */
+    no: number | null;
+    text: string;
+    /** Which conflict the line belongs to, or null for a line both sides agree on. */
+    conflict: number | null;
+    /** Position within that side of the conflict, which is what a pick names. */
+    line: number | null;
+    /** True for the first line of a conflict, which is what the stepper scrolls to. */
+    first: boolean;
+  }
+
+  /** The file as one side has it: every agreed line, plus that side of every conflict. */
+  export function sideRows(blocks: readonly Block[], side: Side): Row[] {
+    const out: Row[] = [];
     let conflict = 0;
-    return blocks.map((block, at) => ({
-      at,
-      block,
-      conflict: block.kind === 'conflict' ? conflict++ : -1,
-    }));
+    for (const block of blocks) {
+      if (block.kind === 'common') {
+        for (const text of block.lines) push(out, text, null, null, false);
+        continue;
+      }
+      const lines = sideOf(block, side);
+      lines.forEach((text, i) => push(out, text, conflict, i, i === 0));
+      // A side that adds nothing here still needs a row, or the conflict has no place in
+      // this pane at all and the stepper has nothing to scroll to.
+      if (lines.length === 0) push(out, '(nothing on this side)', conflict, null, true, false);
+      conflict += 1;
+    }
+    return out;
+  }
+
+  /** The file as it will be written, with each line tied back to the conflict it came from. */
+  export function outputRows(blocks: readonly Block[], choices: Record<number, Pick>): Row[] {
+    const out: Row[] = [];
+    let conflict = 0;
+    for (const block of blocks) {
+      if (block.kind === 'common') {
+        for (const text of block.lines) push(out, text, null, null, false);
+        continue;
+      }
+      const pick = choices[conflict] ?? [];
+      const lines =
+        pick.length === 0
+          ? [...block.base]
+          : pick.map((t) => sideOf(block, t.side)[t.line]).filter((l) => l !== undefined);
+      lines.forEach((text, i) => push(out, text, conflict, i, i === 0));
+      if (lines.length === 0) push(out, '(nothing taken)', conflict, null, true, false);
+      conflict += 1;
+    }
+    return out;
+  }
+
+  /** Appends a row, numbering it. A placeholder stands in for a line and takes no number. */
+  function push(
+    out: Row[],
+    text: string,
+    conflict: number | null,
+    line: number | null,
+    first: boolean,
+    real = true,
+  ) {
+    const previous = out.at(-1);
+    const before = previous?.no ?? 0;
+    out.push({ at: out.length, no: real ? before + 1 : null, text, conflict, line, first });
   }
 </script>
 
@@ -377,63 +502,78 @@
   .wholesale button { font-size: 10px; padding: 0 var(--space-2); }
   .done { padding: var(--space-3); font-size: 12px; color: var(--fg-2); }
 
-  .blocks { flex: 1; min-width: 0; overflow: auto; padding-bottom: var(--space-4); }
+  /* The pane holding everything to the right of the file list: a bar, the two sides, the
+     result. It scrolls nothing itself; each sheet scrolls on its own. */
+  .blocks { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
   .bar {
-    position: sticky; top: 0; z-index: 1;
+    flex: 0 0 auto;
     display: flex; align-items: center; gap: var(--space-2);
     padding: var(--space-2) var(--space-3); background: var(--bg-1);
     border-bottom: 1px solid var(--border); font-size: 12px;
   }
   .path { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  pre {
-    margin: 0; white-space: pre; font-family: var(--font-mono); font-size: 11px;
-    line-height: 17px; overflow-x: auto;
-  }
-  .common { padding: 0 var(--space-3); color: var(--fg-1); }
-  .conflict { display: flex; gap: 1px; margin: var(--space-2) 0; background: var(--border); }
-  /* Undecided regions are outlined so an unresolved one is visible while scrolling past. */
-  .conflict.undecided { outline: 1px solid var(--danger); }
-  .side {
-    flex: 1; min-width: 0; text-align: left; border: 0; border-radius: 0;
-    padding: var(--space-1) var(--space-2); background: var(--bg-0);
-  }
-  .side.ours { background: var(--add-bg); }
-  .side.theirs { background: var(--remove-bg); }
-  .side.base { background: var(--bg-2); }
-  .side.picked { outline: 2px solid var(--accent); outline-offset: -2px; }
-  .who {
-    display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
-    color: var(--fg-2); margin-bottom: 2px;
-  }
-  .order {
-    display: inline-block; min-width: 13px; padding: 0 3px; margin-left: 4px;
-    background: var(--accent); color: var(--accent-fg); border-radius: 7px;
-    font-size: 9px; text-align: center;
-  }
-  .neither {
-    align-self: center; padding: 0 var(--space-2); background: var(--bg-0);
-    font-size: 10px; color: var(--fg-2);
-  }
-  /* While the result is being typed over, the picks no longer decide it — saying so is
-     better than leaving buttons that look live and change nothing. */
-  .regions.frozen { opacity: 0.55; }
 
-  .result { border-top: 1px solid var(--border-strong); margin-top: var(--space-3); }
-  .result .bar { position: static; }
-  .output {
-    display: block; width: 100%; box-sizing: border-box; min-height: 120px;
-    max-height: 320px; overflow: auto; padding: var(--space-2) var(--space-3);
-    background: var(--bg-0); color: var(--fg-0); border: 0;
-    font-family: var(--font-mono); font-size: 11px; line-height: 17px;
-    white-space: pre; resize: vertical;
+  /* Side by side above, the result below: which side to take is a question about the code
+     around the conflict, so both sides show the whole file rather than the region alone. */
+  .sheets { flex: 3 1 0; display: flex; min-height: 0; border-bottom: 1px solid var(--border-strong); }
+  .sheets.frozen { opacity: 0.5; }
+  .pane { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .pane + .pane { border-left: 1px solid var(--border); }
+  .pane .head {
+    flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2);
+    padding: var(--space-1) var(--space-2); font-size: 11px;
+    background: var(--bg-1); border-bottom: 1px solid var(--border);
   }
-  textarea.output { outline: 1px solid var(--accent); outline-offset: -1px; }
+  .pane .head .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pane .head button { font-size: 10px; flex: 0 0 auto; }
+  .tag {
+    display: inline-block; width: 15px; text-align: center; border-radius: 3px;
+    font-size: 10px; font-weight: 700; color: var(--accent-fg);
+  }
+  .pane.ours .tag { background: var(--lane-7); }
+  .pane.theirs .tag { background: var(--lane-3); }
+
+  .code { flex: 1; min-height: 0; overflow: auto; background: var(--bg-0); }
+  .result { flex: 1; min-height: 0; overflow: auto; background: var(--bg-0); }
+  .output { flex: 2 1 0; display: flex; flex-direction: column; min-height: 0; }
+  .output .bar { border-top: 0; border-bottom: 1px solid var(--border); }
+
+  /* One row per line. `content-visibility` keeps a long file cheap: the rows off screen are
+     not laid out at all, which is what makes three sheets of a big file affordable. */
+  .line {
+    display: flex; align-items: baseline; gap: var(--space-2);
+    font-family: var(--font-mono); font-size: 11px; line-height: 17px;
+    white-space: pre; content-visibility: auto; contain-intrinsic-size: auto 17px;
+  }
+  .line .tick { flex: 0 0 14px; text-align: center; }
+  .line .tick input { margin: 0; vertical-align: middle; cursor: pointer; }
+  .line .no {
+    flex: 0 0 34px; text-align: right; color: var(--fg-2);
+    font-variant-numeric: tabular-nums; user-select: none;
+  }
+  .line .text { flex: 1; min-width: 0; color: var(--fg-0); }
+
+  /* A conflicting line is tinted by which side it is on, and marked when it has been taken.
+     The bar down the left is what carries that at a glance while scrolling. */
+  .pane.ours .line.in-conflict { background: var(--lane-7-soft); box-shadow: inset 3px 0 0 var(--lane-7); }
+  .pane.theirs .line.in-conflict { background: var(--lane-3-soft); box-shadow: inset 3px 0 0 var(--lane-3); }
+  .line.in-conflict.taken { font-weight: 600; }
+  .result .line.in-conflict { background: var(--lane-2-soft); box-shadow: inset 3px 0 0 var(--lane-2); }
+  .result .line.in-conflict.here { outline: 1px solid var(--lane-2); outline-offset: -1px; }
+
+  .typed {
+    flex: 1; min-height: 0; width: 100%; box-sizing: border-box; resize: none;
+    padding: var(--space-2) var(--space-3); background: var(--bg-0); color: var(--fg-0);
+    border: 0; outline: 1px solid var(--accent); outline-offset: -1px;
+    font-family: var(--font-mono); font-size: 11px; line-height: 17px; white-space: pre;
+  }
   .whole { padding: var(--space-3); font-size: 12px; color: var(--fg-1); max-width: 60ch; }
   .whole p { margin: 0 0 var(--space-3); line-height: 1.5; }
   .choices { display: flex; flex-wrap: wrap; gap: var(--space-2); }
   .choices button { font-size: 12px; padding: var(--space-1) var(--space-3); }
-  /* A branch name and a commit subject are both long; the row must not grow to fit them. */
-  .wholesale button {
+  /* A branch name and a commit subject are both long; neither row must grow to fit them. */
+  .wholesale button,
+  .blocks > .bar > button {
     max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .muted { color: var(--fg-2); padding: var(--space-3); font-size: 12px; }

@@ -252,8 +252,11 @@ impl RepoLocation {
             .ok()
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
             .filter(|n| !n.is_empty() && n != "undefined")
-            // name-rev qualifies tags as "tags/v7.2"; the bare name is what people call it.
-            .map(|n| n.strip_prefix("tags/").unwrap_or(&n).to_owned());
+            // name-rev qualifies tags as "tags/v7.2" and remote branches as
+            // "remotes/origin/main". The bare names are what people call them, and the merge
+            // tool puts these in a column heading where every character counts.
+            .map(|n| n.strip_prefix("tags/").unwrap_or(&n).to_owned())
+            .map(|n| n.strip_prefix("remotes/").unwrap_or(&n).to_owned());
 
         named.unwrap_or_else(|| rev.chars().take(8).collect())
     }
