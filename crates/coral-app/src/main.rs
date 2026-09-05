@@ -2,8 +2,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use coral_app_lib::{
-    actions, activity, commands, conflicts, experimental, graph, hosting, recent, remotes, signing,
-    ssh, tabs, terminal, watcher,
+    actions, activity, commands, conflicts, experimental, graph, hosting, recent, remotes, scope,
+    signing, ssh, tabs, terminal, watcher,
 };
 
 fn main() {
@@ -78,6 +78,7 @@ fn load_state(app: &tauri::App) {
         .unwrap_or_else(|_| std::env::temp_dir());
     app.manage(tabs::Tabs::load(dir.join("session.json")));
     app.manage(recent::Recents::load(dir.join("recent.json")));
+    app.manage(scope::Scopes::load(dir.join("scope.json")));
 
     // Before anything can run git, since this is what decides which git that is.
     let settings = experimental::Experimental::load(dir.join("settings.json"));
@@ -121,6 +122,8 @@ fn window() {
             graph::repo_stashes,
             graph::graph_row_of,
             graph::graph_rewalk,
+            scope::graph_scope,
+            scope::set_graph_scope,
             activity::activity_log,
             activity::activity_clear,
             experimental::experimental_git,

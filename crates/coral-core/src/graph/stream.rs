@@ -25,10 +25,26 @@ pub enum Order {
     CommitTime,
 }
 
+/// Where a walk starts.
+///
+/// Ref names rather than object ids, and deliberately so: resolving to an id here would pin the
+/// walk to where the branch stood when the user picked it, so a commit made onto a soloed
+/// branch would never appear. The names are resolved once per walk instead.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum Tips {
+    /// Every ref that resolves to a commit, plus HEAD.
+    #[default]
+    All,
+    /// Every one of those but these, by full ref name. HEAD comes too unless it is one of them.
+    Except(Vec<String>),
+    /// Only these, by full ref name. Empty is an empty graph, and says so rather than quietly
+    /// meaning "all" — which is what a bare `Vec` could not distinguish.
+    Only(Vec<String>),
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct StreamOpts {
-    /// Walk starts. Empty means every ref that resolves to a commit, plus HEAD.
-    pub tips: Vec<ObjectId>,
+    pub tips: Tips,
     pub order: Order,
     pub first_parent: bool,
     pub max_count: Option<u64>,

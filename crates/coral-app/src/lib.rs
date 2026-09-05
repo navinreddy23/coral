@@ -11,6 +11,7 @@ pub mod graph;
 pub mod hosting;
 pub mod recent;
 pub mod remotes;
+pub mod scope;
 pub mod session;
 pub mod signing;
 pub mod ssh;

@@ -2,7 +2,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use coral_core::CoralError;
-use coral_core::graph::{GixCommitStream, NO_ROW, Order, StreamOpts, build, flags};
+use coral_core::graph::{GixCommitStream, NO_ROW, Order, StreamOpts, Tips, build, flags};
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,19 +39,19 @@ pub async fn run(
     limit: Option<u64>,
     from: u32,
     first_paint: bool,
+    solo: Option<String>,
+    hidden: Vec<String>,
 ) -> Result<Graph, CoralError> {
     let stream = GixCommitStream::open(path)?;
-    let opts = if first_paint {
-        StreamOpts {
-            order: Order::CommitTime,
-            max_count: limit,
-            ..StreamOpts::default()
-        }
-    } else {
-        StreamOpts {
-            max_count: limit,
-            ..StreamOpts::default()
-        }
+    let opts = StreamOpts {
+        tips: tips_from(solo, hidden),
+        order: if first_paint {
+            Order::CommitTime
+        } else {
+            Order::Topological
+        },
+        max_count: limit,
+        ..StreamOpts::default()
     };
 
     let store = tokio::task::spawn_blocking(move || build(&stream, &opts))
@@ -86,6 +86,18 @@ pub async fn run(
         lanes: store.max_lane().saturating_add(1),
         provisional: first_paint,
     })
+}
+
+/// Where the walk starts, from the two flags.
+///
+/// Solo wins over hiding, as it does in the window: it is the narrower answer, and a walk that
+/// tried to honour both would have to say which of the two the user is looking at.
+fn tips_from(solo: Option<String>, hidden: Vec<String>) -> Tips {
+    match solo {
+        Some(name) => Tips::Only(vec![name]),
+        None if hidden.is_empty() => Tips::All,
+        None => Tips::Except(hidden),
+    }
 }
 
 impl crate::output::Human for Graph {

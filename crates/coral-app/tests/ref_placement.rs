@@ -1,7 +1,7 @@
 //! Placing refs on graph rows. The interesting case is an annotated tag, whose ref points at a
 //! tag object that is not in the graph at all — only its peeled commit is.
 
-use coral_core::graph::{GixCommitStream, StreamOpts, build};
+use coral_core::graph::{GixCommitStream, StreamOpts, Tips, build};
 use coral_core::process::GitRunner;
 use coral_core::repo::RepoLocation;
 use coral_core::testutil::TestRepo;
@@ -74,10 +74,9 @@ async fn a_ref_outside_the_loaded_graph_has_no_row() {
     let refs = loc.refs(&runner).await.unwrap();
 
     // Walk only main, deliberately excluding the orphan.
-    let head = loc.rev_parse(&runner, "refs/heads/main").await.unwrap();
     let stream = GixCommitStream::open(repo.path()).unwrap();
     let opts = StreamOpts {
-        tips: vec![gix::ObjectId::from_hex(head.as_bytes()).unwrap()],
+        tips: Tips::Only(vec!["refs/heads/main".into()]),
         ..StreamOpts::default()
     };
     let store = build(&stream, &opts).unwrap();

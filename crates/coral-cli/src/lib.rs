@@ -363,6 +363,13 @@ pub enum Command {
         /// Use the fast commit-time order the UI paints first, rather than topological order.
         #[arg(long)]
         first_paint: bool,
+        /// Walk only this ref, by full name. The window calls this soloing a branch.
+        #[arg(long)]
+        solo: Option<String>,
+        /// Leave this ref out of the walk, by full name. Repeatable. Its commits still appear
+        /// when a ref that is walked reaches them, which is what git itself would say.
+        #[arg(long = "hide")]
+        hidden: Vec<String>,
     },
     /// Report the git binary coral will drive.
     Version,
@@ -518,7 +525,11 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
             limit,
             from,
             first_paint,
-        } => output::render(&commands::graph::run(repo, limit, from, first_paint).await),
+            solo,
+            hidden,
+        } => output::render(
+            &commands::graph::run(repo, limit, from, first_paint, solo, hidden).await,
+        ),
         Command::Version => output::render(&commands::version::run().await),
         other => dispatch_write(other, repo).await,
     }

@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use gix::ObjectId;
 use smallvec::SmallVec;
 
-use super::stream::{CommitNode, CommitStream, Order, StreamOpts, WalkControl, WalkStats};
+use super::stream::{CommitNode, CommitStream, Order, StreamOpts, Tips, WalkControl, WalkStats};
 use crate::error::CoralError;
 use crate::process::{GitCommand, GitRunner, Sink};
 
@@ -28,6 +28,26 @@ impl SubprocessCommitStream {
         }
     }
 
+    /// Whether HEAD is on no branch.
+    ///
+    /// Only asked when something is hidden, and only because `--all` cannot answer it. `--all`
+    /// means "every ref, and HEAD", and `--exclude` filters the refs but not the HEAD it adds,
+    /// so hiding the checked-out branch left every one of its commits on screen. `--glob=refs/*`
+    /// is the same set without that HEAD, which makes the exclusion work — and then leaves a
+    /// detached HEAD, reachable from no ref at all, as the one tip that has to be named again.
+    fn head_detached(&self) -> bool {
+        let cmd = GitCommand::read("rev-parse", &self.workdir)
+            .arg("rev-parse")
+            .arg("--symbolic-full-name")
+            .arg("HEAD");
+        let mut detached = false;
+        let read = self.runner.stream_blocking(&cmd, b'\n', |line| {
+            detached = line == b"HEAD";
+            Ok(Sink::Stop)
+        });
+        read.is_ok() && detached
+    }
+
     fn command(&self, opts: &StreamOpts) -> GitCommand {
         let mut cmd = GitCommand::read("rev-list", &self.workdir)
             .arg("rev-list")
@@ -44,10 +64,27 @@ impl SubprocessCommitStream {
         if let Some(n) = opts.max_count {
             cmd = cmd.arg(format!("--max-count={n}"));
         }
-        if opts.tips.is_empty() {
-            cmd.arg("--all")
-        } else {
-            cmd.args(opts.tips.iter().map(ToString::to_string))
+        // git's own vocabulary for the same thing, which is what keeps this an oracle rather
+        // than a second implementation: `--exclude` applies to the `--all` that follows it, so
+        // the order of these two arguments is the whole of their meaning.
+        match &opts.tips {
+            Tips::All => cmd.arg("--all"),
+            Tips::Except(names) => {
+                for name in names {
+                    cmd = cmd.arg(format!("--exclude={name}"));
+                }
+                cmd = cmd.arg("--glob=refs/*");
+                if self.head_detached() {
+                    cmd = cmd.arg("HEAD");
+                }
+                cmd
+            }
+            // A name the repository no longer has is skipped, not refused: these come from a
+            // choice the user made before the branch was deleted, and rev-list's default is to
+            // exit 128 on one. The gix walk skips it, so without this the two disagree.
+            Tips::Only(names) => cmd
+                .arg("--ignore-missing")
+                .args(names.iter().map(String::as_str)),
         }
     }
 }
@@ -96,6 +133,11 @@ impl CommitStream for SubprocessCommitStream {
         opts: &StreamOpts,
         sink: &mut dyn FnMut(CommitNode) -> WalkControl,
     ) -> Result<WalkStats, CoralError> {
+        // `rev-list` with no revision argument is a usage error, not an empty answer, and
+        // soloing nothing is a legitimate state to pass through on the way to soloing something.
+        if opts.tips == Tips::Only(Vec::new()) {
+            return Ok(WalkStats::default());
+        }
         let cmd = self.command(opts);
         let mut stats = WalkStats::default();
 

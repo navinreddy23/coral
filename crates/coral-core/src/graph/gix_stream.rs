@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use gix::ObjectId;
 use smallvec::SmallVec;
 
-use super::stream::{CommitNode, CommitStream, Order, StreamOpts, WalkControl, WalkStats};
+use super::stream::{CommitNode, CommitStream, Order, StreamOpts, Tips, WalkControl, WalkStats};
 use crate::error::CoralError;
 
 /// Reads the DAG in-process through gix, using the commit-graph file when one is present.
@@ -74,7 +74,38 @@ impl GixCommitStream {
         (stashes, hidden)
     }
 
-    /// Every ref that resolves to a commit, plus HEAD.
+    /// The commits a walk starts from, for whichever selection was asked for.
+    fn tips_for(repo: &gix::Repository, tips: &Tips) -> Result<Vec<ObjectId>, CoralError> {
+        let mut out = match tips {
+            Tips::All => Self::all_tips(repo, &[])?,
+            Tips::Except(names) => Self::all_tips(repo, names)?,
+            Tips::Only(names) => Self::named_tips(repo, names),
+        };
+        out.sort_unstable();
+        out.dedup();
+        Ok(out)
+    }
+
+    /// The commits the named refs point at, skipping any that this repository does not have.
+    ///
+    /// Skipped rather than refused, because these names come from a choice the user made
+    /// earlier: a branch soloed yesterday and deleted this morning must leave a graph that
+    /// draws, not an error where the commits should be.
+    fn named_tips(repo: &gix::Repository, names: &[String]) -> Vec<ObjectId> {
+        names
+            .iter()
+            .filter_map(|name| {
+                let mut reference = repo.find_reference(name.as_str()).ok()?;
+                let id = reference.peel_to_id().ok()?.detach();
+                match repo.find_header(id) {
+                    Ok(header) if header.kind() == gix::object::Kind::Commit => Some(id),
+                    _ => None,
+                }
+            })
+            .collect()
+    }
+
+    /// Every ref that resolves to a commit, less `except`, plus HEAD.
     ///
     /// Refs are filtered by object kind because the kernel carries tags that peel to trees and
     /// blobs, and handing one to the walk is a hard error rather than a skip.
@@ -84,9 +115,13 @@ impl GixCommitStream {
     /// nothing anywhere to say so, and the only symptom is a commit count that quietly
     /// disagrees with git's. That is exactly how it presents, and it took a screenshot from
     /// another client beside it to notice.
-    fn all_tips(repo: &gix::Repository) -> Result<Vec<ObjectId>, CoralError> {
+    ///
+    /// A hidden ref is not that. It is absent because the user said so, and it is left out
+    /// before the object is ever read — a branch can be hidden precisely because it is broken.
+    fn all_tips(repo: &gix::Repository, except: &[String]) -> Result<Vec<ObjectId>, CoralError> {
         let mut tips: Vec<ObjectId> = Vec::new();
         let mut unreadable: Vec<String> = Vec::new();
+        let excluded: HashSet<&str> = except.iter().map(String::as_str).collect();
 
         for reference in repo
             .references()
@@ -98,6 +133,9 @@ impl GixCommitStream {
                 continue;
             };
             let name = reference.name().as_bstr().to_string();
+            if excluded.contains(name.as_str()) {
+                continue;
+            }
             let Ok(id) = reference.peel_to_id() else {
                 unreadable.push(name);
                 continue;
@@ -124,11 +162,16 @@ impl GixCommitStream {
             });
         }
 
-        if let Ok(head) = repo.head_id() {
+        // Hiding the branch you are on hides it: HEAD names the same commit, so leaving HEAD
+        // in would put every one of those commits back and the eye would appear to do nothing.
+        let head_hidden = repo
+            .head_ref()
+            .ok()
+            .flatten()
+            .is_some_and(|r| excluded.contains(r.name().as_bstr().to_string().as_str()));
+        if !head_hidden && let Ok(head) = repo.head_id() {
             tips.push(head.detach());
         }
-        tips.sort_unstable();
-        tips.dedup();
         Ok(tips)
     }
 
@@ -263,11 +306,7 @@ impl CommitStream for GixCommitStream {
         sink: &mut dyn FnMut(CommitNode) -> WalkControl,
     ) -> Result<WalkStats, CoralError> {
         let repo = self.repo.to_thread_local();
-        let tips = if opts.tips.is_empty() {
-            Self::all_tips(&repo)?
-        } else {
-            opts.tips.clone()
-        };
+        let tips = Self::tips_for(&repo, &opts.tips)?;
         if tips.is_empty() {
             return Ok(WalkStats::default());
         }

@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use coral_core::graph::{
-    CommitNode, CommitStream, GixCommitStream, Order, StreamOpts, SubprocessCommitStream,
+    CommitNode, CommitStream, GixCommitStream, Order, StreamOpts, SubprocessCommitStream, Tips,
     WalkControl,
 };
 use coral_core::process::GitRunner;
@@ -179,7 +179,6 @@ async fn first_parent_follows_only_the_mainline() {
     let (gix, sub) = streams(repo.path()).await;
     let opts = StreamOpts {
         first_parent: true,
-        tips: vec![],
         ..StreamOpts::default()
     };
 
@@ -308,4 +307,160 @@ async fn a_stash_is_one_row_and_not_its_bookkeeping() {
         1,
         "the stash still points at its plumbing"
     );
+}
+
+/// The set of commits a walk emitted, for comparing selections against each other.
+fn ids(stream: &dyn CommitStream, tips: Tips) -> HashSet<gix::ObjectId> {
+    let opts = StreamOpts {
+        tips,
+        ..StreamOpts::default()
+    };
+    collect(stream, &opts).into_iter().map(|n| n.id).collect()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn soloing_one_ref_walks_only_what_that_ref_reaches() {
+    let repo = gnarly_repo();
+    let (gix, sub) = streams(repo.path()).await;
+    let only = Tips::Only(vec!["refs/heads/a".to_owned()]);
+
+    for stream in [&gix as &dyn CommitStream, &sub as &dyn CommitStream] {
+        let soloed = ids(stream, only.clone());
+        let everything = ids(stream, Tips::All);
+
+        // `a` is one commit on top of the base, and nothing else in this repository is below it.
+        assert_eq!(soloed.len(), 2, "{} soloed the wrong number", stream.name());
+        assert!(
+            soloed.is_subset(&everything) && soloed.len() < everything.len(),
+            "{} soloed a set that is not a proper part of the whole",
+            stream.name()
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn hiding_a_ref_drops_only_the_commits_nothing_else_reaches() {
+    let repo = gnarly_repo();
+    let (gix, sub) = streams(repo.path()).await;
+
+    for stream in [&gix as &dyn CommitStream, &sub as &dyn CommitStream] {
+        let everything = ids(stream, Tips::All);
+        let without = ids(stream, Tips::Except(vec!["refs/heads/orphan".to_owned()]));
+        let orphan = ids(stream, Tips::Only(vec!["refs/heads/orphan".to_owned()]));
+
+        // The orphan root is reachable from nothing else, so hiding its branch is the one case
+        // where hiding actually removes commits.
+        assert!(
+            without.is_subset(&everything),
+            "{} invented commits when hiding",
+            stream.name()
+        );
+        assert!(
+            orphan.iter().all(|id| !without.contains(id)),
+            "{} still drew the hidden orphan",
+            stream.name()
+        );
+        assert_eq!(
+            without.len() + orphan.len(),
+            everything.len(),
+            "{} lost commits that another branch still reaches",
+            stream.name()
+        );
+    }
+}
+
+/// Hiding a branch whose commits another branch also reaches must change nothing. This is the
+/// honest answer, and the one git gives: `a` is an ancestor of the octopus merge on `main`.
+#[tokio::test(flavor = "multi_thread")]
+async fn hiding_a_merged_branch_leaves_its_commits_where_they_are() {
+    let repo = gnarly_repo();
+    let (gix, sub) = streams(repo.path()).await;
+
+    for stream in [&gix as &dyn CommitStream, &sub as &dyn CommitStream] {
+        assert_eq!(
+            ids(stream, Tips::Except(vec!["refs/heads/a".to_owned()])),
+            ids(stream, Tips::All),
+            "{} dropped commits that were still reachable",
+            stream.name()
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn soloing_nothing_is_an_empty_graph_rather_than_every_branch() {
+    let repo = gnarly_repo();
+    let (gix, sub) = streams(repo.path()).await;
+
+    for stream in [&gix as &dyn CommitStream, &sub as &dyn CommitStream] {
+        assert!(
+            ids(stream, Tips::Only(Vec::new())).is_empty(),
+            "{} read an empty selection as every ref",
+            stream.name()
+        );
+    }
+}
+
+/// A name from a choice made before the branch was deleted. It must leave a graph that draws.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_selection_naming_a_ref_that_is_gone_is_skipped_rather_than_refused() {
+    let repo = gnarly_repo();
+    let (gix, sub) = streams(repo.path()).await;
+    let tips = Tips::Only(vec![
+        "refs/heads/a".to_owned(),
+        "refs/heads/deleted-yesterday".to_owned(),
+    ]);
+
+    for stream in [&gix as &dyn CommitStream, &sub as &dyn CommitStream] {
+        assert_eq!(
+            ids(stream, tips.clone()),
+            ids(stream, Tips::Only(vec!["refs/heads/a".to_owned()])),
+            "{} did not skip the missing ref",
+            stream.name()
+        );
+    }
+}
+
+/// Hiding the branch HEAD is on has to hide it. HEAD resolves to the same commit, so leaving it
+/// in the tip set would put the branch straight back with nothing on screen to explain it.
+#[tokio::test(flavor = "multi_thread")]
+async fn hiding_the_checked_out_branch_hides_it() {
+    let repo = gnarly_repo();
+    let tip = repo.git(["rev-parse", "refs/heads/main"]);
+    let tip = gix::ObjectId::from_hex(tip.trim().as_bytes()).unwrap();
+    let (gix, sub) = streams(repo.path()).await;
+
+    for stream in [&gix as &dyn CommitStream, &sub as &dyn CommitStream] {
+        assert!(
+            ids(stream, Tips::All).contains(&tip),
+            "{} did not draw the checked-out branch to begin with",
+            stream.name()
+        );
+        // The octopus merge is on main and on nothing else, so it is the commit that says
+        // whether hiding main took effect at all.
+        assert!(
+            !ids(stream, Tips::Except(vec!["refs/heads/main".to_owned()])).contains(&tip),
+            "{} kept the checked-out branch through HEAD",
+            stream.name()
+        );
+    }
+}
+
+/// A detached HEAD is a tip no ref reaches, so hiding something unrelated must not take it with
+/// it. This is the case `--glob=refs/*` drops and the explicit HEAD puts back.
+#[tokio::test(flavor = "multi_thread")]
+async fn hiding_a_branch_keeps_a_detached_head() {
+    let repo = gnarly_repo();
+    repo.git(["checkout", "--quiet", "--detach"]);
+    let repo = repo.write("loose.txt", "loose\n").commit("on no branch");
+    let loose = repo.git(["rev-parse", "HEAD"]);
+    let loose = gix::ObjectId::from_hex(loose.trim().as_bytes()).unwrap();
+    let (gix, sub) = streams(repo.path()).await;
+
+    for stream in [&gix as &dyn CommitStream, &sub as &dyn CommitStream] {
+        assert!(
+            ids(stream, Tips::Except(vec!["refs/heads/orphan".to_owned()])).contains(&loose),
+            "{} lost the detached HEAD while hiding another branch",
+            stream.name()
+        );
+    }
 }

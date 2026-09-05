@@ -4,6 +4,8 @@ use std::sync::{Arc, PoisonError};
 
 use coral_core::CoralError;
 use coral_core::graph::{GixCommitStream, RowStore, StreamOpts, build, wire};
+
+use crate::scope::{RepoScope, Scopes};
 use tokio::sync::Mutex;
 
 /// How many repositories keep their walk. A `RowStore` for the kernel is about eighty
@@ -45,6 +47,13 @@ struct Slot {
     /// What the refs hashed to when the held walk was asked for, so a tab switch back to a
     /// repository nobody has touched is free rather than another walk of it.
     refs: AtomicU64,
+    /// What the scope hashed to when this walk was built.
+    ///
+    /// The refs hash cannot stand in for it. Hiding a branch or soloing one moves no ref, so
+    /// the freshness check above would find the repository exactly where it left it and keep
+    /// serving the walk of everything — the eye and the solo banner would light up and the
+    /// graph would not change at all.
+    scope: AtomicU64,
 }
 
 impl Slot {
@@ -90,6 +99,7 @@ impl GraphCache {
             quick: std::sync::Mutex::new(None),
             used: AtomicU64::new(now),
             refs: AtomicU64::new(0),
+            scope: AtomicU64::new(scope_hash(&RepoScope::default())),
         });
         slots.insert(path.to_owned(), Arc::clone(&slot));
         slot
@@ -118,26 +128,44 @@ impl GraphCache {
     /// repository had no branches, no remotes and no tags. The rows a commit-time walk gives
     /// are the rows the frame on screen is using at that moment anyway; the window asks again
     /// when the real walk lands.
-    async fn best_store(&self, path: &str) -> Result<Arc<RowStore>, CoralError> {
+    async fn best_store(&self, path: &str, scope: &RepoScope) -> Result<Arc<RowStore>, CoralError> {
         let slot = self.slot(path);
-        if let Ok(held) = slot.held.try_lock()
+        if slot.scope.load(Ordering::Relaxed) == scope_hash(scope)
+            && let Ok(held) = slot.held.try_lock()
             && let Some(cached) = held.as_ref().filter(|c| !c.provisional)
         {
             return Ok(Arc::clone(&cached.store));
         }
         drop(slot);
-        self.store(path, true).await
+        self.store(path, true, scope).await
     }
 
     /// Returns the store for `path`, building it if it is not held.
-    async fn store(&self, path: &str, first_paint: bool) -> Result<Arc<RowStore>, CoralError> {
+    async fn store(
+        &self,
+        path: &str,
+        first_paint: bool,
+        scope: &RepoScope,
+    ) -> Result<Arc<RowStore>, CoralError> {
         let slot = self.slot(path);
+        let wanted = scope_hash(scope);
         // Answered without the lock, which the topological walk holds for as long as it runs.
-        if first_paint && let Some(quick) = slot.quick_store() {
+        // Only when it is a walk of the same shape: a quick store built before a branch was
+        // soloed holds a different set of commits under the same row numbers.
+        if first_paint
+            && slot.scope.load(Ordering::Relaxed) == wanted
+            && let Some(quick) = slot.quick_store()
+        {
             return Ok(quick);
         }
 
         let mut held = slot.held.lock().await;
+        // Under the lock, so two requests asking for different scopes cannot each decide the
+        // other's walk is theirs.
+        if slot.scope.swap(wanted, Ordering::Relaxed) != wanted {
+            *held = None;
+            slot.set_quick(None);
+        }
         // Serving a provisional store to the request that wants topological rows would mean the
         // real walk never ran and the user stayed on commit-time order for good.
         if let Some(cached) = held.as_ref()
@@ -147,12 +175,19 @@ impl GraphCache {
         }
 
         let owned = path.to_owned();
+        let tips = scope.tips();
         let store = tokio::task::spawn_blocking(move || {
             let stream = GixCommitStream::open(std::path::Path::new(&owned))?;
             let opts = if first_paint {
-                StreamOpts::first_paint(StreamOpts::FIRST_PAINT_ROWS)
+                StreamOpts {
+                    tips,
+                    ..StreamOpts::first_paint(StreamOpts::FIRST_PAINT_ROWS)
+                }
             } else {
-                StreamOpts::default()
+                StreamOpts {
+                    tips,
+                    ..StreamOpts::default()
+                }
             };
             build(&stream, &opts)
         })
@@ -174,6 +209,19 @@ impl GraphCache {
     }
 }
 
+/// What a scope hashes to, for telling one walk from another.
+///
+/// A hash rather than the scope itself, so the slot can hold it in an atomic and be compared
+/// without a lock on the read path that answers a frame.
+fn scope_hash(scope: &RepoScope) -> u64 {
+    use std::hash::{Hash as _, Hasher as _};
+
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    scope.solo.hash(&mut hasher);
+    scope.hidden.hash(&mut hasher);
+    hasher.finish()
+}
+
 /// Returns one binary frame of graph rows.
 ///
 /// The response is raw bytes rather than JSON: a million rows as JSON objects would cost
@@ -183,12 +231,13 @@ impl GraphCache {
 #[tauri::command]
 pub async fn graph_frame(
     cache: tauri::State<'_, GraphCache>,
+    scopes: tauri::State<'_, Scopes>,
     path: String,
     start_row: u32,
     first_paint: bool,
 ) -> Result<tauri::ipc::Response, crate::commands::IpcError> {
     tracing::info!(path, start_row, first_paint, "graph_frame");
-    let store = cache.store(&path, first_paint).await?;
+    let store = cache.store(&path, first_paint, &scopes.read(&path)).await?;
     tracing::info!(rows = store.len(), "graph_frame served");
     let hash_len = store.oid(0).map_or(20, |id| id.as_bytes().len());
     Ok(tauri::ipc::Response::new(wire::encode(
@@ -207,6 +256,7 @@ pub async fn graph_frame(
 #[tauri::command]
 pub async fn row_metadata(
     cache: tauri::State<'_, GraphCache>,
+    scopes: tauri::State<'_, Scopes>,
     path: String,
     start_row: u32,
     count: u32,
@@ -214,7 +264,7 @@ pub async fn row_metadata(
 ) -> Result<Vec<coral_core::commit::CommitMeta>, crate::commands::IpcError> {
     // Against the walk the window is showing, not the one it will show next: a row is a
     // position in a particular walk, and reading it from the other one names a different commit.
-    let store = cache.store(&path, provisional).await?;
+    let store = cache.store(&path, provisional, &scopes.read(&path)).await?;
     let end = (start_row + count).min(store.len());
     tracing::info!(
         start_row,
@@ -266,13 +316,14 @@ pub struct PlacedRef {
 #[tauri::command]
 pub async fn repo_refs(
     cache: tauri::State<'_, GraphCache>,
+    scopes: tauri::State<'_, Scopes>,
     path: String,
 ) -> Result<Vec<PlacedRef>, crate::commands::IpcError> {
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
     let refs = loc.refs(&runner).await?;
-    let store = cache.best_store(&path).await?;
+    let store = cache.best_store(&path, &scopes.read(&path)).await?;
 
     Ok(refs
         .into_iter()
@@ -334,13 +385,14 @@ pub struct PlacedStash {
 #[tauri::command]
 pub async fn repo_stashes(
     cache: tauri::State<'_, GraphCache>,
+    scopes: tauri::State<'_, Scopes>,
     path: String,
 ) -> Result<Vec<PlacedStash>, crate::commands::IpcError> {
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
     let entries = loc.stashes(&runner).await?;
-    let store = cache.store(&path, false).await?;
+    let store = cache.store(&path, false, &scopes.read(&path)).await?;
 
     Ok(entries
         .into_iter()
@@ -367,10 +419,11 @@ pub async fn repo_stashes(
 #[tauri::command]
 pub async fn graph_row_of(
     cache: tauri::State<'_, GraphCache>,
+    scopes: tauri::State<'_, Scopes>,
     path: String,
     oid: String,
 ) -> Result<Option<u32>, crate::commands::IpcError> {
-    let store = cache.store(&path, false).await?;
+    let store = cache.store(&path, false, &scopes.read(&path)).await?;
     Ok(gix::ObjectId::from_hex(oid.as_bytes())
         .ok()
         .and_then(|id| store.row_of(&id)))
@@ -411,6 +464,7 @@ pub async fn commit_tree(
 #[tauri::command]
 pub async fn search_commits(
     cache: tauri::State<'_, GraphCache>,
+    scopes: tauri::State<'_, Scopes>,
     path: String,
     query: String,
     limit: u64,
@@ -426,7 +480,7 @@ pub async fn search_commits(
 
     // Whatever walk is in hand: a search that has already taken ten seconds must not then
     // wait on a walk, and the rows it places matches at are the rows on screen.
-    let store = cache.best_store(&path).await?;
+    let store = cache.best_store(&path, &scopes.read(&path)).await?;
     let mut out: Vec<FoundCommit> = found
         .into_iter()
         .filter_map(|oid| {
@@ -750,6 +804,7 @@ pub async fn worktree_diff(
 #[cfg(test)]
 mod tests {
     use super::{GraphCache, KEEP};
+    use crate::scope::RepoScope;
     use coral_core::testutil::TestRepo;
     use std::sync::Arc;
 
@@ -769,15 +824,15 @@ mod tests {
         let cache = GraphCache::default();
 
         let first = cache
-            .store(&one.path().to_string_lossy(), false)
+            .store(&one.path().to_string_lossy(), false, &RepoScope::default())
             .await
             .unwrap();
         let _ = cache
-            .store(&two.path().to_string_lossy(), false)
+            .store(&two.path().to_string_lossy(), false, &RepoScope::default())
             .await
             .unwrap();
         let again = cache
-            .store(&one.path().to_string_lossy(), false)
+            .store(&one.path().to_string_lossy(), false, &RepoScope::default())
             .await
             .unwrap();
 
@@ -797,16 +852,31 @@ mod tests {
             .collect();
         let cache = GraphCache::default();
 
-        let oldest = cache.store(&paths[0], false).await.unwrap();
+        let oldest = cache
+            .store(&paths[0], false, &RepoScope::default())
+            .await
+            .unwrap();
         for path in &paths[1..] {
-            let _ = cache.store(path, false).await.unwrap();
+            let _ = cache
+                .store(path, false, &RepoScope::default())
+                .await
+                .unwrap();
         }
 
-        let after = cache.store(&paths[0], false).await.unwrap();
+        let after = cache
+            .store(&paths[0], false, &RepoScope::default())
+            .await
+            .unwrap();
         assert!(!Arc::ptr_eq(&oldest, &after), "nothing was ever evicted");
         // The one asked for most recently is still there.
-        let newest = cache.store(&paths[KEEP], false).await.unwrap();
-        let newest_again = cache.store(&paths[KEEP], false).await.unwrap();
+        let newest = cache
+            .store(&paths[KEEP], false, &RepoScope::default())
+            .await
+            .unwrap();
+        let newest_again = cache
+            .store(&paths[KEEP], false, &RepoScope::default())
+            .await
+            .unwrap();
         assert!(Arc::ptr_eq(&newest, &newest_again));
     }
 
@@ -820,18 +890,30 @@ mod tests {
         let two_path = two.path().to_string_lossy().into_owned();
 
         cache.forget_if_moved(&one_path, 1).await;
-        let held_one = cache.store(&one_path, false).await.unwrap();
+        let held_one = cache
+            .store(&one_path, false, &RepoScope::default())
+            .await
+            .unwrap();
         cache.forget_if_moved(&two_path, 1).await;
-        let held_two = cache.store(&two_path, false).await.unwrap();
+        let held_two = cache
+            .store(&two_path, false, &RepoScope::default())
+            .await
+            .unwrap();
 
         assert!(cache.forget_if_moved(&one_path, 2).await, "refs moved");
         assert!(!Arc::ptr_eq(
             &held_one,
-            &cache.store(&one_path, false).await.unwrap()
+            &cache
+                .store(&one_path, false, &RepoScope::default())
+                .await
+                .unwrap()
         ));
         assert!(Arc::ptr_eq(
             &held_two,
-            &cache.store(&two_path, false).await.unwrap()
+            &cache
+                .store(&two_path, false, &RepoScope::default())
+                .await
+                .unwrap()
         ));
     }
 
@@ -846,12 +928,18 @@ mod tests {
         let path = repo.path().to_string_lossy().into_owned();
         let cache = GraphCache::default();
 
-        let quick = cache.store(&path, true).await.unwrap();
+        let quick = cache
+            .store(&path, true, &RepoScope::default())
+            .await
+            .unwrap();
         let slot = cache.slot(&path);
         // Held exactly as the topological walk holds it.
         let held = slot.held.lock().await;
 
-        let again = cache.store(&path, true).await.unwrap();
+        let again = cache
+            .store(&path, true, &RepoScope::default())
+            .await
+            .unwrap();
         assert!(Arc::ptr_eq(&quick, &again));
         drop(held);
     }
@@ -863,11 +951,20 @@ mod tests {
         let path = repo.path().to_string_lossy().into_owned();
         let cache = GraphCache::default();
 
-        let quick = cache.store(&path, true).await.unwrap();
-        let full = cache.store(&path, false).await.unwrap();
+        let quick = cache
+            .store(&path, true, &RepoScope::default())
+            .await
+            .unwrap();
+        let full = cache
+            .store(&path, false, &RepoScope::default())
+            .await
+            .unwrap();
         assert!(!Arc::ptr_eq(&quick, &full));
 
-        let asked = cache.store(&path, true).await.unwrap();
+        let asked = cache
+            .store(&path, true, &RepoScope::default())
+            .await
+            .unwrap();
         assert!(Arc::ptr_eq(&full, &asked), "a row still meant the old walk");
     }
 
@@ -879,12 +976,86 @@ mod tests {
         let cache = GraphCache::default();
 
         cache.forget_if_moved(&path, 7).await;
-        let first = cache.store(&path, false).await.unwrap();
+        let first = cache
+            .store(&path, false, &RepoScope::default())
+            .await
+            .unwrap();
 
         assert!(!cache.forget_if_moved(&path, 7).await, "nothing moved");
         assert!(Arc::ptr_eq(
             &first,
-            &cache.store(&path, false).await.unwrap()
+            &cache
+                .store(&path, false, &RepoScope::default())
+                .await
+                .unwrap()
         ));
+    }
+    /// Narrowing the walk has to walk again.
+    ///
+    /// The slot is keyed by path and its freshness token is a hash of the refs. Hiding a
+    /// branch moves no ref, so without the scope in that check the eye would light up in the
+    /// panel and the graph would not change at all — which is exactly how it presented.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_narrower_scope_is_a_different_walk() {
+        let repo = a_repo();
+        // An orphan branch, so it is the one thing nothing else in the graph reaches.
+        repo.git(["checkout", "--quiet", "--orphan", "spike"]);
+        repo.git(["rm", "-rf", "--quiet", "--cached", "."]);
+        let repo = repo.write("s.txt", "s\n").commit("spike work");
+        repo.git(["checkout", "--quiet", "main"]);
+
+        let path = repo.path().to_string_lossy().into_owned();
+        let cache = GraphCache::default();
+        let hide_spike = RepoScope {
+            solo: None,
+            hidden: vec!["refs/heads/spike".into()],
+        };
+
+        let all = cache
+            .store(&path, false, &RepoScope::default())
+            .await
+            .unwrap();
+        let narrowed = cache.store(&path, false, &hide_spike).await.unwrap();
+        // And back, which must not be answered out of the narrowed walk still in the slot.
+        let again = cache
+            .store(&path, false, &RepoScope::default())
+            .await
+            .unwrap();
+
+        assert_eq!(all.len(), 2, "the base commit and the orphan spike");
+        assert_eq!(narrowed.len(), 1, "the spike, which nothing else reaches");
+        assert_eq!(again.len(), 2, "widening it again walks again too");
+    }
+
+    /// The quick store is answered without the lock, and so needs the same check.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_fast_first_paint_is_not_served_across_a_scope_change() {
+        let repo = a_repo();
+        repo.git(["checkout", "--quiet", "--orphan", "spike"]);
+        repo.git(["rm", "-rf", "--quiet", "--cached", "."]);
+        let repo = repo.write("s.txt", "s\n").commit("spike work");
+        repo.git(["checkout", "--quiet", "main"]);
+
+        let path = repo.path().to_string_lossy().into_owned();
+        let cache = GraphCache::default();
+
+        let quick = cache
+            .store(&path, true, &RepoScope::default())
+            .await
+            .unwrap();
+        let narrowed = cache
+            .store(
+                &path,
+                true,
+                &RepoScope {
+                    solo: Some("refs/heads/main".into()),
+                    hidden: vec![],
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(quick.len(), 2);
+        assert_eq!(narrowed.len(), 1, "soloing main leaves the base commit");
     }
 }
