@@ -75,6 +75,13 @@ every row flagged provisional, then swaps in topological rows when the full walk
 `--limit` does not avoid this, which is why `coral graph --limit N` is no faster than the full
 walk while `--first-paint` is.
 
+Which refs the walk starts from is `Tips`: all of them, all but a named few, or only a named
+few. Names rather than object ids, because the walk is redone every time the repository moves
+and an id would pin it to where the branch stood when the user picked it. `coral-app` keeps
+each repository's choice in `scope.json` and folds it into the graph cache's freshness check,
+which otherwise hashes only the refs — hiding a branch moves no ref, so the cache would have
+served the walk of everything and the eye would have appeared to do nothing.
+
 The window fetches frames rather than the graph. `wire::encode` caps a frame at
 `ROWS_PER_FRAME`, so on the kernel one frame is 4096 of 1.48M rows: rows are absolute
 everywhere in the UI and the frame is a window into them, refetched when the visible range

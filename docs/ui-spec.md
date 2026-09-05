@@ -44,6 +44,14 @@ the signed-in avatar when a hosting provider matches, with branches nested benea
 requests group by remote showing number, title, author avatar and state. Tags sort by version.
 Stashes show message and age. Submodules are listed only.
 
+Every branch and tag row carries an eye on its right, beside the dots, taking that ref out of
+the walk and putting it back. It stays showing on a hidden row rather than waiting for a hover,
+since otherwise nothing on screen says a branch is missing from the graph. A soloed repository
+shows a banner above the filter box naming the branch with a Leave button, the soloed row
+marked and every other row dimmed; a repository with refs merely hidden shows a quieter count
+and a Show all. A row outside the current walk stays clickable, and clicking it widens the view
+rather than doing nothing.
+
 Context menus — local branch: checkout, rename, delete, push, pull, set upstream, merge into
 current, rebase current onto, create PR/MR, hide, solo, copy name. Remote branch: checkout
 (creating a tracking local), delete from remote, merge, rebase, create PR/MR. Remote: fetch,

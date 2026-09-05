@@ -188,3 +188,33 @@ never loads a page — no IPC call is ever made, so there is nothing in the log 
 
 Verified both ways against the same freshly built `ui/dist`, so it is the command and not a
 stale embed. `just build` is the sanctioned path.
+
+## Soloing a branch walks that branch and nothing else
+
+Including HEAD alongside the soloed tip was the other candidate. Solo exists to answer "show me
+only this", and a second line of history nobody asked for makes it a two-branch graph, leaving
+the reader to work out which of the two they soloed. So the soloed ref is the whole tip set,
+and the branch you are standing on is off the screen until you leave. The banner names the
+soloed branch and offers the way out in one click, so what is missing is both explained and
+one click from returning.
+
+The uncommitted-work row is the exception, and it stays. It is not drawn on a commit — it is a
+sticky row above the list, owned by the working tree rather than by the walk — so nothing about
+solo takes it away, and it names the branch it belongs to. Removing it would mean losing the
+staging panel, and therefore the ability to commit at all, for as long as a different branch
+was soloed. Showing it costs nothing: it reads "WIP on <branch>", which is the same sentence
+whether or not that branch is in the graph beneath it.
+
+Hiding is the opposite case and keeps HEAD: hiding a spike should not take the branch you are
+standing on off the screen. HEAD is dropped there only when the branch it is on is itself the
+one hidden, since otherwise the eye on your own branch would appear to do nothing.
+
+## Hidden and soloed refs are stored per repository, in Rust
+
+The rest of the window's preferences live in `localStorage` under the rule stated at the top of
+`ui/src/state/views.svelte.ts`: they belong to the person at the window, not to the
+repositories open in it. Which branches are hidden is the other kind. A dead spike is a fact
+about that repository, and someone opening it on a second machine is not asking for their
+spikes back. So it goes in `scope.json` beside `session.json`, keyed by repository path, and
+the CLI can be given the same selection with `--solo` and `--hide`.
+
