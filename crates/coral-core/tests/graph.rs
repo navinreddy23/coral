@@ -67,6 +67,8 @@ async fn streams(path: &std::path::Path) -> (GixCommitStream, SubprocessCommitSt
 /// permanently flaky. What must match is the set of commits and each one's parents.
 #[tokio::test(flavor = "multi_thread")]
 async fn gix_and_rev_list_see_the_same_dag() {
+    // On a repository with no stash. The gix walk hides the two commits git writes for one,
+    // which `rev-list` has no reason to; the fixture below has no stash, so they agree.
     let repo = gnarly_repo();
     let (gix, sub) = streams(repo.path()).await;
     let opts = StreamOpts::default();
@@ -256,4 +258,54 @@ fn a_tag_that_peels_to_a_tree_is_skipped_rather_than_refused() {
         })
         .unwrap();
     assert_eq!(seen, 1, "the one commit is still walked");
+}
+
+/// A stash is one thing the user did, not three.
+///
+/// `git stash` writes a commit for the stash, one for the index and one for the untracked
+/// files, and the last two are the first one's extra parents. Drawn like any other commit,
+/// they put three rows and two extra lanes in the graph for every stash, captioned "index on
+/// main" and "untracked files on main".
+#[tokio::test]
+async fn a_stash_is_one_row_and_not_its_bookkeeping() {
+    let repo = TestRepo::new().write("a.txt", "one\n").commit("first");
+    std::fs::write(repo.path().join("a.txt"), "changed\n").unwrap();
+    std::fs::write(repo.path().join("new.txt"), "untracked\n").unwrap();
+    repo.git(["stash", "push", "--include-untracked", "--message", "wip"]);
+
+    let (gix, _) = streams(repo.path()).await;
+    let rows = collect(&gix, &StreamOpts::default());
+
+    let messages: Vec<String> = rows
+        .iter()
+        .map(|node| repo.git(["log", "--format=%s", "-1", &node.id.to_string()]))
+        .collect();
+    assert!(
+        messages
+            .iter()
+            .any(|m| m.starts_with("On main: wip") || m.starts_with("WIP on main")),
+        "the stash itself is missing: {messages:?}"
+    );
+    assert!(
+        !messages.iter().any(|m| m.starts_with("index on")),
+        "the index commit is drawn: {messages:?}"
+    );
+    assert!(
+        !messages.iter().any(|m| m.starts_with("untracked files on")),
+        "the untracked commit is drawn: {messages:?}"
+    );
+
+    // And the stash's own row keeps one parent, so no lane is opened for what is not drawn.
+    let stash = rows
+        .iter()
+        .find(|node| {
+            let m = repo.git(["log", "--format=%s", "-1", &node.id.to_string()]);
+            m.starts_with("On main: wip") || m.starts_with("WIP on main")
+        })
+        .expect("the stash row");
+    assert_eq!(
+        stash.parents.len(),
+        1,
+        "the stash still points at its plumbing"
+    );
 }

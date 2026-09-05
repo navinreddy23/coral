@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use gix::ObjectId;
 use smallvec::SmallVec;
 
@@ -23,6 +25,53 @@ impl GixCommitStream {
             .map_err(|_| CoralError::NotARepository(path.to_path_buf()))?
             .into_sync();
         Ok(Self { repo })
+    }
+
+    /// The commits git keeps for a stash that are not the stash itself.
+    ///
+    /// `git stash` writes three commits: the stash, a commit holding the index, and one
+    /// holding the untracked files. Only the first is a thing the user did; the other two are
+    /// its second and third parents, and drawing them put three rows and two extra lanes in
+    /// the graph for every stash, captioned "index on main" and "untracked files on main".
+    ///
+    /// Returned as a pair: the stashes themselves, whose extra parents are dropped, and the
+    /// bookkeeping commits, which are not drawn at all.
+    fn stash_plumbing(repo: &gix::Repository) -> (HashSet<ObjectId>, HashSet<ObjectId>) {
+        let mut stashes = HashSet::new();
+        let mut hidden = HashSet::new();
+        let Ok(Some(reference)) = repo.try_find_reference("refs/stash") else {
+            return (stashes, hidden);
+        };
+        // Every stash, not only the newest: the reflog is where the older ones live, and a
+        // repository can be left with a ref pointing at one.
+        let mut ids: Vec<ObjectId> = reference
+            .log_iter()
+            .all()
+            .ok()
+            .flatten()
+            .map(|entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .filter_map(|line| ObjectId::from_hex(line.new_oid).ok())
+                    .collect()
+            })
+            .unwrap_or_default();
+        if let Ok(id) = reference.clone().into_fully_peeled_id() {
+            ids.push(id.detach());
+        }
+
+        for id in ids {
+            let Ok(commit) = repo.find_commit(id) else {
+                continue;
+            };
+            let extra: Vec<ObjectId> = commit.parent_ids().skip(1).map(gix::Id::detach).collect();
+            if extra.is_empty() {
+                continue;
+            }
+            stashes.insert(id);
+            hidden.extend(extra);
+        }
+        (stashes, hidden)
     }
 
     /// Every ref that resolves to a commit, plus HEAD.
@@ -87,6 +136,7 @@ impl GixCommitStream {
         repo: &gix::Repository,
         tips: Vec<ObjectId>,
         opts: &StreamOpts,
+        plumbing: &(HashSet<ObjectId>, HashSet<ObjectId>),
         sink: &mut dyn FnMut(CommitNode) -> WalkControl,
     ) -> Result<WalkStats, CoralError> {
         use gix::traverse::commit::{Parents, topo};
@@ -109,6 +159,7 @@ impl GixCommitStream {
             if !emit(
                 &mut stats,
                 opts,
+                plumbing,
                 sink,
                 info.id,
                 &info.parent_ids,
@@ -124,6 +175,7 @@ impl GixCommitStream {
         repo: &gix::Repository,
         tips: Vec<ObjectId>,
         opts: &StreamOpts,
+        plumbing: &(HashSet<ObjectId>, HashSet<ObjectId>),
         sink: &mut dyn FnMut(CommitNode) -> WalkControl,
     ) -> Result<WalkStats, CoralError> {
         let mut platform = repo
@@ -139,7 +191,15 @@ impl GixCommitStream {
         for info in platform.all().map_err(graph_err)? {
             let info = info.map_err(graph_err)?;
             let time = info.commit_time.unwrap_or_default();
-            if !emit(&mut stats, opts, sink, info.id, &info.parent_ids, time) {
+            if !emit(
+                &mut stats,
+                opts,
+                plumbing,
+                sink,
+                info.id,
+                &info.parent_ids,
+                time,
+            ) {
                 break;
             }
         }
@@ -151,14 +211,23 @@ impl GixCommitStream {
 fn emit(
     stats: &mut WalkStats,
     opts: &StreamOpts,
+    plumbing: &(HashSet<ObjectId>, HashSet<ObjectId>),
     sink: &mut dyn FnMut(CommitNode) -> WalkControl,
     id: ObjectId,
     parents: &[ObjectId],
     commit_time: i64,
 ) -> bool {
+    let (stashes, hidden) = plumbing;
+    // git's own bookkeeping, not anything the user did. Skipped rather than drawn, and the
+    // walk goes on: their own parent is the commit the stash was taken from, which is
+    // reachable anyway.
+    if hidden.contains(&id) {
+        return opts.max_count.is_none_or(|m| stats.commits < m);
+    }
     // Both gix and git report every parent even when only the first is traversed; keeping the
     // rest would leave edges pointing at rows the walk never emits.
-    let parents: SmallVec<[ObjectId; 2]> = if opts.first_parent {
+    let first_only = opts.first_parent || stashes.contains(&id);
+    let parents: SmallVec<[ObjectId; 2]> = if first_only {
         SmallVec::from_slice(&parents[..parents.len().min(1)])
     } else {
         SmallVec::from_slice(parents)
@@ -202,9 +271,10 @@ impl CommitStream for GixCommitStream {
         if tips.is_empty() {
             return Ok(WalkStats::default());
         }
+        let plumbing = Self::stash_plumbing(&repo);
         match opts.order {
-            Order::Topological => Self::walk_topological(&repo, tips, opts, sink),
-            Order::CommitTime => Self::walk_by_commit_time(&repo, tips, opts, sink),
+            Order::Topological => Self::walk_topological(&repo, tips, opts, &plumbing, sink),
+            Order::CommitTime => Self::walk_by_commit_time(&repo, tips, opts, &plumbing, sink),
         }
     }
 }
