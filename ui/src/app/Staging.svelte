@@ -277,7 +277,24 @@
 </div>
 
 <style>
-  .panel { display: flex; flex-direction: column; gap: var(--space-2); font-size: 12px; }
+  /*
+   * The whole height, and none of it wasted: the two lists take what is left after the header
+   * and the commit box, half each, and scroll inside themselves. Before this the panel was a
+   * column that stacked from the top, so a repository with two changed files left four fifths
+   * of the panel empty and a repository with two hundred pushed the commit box off the end.
+   */
+  .panel {
+    display: flex; flex-direction: column; gap: var(--space-2); font-size: 12px;
+    flex: 1; min-height: 0;
+  }
+  .panel > section {
+    flex: 1 1 0; min-height: 64px; display: flex; flex-direction: column;
+  }
+  /* The heading stays put; the list under it is what moves. */
+  .panel > section > h3 { flex: 0 0 auto; }
+  .panel > section > .flat,
+  .panel > section > :global(.tree) { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .compose { flex: 0 0 auto; }
   header {
     display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
     padding-bottom: var(--space-2); border-bottom: 1px solid var(--border);
