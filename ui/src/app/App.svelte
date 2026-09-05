@@ -56,6 +56,7 @@
   import {
     DEFAULT_METRICS,
     firstRowFor,
+    fittedMetrics,
     GRAPH_COLUMN_PX,
     graphWidthFor,
     listTop,
@@ -2308,6 +2309,33 @@
    * the corridor of empty pixels the wide setting left between a commit's node and its message
    * is what made the two read as unrelated.
    */
+  /**
+   * The metrics the canvas is drawing with, so anything placed beside a lane agrees with it.
+   *
+   * The canvas draws tighter than the shipped pitch once a merge region needs more lanes than
+   * the column has room for, and a strip measured against the shipped pitch would then start
+   * somewhere in the middle of the lanes.
+   */
+  const laneMetrics = $derived(
+    fittedMetrics(widestLane(graph.frame, rows), panes.widths.graph),
+  );
+
+  /**
+   * The empty pixels on a row between its outermost lane and the commit message.
+   *
+   * The column is as wide as the widest row on screen and never narrows again, so on a linear
+   * stretch of a repository that has merge regions elsewhere this is most of the column: a
+   * corridor of nothing between a commit's node and the text about it. The lane colour fills
+   * it, which is what ties the two together.
+   *
+   * Measured per row rather than for the screen, because the row beside a thirty-lane merge
+   * has no gap at all and painting one would cover the lanes.
+   */
+  function laneGap(row: number): number {
+    if (graph.frame === null || localRow(graph.frame, row) === null) return 0;
+    return Math.max(0, panes.widths.graph - graphWidthFor(widestLane(graph.frame, [row]), laneMetrics));
+  }
+
   const laneFit = $derived.by(() => {
     if (rows.length === 0) return 0;
     const want = graphWidthFor(widestLane(graph.frame, rows), DEFAULT_METRICS);
@@ -2682,7 +2710,6 @@
           <span class="cell refs"></span>
           <span class="cell graph-col"><span class="wip-node"></span></span>
           <span class="cell message">
-            <span class="lane-strip" aria-hidden="true"></span>
             <span class="summary">WIP on {headName ?? 'HEAD'}</span>
             {#if wip.edits > 0}<span class="tally edit">✎ {wip.edits}</span>{/if}
             {#if wip.adds > 0}<span class="tally add">+ {wip.adds}</span>{/if}
@@ -2783,7 +2810,8 @@
               </span>
               <span class="cell graph-col"></span>
               <span class="cell message" style:--row-tint="var(--lane-{laneOf(row)}-soft)">
-                <span class="lane-strip" aria-hidden="true"></span>
+                <span class="lane-strip" aria-hidden="true" style:--lane-gap="{laneGap(row)}px"
+                ></span>
                 <span class="summary">{visibleMeta.get(row)?.summary ?? ''}</span>
                 {#if showBody}
                   <span class="detail">{flatten(visibleMeta.get(row)?.body ?? '')}</span>
@@ -3061,7 +3089,7 @@
    */
   .wip {
     position: sticky; top: 22px; z-index: 1; cursor: pointer;
-    background: var(--warn-soft);
+    background: var(--warn-soft); box-shadow: inset 2px 0 0 var(--warn);
     /* It is a button, and a button is shrink-to-fit even as a grid container. Every other row
        is a list item and stretches on its own, which is why the difference only showed once
        this row had a colour of its own to stop halfway across. */
@@ -3082,29 +3110,39 @@
    * still ties the line of text to a node three columns away, and leaves the cell itself plain
    * for the accent to land on. The reference client paints the same gap for the same reason.
    */
-  .row .cell.message { background: var(--bg-0); padding-left: 0; }
+  .row .cell.message { background: var(--bg-0); }
   .row:hover .cell.message { background: var(--bg-1); }
+  /*
+   * The band filling that corridor. It takes no room in the row: the width and the negative
+   * margin are the same number, so it is drawn entirely leftwards into the lane column and
+   * stops exactly where the message cell begins, leaving that cell's own leading bar to show
+   * which row is selected.
+   *
+   * Square, and deliberately: consecutive commits in one lane then run into a single ribbon,
+   * which is the point — a branch reads as one colour from its label to its last commit.
+   */
   .lane-strip {
-    flex: 0 0 6px; align-self: stretch;
+    /* Positioned rather than laid out, so it takes no part in the row's flow and no negative
+       margin has to cancel it. `right: 100%` puts its right edge exactly on the message cell's
+       leading edge, which leaves that cell's own inset bar — the one that marks the selected
+       row — visible instead of painted over. */
+    position: absolute; right: 100%; top: 0; bottom: 0;
+    width: var(--lane-gap, 0px);
     background: var(--row-tint, transparent);
-    border-radius: var(--radius-1) 0 0 var(--radius-1);
   }
-  /* The strip is the leading edge, so it is also where the row's state is shown: a bar drawn
-     inside the cell would sit behind it and never be seen. */
-  .row.selected .lane-strip { background: var(--accent-line); }
-  .row.here .lane-strip { background: var(--warn); }
-  .wip .lane-strip { background: var(--warn); }
-  .wip.selected .lane-strip { background: var(--accent-line); }
   /* Every match tinted, the one being stood on ruled as well: a screen of identical tints
      says how many matched and nothing about which one the buttons are pointing at. */
   .row.found .cell.message { background: var(--warn-soft); }
-  .row.here .cell.message { box-shadow: inset 0 0 0 1px var(--warn); }
+  .row.here .cell.message { box-shadow: inset 2px 0 0 var(--warn); }
   /*
    * The selected commit, tinted and given a bar down its leading edge. On a screen of rows
    * that all look alike a tint alone is easy to lose, and the bar survives a hover passing
    * over a neighbour.
    */
-  .row.selected .cell.message, .wip.selected { background: var(--accent-soft); }
+  .row.selected .cell.message, .wip.selected {
+    background: var(--accent-soft);
+    box-shadow: inset 2px 0 0 var(--accent-line);
+  }
   /* Selected beats dirty: whichever row the panel on the right is showing has to be the one
      that looks picked, and the working copy is still the only amber-noded row on the list. */
   .wip.selected .cell.refs, .wip.selected .cell.message { background: var(--accent-soft); }
@@ -3126,6 +3164,8 @@
    */
   .cell.message, .cell.refs { background: var(--bg-0); }
   .cell.message {
+    /* The containing block for the lane band, which is drawn outside it to the left. */
+    position: relative;
     border-radius: var(--radius-1); padding: 0 var(--space-2);
     /* The row's own height, so the highlight is a band rather than a floating pill. */
     height: 100%;

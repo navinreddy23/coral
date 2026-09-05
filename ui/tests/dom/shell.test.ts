@@ -211,6 +211,30 @@ describe('the shell', () => {
     ).toBe(true);
   });
 
+  it('sizes the lane band to the empty part of the lane column', async () => {
+    // The band fills the corridor between a row's outermost lane and its message, so its width
+    // is per-row and comes from the geometry. It has been silently zero once already: a flex
+    // basis of zero beat the width and the colour disappeared with nothing to say so.
+    const { container } = await shell();
+    const strips = [...container.querySelectorAll('li.row .lane-strip')] as HTMLElement[];
+    expect(strips.length, 'every commit row carries one').toBeGreaterThan(0);
+    for (const strip of strips) {
+      expect(strip.style.getPropertyValue('--lane-gap')).toMatch(/^\d+(\.\d+)?px$/u);
+    }
+
+    const rule = [...document.styleSheets]
+      .flatMap((sheet) => [...(sheet.cssRules ?? [])])
+      .map((r) => r.cssText)
+      .find((text) => /\.lane-strip[^{]*\{/u.test(text) && /--lane-gap/u.test(text));
+    expect(rule, 'the band is sized from that property').toBeDefined();
+    // Out of flow and anchored to the cell's leading edge, or it paints over the padding where
+    // the selected row's bar is drawn.
+    expect(rule).toMatch(/position:\s*absolute/u);
+    expect(rule).toMatch(/right:\s*100%/u);
+    // A flex basis would beat the width. There must not be one.
+    expect(rule).not.toMatch(/flex:/u);
+  });
+
   /** One local branch sitting on a row the fixture frame actually holds. */
   function aBranchOnRow(row: number) {
     return [
