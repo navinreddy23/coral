@@ -657,6 +657,7 @@
       });
     } else if (ref.kind.kind === 'tag') {
       items.push({ kind: 'separator' });
+      items.push(...pushTagItems(ref.short));
       items.push({
         kind: 'item',
         label: `Delete the tag ${ref.short}…`,
@@ -668,6 +669,62 @@
 
     if (items.length === 0) return;
     menu = { x: event.clientX, y: event.clientY, items };
+  }
+
+  /**
+   * Where a push should go when nobody has said: `origin` if it is there, else the only one.
+   *
+   * Null when there are several and none is called `origin`, which is the case that has to be
+   * asked about rather than guessed at.
+   */
+  const defaultRemote = $derived(
+    remotes.list.find((r) => r.name === 'origin')?.name ??
+      (remotes.list.length === 1 ? remotes.list[0]?.name ?? null : null),
+  );
+
+  /**
+   * Sends one tag to a remote.
+   *
+   * Tags do not travel with a push; git sends them only when they are named, which is why a
+   * tag made in the window sat there looking published and was on nobody else's machine.
+   */
+  function pushTag(name: string, remote: string) {
+    void act({
+      kind: 'push',
+      remote,
+      setUpstream: false,
+      refspec: `refs/tags/${name}`,
+      tags: false,
+    });
+  }
+
+  /** The menu items for pushing one tag: one remote, or a choice of them. */
+  function pushTagItems(name: string): MenuItem[] {
+    if (remotes.list.length === 0) return [];
+    const busy = actions.busy || worktree.busy;
+    if (remotes.list.length === 1 || defaultRemote !== null) {
+      const remote = defaultRemote ?? remotes.list[0]?.name ?? 'origin';
+      return [
+        {
+          kind: 'item',
+          label: `Push ${name} to ${remote}`,
+          disabled: busy,
+          run: () => pushTag(name, remote),
+        },
+      ];
+    }
+    return [
+      {
+        kind: 'submenu',
+        label: `Push ${name}`,
+        items: remotes.list.map((r) => ({
+          kind: 'item' as const,
+          label: r.name,
+          disabled: busy,
+          run: () => pushTag(name, r.name),
+        })),
+      },
+    ];
   }
 
   /** The branch name a remote-tracking ref checks out as: `origin/topic` becomes `topic`. */
@@ -1176,6 +1233,47 @@
   }
 
   /** How a pull should integrate, offered at the caret beside the Pull button. */
+  /** What a push can send beyond the current branch. Tags are the whole of it. */
+  function pushMenu(event: MouseEvent) {
+    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const busy = actions.busy || worktree.busy;
+    const tags = refs.groups.tags;
+    menu = {
+      x: box.left,
+      y: box.bottom + 2,
+      items: [
+        {
+          kind: 'item',
+          label: 'Push this branch',
+          hint: 'sets the upstream',
+          disabled: busy,
+          run: () =>
+            void act({
+              kind: 'push',
+              remote: null,
+              setUpstream: true,
+              refspec: null,
+              tags: false,
+            }),
+        },
+        {
+          kind: 'item',
+          label: 'Push this branch and every tag',
+          hint: tags.length === 0 ? 'no tags here' : `${tags.length} tag${tags.length === 1 ? '' : 's'}`,
+          disabled: busy || tags.length === 0,
+          run: () =>
+            void act({
+              kind: 'push',
+              remote: null,
+              setUpstream: true,
+              refspec: null,
+              tags: true,
+            }),
+        },
+      ],
+    };
+  }
+
   function pullMenu(event: MouseEvent) {
     const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
     menu = {
@@ -1425,7 +1523,7 @@
       { id: 'fetch', label: 'Fetch', group: 'Remote', run: () => void act({ kind: 'fetch', remote: null }) },
       { id: 'pull', label: 'Pull (fast-forward only)', group: 'Remote', run: () => void act({ kind: 'pull', remote: null, mode: 'ffOnly' }) },
       { id: 'pull-rebase', label: 'Pull, rebasing', group: 'Remote', run: () => void act({ kind: 'pull', remote: null, mode: 'rebase' }) },
-      { id: 'push', label: 'Push', group: 'Remote', run: () => void act({ kind: 'push', remote: null, setUpstream: true }) },
+      { id: 'push', label: 'Push', group: 'Remote', run: () => void act({ kind: 'push', remote: null, setUpstream: true, refspec: null, tags: false }) },
       { id: 'stash', label: 'Stash changes', group: 'Stash', run: () => void act({ kind: 'stashPush', message: null }) },
       { id: 'pop', label: 'Pop the latest stash', group: 'Stash', run: () => void act({ kind: 'stashApply', index: 0, pop: true }) },
       { id: 'undo', label: 'Undo', group: 'History', run: () => void act({ kind: 'undo' }) },
@@ -1484,7 +1582,7 @@
   async function dropRef(source: string, target: string) {
     const pushing = target === `origin/${source}` || target.endsWith(`/${source}`);
     if (pushing) {
-      await act({ kind: 'push', remote: null, setUpstream: true });
+      await act({ kind: 'push', remote: null, setUpstream: true, refspec: null, tags: false });
       return;
     }
     const { choice } = await ask({
@@ -1517,7 +1615,7 @@
       case 'pull': return void act({ kind: 'pull', remote: null, mode: 'ffOnly' });
       // set-upstream on every push: it is a no-op once one is configured, and without it the
       // first push of a new branch fails with advice instead of pushing.
-      case 'push': return void act({ kind: 'push', remote: null, setUpstream: true });
+      case 'push': return void act({ kind: 'push', remote: null, setUpstream: true, refspec: null, tags: false });
       case 'stash': return void act({ kind: 'stashPush', message: null });
       case 'pop': return void act({ kind: 'stashApply', index: 0, pop: true });
       case 'terminal': return terminal.toggle();
@@ -2257,6 +2355,7 @@
       onAction={toolbarAction}
       onLeaveSubmodule={() => void leaveSubmodule()}
       onPullMenu={pullMenu}
+      onPushMenu={pushMenu}
     />
   {/if}
 
@@ -3023,10 +3122,11 @@
   }
 
   .wip-panel {
-    width: var(--details-w, 340px); flex: 0 0 auto; overflow-y: auto;
+    width: var(--details-w, 340px); flex: 0 0 auto; min-height: 0;
     border-left: 1px solid var(--border); background: var(--bg-1);
     padding: var(--space-3);
-    /* The compose box is sticky against this, so the panel is what scrolls. */
-    display: flex; flex-direction: column;
+    /* The panel itself does not scroll: the two file lists inside it do, each with half the
+       height, so the commit box stays where it is and both lists are always visible. */
+    display: flex; flex-direction: column; overflow: hidden;
   }
 </style>

@@ -480,6 +480,50 @@ describe('the branch and tag menu', () => {
     expect(lastAction()).toEqual({ kind: 'checkout', rev: 'v1.2.0' });
   });
 
+  it('offers to push a tag, since a push sends none of them', async () => {
+    // Tags do not travel with a push. A tag made in the window sat there looking published
+    // and was on nobody else's machine.
+    const { container } = await shell(
+      {
+        repo_refs: [on('v1.2.0', { kind: 'tag', annotated: false })],
+        remote_list: [
+          { name: 'origin', fetchUrl: 'git@example.com:x.git', pushUrl: 'git@example.com:x.git' },
+        ],
+      },
+      true,
+    );
+
+    // The remotes are read without being waited on, so the window can open before they land.
+    await waitFor(() => {
+      if (!invoke.mock.calls.some(([cmd]) => cmd === 'remote_list')) throw new Error('not yet');
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    await expand(container, 'Tags');
+    const labels = await refMenu(container, 'v1.2.0');
+    expect(labels).toContain('Push v1.2.0 to origin');
+
+    await fireEvent.click(itemNamed(container, 'Push v1.2.0 to origin'));
+    await waitFor(() => {
+      expect(lastAction()).toEqual({
+        kind: 'push',
+        remote: 'origin',
+        setUpstream: false,
+        refspec: 'refs/tags/v1.2.0',
+        tags: false,
+      });
+    });
+  });
+
+  it('offers no push for a tag when there is no remote to push it to', async () => {
+    const { container } = await shell(
+      { repo_refs: [on('v1.2.0', { kind: 'tag', annotated: false })], remote_list: [] },
+      true,
+    );
+    await expand(container, 'Tags');
+    const labels = await refMenu(container, 'v1.2.0');
+    expect(labels.some((l) => l.startsWith('Push v1.2.0'))).toBe(false);
+  });
+
   it('offers what can be done with a branch, not only going to it', async () => {
     const { container } = await shell(
       { repo_refs: [on('topic', { kind: 'local_branch' })] },

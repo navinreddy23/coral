@@ -8,6 +8,7 @@
     onAction,
     onLeaveSubmodule,
     onPullMenu,
+    onPushMenu,
   }: {
     repo: string;
     /** The submodule being looked at inside this tab, or null for the repository itself. */
@@ -19,6 +20,8 @@
     onLeaveSubmodule: () => void;
     /** Opens the choice of how a pull should integrate, at the caret. */
     onPullMenu: (event: MouseEvent) => void;
+    /** Opens the choice of what a push should send, at the caret. */
+    onPushMenu: (event: MouseEvent) => void;
   } = $props();
 
   /**
@@ -109,6 +112,12 @@
           <!-- How a pull integrates is a real choice, and the reference puts it here rather
                than only in a menu somewhere else. -->
           <button class="caret" disabled={busy} title="Choose how to pull" onclick={onPullMenu}>
+            ▾
+          </button>
+        {/if}
+        {#if action.name === 'push'}
+          <!-- Tags do not travel with a push; git sends them only when they are asked for. -->
+          <button class="caret" disabled={busy} title="Choose what to push" onclick={onPushMenu}>
             ▾
           </button>
         {/if}

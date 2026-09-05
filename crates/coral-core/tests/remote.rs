@@ -338,6 +338,72 @@ async fn a_rejected_push_is_settled_by_rebasing_and_pushing_again() {
     );
 }
 
+/// A tag reaches the remote only when it is pushed: `git push` alone sends none.
+#[tokio::test]
+async fn pushes_one_tag_by_name() {
+    let (repo, _home, origin) = with_origin();
+    let (runner, loc) = open(&repo).await;
+    repo.git([
+        "tag",
+        "--annotate",
+        "v1.0",
+        "--message",
+        "the first release",
+    ]);
+
+    let (_, sink) = collector();
+    let results = loc
+        .push(
+            &runner,
+            &PushOpts {
+                remote: Some("origin".into()),
+                refspec: Some("refs/tags/v1.0".into()),
+                ..PushOpts::default()
+            },
+            sink,
+        )
+        .await
+        .unwrap();
+
+    assert!(results.iter().all(|r| !r.flag.is_failure()), "{results:?}");
+    let there = std::process::Command::new("git")
+        .args(["ls-remote", "--tags", origin.to_str().unwrap()])
+        .output()
+        .unwrap();
+    let listed = String::from_utf8_lossy(&there.stdout).into_owned();
+    assert!(listed.contains("refs/tags/v1.0"), "{listed}");
+}
+
+/// The other half of it: every tag at once, which is what the toolbar offers.
+#[tokio::test]
+async fn pushes_every_tag_at_once() {
+    let (repo, _home, origin) = with_origin();
+    let (runner, loc) = open(&repo).await;
+    repo.git(["tag", "v1.0"]);
+    repo.git(["tag", "v1.1"]);
+
+    let (_, sink) = collector();
+    loc.push(
+        &runner,
+        &PushOpts {
+            remote: Some("origin".into()),
+            tags: true,
+            ..PushOpts::default()
+        },
+        sink,
+    )
+    .await
+    .unwrap();
+
+    let there = std::process::Command::new("git")
+        .args(["ls-remote", "--tags", origin.to_str().unwrap()])
+        .output()
+        .unwrap();
+    let listed = String::from_utf8_lossy(&there.stdout).into_owned();
+    assert!(listed.contains("refs/tags/v1.0"), "{listed}");
+    assert!(listed.contains("refs/tags/v1.1"), "{listed}");
+}
+
 #[tokio::test]
 async fn fetch_brings_down_new_commits_and_reports_progress() {
     let (repo, _home, origin) = with_origin();

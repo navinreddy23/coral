@@ -30,6 +30,12 @@ pub enum Action {
     Push {
         remote: Option<String>,
         set_upstream: bool,
+        /// One ref to push instead of the current branch, such as `refs/tags/v1.0`.
+        #[serde(default)]
+        refspec: Option<String>,
+        /// Send every tag as well. Tags travel only when they are asked for.
+        #[serde(default)]
+        tags: bool,
     },
     Checkout {
         rev: String,
@@ -211,6 +217,13 @@ impl Done {
     }
 }
 
+/// A ref as people say it: `refs/tags/v1.0` is "v1.0" to everyone but git.
+fn bare_ref(name: &str) -> &str {
+    name.strip_prefix("refs/tags/")
+        .or_else(|| name.strip_prefix("refs/heads/"))
+        .unwrap_or(name)
+}
+
 /// A revision as a label should read it: an object id shortened, a name left whole.
 ///
 /// Every one of these was formatted with `{rev:.8}`, which is right for the forty characters
@@ -234,6 +247,11 @@ impl Action {
         match self {
             Self::Fetch { .. } => "fetch".to_owned(),
             Self::Pull { .. } => "pull".to_owned(),
+            Self::Push {
+                refspec: Some(refspec),
+                ..
+            } => format!("push {}", bare_ref(refspec)),
+            Self::Push { tags: true, .. } => "push every tag".to_owned(),
             Self::Push { .. } => "push".to_owned(),
             Self::Checkout { rev } => format!("checkout {rev}"),
             Self::BranchCreate { name, .. } => format!("create branch {name}"),
@@ -387,10 +405,14 @@ async fn run_remote(
         Action::Push {
             remote,
             set_upstream,
+            refspec,
+            tags,
         } => {
             let opts = PushOpts {
                 remote,
                 set_upstream,
+                refspec,
+                tags,
                 ..PushOpts::default()
             };
             let results = loc.push(runner, &opts, |_| {}).await?;
@@ -583,6 +605,25 @@ mod tests {
         // the journal read "rebase onto d38081e90dcfd1183977998a03aed3fe8e324949~1".
         assert_eq!(named(&format!("{}~1", "b".repeat(40))), "bbbbbbbb~1");
         assert_eq!(named(&format!("{}^2", "c".repeat(40))), "cccccccc^2");
+    }
+
+    #[test]
+    fn pushing_a_tag_is_labelled_with_the_tag() {
+        let action = Action::Push {
+            remote: Some("origin".to_owned()),
+            set_upstream: false,
+            refspec: Some("refs/tags/v1.0".to_owned()),
+            tags: false,
+        };
+        assert_eq!(action.label(), "push v1.0");
+
+        let all = Action::Push {
+            remote: None,
+            set_upstream: false,
+            refspec: None,
+            tags: true,
+        };
+        assert_eq!(all.label(), "push every tag");
     }
 
     #[test]

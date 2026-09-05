@@ -196,6 +196,60 @@ describe('the shell', () => {
     });
   });
 
+  it('offers to send the tags with a push, since git sends none by itself', async () => {
+    const { container } = await shell({
+      repo_action: { what: 'push', conflicted: false, message: '' },
+      repo_refs: [
+        {
+          name: 'refs/tags/v1.0',
+          short: 'v1.0',
+          kind: { kind: 'tag', annotated: false },
+          target: 'a'.repeat(40),
+          peeled: null,
+          upstream: null,
+          ahead: 0,
+          behind: 0,
+          row: 0,
+        },
+      ],
+    });
+
+    // The refs are a second read; a menu built before they land knows of no tags and offers
+    // the item disabled.
+    await waitFor(() => {
+      if (!container.querySelector('.pill-text')) throw new Error('no refs yet');
+    });
+
+    const caret = [...container.querySelectorAll('button.caret')].find(
+      (b) => b.getAttribute('title') === 'Choose what to push',
+    ) as HTMLButtonElement;
+    expect(caret, 'the push button has a caret of its own').toBeTruthy();
+    await fireEvent.click(caret);
+
+    const labels = await waitFor(() => {
+      const found = [...container.querySelectorAll('.menu .label')].map((e) => e.textContent?.trim());
+      if (found.length === 0) throw new Error('no menu');
+      return found;
+    });
+    expect(labels).toEqual(['Push this branch', 'Push this branch and every tag']);
+
+    const withTags = [...container.querySelectorAll('.menu .label')].find(
+      (e) => e.textContent?.trim() === 'Push this branch and every tag',
+    );
+    await fireEvent.click(withTags?.closest('button') as HTMLButtonElement);
+
+    await waitFor(() => {
+      const call = invoke.mock.calls.filter(([cmd]) => cmd === 'repo_action').at(-1);
+      expect((call?.[1] as { action: unknown }).action).toEqual({
+        kind: 'push',
+        remote: null,
+        setUpstream: true,
+        refspec: null,
+        tags: true,
+      });
+    });
+  });
+
   it('closes the search bar on Escape, wherever the focus went', async () => {
     // Escape was bound to the search field alone, so clicking a result — which is the whole
     // point of the bar — left no way to dismiss it but finding the small button.

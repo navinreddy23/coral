@@ -236,7 +236,15 @@ export function worktreeDiff(
 export type Action =
   | { kind: 'fetch'; remote: string | null }
   | { kind: 'pull'; remote: string | null; mode: 'ffOnly' | 'merge' | 'rebase' }
-  | { kind: 'push'; remote: string | null; setUpstream: boolean }
+  | {
+      kind: 'push';
+      remote: string | null;
+      setUpstream: boolean;
+      /** One ref instead of the current branch, such as `refs/tags/v1.0`. */
+      refspec: string | null;
+      /** Send every tag as well. Tags travel only when they are asked for. */
+      tags: boolean;
+    }
   | { kind: 'checkout'; rev: string }
   | { kind: 'branchCreate'; name: string; at: string | null; checkout: boolean }
   | { kind: 'branchDelete'; name: string; force: boolean }
