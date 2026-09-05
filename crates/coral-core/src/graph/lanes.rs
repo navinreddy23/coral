@@ -141,7 +141,11 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
                 kept_my_lane = true;
                 Some(lane)
             } else {
-                self.alloc()
+                // To the right of this commit, so the line bends one way. A free lane to the
+                // left is closer, but taking it draws a branch that leaves leftwards and
+                // comes back, and a screen of those reads as a knot rather than as a trunk
+                // with branches off it.
+                self.alloc_after(lane)
             };
             // Nowhere to put it. The edge is dropped and the parent becomes a tip when its own
             // row comes: a missing line in a region already too wide to draw is a smaller lie
@@ -196,7 +200,21 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
     /// When every lane is taken, the one claimed longest ago is taken back. `None` only when
     /// even that is impossible, which is a row that has just claimed every lane itself.
     fn alloc(&mut self) -> Option<u16> {
-        for (i, slot) in self.lanes.iter().enumerate() {
+        self.alloc_from(0)
+    }
+
+    /// Leftmost free lane to the right of `lane`, falling back to anywhere.
+    ///
+    /// Preferred for a parent so that branch lines only ever bend one way. When the right is
+    /// full the left is still better than nothing: a line bending the wrong way beats a
+    /// commit with no lane at all.
+    fn alloc_after(&mut self, lane: u16) -> Option<u16> {
+        self.alloc_from(lane.saturating_add(1))
+            .or_else(|| self.alloc_from(0))
+    }
+
+    fn alloc_from(&mut self, first: u16) -> Option<u16> {
+        for (i, slot) in self.lanes.iter().enumerate().skip(first as usize) {
             let lane = u16::try_from(i).unwrap_or(u16::MAX);
             if lane >= SPILL {
                 break;
@@ -209,7 +227,9 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
             self.lanes.push(None);
             return u16::try_from(self.lanes.len() - 1).ok();
         }
-        self.evict()
+        // Only the leftward pass may take a lane back; the rightward one gives way instead,
+        // so a preference does not cost somebody else their line.
+        if first == 0 { self.evict() } else { None }
     }
 
     /// Gives back every lane held longer than a line is worth drawing.

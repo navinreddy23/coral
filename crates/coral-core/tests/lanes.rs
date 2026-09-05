@@ -322,3 +322,28 @@ fn a_recycled_lane_is_closed_before_it_is_handed_out_again() {
         }
     }
 }
+
+/// Branch lines bend one way, which is what makes a graph read as a trunk with branches.
+///
+/// A lane to the left of the merge is nearer, but taking it draws a branch that leaves
+/// leftwards and comes back, and a screen of those reads as a knot.
+#[test]
+fn a_merge_opens_its_extra_lane_to_the_right() {
+    let mut assigner: LaneAssigner<u32> = LaneAssigner::new();
+
+    // Three tips, so lanes 0, 1 and 2 are taken; then lane 0 falls free.
+    assigner.push(&0, &[10]);
+    assigner.push(&1, &[11]);
+    assigner.push(&2, &[12]);
+    assigner.push(&10, &[]); // lane 0 dies here
+
+    // A merge sitting in lane 1 must open lane 3, not the free lane 0 to its left.
+    let merge = assigner.push(&11, &[20, 21]);
+    assert_eq!(merge.lane, 1);
+    let opened = merge.parent_lanes[1];
+    assert!(
+        opened > merge.lane,
+        "the branch bends left, into lane {opened}, from lane {}",
+        merge.lane
+    );
+}
