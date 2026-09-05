@@ -1,7 +1,9 @@
 <script lang="ts">
   import { elidePath } from './path';
+  import CodeSheet from './CodeSheet.svelte';
+  import { outputRows, sideRows, type Row } from './sheet';
   import type { ConflictedFile } from '../ipc/types';
-  import type { MergeState } from '../state/merge.svelte';
+  import type { MergeState, Side } from '../state/merge.svelte';
 
   const { merge, onDone }: { merge: MergeState; onDone: () => void } = $props();
 
@@ -57,19 +59,52 @@
     at = 0;
   });
 
+  /** The three files, built once per change rather than once per pane per render. */
+  const ourRows = $derived(merge.blocks === null ? [] : sideRows(merge.blocks.blocks, 'ours'));
+  const theirRows = $derived(merge.blocks === null ? [] : sideRows(merge.blocks.blocks, 'theirs'));
+  const outRows = $derived(
+    merge.blocks === null ? [] : outputRows(merge.blocks.blocks, merge.choices),
+  );
+
   /**
-   * Moves to another conflict and brings it into view in all three panes.
+   * Width of the number column, in digits of the monospace face.
    *
-   * A file with a dozen conflicts is a file where scrolling three panes by hand is the work,
+   * From the longest of the three, so the three sheets line up and the column does not change
+   * width as four-digit numbers scroll into it.
+   */
+  const digits = $derived(
+    Math.max(3, String(Math.max(ourRows.length, theirRows.length, outRows.length)).length),
+  );
+
+  /**
+   * The row each sheet should scroll to, which is how the stepper moves all three at once.
+   *
+   * A row number rather than an element: the sheets only build what is on screen, so the row
+   * the stepper wants usually does not exist yet.
+   */
+  let jumped = $state(0);
+  const ourJump = $derived(rowOfConflict(ourRows, at, jumped));
+  const theirJump = $derived(rowOfConflict(theirRows, at, jumped));
+  const outJump = $derived(rowOfConflict(outRows, at, jumped));
+
+  function rowOfConflict(rows: Row[], conflict: number, tick: number): number | null {
+    void tick;
+    const found = rows.findIndex((r) => r.conflict === conflict && r.first);
+    return found === -1 ? null : found;
+  }
+
+  /**
+   * Moves to another conflict and brings it into view in all three sheets.
+   *
+   * A file with a dozen conflicts is a file where scrolling three sheets by hand is the work,
    * which is why every merge tool has this pair of arrows.
    */
   function step(by: number) {
     const total = merge.conflicts.length;
     if (total === 0) return;
     at = (at + by + total) % total;
-    for (const id of [`ours-conflict-${at}`, `theirs-conflict-${at}`, `out-conflict-${at}`]) {
-      document.getElementById(id)?.scrollIntoView({ block: 'center' });
-    }
+    // Changed so the sheets scroll again even when the same conflict is asked for twice.
+    jumped += 1;
   }
 
   /** What to call the operation. The state is an enum name; `cherry_pick` is not a word. */
@@ -299,40 +334,18 @@
                   Take all
                 </button>
               </div>
-              <div class="code">
-                {#each sideRows(merge.blocks.blocks, pane.side) as row (row.at)}
-                  {@const taken =
-                    row.conflict !== null &&
-                    row.line !== null &&
-                    (merge.choices[row.conflict] ?? []).some(
-                      (t) => t.side === pane.side && t.line === row.line,
-                    )}
-                  <div
-                    class="line"
-                    class:in-conflict={row.conflict !== null}
-                    class:taken
-                    id={row.first && row.conflict !== null
-                      ? `${pane.side}-conflict-${row.conflict}`
-                      : undefined}
-                  >
-                    <span class="tick">
-                      {#if row.conflict !== null && row.line !== null}
-                        {@const conflict = row.conflict}
-                        {@const line = row.line}
-                        <input
-                          type="checkbox"
-                          checked={taken}
-                          disabled={merge.edited !== null}
-                          aria-label="Take line {row.no} of {pane.label}"
-                          onchange={() => merge.toggleLine(conflict, pane.side, line)}
-                        />
-                      {/if}
-                    </span>
-                    <span class="no">{row.no}</span>
-                    <span class="text">{row.text}</span>
-                  </div>
-                {/each}
-              </div>
+              <CodeSheet
+                rows={pane.side === 'ours' ? ourRows : theirRows}
+                side={pane.side}
+                digits={digits}
+                frozen={merge.edited !== null}
+                scrollTo={pane.side === 'ours' ? ourJump : theirJump}
+                picked={(conflict, line) =>
+                  (merge.choices[conflict] ?? []).some(
+                    (t) => t.side === pane.side && t.line === line,
+                  )}
+                onPick={(conflict, line) => merge.toggleLine(conflict, pane.side, line)}
+              />
             </div>
           {/each}
         </div>
@@ -357,20 +370,11 @@
             {/if}
           </div>
           {#if merge.edited === null}
-            <div class="code result">
-              {#each outputRows(merge.blocks.blocks, merge.choices) as row (row.at)}
-                <div
-                  class="line"
-                  class:in-conflict={row.conflict !== null}
-                  class:here={row.conflict === at}
-                  id={row.first && row.conflict !== null ? `out-conflict-${row.conflict}` : undefined}
-                >
-                  <span class="no">{row.no}</span>
-                  <span class="text">{row.text}</span>
-                </div>
-              {/each}
-              {#if outputRows(merge.blocks.blocks, merge.choices).length === 0}
+            <div class="result">
+              {#if outRows.length === 0}
                 <p class="muted">The file comes out empty.</p>
+              {:else}
+                <CodeSheet rows={outRows} here={at} digits={digits} scrollTo={outJump} />
               {/if}
             </div>
           {:else}
@@ -388,80 +392,6 @@
   </div>
 </section>
 
-<script module lang="ts">
-  import type { Block } from '../ipc/types';
-  import type { Pick, Side } from '../state/merge.svelte';
-  import { sideOf } from '../state/merge.svelte';
-
-  /** One line of a file as a pane draws it. */
-  export interface Row {
-    /** Position in the pane, which is what keys the list. */
-    at: number;
-    /** Line number in this version of the file, or null for a placeholder. */
-    no: number | null;
-    text: string;
-    /** Which conflict the line belongs to, or null for a line both sides agree on. */
-    conflict: number | null;
-    /** Position within that side of the conflict, which is what a pick names. */
-    line: number | null;
-    /** True for the first line of a conflict, which is what the stepper scrolls to. */
-    first: boolean;
-  }
-
-  /** The file as one side has it: every agreed line, plus that side of every conflict. */
-  export function sideRows(blocks: readonly Block[], side: Side): Row[] {
-    const out: Row[] = [];
-    let conflict = 0;
-    for (const block of blocks) {
-      if (block.kind === 'common') {
-        for (const text of block.lines) push(out, text, null, null, false);
-        continue;
-      }
-      const lines = sideOf(block, side);
-      lines.forEach((text, i) => push(out, text, conflict, i, i === 0));
-      // A side that adds nothing here still needs a row, or the conflict has no place in
-      // this pane at all and the stepper has nothing to scroll to.
-      if (lines.length === 0) push(out, '(nothing on this side)', conflict, null, true, false);
-      conflict += 1;
-    }
-    return out;
-  }
-
-  /** The file as it will be written, with each line tied back to the conflict it came from. */
-  export function outputRows(blocks: readonly Block[], choices: Record<number, Pick>): Row[] {
-    const out: Row[] = [];
-    let conflict = 0;
-    for (const block of blocks) {
-      if (block.kind === 'common') {
-        for (const text of block.lines) push(out, text, null, null, false);
-        continue;
-      }
-      const pick = choices[conflict] ?? [];
-      const lines =
-        pick.length === 0
-          ? [...block.base]
-          : pick.map((t) => sideOf(block, t.side)[t.line]).filter((l) => l !== undefined);
-      lines.forEach((text, i) => push(out, text, conflict, i, i === 0));
-      if (lines.length === 0) push(out, '(nothing taken)', conflict, null, true, false);
-      conflict += 1;
-    }
-    return out;
-  }
-
-  /** Appends a row, numbering it. A placeholder stands in for a line and takes no number. */
-  function push(
-    out: Row[],
-    text: string,
-    conflict: number | null,
-    line: number | null,
-    first: boolean,
-    real = true,
-  ) {
-    const previous = out.at(-1);
-    const before = previous?.no ?? 0;
-    out.push({ at: out.length, no: real ? before + 1 : null, text, conflict, line, first });
-  }
-</script>
 
 <style>
   .merge { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-0); }
@@ -533,36 +463,9 @@
   .pane.ours .tag { background: var(--lane-7); }
   .pane.theirs .tag { background: var(--lane-3); }
 
-  .code { flex: 1; min-height: 0; overflow: auto; background: var(--bg-0); }
-  .result { flex: 1; min-height: 0; overflow: auto; background: var(--bg-0); }
+  .result { flex: 1; min-height: 0; display: flex; background: var(--bg-0); }
   .output { flex: 2 1 0; display: flex; flex-direction: column; min-height: 0; }
   .output .bar { border-top: 0; border-bottom: 1px solid var(--border); }
-
-  /* One row per line. `content-visibility` keeps a long file cheap: the rows off screen are
-     not laid out at all, which is what makes three sheets of a big file affordable. */
-  .line {
-    display: flex; align-items: baseline; gap: var(--space-2);
-    font-family: var(--font-mono); font-size: 11px; line-height: 17px;
-    white-space: pre; content-visibility: auto; contain-intrinsic-size: auto 17px;
-  }
-  .line .tick { flex: 0 0 14px; text-align: center; }
-  .line .tick input { margin: 0; vertical-align: middle; cursor: pointer; }
-  /* Wide enough for a four-digit file, with room on the left so the first digit is not
-     against the pane's edge. */
-  .line .no {
-    flex: 0 0 40px; padding-left: var(--space-1); box-sizing: border-box;
-    text-align: right; color: var(--fg-2);
-    font-variant-numeric: tabular-nums; user-select: none;
-  }
-  .line .text { flex: 1; min-width: 0; color: var(--fg-0); }
-
-  /* A conflicting line is tinted by which side it is on, and marked when it has been taken.
-     The bar down the left is what carries that at a glance while scrolling. */
-  .pane.ours .line.in-conflict { background: var(--lane-7-soft); box-shadow: inset 3px 0 0 var(--lane-7); }
-  .pane.theirs .line.in-conflict { background: var(--lane-3-soft); box-shadow: inset 3px 0 0 var(--lane-3); }
-  .line.in-conflict.taken { font-weight: 600; }
-  .result .line.in-conflict { background: var(--lane-2-soft); box-shadow: inset 3px 0 0 var(--lane-2); }
-  .result .line.in-conflict.here { outline: 1px solid var(--lane-2); outline-offset: -1px; }
 
   .typed {
     flex: 1; min-height: 0; width: 100%; box-sizing: border-box; resize: none;

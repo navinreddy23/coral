@@ -315,3 +315,40 @@ describe('picking in the merge tool', () => {
     expect(during).not.toContain('Skip commit');
   });
 });
+
+describe('a very large conflicted file', () => {
+  /** Thirty thousand lines, which is the size of the kernel's MAINTAINERS. */
+  function huge() {
+    const merge = state([conflicted()]);
+    merge.active = 'MAINTAINERS';
+    const before = Array.from({ length: 15000 }, (_, i) => `line ${i}`);
+    const after = Array.from({ length: 15000 }, (_, i) => `tail ${i}`);
+    merge.blocks = {
+      blocks: [
+        { kind: 'common', lines: before },
+        { kind: 'conflict', base: ['was'], ours: ['MAIN'], theirs: ['SIDE'] },
+        { kind: 'common', lines: after },
+      ],
+    };
+    return merge;
+  }
+
+  it('builds only the lines on screen, not the whole file three times over', () => {
+    // Every line of every pane was in the page: a quarter of a million elements for this
+    // file, and the window sat on "Loading…" for minutes.
+    const merge = huge();
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+
+    const lines = container.querySelectorAll('.line');
+    expect(lines.length).toBeGreaterThan(0);
+    expect(lines.length).toBeLessThan(1000);
+  });
+
+  it('still says how long the file is, so the scrollbar tells the truth', () => {
+    const merge = huge();
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+    const spacer = container.querySelector('.code .spacer') as HTMLElement;
+    // 30,001 lines at seventeen pixels each.
+    expect(spacer.style.height).toBe(`${30001 * 17}px`);
+  });
+});
