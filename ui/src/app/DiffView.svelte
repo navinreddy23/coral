@@ -622,9 +622,16 @@
     font-family: var(--font-mono); font-size: 11px; font-weight: 400; line-height: 17px;
   }
   .window { position: absolute; inset: 0 0 auto 0; will-change: transform; }
+  /*
+   * `minmax(0, 1fr)`, not `1fr`. A bare `1fr` is `minmax(auto, 1fr)`, so a column whose
+   * content cannot wrap — a long line of code under `white-space: pre` — grows past its share
+   * and pushes everything after it along. That is what put the right pane's gutter in the
+   * middle of the left pane's text, and its code off the side of the window: the numbers
+   * looked like they had escaped into the margin because the column holding them had.
+   */
   .line {
     display: grid; height: 17px;
-    grid-template-columns: var(--gutter) 1fr var(--gutter) 1fr;
+    grid-template-columns: var(--gutter) minmax(0, 1fr) var(--gutter) minmax(0, 1fr);
   }
   /* More room on the left than on the right: the widest number the file reaches fills the
      column exactly, and with even padding its first digit landed against the pane's edge. */

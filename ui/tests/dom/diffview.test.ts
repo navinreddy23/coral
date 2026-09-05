@@ -177,3 +177,22 @@ describe('a comparison of two commits', () => {
     expect(diff.view).toBe('blame');
   });
 });
+
+describe('the side-by-side layout', () => {
+  it('gives each side half the width, whatever the lines hold', () => {
+    // `1fr` is `minmax(auto, 1fr)`, so a column whose content cannot wrap — a long line under
+    // `white-space: pre` — grows past its share and pushes everything after it along. That is
+    // what put the right pane's gutter in the middle of the left pane's text and its code off
+    // the side of the window.
+    const diff = new DiffState(new ViewsState());
+    diff.setMode('split');
+    diff.path = 'kernel/sched/core.c';
+    diff.file = fileDiff();
+    const { container } = render(DiffView, { props: { diff, onClose: () => {} } });
+
+    const line = container.querySelector('.line') as HTMLElement;
+    const columns = getComputedStyle(line).gridTemplateColumns;
+    // Both code columns, not one: the gutters are fixed and the two halves share the rest.
+    expect(columns.match(/minmax\(0/gu) ?? []).toHaveLength(2);
+  });
+});
