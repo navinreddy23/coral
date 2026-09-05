@@ -211,6 +211,29 @@ describe('the shell', () => {
     ).toBe(true);
   });
 
+  it('gives the whole pane to the merge tool while an operation is stopped', async () => {
+    // The panel beside it can only offer a commit to select, so it spent half the window
+    // saying so while the two sides being merged were squeezed into a column too narrow to
+    // read, with the button that takes a side clipped off the end of it.
+    const { container } = await shell({
+      repo_operation: {
+        state: 'merge',
+        labels: { ours: 'main', theirs: 'side', swapped: false },
+        progress: null,
+        headName: 'main',
+        stoppedAt: null,
+        interactive: false,
+      },
+      repo_conflicts: [{ path: 'shared.txt', kind: 'both_modified' }],
+    });
+
+    await waitFor(() => {
+      if (!container.textContent?.includes('merge in progress')) throw new Error('not stopped yet');
+    });
+    expect(container.textContent).not.toContain('Select a commit');
+    expect(container.querySelector('aside.wip-panel')).toBeNull();
+  });
+
   it('keeps the row click target above the cells that are positioned', async () => {
     // The message cell is a positioned element, because the lane band hangs off it, and it
     // comes after the click overlay in the row. Without a raise on the overlay the cell sat on

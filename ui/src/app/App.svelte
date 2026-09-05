@@ -2835,7 +2835,13 @@
         </ul>
       </div>
     </div>
-    {#if views.current.details}
+    <!--
+      Not while a merge is stopped. The tool that settles it is the only thing worth looking at
+      until it is settled, and the panel beside it can only offer a commit to select — so it
+      spent half the window saying "select a commit" while the two sides being merged were
+      squeezed into a column too narrow to read, with the button that takes a side clipped.
+    -->
+    {#if views.current.details && !merge.inProgress}
       <Splitter
         label="Resize the detail panel"
         value={panes.widths.details}

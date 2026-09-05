@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { byVersionDescending } from './version';
   import type { PullRequest } from '../ipc/commands';
   import type { Remote, Submodule } from '../ipc/types';
   import type { PlacedRef, RefGroups } from '../state/refs.svelte';
@@ -228,7 +229,12 @@
   // Section order follows the reference's left panel: Local, Remote, Stashes, then Tags. The
   // remote section is rendered on its own because a remote is a thing with a menu, not a row.
   const above = $derived([{ key: 'local', title: 'Local', icon: '🖿', refs: shown(groups.local) }]);
-  const below = $derived([{ key: 'tags', title: 'Tags', icon: '🏷', refs: shown(groups.tags) }]);
+  // Newest first. The cap that keeps the DOM small takes the first two hundred rows, so the
+  // order has to be right before it applies or the kernel's list would be capped at its oldest
+  // tags and the release anyone wants would be behind a "Show all 944".
+  const below = $derived([
+    { key: 'tags', title: 'Tags', icon: '🏷', refs: byVersionDescending(shown(groups.tags), (r) => r.short) },
+  ]);
 
   /** The stack, filtered by the same box as everything else in this panel. */
   const stashRows = $derived(
