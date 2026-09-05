@@ -72,13 +72,47 @@ describe('the merge tool', () => {
     expect(container.querySelector('.warn')?.textContent).toContain('reversed');
   });
 
-  it('offers only whole-file choices for a binary conflict', () => {
+  it('offers only whole-file choices for a binary conflict', async () => {
     const merge = state([conflicted({ binary: true })]);
     const { container } = render(MergeTool, { props: { merge, onDone: noop } });
     const file = container.querySelector('button.file') as HTMLButtonElement;
-    // There are no blocks to pick between, so opening it would show an empty pane.
-    expect(file.disabled).toBe(true);
     expect(file.textContent).toContain('whole file');
+
+    // Selectable all the same: there is still a choice to make, and disabling it left the
+    // pane telling people to pick regions in a file that has none.
+    expect(file.disabled).toBe(false);
+    await fireEvent.click(file);
+    expect(container.querySelector('.whole')?.textContent).toContain('binary');
+    expect(container.querySelector('.conflict')).toBeNull();
+  });
+
+  it('explains a file deleted on this side and changed by the commit, and offers the two ways out', async () => {
+    // The reported case: cherry-picking a commit that changes a file this branch does not
+    // have. There is one version of it, so a region picker has nothing to pick between.
+    const merge = state([conflicted({ kind: 'deleted_by_us', deleteModify: true })]);
+    merge.operation = {
+      state: 'cherry_pick',
+      labels: { ours: 'dummyx', theirs: '3755eae (test conflicts)', swapped: false },
+      progress: null,
+      headName: null,
+      stoppedAt: null,
+      interactive: false,
+    };
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+
+    expect(container.querySelector('header')?.textContent).toContain('cherry-pick in progress');
+    // The side that does not exist is not offered; taking it could only ever fail.
+    const wholesale = container.querySelector('.wholesale')?.textContent ?? '';
+    expect(wholesale).not.toContain('dummyx');
+    expect(wholesale).toContain('3755eae');
+
+    await fireEvent.click(container.querySelector('button.file') as HTMLButtonElement);
+    const said = container.querySelector('.whole')?.textContent ?? '';
+    expect(said).toContain('is not on dummyx');
+    const choices = [...container.querySelectorAll('.choices button')].map((b) =>
+      b.textContent?.trim(),
+    );
+    expect(choices).toEqual(['Take the version from 3755eae (test conflicts)', 'Leave it deleted']);
   });
 
   it('offers a delete for a file removed on one side', () => {

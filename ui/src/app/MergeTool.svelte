@@ -1,5 +1,6 @@
 <script lang="ts">
   import { elidePath } from './path';
+  import type { ConflictedFile } from '../ipc/types';
   import type { MergeState, Side } from '../state/merge.svelte';
 
   const { merge, onDone }: { merge: MergeState; onDone: () => void } = $props();
@@ -42,12 +43,56 @@
   async function skip() {
     if (await merge.step('skip')) onDone();
   }
+
+  /** What to call the operation. The state is an enum name; `cherry_pick` is not a word. */
+  const verb = $derived.by(() => {
+    const state = merge.operation?.state ?? 'merge';
+    if (state === 'cherry_pick') return 'cherry-pick';
+    return state === 'clean' || state === 'bisect' ? 'merge' : state;
+  });
+
+  /**
+   * Which sides a conflict actually has content on.
+   *
+   * A file deleted on one side and modified on the other has one version, not two, and
+   * offering the missing one gave a button that could only ever fail. git's own names for
+   * these say which side is gone.
+   */
+  function sidesOf(file: ConflictedFile): { ours: boolean; theirs: boolean } {
+    const kind = file.kind;
+    return {
+      ours: !['added_by_them', 'deleted_by_us', 'both_deleted'].includes(kind),
+      theirs: !['added_by_us', 'deleted_by_them', 'both_deleted'].includes(kind),
+    };
+  }
+
+  /** The file being looked at, when it is one that cannot be picked apart. */
+  const wholeFile = $derived(
+    merge.files.find((f) => f.path === merge.active && !supportsBlocks(f)) ?? null,
+  );
+
+  function supportsBlocks(file: ConflictedFile): boolean {
+    return !file.binary && !file.deleteModify;
+  }
+
+  /** Why this file cannot be settled region by region, in words rather than a flag. */
+  function whyWhole(file: ConflictedFile): string {
+    if (file.binary) return `${file.path} is binary, so there are no lines to pick between.`;
+    const gone = sidesOf(file);
+    if (!gone.ours) {
+      return `${file.path} is not on ${labels.ours} at all: ${labels.theirs} changed a file this side had deleted.`;
+    }
+    if (!gone.theirs) {
+      return `${file.path} was deleted by ${labels.theirs}, and changed on ${labels.ours}.`;
+    }
+    return `${file.path} was deleted on both sides.`;
+  }
 </script>
 
 <section class="merge">
   <header>
     <span class="what">
-      {merge.operation?.state ?? 'merge'} in progress
+      {verb} in progress
       {#if merge.operation?.progress}
         <span class="muted">
           — {merge.operation.progress.current} of {merge.operation.progress.total}
@@ -93,29 +138,46 @@
   <div class="body">
     <ul class="files">
       {#each merge.files as file (file.path)}
-        {@const blockwise = !file.binary && !file.deleteModify}
+        {@const blockwise = supportsBlocks(file)}
+        {@const has = sidesOf(file)}
         <li>
+          <!-- Selectable whether or not it can be picked apart. A file with one version left
+               still has a decision to make, and disabling it left the pane telling people to
+               pick regions in a file that has none. -->
           <button
             class="file"
             class:on={file.path === merge.active}
-            disabled={!blockwise}
-            title={blockwise
-              ? file.path
-              : `${file.path} — binary or deleted on one side, so only a whole-file choice applies`}
+            title={file.path}
             onclick={() => merge.open(file.path)}
           >
             <span class="name">{elidePath(file.path, 40)}</span>
             {#if !blockwise}<span class="tag">whole file</span>{/if}
           </button>
           <span class="wholesale">
-            <button disabled={merge.busy} onclick={() => merge.take(file.path, { kind: 'ours' })}>
-              {labels.ours}
-            </button>
-            <button disabled={merge.busy} onclick={() => merge.take(file.path, { kind: 'theirs' })}>
-              {labels.theirs}
-            </button>
+            {#if has.ours}
+              <button
+                disabled={merge.busy}
+                title="Take the version on {labels.ours}"
+                onclick={() => merge.take(file.path, { kind: 'ours' })}
+              >
+                {labels.ours}
+              </button>
+            {/if}
+            {#if has.theirs}
+              <button
+                disabled={merge.busy}
+                title="Take the version from {labels.theirs}"
+                onclick={() => merge.take(file.path, { kind: 'theirs' })}
+              >
+                {labels.theirs}
+              </button>
+            {/if}
             {#if file.deleteModify}
-              <button disabled={merge.busy} onclick={() => merge.take(file.path, { kind: 'delete' })}>
+              <button
+                disabled={merge.busy}
+                title="Leave the file deleted"
+                onclick={() => merge.take(file.path, { kind: 'delete' })}
+              >
                 delete
               </button>
             {/if}
@@ -129,7 +191,44 @@
 
     <div class="blocks">
       {#if merge.active === null}
-        <p class="muted">Pick a file to resolve it region by region.</p>
+        <p class="muted">
+          {merge.files.length === 0
+            ? 'Nothing is left conflicted.'
+            : 'Pick a file to settle it.'}
+        </p>
+      {:else if wholeFile}
+        <!-- One version of the file exists, or none, so there is nothing to pick between
+             line by line. Saying which choice is on offer beats a pane that asks for regions
+             the file does not have. -->
+        <div class="whole">
+          <p>{whyWhole(wholeFile)}</p>
+          <div class="choices">
+            {#if sidesOf(wholeFile).ours}
+              <button
+                class="primary"
+                disabled={merge.busy}
+                onclick={() => merge.take(wholeFile.path, { kind: 'ours' })}
+              >
+                Keep what is on {labels.ours}
+              </button>
+            {/if}
+            {#if sidesOf(wholeFile).theirs}
+              <button
+                class="primary"
+                disabled={merge.busy}
+                onclick={() => merge.take(wholeFile.path, { kind: 'theirs' })}
+              >
+                Take the version from {labels.theirs}
+              </button>
+            {/if}
+            <button
+              disabled={merge.busy}
+              onclick={() => merge.take(wholeFile.path, { kind: 'delete' })}
+            >
+              Leave it deleted
+            </button>
+          </div>
+        </div>
       {:else if merge.blocks === null}
         <p class="muted">Loading…</p>
       {:else}
@@ -324,6 +423,14 @@
     white-space: pre; resize: vertical;
   }
   textarea.output { outline: 1px solid var(--accent); outline-offset: -1px; }
+  .whole { padding: var(--space-3); font-size: 12px; color: var(--fg-1); max-width: 60ch; }
+  .whole p { margin: 0 0 var(--space-3); line-height: 1.5; }
+  .choices { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .choices button { font-size: 12px; padding: var(--space-1) var(--space-3); }
+  /* A branch name and a commit subject are both long; the row must not grow to fit them. */
+  .wholesale button {
+    max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .muted { color: var(--fg-2); padding: var(--space-3); font-size: 12px; }
   .error { color: var(--danger); padding: var(--space-2) var(--space-3); font-size: 12px; margin: 0; }
   .stopped {
