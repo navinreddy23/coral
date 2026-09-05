@@ -111,8 +111,9 @@ link.
 ## Diff view
 
 Inline and side-by-side toggle, word-level highlighting, hunk headers with stage/unstage/discard
-hunk, line selection to stage/unstage/discard lines, whitespace toggle, expand context, file
-history and blame tabs, next/previous change. Large and binary files render as a placeholder
+hunk, line selection to stage/unstage/discard lines, whitespace toggle, file history and blame
+tabs, and next/previous change in both layouts. The unified view can be widened from the hunks
+to the whole file; side by side always shows the whole of it. Large and binary files render as a placeholder
 with an explicit load action.
 
 ## Merge conflict tool

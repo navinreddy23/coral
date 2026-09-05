@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { render } from '@testing-library/svelte';
+import { fireEvent } from '@testing-library/dom';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
@@ -194,5 +195,45 @@ describe('the side-by-side layout', () => {
     const columns = getComputedStyle(line).gridTemplateColumns;
     // Both code columns, not one: the gutters are fixed and the two halves share the rest.
     expect(columns.match(/minmax\(0/gu) ?? []).toHaveLength(2);
+  });
+});
+
+describe('reading a change in its surroundings', () => {
+  it('offers to widen the unified view to the whole file, and to narrow it again', async () => {
+    const { container } = mounted('inline');
+    const wider = container.querySelector('button.wider') as HTMLButtonElement;
+    expect(wider, 'the unified view offers it').not.toBeNull();
+    expect(wider.textContent?.trim()).toBe('Whole file');
+
+    await fireEvent.click(wider);
+    expect(
+      (container.querySelector('button.wider') as HTMLButtonElement).textContent?.trim(),
+    ).toBe('Changes only');
+  });
+
+  it('does not offer it side by side, which already shows the whole file', () => {
+    const { container } = mounted('split');
+    expect(container.querySelector('button.wider')).toBeNull();
+  });
+
+  it('carries next and previous change in the unified view too', () => {
+    const { container } = mounted('inline');
+    const steps = [...container.querySelectorAll('.steps button')] as HTMLButtonElement[];
+    expect(steps.length, 'two buttons').toBe(2);
+    expect(steps.map((b) => b.title)).toEqual(['Previous change', 'Next change']);
+    expect(steps.every((b) => !b.disabled), 'the fixture has changes to step to').toBe(true);
+  });
+
+  it('disables them for a file with nothing changed in it', () => {
+    const diff = new DiffState(new ViewsState());
+    diff.setMode('inline');
+    diff.path = 'unchanged.txt';
+    diff.file = {
+      ...fileDiff(),
+      hunks: [{ header: '@@', oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: [line('context', 'same', 1, 1)] }],
+    };
+    const { container } = render(DiffView, { props: { diff, onClose: () => {} } });
+    const steps = [...container.querySelectorAll('.steps button')] as HTMLButtonElement[];
+    expect(steps.every((b) => b.disabled)).toBe(true);
   });
 });

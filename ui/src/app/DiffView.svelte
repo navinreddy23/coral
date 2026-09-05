@@ -206,6 +206,38 @@
     el.scrollTop = Math.max(0, next * ROW - el.clientHeight / 3);
   }
 
+  /** Whether there is anything to step to, which decides the buttons' state in both layouts. */
+  const anyChange = $derived(
+    (diff.file?.hunks ?? []).some((h) => h.lines.some((l) => l.kind !== 'context')),
+  );
+
+  /** The unified table, so stepping can find the rows it has rendered. */
+  let table: HTMLElement | null = $state(null);
+
+  /**
+   * Moves to the change before or after the one on screen, in the unified layout.
+   *
+   * By the rows themselves rather than by arithmetic: this table is not virtualised and its
+   * rows are not a uniform height once a line wraps, so where a change actually sits is a
+   * question only the rendered row can answer.
+   */
+  function stepInline(direction: 1 | -1) {
+    const root = table;
+    if (root === null) return;
+    const rows = [...root.querySelectorAll('tr.add, tr.delete')] as HTMLElement[];
+    if (rows.length === 0) return;
+
+    // A third of the way down, matching the split view: a change half off the bottom is the
+    // next one, not one already passed.
+    const box = root.getBoundingClientRect();
+    const line = box.top + root.clientHeight / 3;
+    const next =
+      direction === 1
+        ? rows.find((row) => row.getBoundingClientRect().top > line + 1)
+        : [...rows].reverse().find((row) => row.getBoundingClientRect().top < line - 1);
+    next?.scrollIntoView({ block: 'center' });
+  }
+
   /** The file's lines paired with the commit that last changed each. */
   const blamed = $derived.by(() => {
     const blame = diff.blame;
@@ -275,6 +307,19 @@
         </button>
       </div>
 
+      {#if diff.mode === 'inline' && diff.file && !diff.file.binary}
+        <button
+          class="wider"
+          class:on={diff.expanded}
+          onclick={() => diff.setExpanded(!diff.expanded)}
+          title={diff.expanded
+            ? 'Show only the changed parts of the file'
+            : 'Show the whole file around the changes'}
+        >
+          {diff.expanded ? 'Changes only' : 'Whole file'}
+        </button>
+      {/if}
+
       {#if diff.mode === 'split'}
         <div class="steps">
           <button
@@ -286,6 +331,15 @@
             onclick={() => step(1)}
             disabled={changeRows.length === 0}
             title="Next change">↓</button
+          >
+        </div>
+      {:else if diff.mode === 'inline'}
+        <div class="steps">
+          <button onclick={() => stepInline(-1)} disabled={!anyChange} title="Previous change"
+            >↑</button
+          >
+          <button onclick={() => stepInline(1)} disabled={!anyChange} title="Next change"
+            >↓</button
           >
         </div>
       {/if}
@@ -375,7 +429,7 @@
         {diff.file.oldPath ? `Renamed from ${diff.file.oldPath}.` : 'No line changes.'}
       </p>
     {:else if diff.mode === 'inline'}
-      <table class="lines">
+      <table class="lines" bind:this={table}>
         <tbody>
           {#each hunks as hunk, h (hunk.header + hunk.newStart)}
             <tr class="hunk">
@@ -518,6 +572,13 @@
     color: var(--fg-1); padding: 0 6px;
   }
   .steps button:hover:not(:disabled), .ws:hover { background: var(--bg-2); color: var(--fg-0); }
+  .wider {
+    font: inherit; font-size: 11px; cursor: pointer;
+    padding: 2px var(--space-2); border-radius: var(--radius-1);
+    background: var(--bg-2); border: 1px solid var(--border-strong); color: var(--fg-1);
+  }
+  .wider:hover { background: var(--bg-3); }
+  .wider.on { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
   .steps button:disabled { color: var(--fg-2); cursor: default; }
   .ws.on { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 

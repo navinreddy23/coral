@@ -74,10 +74,29 @@ export class DiffState {
    * not blank on a button press.
    */
   setMode(mode: DiffMode): void {
-    const before = wholeFileFor(this.mode);
+    const before = this.wholeFile;
     this.#views.set('diff', mode);
-    if (wholeFileFor(mode) !== before) void this.#reread();
+    if (this.wholeFile !== before) void this.#reread();
   }
+
+  /**
+   * Whether the unified view shows the file around the changes rather than only the hunks.
+   *
+   * Not remembered between files. Widening the context is a thing somebody does to read one
+   * change in its surroundings, and coming back to the next file with every line of it on
+   * screen is not what they asked for.
+   */
+  expanded = $state(false);
+
+  /** Shows the whole file in the unified view, or goes back to the hunks. */
+  setExpanded(expanded: boolean): void {
+    const before = this.wholeFile;
+    this.expanded = expanded;
+    if (this.wholeFile !== before) void this.#reread();
+  }
+
+  /** How much of the file to ask git for, which the layout and the toggle decide together. */
+  wholeFile = $derived(wholeFileFor(this.mode) || this.expanded);
 
   /**
    * The change, who wrote each line, or what has touched the file. Remembered like the mode.
@@ -233,7 +252,7 @@ export class DiffState {
     this.#request = request;
     const token = ++this.#token;
     try {
-      const got = await read(request, wholeFileFor(this.mode), this.ignoreWhitespace);
+      const got = await read(request, this.wholeFile, this.ignoreWhitespace);
       if (token !== this.#token) return;
       this.file = got;
       this.error = got === null ? absentFor(request.source) : null;
@@ -259,7 +278,7 @@ export class DiffState {
     this.error = null;
     this.loading = true;
     try {
-      const got = await read(request, wholeFileFor(this.mode), this.ignoreWhitespace);
+      const got = await read(request, this.wholeFile, this.ignoreWhitespace);
       // Clicking down a long file list must not let an earlier, slower read win.
       if (token !== this.#token) return;
       this.file = got;
@@ -287,6 +306,7 @@ export class DiffState {
     this.history = [];
     this.moreHistory = false;
     this.atCommit = null;
+    this.expanded = false;
   }
 }
 
