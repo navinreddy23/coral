@@ -17,6 +17,7 @@ pub mod signing;
 pub mod ssh;
 pub mod tabs;
 pub mod terminal;
+pub mod version;
 pub mod watcher;
 
 pub use commands::{

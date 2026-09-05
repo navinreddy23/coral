@@ -573,3 +573,14 @@ export function sshGenerate(
 export function sshPublicKey(path: string): Promise<string> {
   return invoke<string>('ssh_public_key', { path });
 }
+
+/** What this build of Coral is: the version, the commit behind it, and whether it is a debug build. */
+export interface AppVersion {
+  number: string;
+  commit: string | null;
+  debug: boolean;
+}
+
+export function appVersion(): Promise<AppVersion> {
+  return invoke<AppVersion>('app_version');
+}

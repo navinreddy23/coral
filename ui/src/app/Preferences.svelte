@@ -1,4 +1,5 @@
 <script lang="ts">
+  import About from './About.svelte';
   import CommitSigning from './CommitSigning.svelte';
   import Experimental from './Experimental.svelte';
   import Ssh from './Ssh.svelte';
@@ -34,6 +35,7 @@
     { id: 'ssh', label: 'SSH', glyph: '⛨', needsRepository: true },
     { id: 'signing', label: 'Commit Signing', glyph: '✎', needsRepository: true },
     { id: 'experimental', label: 'Experimental', glyph: '⚗', needsRepository: false },
+    { id: 'about', label: 'About', glyph: 'ⓘ', needsRepository: false },
   ].filter((pane) => hasRepository || !pane.needsRepository));
 
   // svelte-ignore state_referenced_locally
@@ -66,6 +68,8 @@
     <Ssh {ssh} {onCopied} />
   {:else if active === 'experimental'}
     <Experimental {experimental} {onPickGit} />
+  {:else if active === 'about'}
+    <About {onCopied} />
   {/if}
 </div>
 

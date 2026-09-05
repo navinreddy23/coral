@@ -3,7 +3,7 @@
 
 use coral_app_lib::{
     actions, activity, commands, conflicts, experimental, graph, hosting, recent, remotes, scope,
-    signing, ssh, tabs, terminal, watcher,
+    signing, ssh, tabs, terminal, version, watcher,
 };
 
 fn main() {
@@ -187,6 +187,7 @@ fn window() {
             tabs::group_recolour,
             tabs::group_dissolve,
             tabs::group_close,
+            version::app_version,
             graph::binary_self_test
         ])
         .run(tauri::generate_context!())
