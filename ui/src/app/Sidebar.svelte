@@ -29,6 +29,7 @@
     onSubmoduleMenu,
     collapsed,
     onCollapse,
+    focusFilter,
     scope,
     onToggleHidden,
     onLeaveSolo,
@@ -78,6 +79,13 @@
      */
     collapsed: Record<string, boolean>;
     onCollapse: (section: string, closed: boolean) => void;
+    /**
+     * Bumped by the window to put the caret in the filter box.
+     *
+     * A counter rather than a flag: pressing the key twice has to work twice, and a flag set
+     * to true while already true is not a change for an effect to see.
+     */
+    focusFilter: number;
     /**
      * Which refs the graph is walked from, by full name.
      *
@@ -143,6 +151,17 @@
   }
 
   let filter = $state('');
+  let filterField = $state<HTMLInputElement | null>(null);
+  // Only when asked, never on mount: an effect that reads the counter runs once as the panel
+  // appears, and the window would open with the caret in the filter box, so the arrow keys
+  // typed at the graph went into a text field instead.
+  let focusedAt = 0;
+  $effect(() => {
+    if (focusFilter === focusedAt) return;
+    focusedAt = focusFilter;
+    filterField?.focus();
+    filterField?.select();
+  });
   /**
    * Sections rendered in full, by key.
    *
@@ -320,7 +339,12 @@
     </div>
   {/if}
   <p class="viewing">Viewing <strong>{total}</strong></p>
-  <input class="filter" placeholder="Filter" bind:value={filter} />
+  <input
+    class="filter"
+    placeholder="Filter"
+    bind:this={filterField}
+    bind:value={filter}
+  />
 
   {#each above as section (section.key)}
     <section>

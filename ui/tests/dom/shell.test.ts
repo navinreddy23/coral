@@ -215,6 +215,81 @@ describe('the shell', () => {
     ).toBe(true);
   });
 
+  it('commits from the keyboard, and keeps the message when the panel is not showing', async () => {
+    // The message lives in the window, not the panel: selecting a commit unmounts the panel,
+    // and a half-written message used to go with it.
+    const { container } = await shell({
+      repo_status: {
+        entries: [{ path: 'a.txt', staged: 'modified', worktree: null, conflict: null }],
+        conflicted: [],
+      },
+      commit_staged: { entries: [], conflicted: [] },
+    });
+
+    // The panel opens with the working copy, which is a row of its own at the top of the list.
+    await waitFor(() => {
+      if (!container.querySelector('button.row.wip')) throw new Error('no working copy row yet');
+    });
+    await fireEvent.click(container.querySelector('button.row.wip') as HTMLButtonElement);
+    await waitFor(() => {
+      if (!container.querySelector('input.summary')) throw new Error('no staging panel yet');
+    });
+    const summary = container.querySelector('input.summary') as HTMLInputElement;
+    summary.value = 'a message typed by hand';
+    await fireEvent.input(summary);
+
+    invoke.mockClear();
+    // On the field, because that is where the key is pressed: the binding is scoped to the
+    // message box rather than the whole window, so Enter elsewhere means Enter.
+    await fireEvent.keyDown(summary, { key: 'Enter', ctrlKey: true });
+    await waitFor(() => {
+      const committed = invoke.mock.calls.find((c) => c[0] === 'commit_staged');
+      if (!committed) throw new Error('no commit yet');
+      expect((committed[1] as { message?: string }).message).toBe('a message typed by hand');
+    });
+  });
+
+  it('fetches from the keyboard', async () => {
+    await shell({ repo_action: { what: 'fetch', message: '', conflicted: false } });
+    invoke.mockClear();
+    await fireEvent.keyDown(window, { key: 'l', ctrlKey: true });
+    await waitFor(() => {
+      const fetched = invoke.mock.calls.find(
+        (c) =>
+          c[0] === 'repo_action' &&
+          (c[1] as { action?: { kind?: string } })?.action?.kind === 'fetch',
+      );
+      if (!fetched) throw new Error('no fetch yet');
+    });
+  });
+
+  it('hides and restores the toolbar from the keyboard', async () => {
+    const { container } = await shell();
+    const toolbar = () => container.querySelector('.toolbar');
+    expect(toolbar(), 'the toolbar starts visible').not.toBeNull();
+
+    await fireEvent.keyDown(window, { key: 'u', ctrlKey: true });
+    await waitFor(() => {
+      if (toolbar() !== null) throw new Error('still there');
+    });
+    await fireEvent.keyDown(window, { key: 'u', ctrlKey: true });
+    await waitFor(() => {
+      if (toolbar() === null) throw new Error('did not come back');
+    });
+  });
+
+  it('puts the caret in the branch filter when / is pressed', async () => {
+    const { container } = await shell();
+    const filter = container.querySelector('input.filter') as HTMLInputElement;
+    expect(filter, 'the panel has a filter box').not.toBeNull();
+    expect(document.activeElement).not.toBe(filter);
+
+    await fireEvent.keyDown(window, { key: '/' });
+    await waitFor(() => {
+      if (document.activeElement !== filter) throw new Error('not focused yet');
+    });
+  });
+
   it('offers to apply a patch when nothing is being compared', async () => {
     const { container } = await shell();
     const dialog = vi.mocked(openDialog);

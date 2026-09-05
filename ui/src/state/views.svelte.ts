@@ -30,9 +30,10 @@ export interface Views {
   fileView: FileView;
   /** Whether a change that is only whitespace counts as a change. */
   ignoreWhitespace: boolean;
-  /** Whether the left panel and the detail panel are showing. */
+  /** Whether the left panel, the detail panel and the toolbar are showing. */
   sidebar: boolean;
   details: boolean;
+  toolbar: boolean;
   terminalDock: Dock;
   terminalSize: number;
   /** Which sections of the sidebar are closed, by key. */
@@ -50,6 +51,7 @@ function defaults(): Views {
     ignoreWhitespace: false,
     sidebar: true,
     details: true,
+    toolbar: true,
     terminalDock: 'bottom',
     terminalSize: 260,
     // Remote and tag lists run to hundreds on a real repository, so they start closed; local

@@ -11,6 +11,7 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn() }));
 
 import Staging from '../../src/app/Staging.svelte';
+import { CommitState } from '../../src/state/commit.svelte';
 import { WorktreeState } from '../../src/state/worktree.svelte';
 import type { Status, StatusEntry } from '../../src/ipc/types';
 
@@ -45,16 +46,21 @@ function status(): Status {
 
 async function panel(over: Record<string, unknown> = {}) {
   const worktree = new WorktreeState();
+  // The message being written is the window's, not the panel's: the panel is unmounted
+  // whenever the selection leaves the working copy, and a half-written message survives that.
+  const commit = new CommitState();
   // Through `load`, not by assignment: staging is refused until the state knows which
   // repository it is acting on, which is what a bare assignment would skip.
   await worktree.load('/repo');
   const onOpenFile = vi.fn();
   return {
     worktree,
+    commit,
     onOpenFile,
     ...render(Staging, {
       props: {
         worktree,
+        commit,
         branch: 'main',
         openPath: null,
         grouping: 'tree',
@@ -176,6 +182,7 @@ describe('the staging panel', () => {
     const { container } = render(Staging, {
       props: {
         worktree,
+        commit: new CommitState(),
         branch: 'main',
         openPath: null,
         grouping: 'tree',
@@ -195,6 +202,7 @@ describe('the staging panel', () => {
     const { container } = render(Staging, {
       props: {
         worktree,
+        commit: new CommitState(),
         branch: 'main',
         openPath: null,
         grouping: 'tree',

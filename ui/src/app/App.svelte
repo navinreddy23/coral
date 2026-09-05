@@ -23,6 +23,7 @@
     type PullRequest,
   } from '../ipc/commands';
   import { ActionsState } from '../state/actions.svelte';
+  import { CommitState } from '../state/commit.svelte';
   import MergeTool from './MergeTool.svelte';
   import { MergeState } from '../state/merge.svelte';
   import RebasePicker from './RebasePicker.svelte';
@@ -122,6 +123,8 @@
     'stage.all', 'unstage.all', 'tab.new', 'tab.close', 'tab.next', 'tab.previous',
     'palette', 'repo.open', 'terminal', 'search.commits',
     'panel.left', 'panel.detail', 'help', 'undo', 'redo',
+    'commit', 'commit.stageAll', 'commit.focus', 'stage.file', 'unstage.file',
+    'branch.create', 'fetch.all', 'toolbar', 'filter.focus',
   ]);
 
   function move(delta: number) {
@@ -183,6 +186,15 @@
       // was inert while the button beside it worked.
       case 'undo': toolbarAction('undo'); break;
       case 'redo': toolbarAction('redo'); break;
+      case 'branch.create': toolbarAction('branch'); break;
+      case 'fetch.all': toolbarAction('fetch'); break;
+      case 'toolbar': views.set('toolbar', !views.current.toolbar); break;
+      case 'filter.focus': filterTick += 1; break;
+      case 'commit': void recordCommit(false); break;
+      case 'commit.stageAll': void recordCommit(true); break;
+      case 'commit.focus': focusCommitMessage(); break;
+      case 'stage.file': void stageOpenFile(true); break;
+      case 'unstage.file': void stageOpenFile(false); break;
       case 'terminal': terminal.toggle(); break;
       case 'repo.open': void openAnother(); break;
       default: break;
@@ -235,6 +247,9 @@
   const panes = new PanesState();
   const diff = new DiffState(views);
   const actions = new ActionsState();
+  const commitDraft = new CommitState();
+  /** Bumped to ask the branch panel for the caret; see the prop's own note. */
+  let filterTick = $state(0);
   const merge = new MergeState();
   const hosting = new HostingState();
   const rebase = new RebaseState();
@@ -429,6 +444,47 @@
     const path = info.path;
     await Promise.all([refs.load(path), worktree.load(path), merge.load(path)]);
     await graph.open(path);
+  }
+
+  /**
+   * Records the commit the staging panel is holding, from the keyboard.
+   *
+   * The panel's own button does the same thing; this is the path Ctrl+Enter takes, and it has
+   * to work whether or not the panel is on screen — the message survives the panel being
+   * unmounted, so the shortcut should not be the one thing that needs it visible.
+   */
+  async function recordCommit(stageEverything: boolean) {
+    if (!info || worktree.busy) return;
+    if (stageEverything && worktree.unstaged.length > 0) {
+      await worktree.stage(worktree.unstaged.map((f) => f.path), true);
+    }
+    if (!commitDraft.ready(worktree)) return;
+    await worktree.commit(commitDraft.message, commitDraft.amend);
+    if (!worktree.error) {
+      commitDraft.clear();
+      await reloadAll();
+    }
+  }
+
+  /** Shows the working copy and puts the caret in the summary field. */
+  function focusCommitMessage() {
+    if (!info) return;
+    pickWip();
+    commitDraft.focus();
+  }
+
+  /**
+   * Stages or unstages the file whose diff is open.
+   *
+   * "Current file" is the one being read, which is the only file the window has a notion of.
+   * Without a diff open there is nothing to act on, and doing something to a file the user
+   * cannot see would be worse than doing nothing.
+   */
+  async function stageOpenFile(stage: boolean) {
+    const path = diff.path;
+    if (!info || path === null || diff.source === 'commit' || diff.source === 'compare') return;
+    await worktree.stage([path], stage);
+    await diff.reload(info.path);
   }
 
   /** Every ref and where it points, as one string, to tell whether an action moved anything. */
@@ -2583,6 +2639,7 @@
   />
 
   {#if info && !showStart}
+    {#if views.current.toolbar}
     <Toolbar
       repo={TabsState.title(tabs.active ?? { id: 0, path: info.path, submodule: null, group: null, missing: false })}
       submodule={tabs.active?.submodule ?? null}
@@ -2595,6 +2652,7 @@
       onPullMenu={pullMenu}
       onPushMenu={pushMenu}
     />
+    {/if}
   {/if}
 
   {#if graph.transportWarning}
@@ -2683,6 +2741,7 @@
         onDropRef={dropRef}
         pullRequests={hosting.pullRequests}
         pullRequestLabel={hosting.view?.host?.kind === 'gitlab' ? 'Merge requests' : 'Pull requests'}
+        focusFilter={filterTick}
         collapsed={views.current.collapsed}
         onCollapse={(section, closed) => views.setCollapsed(section, closed)}
         onOpenPullRequest={(pr: PullRequest) => void openInBrowser(pr.webUrl)}
@@ -2951,6 +3010,7 @@
         <aside class="wip-panel">
           <Staging
             {worktree}
+            commit={commitDraft}
             branch={headName}
             openPath={diff.path}
             grouping={views.current.changes}

@@ -85,6 +85,10 @@ export const BINDINGS: Binding[] = [
   // Command palette
   { id: 'palette', label: 'Toggle command palette', keys: 'Ctrl P', group: 'Command palette',
     context: 'global', match: (e) => primary(e) && !e.shift && is(e, 'p') },
+  // The one key every list with a filter binds. Plain, because the field it reaches is a
+  // filter and not a search of the history, which is what Ctrl F is.
+  { id: 'filter.focus', label: 'Filter the branch list', keys: '/', group: 'Navigation',
+    context: 'global', match: (e) => plain(e) && e.key === '/' },
   { id: 'search.commits', label: 'Search commits', keys: 'Ctrl F', group: 'Command palette',
     context: 'global', match: (e) => primary(e) && !e.shift && is(e, 'f') },
   { id: 'repo.open', label: 'Open repository', keys: 'Ctrl Shift O', group: 'Command palette',

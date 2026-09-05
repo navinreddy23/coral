@@ -2,11 +2,13 @@
   import Changes, { kindOf, markOf } from './Changes.svelte';
   import { buildTree } from '../diff/tree';
   import type { StatusEntry } from '../ipc/types';
+  import type { CommitState } from '../state/commit.svelte';
   import type { WorktreeState } from '../state/worktree.svelte';
   import type { Grouping } from '../state/views.svelte';
 
   const {
     worktree,
+    commit: draft,
     branch,
     openPath,
     grouping,
@@ -16,6 +18,11 @@
     onFileMenu,
   }: {
     worktree: WorktreeState;
+    /**
+     * The message being written. Held by the window, because this panel is unmounted whenever
+     * the selection moves off the working copy and a half-written message must survive that.
+     */
+    commit: CommitState;
     /** What the changes are on, which is what the header names. */
     branch: string | null;
     /** The file whose diff is on screen, so the list can mark it. */
@@ -41,10 +48,6 @@
     onFileMenu: (event: MouseEvent, entry: StatusEntry, staged: boolean) => void;
   } = $props();
 
-  let summary = $state('');
-  let description = $state('');
-  let amend = $state(false);
-
   /**
    * git's own convention, and what every review tool wraps at.
    *
@@ -54,22 +57,22 @@
   const LIMIT = 72;
 
   const total = $derived(worktree.staged.length);
-  const canCommit = $derived(
-    summary.trim().length > 0 && (total > 0 || amend) && !worktree.busy,
-  );
+  const canCommit = $derived(draft.ready(worktree));
 
-  /** Subject, blank line, body — which is the shape every git tool expects. */
-  const message = $derived(
-    description.trim() === '' ? summary.trim() : `${summary.trim()}\n\n${description.trim()}`,
-  );
+  /** The summary field, so the window can ask for the caret without reaching into the DOM. */
+  let summaryField = $state<HTMLInputElement | null>(null);
+  // Only when asked. The panel appears whenever the working copy is selected, and taking the
+  // caret every time it did would put keystrokes meant for the list into the message.
+  let focusedAt = 0;
+  $effect(() => {
+    if (draft.focusTick === focusedAt) return;
+    focusedAt = draft.focusTick;
+    summaryField?.focus();
+  });
 
-  async function commit() {
-    await worktree.commit(message, amend);
-    if (!worktree.error) {
-      summary = '';
-      description = '';
-      amend = false;
-    }
+  async function record() {
+    await worktree.commit(draft.message, draft.amend);
+    if (!worktree.error) draft.clear();
   }
 
   /** Collapsed directories, per side, so expanding one list leaves the other alone. */
@@ -254,18 +257,25 @@
 
   <div class="compose">
     <label class="amend">
-      <input type="checkbox" bind:checked={amend} />
+      <input type="checkbox" bind:checked={draft.amend} />
       Amend the previous commit
     </label>
     <div class="field">
-      <input class="summary" placeholder="Commit summary" bind:value={summary} />
+      <input
+        class="summary"
+        placeholder="Commit summary"
+        bind:this={summaryField}
+        bind:value={draft.summary}
+      />
       <!-- Counts down rather than refusing: the commit is the user's to write. -->
-      <span class="limit" class:over={summary.length > LIMIT}>{LIMIT - summary.length}</span>
+      <span class="limit" class:over={draft.summary.length > LIMIT}>
+        {LIMIT - draft.summary.length}
+      </span>
     </div>
-    <textarea class="description" rows="3" placeholder="Description" bind:value={description}
+    <textarea class="description" rows="3" placeholder="Description" bind:value={draft.description}
     ></textarea>
-    <button class="commit" disabled={!canCommit} onclick={commit}>
-      {#if amend}
+    <button class="commit" disabled={!canCommit} onclick={record}>
+      {#if draft.amend}
         Amend the previous commit
       {:else if total === 0}
         Stage something to commit
