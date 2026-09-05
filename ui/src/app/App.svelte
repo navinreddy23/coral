@@ -341,6 +341,31 @@
   });
 
   /**
+   * The repositories that have a terminal pane, oldest first.
+   *
+   * A pane is built the first time the terminal is shown for a repository and then stays,
+   * hidden while another tab is active: xterm holds the scrollback and the subscription to the
+   * shell's output, and neither survives being unmounted.
+   */
+  let terminalsFor = $state<string[]>([]);
+
+  $effect(() => {
+    const path = info?.path;
+    if (!terminal.open || path === undefined) return;
+    if (!untrack(() => terminalsFor).includes(path)) terminalsFor = [...terminalsFor, path];
+  });
+
+  // A shell belongs to a repository, and a repository with no tab left has nowhere to show
+  // one. Watching the session catches every way a tab goes — the close button, the group
+  // close, the command — rather than each of them having to remember.
+  $effect(() => {
+    const open = new Set(tabs.session.tabs.map((t) => TabsState.workingPath(t)));
+    void terminal.keepOnly(open);
+    const kept = untrack(() => terminalsFor).filter((p) => open.has(p));
+    if (kept.length !== untrack(() => terminalsFor).length) terminalsFor = kept;
+  });
+
+  /**
    * Selects a commit, or compares it with the one already selected.
    *
    * Ctrl or Shift, as the reference takes either: what the modifier means here is "and this
@@ -2609,7 +2634,16 @@
         style:height={terminal.dock === 'bottom' ? `${terminal.size}px` : undefined}
         style:width={terminal.dock === 'right' ? `${terminal.size}px` : undefined}
       >
-        <Terminal session={terminal} path={info.path} onClose={() => (terminal.open = false)} />
+        <!-- One pane per repository whose terminal has been shown, the inactive ones hidden
+             rather than unmounted. A single pane showed the shell of whichever tab was open
+             first; rebuilding it per tab fixed that but threw away the scrollback and the
+             subscription, so coming back to a tab showed a blank pane in front of a shell
+             that was still running. -->
+        {#each terminalsFor as repo (repo)}
+          <div class="pane" hidden={repo !== info.path}>
+            <Terminal session={terminal} path={repo} onClose={() => (terminal.open = false)} />
+          </div>
+        {/each}
       </div>
     {/if}
     </div>
@@ -2712,7 +2746,9 @@
   .workspace { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
   .workspace.beside { flex-direction: row; }
   .term { flex: 0 0 auto; display: flex; min-height: 0; min-width: 0; }
-  .term > :global(.terminal) { flex: 1; min-width: 0; }
+  .term .pane { flex: 1; display: flex; min-width: 0; min-height: 0; }
+  .term .pane[hidden] { display: none; }
+  .term :global(.terminal) { flex: 1; min-width: 0; }
   /* Positioned, so the preferences screen can cover the panes without covering the
      window's own chrome. */
   .body { display: flex; flex: 1; min-height: 0; position: relative; }

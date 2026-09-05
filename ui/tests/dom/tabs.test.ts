@@ -121,6 +121,12 @@ function wire() {
           tooLarge: false,
           hunks: [],
         };
+      case 'terminal_open':
+        return { id: path === A ? 11 : 22, shell: '/bin/sh' };
+      case 'terminal_write':
+      case 'terminal_resize':
+      case 'terminal_close':
+        return null;
       case 'repo_status':
         return { entries: [], conflicted: [] };
       case 'repo_operation':
@@ -288,5 +294,64 @@ describe('two repositories in two tabs', () => {
     });
     // Row 900 of one history is not row 900 of another.
     expect(scroller.scrollTop).toBe(0);
+  });
+
+  it('opens the terminal in the repository the tab is showing', async () => {
+    // The shell was started once for the window, in whichever repository was open first, and
+    // every other tab then showed a prompt sitting in that checkout.
+    const { container } = await shell();
+    await waitFor(() => {
+      const opened = invoke.mock.calls.filter(([cmd]) => cmd === 'terminal_open');
+      if (opened.length === 0) throw new Error('no shell yet');
+    });
+    expect(
+      invoke.mock.calls
+        .filter(([cmd]) => cmd === 'terminal_open')
+        .map(([, args]) => (args as { path: string }).path),
+    ).toEqual([A]);
+
+    await switchTo(container, 'beta');
+    await waitFor(() => {
+      const paths = invoke.mock.calls
+        .filter(([cmd]) => cmd === 'terminal_open')
+        .map(([, args]) => (args as { path: string }).path);
+      if (!paths.includes(B)) throw new Error('no shell in the second repository');
+    });
+  });
+
+  it('keeps each repository’s shell, rather than starting another on every visit', async () => {
+    // The working directory is the point, but so is a half-typed command: coming back to a tab
+    // has to come back to the same shell.
+    const { container } = await shell();
+    await switchTo(container, 'beta');
+    await waitFor(() => {
+      if (!container.textContent?.includes('beta commit')) throw new Error('not beta yet');
+    });
+    await switchTo(container, 'alpha');
+    await waitFor(() => {
+      if (!container.textContent?.includes('alpha commit')) throw new Error('not alpha yet');
+    });
+
+    const paths = invoke.mock.calls
+      .filter(([cmd]) => cmd === 'terminal_open')
+      .map(([, args]) => (args as { path: string }).path);
+    expect(paths.filter((p) => p === A)).toHaveLength(1);
+    expect(paths.filter((p) => p === B)).toHaveLength(1);
+    expect(invoke.mock.calls.filter(([cmd]) => cmd === 'terminal_close')).toHaveLength(0);
+  });
+
+  it('keeps the pane of a repository it is not showing, rather than rebuilding it', async () => {
+    // Rebuilding the pane per tab starts no second shell, but xterm holds the scrollback and
+    // the subscription to the shell's output — so a rebuilt pane comes back blank in front of
+    // a shell that is still running.
+    const { container } = await shell();
+    await switchTo(container, 'beta');
+    await waitFor(() => {
+      if (container.querySelectorAll('.term .pane').length < 2) throw new Error('one pane');
+    });
+
+    const panes = [...container.querySelectorAll('.term .pane')] as HTMLElement[];
+    expect(panes).toHaveLength(2);
+    expect(panes.filter((p) => !p.hidden)).toHaveLength(1);
   });
 });

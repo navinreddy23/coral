@@ -6,6 +6,7 @@ import {
   terminalWrite,
 } from '../ipc/terminal';
 
+import type { Opened } from '../ipc/terminal';
 import type { Dock, ViewsState } from './views.svelte';
 import { messageOf } from '../ipc/error';
 
@@ -24,9 +25,17 @@ export class TerminalState {
    * `import.meta.env.DEV` is replaced with false in a release build, so the branch is dropped.
    */
   open = $state(import.meta.env.DEV && !('__TAURI_INTERNALS__' in globalThis));
-  id = $state<number | null>(null);
-  shell = $state('');
   error = $state<string | null>(null);
+
+  /**
+   * The shell running in each repository, by its path.
+   *
+   * A window-wide shell was one shell, started in whichever repository was open first, and
+   * every other tab's terminal was then sitting in that checkout: `git status` in the beta tab
+   * answered about alpha. One per path, so the pane a tab shows is a shell in that tab's
+   * repository.
+   */
+  #shells = new Map<string, Opened>();
 
   /**
    * Where it sits and how big it is, held with the window's other view choices rather than in
@@ -66,26 +75,38 @@ export class TerminalState {
     this.open = !this.open;
   }
 
-  /** Starts a shell, or does nothing when one is already running. */
-  async start(path: string, cols: number, rows: number): Promise<number | null> {
-    if (this.id !== null) return this.id;
+  /** Starts a shell in `path`, or hands back the one already running there. */
+  async start(path: string, cols: number, rows: number): Promise<Opened | null> {
+    const running = this.#shells.get(path);
+    if (running) return running;
     this.error = null;
     try {
       const opened = await terminalOpen(path, cols, rows);
-      this.id = opened.id;
-      this.shell = opened.shell;
-      return opened.id;
+      this.#shells.set(path, opened);
+      return opened;
     } catch (e) {
       this.error = messageOf(e);
       return null;
     }
   }
 
-  async stop(): Promise<void> {
-    const id = this.id;
-    this.id = null;
-    this.shell = '';
-    if (id !== null) await terminalClose(id);
+  /**
+   * Ends every shell whose repository is no longer open in a tab.
+   *
+   * A shell outlives the pane that shows it, on purpose — moving between tabs must not throw
+   * away a half-typed command. It must not outlive the tab itself, though: those shells are
+   * invisible, unreachable, and hold a pseudo-terminal each.
+   */
+  async keepOnly(paths: Set<string>): Promise<void> {
+    const gone = [...this.#shells.keys()].filter((p) => !paths.has(p));
+    await Promise.all(gone.map((p) => this.stop(p)));
+  }
+
+  /** Ends the shell in `path`, for one that exited or a tab that is closing. */
+  async stop(path: string): Promise<void> {
+    const running = this.#shells.get(path);
+    this.#shells.delete(path);
+    if (running) await terminalClose(running.id);
   }
 }
 

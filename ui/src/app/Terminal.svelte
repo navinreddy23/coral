@@ -20,6 +20,15 @@
   } = $props();
 
   let host = $state<HTMLDivElement | null>(null);
+  /**
+   * This pane's own shell, not the window's.
+   *
+   * Several of these are mounted at once — one per repository whose terminal has been shown —
+   * so a resize or a paste has to reach the shell behind *this* pane. Read from the state, it
+   * reached whichever shell started last.
+   */
+  let id = $state<number | null>(null);
+  let shell = $state('');
   let term: Terminal | null = null;
   let fit: FitAddon | null = null;
   let stop: (() => void) | null = null;
@@ -60,7 +69,7 @@
   }
 
   async function send(size: { cols: number; rows: number }) {
-    if (session.id !== null) await terminalResize(session.id, size.cols, size.rows);
+    if (id !== null) await terminalResize(id, size.cols, size.rows);
   }
 
   onMount(() => {
@@ -87,17 +96,19 @@
     fit.fit();
 
     void (async () => {
-      const id = await session.start(path, term?.cols ?? 80, term?.rows ?? 24);
-      if (id === null || !term) return;
+      const opened = await session.start(path, term?.cols ?? 80, term?.rows ?? 24);
+      if (opened === null || !term) return;
+      id = opened.id;
+      shell = opened.shell;
       stop = await terminalListen(
-        id,
+        opened.id,
         (text) => term?.write(text),
         () => {
           term?.writeln('\r\n\x1b[2m[the shell exited]\x1b[0m');
-          void session.stop();
+          void session.stop(path);
         },
       );
-      term.onData((data) => void terminalWrite(id, data));
+      term.onData((data) => void terminalWrite(opened.id, data));
       term.focus();
     })();
 
@@ -130,7 +141,7 @@
 
   async function paste() {
     const text = await navigator.clipboard.readText();
-    if (text !== '' && session.id !== null) await terminalWrite(session.id, text);
+    if (text !== '' && id !== null) await terminalWrite(id, text);
   }
 
   /**
@@ -154,7 +165,7 @@
 <section class="terminal" class:right={session.dock === 'right'}>
   <header>
     <span class="title">Terminal</span>
-    <span class="shell mono">{session.shell}</span>
+    <span class="shell mono">{shell}</span>
     <span class="spacer"></span>
     <div class="dock" role="group" aria-label="Where the terminal sits">
       <button
