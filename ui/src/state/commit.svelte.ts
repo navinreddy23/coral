@@ -39,6 +39,28 @@ export class CommitState {
     );
   }
 
+  /**
+   * The message an amend was filled in with, so unticking can take back what it put there
+   * without taking away anything the user typed on top of it.
+   */
+  #seeded: string | null = null;
+
+  /** Fills the draft in from a commit's own message, which is where an amend starts. */
+  seed(summary: string, body: string): void {
+    this.summary = summary;
+    this.description = body.trim();
+    this.#seeded = this.message;
+  }
+
+  /** Empties a seeded message again, unless it has been edited since it was put there. */
+  unseed(): void {
+    if (this.#seeded !== null && this.message === this.#seeded) {
+      this.summary = '';
+      this.description = '';
+    }
+    this.#seeded = null;
+  }
+
   focus(): void {
     this.focusTick += 1;
   }
@@ -47,5 +69,6 @@ export class CommitState {
     this.summary = '';
     this.description = '';
     this.amend = false;
+    this.#seeded = null;
   }
 }

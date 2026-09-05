@@ -17,6 +17,7 @@
   import { DiffState } from '../state/diff.svelte';
   import { HostingState } from '../state/hosting.svelte';
   import {
+    commitDetail,
     openInBrowser,
     patchRangeSize,
     pickPatchFiles,
@@ -249,6 +250,32 @@
   const diff = new DiffState(views);
   const actions = new ActionsState();
   const commitDraft = new CommitState();
+  /**
+   * Ticking amend fills the message in from the commit being replaced.
+   *
+   * Amending is nearly always a fix to the change rather than to what it says, so an empty box
+   * asks the user to retype a message they were not trying to alter — and one they can no
+   * longer read, since the panel showing it is the one they are typing into.
+   */
+  let amending = false;
+  $effect(() => {
+    if (commitDraft.amend === amending) return;
+    amending = commitDraft.amend;
+    if (!amending) {
+      commitDraft.unseed();
+      return;
+    }
+    const path = info?.path;
+    if (path === undefined || commitDraft.message !== '') return;
+    void commitDetail(path, 'HEAD')
+      .then((detail) => {
+        // Still wanted: the tick can be undone, or the panel closed, while this is in flight.
+        if (commitDraft.amend && commitDraft.message === '') {
+          commitDraft.seed(detail.commit.summary, detail.commit.body);
+        }
+      })
+      .catch(() => undefined);
+  });
   /** Bumped to ask the branch panel for the caret; see the prop's own note. */
   let filterTick = $state(0);
   const merge = new MergeState();
