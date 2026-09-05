@@ -1385,7 +1385,8 @@
     const where = branch === null ? 'the commit that is checked out' : branch;
     const parts: string[] = [];
     if (tracked > 0) {
-      parts.push(`${count(tracked, 'file')} go back to what ${where} last committed.`);
+      const goes = tracked === 1 ? 'goes' : 'go';
+      parts.push(`${count(tracked, 'file')} ${goes} back to what ${where} last committed.`);
     }
     if (untracked > 0) {
       parts.push(
