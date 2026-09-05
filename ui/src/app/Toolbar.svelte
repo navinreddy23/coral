@@ -201,7 +201,15 @@
   .name {
     font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
   }
-  .glyph { font-size: 15px; line-height: 1; color: var(--accent); }
+  /*
+   * Stroked, because these are font glyphs and most arrows have no bold cut: asking for a
+   * heavier weight changed nothing, and at 15px the hairlines all but disappeared against the
+   * bar. The stroke is drawn in the glyph's own colour, so it thickens rather than outlines.
+   */
+  .glyph {
+    font-size: 15px; line-height: 1; color: var(--accent);
+    -webkit-text-stroke: 0.7px currentColor;
+  }
   /* Sits against the button it belongs to rather than in the gap between two. */
   .caret {
     align-self: flex-end; margin: 0 var(--space-1) 5px -4px;
