@@ -45,6 +45,10 @@ pub enum Action {
     },
     Merge {
         rev: String,
+        /// `FfOnly` refuses anything but a fast-forward, which is what "fast-forward to this"
+        /// means and what makes it different from a merge.
+        #[serde(default)]
+        mode: MergeMode,
     },
     Rebase {
         onto: String,
@@ -207,6 +211,15 @@ impl Done {
     }
 }
 
+/// A revision as a label should read it: an object id shortened, a name left whole.
+///
+/// Every one of these was formatted with `{rev:.8}`, which is right for the forty characters
+/// of an object id and cuts `origin/dummy-branch` down to `origin/d`.
+fn named(rev: &str) -> &str {
+    let is_oid = rev.len() >= 40 && rev.bytes().all(|b| b.is_ascii_hexdigit());
+    if is_oid { &rev[..8] } else { rev }
+}
+
 impl Action {
     /// What the journal should call this, and the label a failure is reported under.
     fn label(&self) -> String {
@@ -217,7 +230,10 @@ impl Action {
             Self::Checkout { rev } => format!("checkout {rev}"),
             Self::BranchCreate { name, .. } => format!("create branch {name}"),
             Self::BranchDelete { name, .. } => format!("delete branch {name}"),
-            Self::Merge { rev } => format!("merge {rev}"),
+            Self::Merge { rev, mode } => match mode {
+                MergeMode::FfOnly => format!("fast-forward to {rev}"),
+                _ => format!("merge {rev}"),
+            },
             Self::Rebase { onto } => format!("rebase onto {onto}"),
             Self::CherryPick { revs, commit } => {
                 let what = revs.join(" ");
@@ -234,12 +250,12 @@ impl Action {
             Self::StashDrop { .. } => "stash drop".to_owned(),
             Self::TagCreate { name, .. } => format!("tag {name}"),
             Self::TagDelete { name } => format!("delete tag {name}"),
-            Self::Reset { rev, .. } => format!("reset to {rev:.8}"),
+            Self::Reset { rev, .. } => format!("reset to {}", named(rev)),
             Self::Rewrite { rev, how, .. } => match how {
-                RewriteKind::Drop => format!("drop {rev:.8}"),
-                RewriteKind::Reword => format!("reword {rev:.8}"),
-                RewriteKind::MoveNewer => format!("move {rev:.8} up"),
-                RewriteKind::MoveOlder => format!("move {rev:.8} down"),
+                RewriteKind::Drop => format!("drop {}", named(rev)),
+                RewriteKind::Reword => format!("reword {}", named(rev)),
+                RewriteKind::MoveNewer => format!("move {} up", named(rev)),
+                RewriteKind::MoveOlder => format!("move {} down", named(rev)),
             },
             Self::WorktreeAdd { path, .. } => format!("worktree at {path}"),
             Self::SubmoduleInit {
@@ -251,7 +267,7 @@ impl Action {
             Self::SubmoduleInit { path: None, .. } => "update the submodules".to_owned(),
             Self::SubmoduleSetUrl { path, .. } => format!("re-point {path}"),
             Self::SubmoduleRemove { path, .. } => format!("remove {path}"),
-            Self::Patch { rev, .. } => format!("patch for {rev:.8}"),
+            Self::Patch { rev, .. } => format!("patch for {}", named(rev)),
             Self::Undo => "undo".to_owned(),
             Self::Redo => "redo".to_owned(),
         }
@@ -399,8 +415,8 @@ async fn run_refs(
                 .await?;
         }
         Action::BranchDelete { name, force } => loc.branch_delete(runner, &name, force).await?,
-        Action::Merge { rev } => {
-            let out = loc.merge(runner, &rev, MergeMode::default(), None).await?;
+        Action::Merge { rev, mode } => {
+            let out = loc.merge(runner, &rev, mode, None).await?;
             return Ok(Done::from(&out));
         }
         Action::Rebase { onto } => {
@@ -537,4 +553,29 @@ fn coral_binary() -> Result<std::path::PathBuf, coral_core::CoralError> {
         label: "rebase",
         detail: format!("could not locate the running binary: {e}"),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Action, ResetKind, named};
+
+    #[test]
+    fn an_object_id_is_shortened_and_a_ref_name_is_not() {
+        assert_eq!(named(&"a".repeat(40)), "aaaaaaaa");
+        assert_eq!(named("origin/dummy-branch"), "origin/dummy-branch");
+        // Long enough to be an id by length, but not hexadecimal.
+        assert_eq!(
+            named("origin/a-very-long-branch-name-goes-here-x"),
+            "origin/a-very-long-branch-name-goes-here-x"
+        );
+    }
+
+    #[test]
+    fn a_reset_to_a_branch_is_labelled_with_the_branch() {
+        let action = Action::Reset {
+            rev: "origin/dummy-branch".to_owned(),
+            mode: ResetKind::Hard,
+        };
+        assert_eq!(action.label(), "reset to origin/dummy-branch");
+    }
 }

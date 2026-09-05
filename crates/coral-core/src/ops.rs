@@ -41,7 +41,8 @@ impl ResetMode {
 }
 
 /// How a merge should be recorded.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum MergeMode {
     /// Fast-forward when possible, otherwise create a merge commit.
     #[default]

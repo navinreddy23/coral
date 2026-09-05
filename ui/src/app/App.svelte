@@ -420,14 +420,6 @@
     }
   }
 
-  /**
-   * What right-clicking a commit offers.
-   *
-   * Grouped as the reference groups them: where to go, what to make here, how to rewrite the
-   * history, what to copy, and what to tag. The history edits are refused by the engine for a
-   * commit that is not on this branch or for a range holding a merge, so nothing here has to
-   * guess at whether they are safe.
-   */
   /** The row under the pointer, if the loaded frame reaches it. */
   function rightClickRow(event: MouseEvent, row: number) {
     const local = localRow(graph.frame, row);
@@ -480,6 +472,57 @@
   }
 
   /**
+   * Bringing what is on a row into the current branch, or putting the branch on top of it.
+   *
+   * The same four the ref panel offers, because a commit in the graph is where people reach
+   * for them: the row is right there and the branch panel is not. Named for a ref on the row
+   * when there is one, since that is what the user is looking at; a row with no label is named
+   * by its commit, which merges and rebases just as well.
+   */
+  function combineFor(row: number, oid: string): MenuItem[] {
+    const here = refs.byRow.get(row) ?? [];
+    // Nothing to do with the row HEAD is already on, and nothing sensible to say about a
+    // detached HEAD, which has no branch to move.
+    if (headName === null || here.some((r) => r.short === headName)) return [];
+
+    const named =
+      here.find((r) => r.kind.kind === 'local_branch') ??
+      here.find((r) => r.kind.kind === 'remote_branch') ??
+      here.find((r) => r.kind.kind === 'tag');
+    const rev = named?.short ?? oid.slice(0, 8);
+    const busy = actions.busy || worktree.busy;
+
+    return [
+      {
+        kind: 'item',
+        label: `Fast-forward ${headName} to ${rev}`,
+        hint: 'refuses to merge',
+        disabled: busy,
+        run: () => void act({ kind: 'merge', rev, mode: 'ffOnly' }),
+      },
+      {
+        kind: 'item',
+        label: `Merge ${rev} into ${headName}`,
+        disabled: busy,
+        run: () => void act({ kind: 'merge', rev, mode: 'auto' }),
+      },
+      {
+        kind: 'item',
+        label: `Rebase ${headName} onto ${rev}`,
+        disabled: busy,
+        run: () => void act({ kind: 'rebase', onto: rev }),
+      },
+      {
+        kind: 'item',
+        label: `Rebase ${headName} onto ${rev}, interactively`,
+        disabled: busy,
+        run: () => info && void rebase.load(info.path, rev),
+      },
+      { kind: 'separator' },
+    ];
+  }
+
+  /**
    * What can be done with one branch or tag, from the panel that lists them.
    *
    * The same three things people reach for — go to it, bring it in, put this work on top of it
@@ -510,9 +553,16 @@
       items.push({ kind: 'separator' });
       items.push({
         kind: 'item',
+        label: `Fast-forward ${head} to ${ref.short}`,
+        hint: 'refuses to merge',
+        disabled: busy,
+        run: () => void act({ kind: 'merge', rev: ref.short, mode: 'ffOnly' }),
+      });
+      items.push({
+        kind: 'item',
         label: `Merge ${ref.short} into ${head}`,
         disabled: busy,
-        run: () => void act({ kind: 'merge', rev: ref.short }),
+        run: () => void act({ kind: 'merge', rev: ref.short, mode: 'auto' }),
       });
       items.push({
         kind: 'item',
@@ -647,6 +697,14 @@
     await act({ kind: 'cherryPick', revs: [oid], commit: choice === 'yes' });
   }
 
+  /**
+   * What right-clicking a commit offers.
+   *
+   * Grouped as the reference groups them: where to go, what to bring in, what to make here,
+   * how to rewrite the history, what to copy, and what to tag. The history edits are refused
+   * by the engine for a commit that is not on this branch or for a range holding a merge, so
+   * nothing here has to guess at whether they are safe.
+   */
   function commitMenu(event: MouseEvent, row: number, oid: string) {
     event.preventDefault();
     pick(row);
@@ -670,6 +728,7 @@
         },
         { kind: 'item', label: 'Create worktree from this commit', run: () => void worktreeAt(oid) },
         { kind: 'separator' },
+        ...combineFor(row, oid),
         { kind: 'item', label: 'Create branch here', run: () => void branchAt(oid) },
         {
           kind: 'item',
@@ -1301,7 +1360,7 @@
     for (const r of refs.groups.local) {
       if (r.short === headName) continue;
       out.push({ id: `co:${r.name}`, label: `Checkout ${r.short}`, group: 'Branch', run: () => void act({ kind: 'checkout', rev: r.short }) });
-      out.push({ id: `merge:${r.name}`, label: `Merge ${r.short} into ${headName ?? 'HEAD'}`, group: 'Branch', run: () => void act({ kind: 'merge', rev: r.short }) });
+      out.push({ id: `merge:${r.name}`, label: `Merge ${r.short} into ${headName ?? 'HEAD'}`, group: 'Branch', run: () => void act({ kind: 'merge', rev: r.short, mode: 'auto' }) });
       out.push({ id: `rebase:${r.name}`, label: `Rebase onto ${r.short}`, group: 'Branch', run: () => void act({ kind: 'rebase', onto: r.short }) });
       out.push({ id: `irebase:${r.name}`, label: `Rebase onto ${r.short}, interactively`, group: 'Branch', run: () => info && void rebase.load(info.path, r.short) });
     }
@@ -1345,7 +1404,7 @@
     if (choice === null) return;
     if (target !== headName) await act({ kind: 'checkout', rev: target });
     if (choice === 'rebase') await act({ kind: 'rebase', onto: source });
-    else await act({ kind: 'merge', rev: source });
+    else await act({ kind: 'merge', rev: source, mode: 'auto' });
   }
 
   /** The toolbar's seven buttons, each the commonest form of its action. */

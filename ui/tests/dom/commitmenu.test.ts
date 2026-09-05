@@ -98,7 +98,7 @@ function answers(): Record<string, unknown> {
   };
 }
 
-async function shell(over: Record<string, unknown> = {}, awaitRef?: string) {
+async function shell(over: Record<string, unknown> = {}, awaitRefs = false) {
   const table = { ...answers(), ...over };
   invoke.mockImplementation(async (cmd: string) => {
     if (!(cmd in table)) throw new Error(`unstubbed command ${cmd}`);
@@ -109,10 +109,12 @@ async function shell(over: Record<string, unknown> = {}, awaitRef?: string) {
     if (view.container.querySelectorAll('li.row').length === 0) throw new Error('no rows yet');
   });
   // The rows arrive with the frame; the refs are a second read and land after it. A menu built
-  // in between knows about no refs at all.
-  if (awaitRef !== undefined) {
+  // in between knows about no refs at all, so wait for a label to be drawn on a row. Waiting
+  // on the ref's name in the page is not the same thing: the checked-out branch is in the
+  // status bar from the first paint, and a long name is elided in the pill.
+  if (awaitRefs) {
     await waitFor(() => {
-      if (!view.container.textContent?.includes(awaitRef)) throw new Error('no refs yet');
+      if (!view.container.querySelector('.pill-text')) throw new Error('no refs yet');
     });
   }
   return view;
@@ -155,6 +157,26 @@ async function confirm(container: HTMLElement, take: boolean): Promise<void> {
   const target = take ? primary : cancel;
   if (!target) throw new Error(`no ${take ? 'primary' : 'cancel'} button`);
   await fireEvent.click(target);
+}
+
+/** A ref on a row, as `repo_refs` places them. Row 0 and one shared commit unless said. */
+function on(
+  short: string,
+  kind: PlacedRef['kind'],
+  over: Partial<PlacedRef> = {},
+): PlacedRef {
+  return {
+    name: kind.kind === 'tag' ? `refs/tags/${short}` : `refs/heads/${short}`,
+    short,
+    kind,
+    target: 'a'.repeat(40),
+    peeled: null,
+    upstream: null,
+    ahead: 0,
+    behind: 0,
+    row: 0,
+    ...over,
+  };
 }
 
 describe('the commit menu', () => {
@@ -307,27 +329,12 @@ describe('checking out from the graph', () => {
     localStorage.clear();
   });
 
-  /** A ref sitting on the first row, as `repo_refs` places them. */
-  function on(short: string, kind: PlacedRef['kind']): PlacedRef {
-    return {
-      name: kind.kind === 'tag' ? `refs/tags/${short}` : `refs/heads/${short}`,
-      short,
-      kind,
-      target: 'a'.repeat(40),
-      peeled: null,
-      upstream: null,
-      ahead: 0,
-      behind: 0,
-      row: 0,
-    };
-  }
-
   it('checks a branch out by its name, not by the commit it happens to be on', async () => {
     // The bug: every checkout from the graph ran `git checkout <oid>`, which detaches HEAD
     // however many branches were sitting on that row.
     const { container } = await shell(
       { repo_refs: [on('topic', { kind: 'local_branch' })] },
-      'topic',
+      true,
     );
 
     await openMenu(container);
@@ -339,7 +346,7 @@ describe('checking out from the graph', () => {
   it('still offers the commit itself, and says that it detaches', async () => {
     const { container } = await shell(
       { repo_refs: [on('topic', { kind: 'local_branch' })] },
-      'topic',
+      true,
     );
 
     const labels = await openMenu(container);
@@ -354,7 +361,7 @@ describe('checking out from the graph', () => {
       {
         repo_refs: [on('master', { kind: 'local_branch' }), on('topic', { kind: 'local_branch' })],
       },
-      'topic',
+      true,
     );
 
     const labels = await openMenu(container);
@@ -367,7 +374,7 @@ describe('checking out from the graph', () => {
     // it; `git checkout origin/topic` detaches, which is not what anyone means by clicking it.
     const { container } = await shell(
       { repo_refs: [on('origin/topic', { kind: 'remote_branch', remote: 'origin' })] },
-      'topic',
+      true,
     );
 
     await openMenu(container);
@@ -384,7 +391,7 @@ describe('checking out from the graph', () => {
           on('origin/topic', { kind: 'remote_branch', remote: 'origin' }),
         ],
       },
-      'topic',
+      true,
     );
 
     const labels = await openMenu(container);
@@ -394,7 +401,7 @@ describe('checking out from the graph', () => {
   it('says a tag detaches, because it does', async () => {
     const { container } = await shell(
       { repo_refs: [on('v1.2.0', { kind: 'tag', annotated: false })] },
-      'v1.2.0',
+      true,
     );
 
     const labels = await openMenu(container);
@@ -462,7 +469,7 @@ describe('the branch and tag menu', () => {
     // nothing to do with one.
     const { container } = await shell(
       { repo_refs: [on('v1.2.0', { kind: 'tag', annotated: false })] },
-      'v1.2.0',
+      true,
     );
 
     await expand(container, 'Tags');
@@ -476,7 +483,7 @@ describe('the branch and tag menu', () => {
   it('offers what can be done with a branch, not only going to it', async () => {
     const { container } = await shell(
       { repo_refs: [on('topic', { kind: 'local_branch' })] },
-      'topic',
+      true,
     );
 
     const labels = await refMenu(container, 'topic');
@@ -490,7 +497,7 @@ describe('the branch and tag menu', () => {
   it('will not offer to delete or check out the branch already checked out', async () => {
     const { container } = await shell(
       { repo_refs: [on('master', { kind: 'local_branch' })] },
-      'master',
+      true,
     );
 
     const labels = await refMenu(container, 'master');
@@ -502,18 +509,18 @@ describe('the branch and tag menu', () => {
   it('merges the ref that was asked about', async () => {
     const { container } = await shell(
       { repo_refs: [on('topic', { kind: 'local_branch' })] },
-      'topic',
+      true,
     );
 
     await refMenu(container, 'topic');
     await fireEvent.click(itemNamed(container, 'Merge topic into master'));
-    expect(lastAction()).toEqual({ kind: 'merge', rev: 'topic' });
+    expect(lastAction()).toEqual({ kind: 'merge', rev: 'topic', mode: 'auto' });
   });
 
   it('rebases onto the ref that was asked about', async () => {
     const { container } = await shell(
       { repo_refs: [on('topic', { kind: 'local_branch' })] },
-      'topic',
+      true,
     );
 
     await refMenu(container, 'topic');
@@ -576,3 +583,88 @@ describe('cherry picking', () => {
     expect(lastAction()).toBeUndefined();
   });
 });
+
+/**
+ * Bringing a row into the current branch, from the commit menu.
+ *
+ * The branch panel has offered these since the beginning; the graph did not, and the graph is
+ * where people right-click. Each sends exactly one action, named for what the row carries.
+ */
+describe('merging and rebasing from the graph', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  it('offers all four, named for the ref on the row', async () => {
+    const { container } = await shell(
+      { repo_refs: [on('topic', { kind: 'local_branch' })] },
+      true,
+    );
+
+    const labels = await openMenu(container);
+    expect(labels).toContain('Fast-forward master to topic');
+    expect(labels).toContain('Merge topic into master');
+    expect(labels).toContain('Rebase master onto topic');
+    expect(labels).toContain('Rebase master onto topic, interactively');
+  });
+
+  it('fast-forwards with the mode that refuses to merge', async () => {
+    const { container } = await shell(
+      { repo_refs: [on('topic', { kind: 'local_branch' })] },
+      true,
+    );
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Fast-forward master to topic'));
+
+    await waitFor(() => {
+      expect(lastAction()).toEqual({ kind: 'merge', rev: 'topic', mode: 'ffOnly' });
+    });
+  });
+
+  it('merges the ref, not the commit under it', async () => {
+    const { container } = await shell(
+      { repo_refs: [on('topic', { kind: 'local_branch' })] },
+      true,
+    );
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Merge topic into master'));
+
+    await waitFor(() => {
+      expect(lastAction()).toEqual({ kind: 'merge', rev: 'topic', mode: 'auto' });
+    });
+  });
+
+  it('rebases onto the ref', async () => {
+    const { container } = await shell(
+      { repo_refs: [on('topic', { kind: 'local_branch' })] },
+      true,
+    );
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Rebase master onto topic'));
+
+    await waitFor(() => {
+      expect(lastAction()).toEqual({ kind: 'rebase', onto: 'topic' });
+    });
+  });
+
+  it('names a row with no ref by its commit', async () => {
+    const { container } = await shell();
+    const labels = await openMenu(container);
+    const short = oidOf(frame, 0).slice(0, 8);
+    expect(labels).toContain(`Merge ${short} into master`);
+    expect(labels).toContain(`Rebase master onto ${short}`);
+  });
+
+  it('offers none of it on the row the branch is already on', async () => {
+    // Merging a branch into itself is a no-op, and rebasing it onto itself is worse than one.
+    const { container } = await shell(
+      { repo_refs: [on('master', { kind: 'local_branch' })] },
+      true,
+    );
+    const labels = await openMenu(container);
+    expect(labels.some((l) => l.startsWith('Merge '))).toBe(false);
+    expect(labels.some((l) => l.startsWith('Rebase master onto'))).toBe(false);
+  });
+});
+

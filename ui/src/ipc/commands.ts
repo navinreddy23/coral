@@ -240,7 +240,7 @@ export type Action =
   | { kind: 'checkout'; rev: string }
   | { kind: 'branchCreate'; name: string; at: string | null; checkout: boolean }
   | { kind: 'branchDelete'; name: string; force: boolean }
-  | { kind: 'merge'; rev: string }
+  | { kind: 'merge'; rev: string; mode: 'auto' | 'noFf' | 'ffOnly' | 'squash' }
   | { kind: 'rebase'; onto: string }
   | { kind: 'cherryPick'; revs: string[]; commit: boolean }
   | { kind: 'revert'; revs: string[] }
