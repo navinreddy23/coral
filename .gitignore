@@ -1,4 +1,6 @@
 /target
+# Both: vitest run from the repository root leaves a cache in a `node_modules` here.
+/node_modules
 /ui/node_modules
 /ui/dist
 .env
