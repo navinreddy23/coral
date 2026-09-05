@@ -66,11 +66,18 @@ impl RepoLocation {
                     "REVERT_HEAD"
                 };
                 let stopped = self.read_head_file(head);
+                // Named the way git names it in its own conflict messages, because the raw
+                // object id is what was here before: a forty-character label on a button, on
+                // a column header, and in every sentence the merge tool writes.
+                let theirs = match &stopped {
+                    Some(oid) => self.name_of(runner, oid).await,
+                    None => None,
+                };
                 Ok(Operation {
                     state,
                     labels: SideLabels {
                         ours: self.current_branch(runner).await,
-                        theirs: stopped.clone().unwrap_or_else(|| "incoming".to_owned()),
+                        theirs: theirs.unwrap_or_else(|| "incoming".to_owned()),
                         swapped: false,
                     },
                     progress: None,
@@ -114,6 +121,24 @@ impl RepoLocation {
                 interactive: false,
             }),
         }
+    }
+
+    /// How git itself writes a commit in a conflict message: `3755eae (test conflicts)`.
+    ///
+    /// `None` when the commit cannot be read, which is the caller's cue to say something
+    /// vaguer rather than print an object id.
+    async fn name_of(&self, runner: &GitRunner, oid: &str) -> Option<String> {
+        let out = runner
+            .output(GitCommand::read("show", self.display_path()).args([
+                "show",
+                "--no-patch",
+                "--format=%h (%s)",
+                oid,
+            ]))
+            .await
+            .ok()?;
+        let text = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+        (!text.is_empty()).then_some(text)
     }
 
     /// Whether any path is left unmerged in the index.

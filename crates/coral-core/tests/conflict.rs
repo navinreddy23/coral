@@ -242,6 +242,37 @@ async fn a_merge_labels_the_sides_by_branch_name() {
     assert!(!op.labels.swapped);
 }
 
+/// A stopped cherry-pick names the commit the way git does, not by its object id.
+///
+/// The id was the label on a button, on a column header and in every sentence the merge tool
+/// wrote: forty characters that say nothing about which commit it is.
+#[tokio::test]
+async fn a_cherry_pick_labels_the_incoming_side_with_the_commit() {
+    let repo = TestRepo::new().write("f.txt", "base\n").commit("base");
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo.write("f.txt", "side\n").commit("a change of theirs");
+    repo.git(["checkout", "--quiet", "main"]);
+    let repo = repo.write("f.txt", "main\n").commit("ours");
+    let (runner, loc) = open(&repo).await;
+
+    let stopped = loc.cherry_pick(&runner, &["side"], true).await.unwrap();
+    assert!(!stopped.completed);
+
+    let op = loc.operation(&runner).await.unwrap();
+    assert_eq!(op.state, OpState::CherryPick);
+    assert_eq!(op.labels.ours, "main");
+    assert!(
+        op.labels.theirs.ends_with("(a change of theirs)"),
+        "the subject is what identifies it: {}",
+        op.labels.theirs
+    );
+    assert!(
+        op.labels.theirs.len() < 30,
+        "and not the whole object id: {}",
+        op.labels.theirs
+    );
+}
+
 /// During a rebase git replays your commits onto the target, so stage 2 is the *target* and
 /// stage 3 is your own work. Reporting the raw words would tell the user the opposite.
 #[tokio::test]
