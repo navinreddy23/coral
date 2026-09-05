@@ -595,8 +595,14 @@
    * A gutter has to look like one. At `--bg-1` it is three percent off the page the code sits
    * on, which at a glance is no strip at all: the numbers read as floating in the text rather
    * than as sitting beside it, and a long number looks like it has escaped into the margin.
+   *
+   * `td`, and that is the whole of the line-number bug. `width: 1%` is how a table column is
+   * asked to shrink to its content, and the side-by-side sheet below names its cells `no` too.
+   * Unscoped, this rule reached them as well: each sat one percent wide inside a grid track
+   * that had been sized correctly all along, so the strip stopped at the padding and every
+   * number past two digits was drawn half on it and half on the code.
    */
-  .no {
+  td.no {
     width: 1%; white-space: nowrap; text-align: right; user-select: none;
     padding: 0 var(--space-2) 0 var(--space-3); color: var(--fg-2); background: var(--bg-2);
     border-right: 1px solid var(--border-strong);
