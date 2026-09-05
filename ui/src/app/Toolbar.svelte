@@ -170,8 +170,11 @@
   /* Wide enough for a real branch name. `gitlab-ci-local-support` is 23 characters and came
      out clipped at 14em; the column is a grid fraction, so a name longer than the window can
      hold still elides rather than pushing the actions off centre. */
+  /* The line box has to hold the whole face, not just the x-height. Eliding needs
+     `overflow: hidden`, and at the 1.15 the column sets, that clipped the tails off `g`, `p`
+     and `y` — which most branch names have one of. */
   .value {
-    font-size: 13px; font-weight: 600; color: var(--fg-0);
+    font-size: 13px; font-weight: 600; line-height: 1.5; color: var(--fg-0);
     max-width: 24em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .sep { color: var(--fg-2); flex: 0 0 auto; }
