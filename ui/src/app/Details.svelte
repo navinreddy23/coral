@@ -1,11 +1,15 @@
 <script lang="ts">
   import FileTree from './FileTree.svelte';
   import { buildTree } from '../diff/tree';
-  import type { ChangedFile, CommitDetail } from '../ipc/types';
+  import { commitTree } from '../ipc/commands';
+  import { messageOf } from '../ipc/error';
+  import type { Entry } from './FileTree.svelte';
+  import type { ChangedFile, CommitDetail, FileChange } from '../ipc/types';
   import type { Grouping } from '../state/views.svelte';
 
   const {
     detail,
+    repo,
     compare,
     loading,
     error,
@@ -16,6 +20,8 @@
     onClearCompare,
   }: {
     detail: CommitDetail | null;
+    /** Which repository the commit is in, for reading its tree. */
+    repo: string | null;
     /**
      * The two commits being compared and what differs between them, when a second commit has
      * been picked. Takes the place of the one commit's own details.
@@ -44,14 +50,71 @@
         detail.commit.author.time !== detail.commit.committer.time),
   );
 
+  /**
+   * Whether to list the whole repository at this commit rather than what it changed.
+   *
+   * The box used to lift a five-hundred-file cap on the list of changed files, which is a
+   * thing almost no commit reaches: ticking it did nothing anyone could see. What it is for
+   * is the other question a commit raises — not "what did this change" but "what was here" —
+   * and that is a tree, so ticking it shows one.
+   */
   let showAll = $state(false);
 
   /** How many files are listed before the rest are summarised. */
   const LIMIT = 500;
 
   const files = $derived(compare?.files ?? detail?.files ?? []);
-  const shown = $derived(showAll ? files : files.slice(0, LIMIT));
-  const tree = $derived(buildTree(shown));
+  const shown = $derived(files.slice(0, LIMIT));
+
+  /** The paths of everything at this commit, once asked for. */
+  let everything = $state<string[]>([]);
+  let loadingAll = $state(false);
+  let allError = $state<string | null>(null);
+
+  const changed = $derived(new Set(files.map((f) => f.path)));
+
+  /**
+   * The whole tree as the file list draws it: every path, marked where this commit touched it.
+   *
+   * A path the commit did not touch has no change of its own, so it is drawn without a mark
+   * and opens as the file was at this commit rather than as a diff.
+   */
+  const everythingAsFiles = $derived(
+    everything.map((path) => ({
+      path,
+      oldPath: null,
+      change: (changed.has(path) ? files.find((f) => f.path === path)?.change : null) ?? null,
+    })),
+  );
+
+  const tree = $derived(
+    buildTree<Entry>(
+      showAll ? everythingAsFiles : shown.map((f) => ({ ...f, change: f.change as FileChange })),
+    ),
+  );
+
+  // Read when the box is ticked, and again whenever the commit changes under it.
+  $effect(() => {
+    const rev = compare?.to ?? detail?.commit.oid ?? null;
+    if (!showAll || rev === null || repo === null) {
+      everything = [];
+      allError = null;
+      return;
+    }
+    loadingAll = true;
+    allError = null;
+    commitTree(repo, rev)
+      .then((paths) => {
+        everything = paths;
+      })
+      .catch((e: unknown) => {
+        allError = messageOf(e);
+        everything = [];
+      })
+      .finally(() => {
+        loadingAll = false;
+      });
+  });
 
   /** In tree mode the directory is a heading and only the file name repeats. */
   function split(path: string): { dir: string; name: string } {
@@ -132,7 +195,10 @@
       {files.length} file{files.length === 1 ? '' : 's'}{compare ? ' differ' : ''}
     </h3>
     <div class="filebar">
-      <div class="toggle">
+      <!-- Path and Tree are how the changed files are arranged. Everything at this commit is
+           thousands of files in a directory structure, which only reads as a tree, so the
+           choice does not apply while that is what is on screen. -->
+      <div class="toggle" class:hidden={showAll}>
         <button class:on={grouping === 'path'} onclick={() => onGrouping('path')}>Path</button>
         <button class:on={grouping === 'tree'} onclick={() => onGrouping('tree')}>Tree</button>
       </div>
@@ -141,7 +207,16 @@
         View all files
       </label>
     </div>
-    {#if grouping === 'tree'}
+    {#if showAll}
+      {#if loadingAll}
+        <p class="muted">Reading the tree…</p>
+      {:else if allError}
+        <p class="error">{allError}</p>
+      {:else}
+        <p class="muted count">{everything.length} files at this commit</p>
+        <FileTree nodes={tree} {openPath} {onOpenFile} startClosed />
+      {/if}
+    {:else if grouping === 'tree'}
       <FileTree nodes={tree} {openPath} {onOpenFile} />
     {:else}
     <ul class="files">
@@ -161,8 +236,8 @@
           </button>
         </li>
       {/each}
-      {#if !showAll && files.length > LIMIT}
-        <li class="muted">…and {files.length - LIMIT} more; tick “View all files” to list them</li>
+      {#if files.length > LIMIT}
+        <li class="muted">…and {files.length - LIMIT} more</li>
       {/if}
     </ul>
     {/if}
@@ -236,6 +311,8 @@
   .parent { display: block; }
   .muted { color: var(--fg-2); }
   .error { color: var(--danger); }
+  .toggle.hidden { visibility: hidden; }
+  .count { padding-bottom: 0; }
   .filebar {
     display: flex; align-items: center; gap: var(--space-3);
     margin-bottom: var(--space-2);

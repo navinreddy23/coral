@@ -99,6 +99,11 @@ export function graphRowOf(path: string, oid: string): Promise<number | null> {
   return invoke<number | null>('graph_row_of', { path, oid });
 }
 
+/** Every file the repository holds at one commit, for the panel's "all files" view. */
+export function commitTree(path: string, rev: string): Promise<string[]> {
+  return invoke<string[]>('commit_tree', { path, rev });
+}
+
 /** The repository's submodules. Empty for a repository that declares none. */
 export function repoSubmodules(path: string): Promise<Submodule[]> {
   return invoke<Submodule[]>('repo_submodules', { path });

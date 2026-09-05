@@ -2713,6 +2713,7 @@
       {:else}
         <Details
           detail={selection.detail}
+          repo={info?.path ?? null}
           compare={selection.pair === null
             ? null
             : {

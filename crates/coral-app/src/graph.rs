@@ -384,6 +384,21 @@ pub struct FoundCommit {
     pub row: u32,
 }
 
+/// Every file the repository holds at one commit, for the panel's "all files" view.
+///
+/// # Errors
+/// Propagates git failures, including an unknown revision.
+#[tauri::command]
+pub async fn commit_tree(
+    path: String,
+    rev: String,
+) -> Result<Vec<String>, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc.tree_files(&runner, &rev).await?)
+}
+
 /// Commits whose message, author or object id matches `query`, in graph order.
 ///
 /// Sorted by row rather than by date, because the answer is stepped through with a next and a

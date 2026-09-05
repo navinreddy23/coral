@@ -578,6 +578,35 @@ impl RepoLocation {
             .collect())
     }
 
+    /// Every file the repository holds at one revision, in git's own order.
+    ///
+    /// For the panel that lists a commit's files: what changed is the usual question, but
+    /// "what was there" is the other one, and it cannot be answered from a diff.
+    ///
+    /// # Errors
+    /// Propagates git failures, including an unknown revision.
+    pub async fn tree_files(
+        &self,
+        runner: &GitRunner,
+        rev: &str,
+    ) -> Result<Vec<String>, CoralError> {
+        let out = runner
+            .output(
+                GitCommand::read("ls-tree", self.display_path())
+                    .args(["ls-tree", "-r", "--name-only", "-z"])
+                    .arg(rev),
+            )
+            .await?;
+        // NUL-separated, because a path may hold anything a byte can and git quotes it
+        // otherwise.
+        Ok(out
+            .stdout
+            .split(|b| *b == 0)
+            .filter(|p| !p.is_empty())
+            .map(|p| String::from_utf8_lossy(p).into_owned())
+            .collect())
+    }
+
     /// One file's contents at one revision.
     ///
     /// Wanted by the blame view, which has chunks of lines attributed to commits and needs the

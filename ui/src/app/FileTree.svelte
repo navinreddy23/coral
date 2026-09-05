@@ -1,18 +1,38 @@
 <script lang="ts">
   import FileTree from './FileTree.svelte';
   import type { TreeNode } from '../diff/tree';
-  import type { ChangedFile } from '../ipc/types';
+  import type { FileChange } from '../ipc/types';
 
-  const { nodes, openPath, onOpenFile, depth = 0 }: {
-    nodes: TreeNode<ChangedFile>[];
+  /**
+   * What the tree needs of an entry.
+   *
+   * A path with no change of its own is a file the commit did not touch, which the "all
+   * files" view is full of: it draws without a mark rather than not at all.
+   */
+  export interface Entry {
+    path: string;
+    oldPath: string | null;
+    change: FileChange | null;
+  }
+
+  const { nodes, openPath, onOpenFile, depth = 0, startClosed = false }: {
+    nodes: TreeNode<Entry>[];
     openPath: string | null;
     onOpenFile: (path: string) => void;
     depth?: number;
+    /**
+     * Whether directories start shut.
+     *
+     * They start open for a commit's own files, where the tree exists to show where the
+     * changes landed and a list of closed folders shows nothing. The whole repository is a
+     * different thing: the kernel has ninety-six thousand files, and drawing them all is a
+     * panel that never paints.
+     */
+    startClosed?: boolean;
   } = $props();
 
-  // Directories start open: the tree exists to show where a commit's changes landed, and a
-  // list of closed folders shows nothing.
   let closed = $state<Record<string, boolean>>({});
+  const shut = (path: string) => closed[path] ?? startClosed;
 
   const mark: Record<string, string> = {
     added: 'A',
@@ -30,12 +50,18 @@
         <button
           class="dir"
           style:padding-left="{depth * 12 + 4}px"
-          onclick={() => (closed[node.path] = !closed[node.path])}
+          onclick={() => (closed[node.path] = !shut(node.path))}
         >
-          <span class="caret">{closed[node.path] ? '›' : '⌄'}</span>{node.name}
+          <span class="caret">{shut(node.path) ? '›' : '⌄'}</span>{node.name}
         </button>
-        {#if !closed[node.path]}
-          <FileTree nodes={node.children} {openPath} {onOpenFile} depth={depth + 1} />
+        {#if !shut(node.path)}
+          <FileTree
+            nodes={node.children}
+            {openPath}
+            {onOpenFile}
+            {startClosed}
+            depth={depth + 1}
+          />
         {/if}
       {:else}
         <button
@@ -45,7 +71,9 @@
           onclick={() => onOpenFile(node.path)}
           title={node.item.oldPath ? `${node.path}\nfrom ${node.item.oldPath}` : node.path}
         >
-          <span class="mark {node.item.change}">{mark[node.item.change] ?? '?'}</span>
+          <span class="mark {node.item.change ?? 'untouched'}">
+            {node.item.change === null ? '' : mark[node.item.change] ?? '?'}
+          </span>
           {node.name}
         </button>
       {/if}
