@@ -458,3 +458,46 @@ fn parses_every_push_flag() {
     assert!(results[5].summary.contains("non-fast-forward"));
     assert_eq!(results[3].local, "", "a deletion has no local side");
 }
+
+/// The first push of a branch has to say where it goes.
+///
+/// `--set-upstream` on its own fails with "the current branch has no upstream branch", which is
+/// exactly the case the flag is for: git needs the remote and the branch named as well.
+#[test]
+fn a_first_push_sets_its_own_upstream() {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let upstream = TestRepo::new().write("a.txt", "1\n").commit("first");
+        let bare = tempfile::tempdir().unwrap();
+        upstream.git(["init", "--bare", "--quiet", &bare.path().to_string_lossy()]);
+
+        let repo = TestRepo::new().write("a.txt", "1\n").commit("first");
+        repo.git(["remote", "add", "origin", &bare.path().to_string_lossy()]);
+        repo.git(["checkout", "--quiet", "-b", "topic"]);
+        let repo = repo.write("b.txt", "2\n").commit("on the branch");
+
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+        let results = loc
+            .push(
+                &runner,
+                &PushOpts {
+                    set_upstream: true,
+                    ..PushOpts::default()
+                },
+                |_| {},
+            )
+            .await
+            .unwrap();
+        assert!(!results.is_empty(), "nothing was pushed");
+
+        // The branch is on the remote, and tracking it.
+        let refs = repo.git(["ls-remote", "--heads", "origin"]);
+        assert!(refs.contains("refs/heads/topic"), "the branch is not there");
+        assert_eq!(
+            repo.git(["rev-parse", "--abbrev-ref", "topic@{upstream}"]),
+            "origin/topic"
+        );
+    });
+}

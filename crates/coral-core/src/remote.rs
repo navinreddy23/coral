@@ -355,10 +355,26 @@ impl RepoLocation {
         if opts.delete {
             cmd = cmd.arg("--delete");
         }
-        if let Some(remote) = &opts.remote {
+        // `--set-upstream` alone is not enough: with no upstream configured git does not know
+        // which remote to set, and answers "the current branch has no upstream branch" — which
+        // is the case the flag exists for. Naming the remote and the branch is what
+        // `git push --set-upstream origin main` does, and what this has to do for itself.
+        let chosen = match (&opts.remote, &opts.refspec) {
+            (None, None) if opts.set_upstream => self.first_push_target(runner).await?,
+            _ => None,
+        };
+        if let Some(remote) = opts
+            .remote
+            .as_deref()
+            .or(chosen.as_ref().map(|c| c.0.as_str()))
+        {
             cmd = cmd.arg(remote);
         }
-        if let Some(refspec) = &opts.refspec {
+        if let Some(refspec) = opts
+            .refspec
+            .as_deref()
+            .or(chosen.as_ref().map(|c| c.1.as_str()))
+        {
             cmd = cmd.arg(refspec);
         }
 
@@ -392,6 +408,32 @@ impl RepoLocation {
         }
     }
 
+    /// Where a branch with no upstream should be pushed the first time.
+    ///
+    /// `origin` when there is one, since that is what a clone makes and what everything else
+    /// assumes; otherwise the only remote, because with exactly one there is no choice to make.
+    /// `None` when the repository has no remotes or several and none called `origin` — git's own
+    /// error is clearer than a guess would be.
+    async fn first_push_target(
+        &self,
+        runner: &GitRunner,
+    ) -> Result<Option<(String, String)>, CoralError> {
+        let crate::repo::Head::Branch { name } = self.head(runner).await? else {
+            // A detached HEAD has no branch to set an upstream for.
+            return Ok(None);
+        };
+
+        let remotes = self.remotes(runner).await?;
+        let picked = remotes.iter().find(|r| r.name == "origin").or_else(|| {
+            if remotes.len() == 1 {
+                remotes.first()
+            } else {
+                None
+            }
+        });
+        Ok(picked.map(|r| (r.name.clone(), name)))
+    }
+
     /// Fetches and integrates, in the way the caller asked for.
     ///
     /// # Errors
@@ -416,21 +458,6 @@ impl RepoLocation {
             cmd = cmd.arg(name);
         }
 
-        match runner.output(cmd).await {
-            Ok(out) => {
-                let msg = String::from_utf8_lossy(&out.stdout).trim().to_owned();
-                self.op_outcome(runner, msg).await
-            }
-            Err(e) => {
-                let outcome = self
-                    .op_outcome(runner, e.stderr().unwrap_or_default().to_owned())
-                    .await?;
-                if outcome.completed {
-                    Err(e)
-                } else {
-                    Ok(outcome)
-                }
-            }
-        }
+        self.run_stoppable(runner, cmd).await
     }
 }

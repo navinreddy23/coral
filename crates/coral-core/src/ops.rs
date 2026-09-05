@@ -470,7 +470,7 @@ impl RepoLocation {
     }
 
     /// Runs a command that may legitimately stop for conflicts.
-    async fn run_stoppable(
+    pub(crate) async fn run_stoppable(
         &self,
         runner: &GitRunner,
         cmd: GitCommand,
