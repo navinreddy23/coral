@@ -84,6 +84,11 @@ describe('the merge tool', () => {
     await fireEvent.click(file);
     expect(container.querySelector('.whole')?.textContent).toContain('binary');
     expect(container.querySelector('.conflict')).toBeNull();
+    // Both sides have one; deleting it is not one of the two answers.
+    const choices = [...container.querySelectorAll('.choices button')].map((b) =>
+      b.textContent?.trim(),
+    );
+    expect(choices).toEqual(['Keep what is on main', 'Take the version from side']);
   });
 
   it('explains a file deleted on this side and changed by the commit, and offers the two ways out', async () => {

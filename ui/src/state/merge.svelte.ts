@@ -85,7 +85,14 @@ export class MergeState {
       if (this.active !== null && !files.some((f) => f.path === this.active)) this.close();
     } catch (e) {
       this.error = messageOf(e);
+      return;
     }
+
+    // Straight into the first file, rather than onto an empty pane asking for a file to be
+    // picked. A stopped operation has exactly one thing to do next, and one conflicted file
+    // is the common case; when there are several, resolving one opens the next.
+    const first = this.files[0];
+    if (this.active === null && first !== undefined) await this.open(first.path);
   }
 
   async open(file: string): Promise<void> {
@@ -94,6 +101,12 @@ export class MergeState {
     this.choices = {};
     this.edited = null;
     this.error = null;
+
+    // A binary file, or one that exists on only one side, has nothing to pick between. The
+    // window offers the whole-file choices for it, so reading blocks would mean parsing a
+    // blob to show nothing — and for a binary one, parsing it as text at all.
+    const known = this.files.find((f) => f.path === file);
+    if (known && (known.binary || known.deleteModify)) return;
     try {
       this.blocks = await conflictBlocks(this.#path, file);
     } catch (e) {

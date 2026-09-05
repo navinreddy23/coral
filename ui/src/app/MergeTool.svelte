@@ -221,12 +221,17 @@
                 Take the version from {labels.theirs}
               </button>
             {/if}
-            <button
-              disabled={merge.busy}
-              onclick={() => merge.take(wholeFile.path, { kind: 'delete' })}
-            >
-              Leave it deleted
-            </button>
+            <!-- Only where a side actually deleted it. A binary file both sides changed has
+                 no deletion in it, and offering one is offering a third answer to a question
+                 with two. -->
+            {#if wholeFile.deleteModify}
+              <button
+                disabled={merge.busy}
+                onclick={() => merge.take(wholeFile.path, { kind: 'delete' })}
+              >
+                Leave it deleted
+              </button>
+            {/if}
           </div>
         </div>
       {:else if merge.blocks === null}

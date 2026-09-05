@@ -165,6 +165,85 @@ describe('picking sides region by region', () => {
   });
 });
 
+describe('arriving at a stopped operation', () => {
+  /** The reads a load does, answered with `files` and a merge in progress. */
+  function wire(files: { path: string; kind: string; binary: boolean; deleteModify: boolean }[]) {
+    // Each case counts its own calls; the spies outlive the test that made them otherwise.
+    vi.clearAllMocks();
+    vi.spyOn(commands, 'repoOperation').mockResolvedValue({
+      state: 'cherry_pick',
+      labels: { ours: 'dummyx', theirs: '056d9dc (lets see what happens)', swapped: false },
+      progress: null,
+      headName: null,
+      stoppedAt: null,
+      interactive: false,
+    });
+    vi.spyOn(commands, 'repoConflicts').mockResolvedValue(files as never);
+    vi.spyOn(commands, 'conflictBlocks').mockImplementation(async (_p, file) => ({
+      blocks: [{ kind: 'conflict', base: ['base'], ours: [`${file} ours`], theirs: [`${file} theirs`] }],
+    }) as never);
+  }
+
+  const conflicted = (path: string) => ({
+    path,
+    kind: 'both_modified',
+    binary: false,
+    deleteModify: false,
+  });
+
+  it('opens the first conflicted file rather than waiting to be asked', async () => {
+    // The pane said "pick a file to settle it" and people did not know that was a control:
+    // the report was that the region view did not work at all.
+    wire([conflicted('dummy.txt')]);
+    const merge = new MergeState();
+    await merge.load('/repo');
+
+    expect(merge.active).toBe('dummy.txt');
+    expect(merge.blocks).not.toBeNull();
+  });
+
+  it('opens the next one when the file being worked on is settled', async () => {
+    wire([conflicted('a.txt'), conflicted('b.txt')]);
+    const merge = new MergeState();
+    await merge.load('/repo');
+    expect(merge.active).toBe('a.txt');
+
+    // a.txt resolved: the reload sees only b.txt, and lands on it.
+    wire([conflicted('b.txt')]);
+    merge.close();
+    await merge.load('/repo');
+    expect(merge.active).toBe('b.txt');
+  });
+
+  it('leaves a file already open alone', async () => {
+    wire([conflicted('a.txt'), conflicted('b.txt')]);
+    const merge = new MergeState();
+    await merge.load('/repo');
+    await merge.open('b.txt');
+    await merge.load('/repo');
+    expect(merge.active).toBe('b.txt');
+  });
+
+  it('does not read blocks for a file that has none', async () => {
+    // Binary, or on one side only: the whole-file choices are all there is, and the read
+    // would be parsing a blob to show nothing.
+    wire([{ path: 'logo.png', kind: 'both_modified', binary: true, deleteModify: false }]);
+    const merge = new MergeState();
+    await merge.load('/repo');
+
+    expect(merge.active).toBe('logo.png');
+    expect(merge.blocks).toBeNull();
+    expect(commands.conflictBlocks).not.toHaveBeenCalled();
+  });
+
+  it('opens nothing when nothing is conflicted', async () => {
+    wire([]);
+    const merge = new MergeState();
+    await merge.load('/repo');
+    expect(merge.active).toBeNull();
+  });
+});
+
 describe('stepping an operation on', () => {
   /** A state already loaded against a repository, with the reads stubbed out. */
   function loaded() {
