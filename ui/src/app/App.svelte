@@ -1785,20 +1785,79 @@
     return out;
   });
 
+  /** The pill being dragged and the one under it, so both can be marked. */
+  let dragged = $state<string | null>(null);
+  let dragOver = $state<string | null>(null);
+
+  function startPillDrag(event: DragEvent, short: string) {
+    dragged = short;
+    // The name as text too, so a drop into another application gets something useful.
+    event.dataTransfer?.setData('text/plain', short);
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+  }
+
+  function endPillDrag() {
+    dragged = null;
+    dragOver = null;
+  }
+
+  function overPill(event: DragEvent, short: string) {
+    if (dragged === null || dragged === short) return;
+    // Preventing the default is what marks this a valid drop target.
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    dragOver = short;
+  }
+
+  function dropOnPill(event: DragEvent, short: string) {
+    event.preventDefault();
+    const source = dragged;
+    endPillDrag();
+    if (source !== null && source !== short) void dropRef(source, short);
+  }
+
+  /** Whether `name` is a tracking branch, which is what decides a drop's direction. */
+  function isRemoteRef(name: string): boolean {
+    return refs.groups.remote.some((r) => r.short === name);
+  }
+
+  /** The branch part of a tracking name, so `origin/main` and `main` can be compared. */
+  function withoutRemote(name: string): string {
+    const at = name.indexOf('/');
+    return at < 0 ? name : name.slice(at + 1);
+  }
+
   /**
    * A branch dropped onto another.
    *
    * The reference reads the gesture as "bring `source` into `target`", which needs `target`
    * checked out first — dropping onto a branch you are not on otherwise merges into the wrong
-   * one silently. Dropping a local branch onto its remote counterpart pushes instead, which is
-   * the one case where the gesture means something else entirely.
+   * one silently. A branch and its own tracking branch are the exception: there the gesture is
+   * a transfer, and which way round it is decides whether that is a push or a pull.
    */
   async function dropRef(source: string, target: string) {
-    const pushing = target === `origin/${source}` || target.endsWith(`/${source}`);
-    if (pushing) {
+    // The same pair of names in the opposite order, which is the whole of the gesture.
+    const sameBranch = withoutRemote(source) === withoutRemote(target);
+    if (sameBranch && !isRemoteRef(source) && isRemoteRef(target)) {
       await act({ kind: 'push', remote: null, setUpstream: true, refspec: null, tags: false });
       return;
     }
+    if (sameBranch && isRemoteRef(source) && !isRemoteRef(target)) {
+      if (target !== headName) await act({ kind: 'checkout', rev: target });
+      await act({ kind: 'pull', remote: null, mode: 'ffOnly' });
+      return;
+    }
+
+    // Opening a request is only offered where there is a host signed in to talk to, and only
+    // for two local branches: a tracking branch is already on the host.
+    const canPropose =
+      hosting.available && !isRemoteRef(source) && !isRemoteRef(target);
+    const choices = [
+      { id: 'merge', label: 'Merge', primary: true },
+      { id: 'rebase', label: 'Rebase' },
+      ...(canPropose ? [{ id: 'propose', label: requestWord }] : []),
+    ];
+
     const { choice } = await ask({
       title: `Bring ${source} into ${target}?`,
       detail:
@@ -1808,12 +1867,13 @@
       asksText: false,
       placeholder: '',
       initial: '',
-      choices: [
-        { id: 'merge', label: 'Merge', primary: true },
-        { id: 'rebase', label: 'Rebase' },
-      ],
+      choices,
     });
     if (choice === null) return;
+    if (choice === 'propose') {
+      proposing = source;
+      return;
+    }
     if (target !== headName) await act({ kind: 'checkout', rev: target });
     if (choice === 'rebase') await act({ kind: 'rebase', onto: source });
     else await act({ kind: 'merge', rev: source, mode: 'auto' });
@@ -2987,9 +3047,20 @@
                   <button
                     class="pill {label.kind.kind}"
                     class:head={label.short === headName}
+                    class:dragging={dragged === label.short}
+                    class:over={dragOver === label.short}
                     style:--tint="var(--lane-{laneOf(row)}-soft)"
                     style:--tint-line="var(--lane-{laneOf(row)})"
                     title="{label.short}&#10;{label.name}"
+                    draggable={label.kind.kind === 'local_branch' ||
+                    label.kind.kind === 'remote_branch'
+                      ? 'true'
+                      : 'false'}
+                    ondragstart={(e) => startPillDrag(e, label.short)}
+                    ondragend={() => endPillDrag()}
+                    ondragover={(e) => overPill(e, label.short)}
+                    ondragleave={() => (dragOver === label.short ? (dragOver = null) : null)}
+                    ondrop={(e) => dropOnPill(e, label.short)}
                     onclick={(e) => pick(row, e)}
                   >
                     <!-- The cap says what the ref is; for a tracking branch that is the host
@@ -3464,6 +3535,9 @@
   }
   .pill-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .pill:hover { background: var(--bg-1); border-color: var(--tint-line, var(--border-strong)); }
+  /* Dragged and dropped-on, marked the way the branch panel marks them. */
+  .pill.dragging { opacity: 0.5; }
+  .pill.over { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   /*
    * The branch you are on, which is the one fact this column exists to show. Filled in the
    * accent rather than in its lane: it has to be findable in one look down a screen of rows

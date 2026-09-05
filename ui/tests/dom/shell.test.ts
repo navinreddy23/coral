@@ -249,6 +249,48 @@ describe('the shell', () => {
     });
   });
 
+  it('makes the graph labels draggable, except the ones nothing can be done with', async () => {
+    const { container } = await shell({
+      repo_refs: [
+        {
+          name: 'refs/heads/spike',
+          short: 'spike',
+          kind: { kind: 'local_branch' },
+          target: frameOids[1],
+          peeled: null,
+          upstream: null,
+          ahead: 0,
+          behind: 0,
+          row: 1,
+        },
+        {
+          name: 'refs/tags/v1',
+          short: 'v1',
+          kind: { kind: 'tag', annotated: false },
+          target: frameOids[2],
+          peeled: null,
+          upstream: null,
+          ahead: 0,
+          behind: 0,
+          row: 2,
+        },
+      ],
+    });
+
+    await waitFor(() => {
+      const names = [...container.querySelectorAll('.pill-text')].map((n) => n.textContent);
+      if (!names.includes('spike')) throw new Error('no pills yet');
+    });
+    const pills = [...container.querySelectorAll('button.pill')] as HTMLElement[];
+    const branch = pills.find((p) => p.textContent?.includes('spike'));
+    const tag = pills.find((p) => p.textContent?.includes('v1'));
+
+    // A branch can be dropped onto another to merge, rebase or push. A tag cannot: there is
+    // nothing the gesture would mean.
+    expect(branch?.getAttribute('draggable')).toBe('true');
+    expect(tag?.getAttribute('draggable')).toBe('false');
+  });
+
   it('fetches from the keyboard', async () => {
     await shell({ repo_action: { what: 'fetch', message: '', conflicted: false } });
     invoke.mockClear();
