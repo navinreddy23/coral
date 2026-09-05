@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use gix::ObjectId;
 use smallvec::SmallVec;
 
+use super::shallow::{Grafted, boundary};
 use super::stream::{CommitNode, CommitStream, Order, StreamOpts, Tips, WalkControl, WalkStats};
 use crate::error::CoralError;
 
@@ -184,8 +185,17 @@ impl GixCommitStream {
     ) -> Result<WalkStats, CoralError> {
         use gix::traverse::commit::{Parents, topo};
 
-        let commit_graph = repo.commit_graph_if_enabled().ok().flatten();
-        let walk = topo::Builder::from_iters(&repo.objects, tips, None::<Vec<ObjectId>>)
+        let edge = boundary(repo);
+        // A commit-graph records the true parents, which for a boundary commit are the ones
+        // the clone does not have; reading them from there would step straight past the graft.
+        // git refuses to write one for a shallow clone for the same reason.
+        let commit_graph = if edge.is_empty() {
+            repo.commit_graph_if_enabled().ok().flatten()
+        } else {
+            None
+        };
+        let find = Grafted::new(&repo.objects, edge);
+        let walk = topo::Builder::from_iters(&find, tips, None::<Vec<ObjectId>>)
             .with_commit_graph(commit_graph)
             .sorting(topo::Sorting::TopoOrder)
             .parents(if opts.first_parent {
@@ -221,17 +231,27 @@ impl GixCommitStream {
         plumbing: &(HashSet<ObjectId>, HashSet<ObjectId>),
         sink: &mut dyn FnMut(CommitNode) -> WalkControl,
     ) -> Result<WalkStats, CoralError> {
-        let mut platform = repo
-            .rev_walk(tips)
-            .sorting(gix::revision::walk::Sorting::ByCommitTime(
-                gix::traverse::commit::simple::CommitTimeOrder::NewestFirst,
-            ));
+        use gix::traverse::commit::{Parents, Simple, simple};
+
+        let edge = boundary(repo);
+        let commit_graph = if edge.is_empty() {
+            repo.commit_graph_if_enabled().ok().flatten()
+        } else {
+            None
+        };
+        let find = Grafted::new(&repo.objects, edge);
+        let mut walk = Simple::new(tips, &find)
+            .sorting(simple::Sorting::ByCommitTime(
+                simple::CommitTimeOrder::NewestFirst,
+            ))
+            .map_err(graph_err)?
+            .commit_graph(commit_graph);
         if opts.first_parent {
-            platform = platform.first_parent_only();
+            walk = walk.parents(Parents::First);
         }
 
         let mut stats = WalkStats::default();
-        for info in platform.all().map_err(graph_err)? {
+        for info in walk {
             let info = info.map_err(graph_err)?;
             let time = info.commit_time.unwrap_or_default();
             if !emit(

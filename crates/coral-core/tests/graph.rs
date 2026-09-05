@@ -464,3 +464,73 @@ async fn hiding_a_branch_keeps_a_detached_head() {
         );
     }
 }
+
+/// A shallow clone of `source`, one commit deep, which is how `west` fetches a module.
+fn shallow_clone_of(source: &std::path::Path, into: &std::path::Path) {
+    let url = format!("file://{}", source.display());
+    let status = std::process::Command::new("git")
+        .args(["clone", "--quiet", "--depth", "1", &url])
+        .arg(into)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .status()
+        .expect("git clone runs");
+    assert!(status.success(), "shallow clone of {url} failed");
+}
+
+/// A shallow clone's boundary commit names parents the clone never fetched. Walking into one
+/// used to stop the graph with "an object … could not be found", which is what opening a west
+/// workspace's modules did; the boundary is grafted now, exactly as git grafts it.
+#[test]
+fn a_shallow_clone_walks_to_its_boundary_and_stops() {
+    let source = TestRepo::new().write("a.txt", "one\n").commit("first");
+    let source = source.write("a.txt", "two\n").commit("second");
+    let source = source.write("a.txt", "three\n").commit("third");
+
+    let dir = tempfile::tempdir().unwrap();
+    let clone = dir.path().join("shallow");
+    shallow_clone_of(source.path(), &clone);
+    assert!(
+        clone.join(".git/shallow").is_file(),
+        "the clone has to be shallow for this test to mean anything"
+    );
+
+    let stream = GixCommitStream::open(&clone).unwrap();
+    let nodes = collect(&stream, &StreamOpts::default());
+    assert_eq!(nodes.len(), 1, "one commit deep");
+    assert!(
+        nodes[0].parents.is_empty(),
+        "the boundary commit is a root as far as this clone is concerned"
+    );
+}
+
+/// The same by commit time, since the two orders take different paths through gix.
+#[test]
+fn a_shallow_clone_walks_by_commit_time_too() {
+    let source = TestRepo::new().write("a.txt", "one\n").commit("first");
+    let source = source.write("a.txt", "two\n").commit("second");
+
+    let dir = tempfile::tempdir().unwrap();
+    let clone = dir.path().join("shallow");
+    shallow_clone_of(source.path(), &clone);
+
+    let stream = GixCommitStream::open(&clone).unwrap();
+    let opts = StreamOpts {
+        order: Order::CommitTime,
+        ..StreamOpts::default()
+    };
+    let nodes = collect(&stream, &opts);
+    assert_eq!(nodes.len(), 1);
+    assert!(nodes[0].parents.is_empty());
+}
+
+/// Grafting must not touch a whole clone: a repository with no `shallow` file keeps every
+/// parent it has, and keeps its commit-graph.
+#[test]
+fn an_ordinary_clone_is_left_alone() {
+    let r = TestRepo::new().write("a.txt", "one\n").commit("first");
+    let r = r.write("a.txt", "two\n").commit("second");
+    let stream = GixCommitStream::open(r.path()).unwrap();
+    let nodes = collect(&stream, &StreamOpts::default());
+    assert_eq!(nodes.len(), 2);
+    assert_eq!(nodes[0].parents.len(), 1, "the tip still knows its parent");
+}

@@ -1,5 +1,6 @@
 pub mod gix_stream;
 pub mod lanes;
+pub mod shallow;
 pub mod store;
 pub mod stream;
 pub mod subprocess;
