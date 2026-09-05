@@ -9,8 +9,17 @@ import {
 import type { Block, Blocks, ConflictedFile, Operation } from '../ipc/types';
 import { messageOf } from '../ipc/error';
 
-/** Which side a conflicting region should take. */
+/** Which side a conflicting region can take. */
 export type Side = 'ours' | 'theirs' | 'base';
+
+/**
+ * What one region resolves to: the sides taken, in the order they were taken.
+ *
+ * A list rather than one side, because plenty of conflicts are settled by keeping both — the
+ * line they added and the line you added — and which goes first is part of the answer. An
+ * empty list is a decision too: the region takes nothing and the lines go.
+ */
+export type Pick = Side[];
 
 /**
  * The merge tool: what is in progress, what still conflicts, and the decisions made so far.
@@ -25,8 +34,15 @@ export class MergeState {
   /** Path being worked on. */
   active = $state<string | null>(null);
   blocks = $state<Blocks | null>(null);
-  /** Chosen side per conflicting block, by its index among the conflicts. */
-  choices = $state<Record<number, Side>>({});
+  /** What each conflicting block takes, by its index among the conflicts. */
+  choices = $state<Record<number, Pick>>({});
+  /**
+   * The result typed out by hand, once someone starts editing it.
+   *
+   * Null while the picks alone decide the file. Two sides picked in order settles most
+   * conflicts but not all: sometimes the answer is a line neither side wrote.
+   */
+  edited = $state<string | null>(null);
   busy = $state(false);
   error = $state<string | null>(null);
 
@@ -49,8 +65,13 @@ export class MergeState {
 
   /** True once every conflicting region of the open file has been decided. */
   settled = $derived(
-    this.conflicts.length > 0 &&
-      this.conflicts.every((_, i) => this.choices[i] !== undefined),
+    this.edited !== null ||
+      (this.conflicts.length > 0 && this.conflicts.every((_, i) => this.choices[i] !== undefined)),
+  );
+
+  /** The file as it will be written: the picks applied, or whatever was typed over them. */
+  output = $derived(
+    this.edited ?? (this.blocks === null ? '' : render(this.blocks.blocks, this.choices)),
   );
 
   async load(path: string): Promise<void> {
@@ -71,6 +92,7 @@ export class MergeState {
     this.active = file;
     this.blocks = null;
     this.choices = {};
+    this.edited = null;
     this.error = null;
     try {
       this.blocks = await conflictBlocks(this.#path, file);
@@ -83,24 +105,53 @@ export class MergeState {
     this.active = null;
     this.blocks = null;
     this.choices = {};
+    this.edited = null;
   }
 
+  /**
+   * Adds a side to a region, or takes it back out.
+   *
+   * Picking is a toggle rather than a choice of one, so that both sides can be kept: click
+   * theirs then ours and the region is written in that order.
+   */
+  toggle(index: number, side: Side): void {
+    const at = this.choices[index] ?? [];
+    const next = at.includes(side) ? at.filter((s) => s !== side) : [...at, side];
+    this.choices = { ...this.choices, [index]: next };
+  }
+
+  /** Takes one side and nothing else for a region. */
   choose(index: number, side: Side): void {
-    this.choices = { ...this.choices, [index]: side };
+    this.choices = { ...this.choices, [index]: [side] };
   }
 
   /** Takes one side for every region at once, which is how most conflicts are settled. */
   chooseAll(side: Side): void {
-    const all: Record<number, Side> = {};
-    this.conflicts.forEach((_, i) => (all[i] = side));
+    const all: Record<number, Pick> = {};
+    this.conflicts.forEach((_, i) => (all[i] = [side]));
     this.choices = all;
+  }
+
+  /** Starts editing the result by hand, seeded with what the picks produce. */
+  edit(text: string): void {
+    this.edited = text;
+  }
+
+  /** Goes back to the picks, discarding anything typed. */
+  unedit(): void {
+    this.edited = null;
   }
 
   /** Writes the decisions and stages the file. */
   async apply(): Promise<boolean> {
     const file = this.active;
     if (file === null || this.blocks === null) return false;
-    return this.run(file, { kind: 'content', text: render(this.blocks.blocks, this.choices) });
+    // A text file ends with a newline. The picks produce one; a box typed into only does when
+    // the person happened to press return last, and dropping it rewrites the final line for
+    // everyone who reads the file afterwards.
+    const text =
+      this.output === '' || this.output.endsWith('\n') ? this.output : `${this.output}\n`;
+    return this.run(file, { kind: 'content', text });
   }
 
   /** Settles a file wholesale, without opening it. */
@@ -153,7 +204,7 @@ export class MergeState {
  * A region with no decision keeps our side, which is what git already put in the index — so a
  * partially decided file that is applied anyway is no worse than not having opened it.
  */
-export function render(blocks: readonly Block[], choices: Record<number, Side>): string {
+export function render(blocks: readonly Block[], choices: Record<number, Pick>): string {
   const out: string[] = [];
   let conflict = 0;
   for (const block of blocks) {
@@ -161,9 +212,11 @@ export function render(blocks: readonly Block[], choices: Record<number, Side>):
       out.push(...block.lines);
       continue;
     }
-    const side = choices[conflict] ?? 'ours';
+    const pick = choices[conflict] ?? ['ours'];
     conflict += 1;
-    out.push(...(side === 'ours' ? block.ours : side === 'theirs' ? block.theirs : block.base));
+    for (const side of pick) {
+      out.push(...(side === 'ours' ? block.ours : side === 'theirs' ? block.theirs : block.base));
+    }
   }
   // A trailing newline, because every line git handed over was one line of a text file.
   return out.length === 0 ? '' : `${out.join('\n')}\n`;

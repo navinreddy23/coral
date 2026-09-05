@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { render } from '@testing-library/svelte';
+import { fireEvent } from '@testing-library/dom';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
@@ -128,5 +129,115 @@ describe('the merge tool', () => {
   it('says nothing of the kind before a step has stopped', () => {
     const { container } = render(MergeTool, { props: { merge: state([conflicted()]), onDone: noop } });
     expect(container.querySelector('.stopped')).toBeNull();
+  });
+});
+
+/**
+ * Picking region by region, which is how a conflict is actually settled.
+ *
+ * The sides are toggles, not one choice of three: a great many conflicts are resolved by
+ * keeping both lines, and the order they are taken in is part of the answer.
+ */
+describe('picking sides in the merge tool', () => {
+  /** A state with one file open on a single conflicting region. */
+  function opened(swapped = false) {
+    const merge = state([conflicted()], swapped);
+    merge.active = 'f.txt';
+    merge.blocks = {
+      blocks: [
+        { kind: 'common', lines: ['one'] },
+        { kind: 'conflict', base: ['two'], ours: ['MAIN'], theirs: ['SIDE'] },
+      ],
+    };
+    return merge;
+  }
+
+  function sideNamed(container: HTMLElement, which: string): HTMLButtonElement {
+    const found = container.querySelector(`.side.${which}`);
+    if (!found) throw new Error(`no ${which} side`);
+    return found as HTMLButtonElement;
+  }
+
+  it('keeps both sides when both are clicked, in the order they were clicked', async () => {
+    const merge = opened();
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+    await fireEvent.click(sideNamed(container, 'theirs'));
+    await fireEvent.click(sideNamed(container, 'ours'));
+
+    expect(merge.choices[0]).toEqual(['theirs', 'ours']);
+    expect(merge.output).toBe('one\nSIDE\nMAIN\n');
+  });
+
+  it('numbers the taken sides once more than one is taken', async () => {
+    const merge = opened();
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+    await fireEvent.click(sideNamed(container, 'ours'));
+    // One side taken needs no number: there is no order to show.
+    expect(container.querySelector('.order')).toBeNull();
+    await fireEvent.click(sideNamed(container, 'theirs'));
+    expect([...container.querySelectorAll('.order')].map((e) => e.textContent?.trim()))
+      .toEqual(['1', '2']);
+  });
+
+  it('takes a side back out when it is clicked again, and says the region takes nothing', async () => {
+    const merge = opened();
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+    await fireEvent.click(sideNamed(container, 'ours'));
+    await fireEvent.click(sideNamed(container, 'ours'));
+
+    expect(merge.choices[0]).toEqual([]);
+    expect(container.querySelector('.neither')).not.toBeNull();
+    // Decided, though it keeps nothing, so the file can be resolved.
+    const resolve = [...container.querySelectorAll('.bar button')].find(
+      (b) => b.textContent?.trim() === 'Mark resolved',
+    ) as HTMLButtonElement;
+    expect(resolve.disabled).toBe(false);
+  });
+
+  it('shows the result that will be written, and follows the picks', async () => {
+    const merge = opened();
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+    await fireEvent.click(sideNamed(container, 'theirs'));
+    expect(container.querySelector('pre.output')?.textContent).toBe('one\nSIDE\n');
+  });
+
+  it('lets the result be typed over, and the picks be gone back to', async () => {
+    const merge = opened();
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+    await fireEvent.click(sideNamed(container, 'ours'));
+
+    const edit = [...container.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Edit it by hand',
+    ) as HTMLButtonElement;
+    await fireEvent.click(edit);
+
+    const box = container.querySelector('textarea.output') as HTMLTextAreaElement;
+    expect(box.value).toBe('one\nMAIN\n');
+    await fireEvent.input(box, { target: { value: 'one\nsomething else\n' } });
+    expect(merge.output).toBe('one\nsomething else\n');
+    // The picks no longer decide the file, so they are not live either.
+    expect(sideNamed(container, 'ours').disabled).toBe(true);
+
+    const back = [...container.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Back to picking sides',
+    ) as HTMLButtonElement;
+    await fireEvent.click(back);
+    expect(merge.output).toBe('one\nMAIN\n');
+  });
+
+  it('offers to skip a commit during a rebase, and not during a merge', () => {
+    const rebase = render(MergeTool, { props: { merge: opened(true), onDone: noop } });
+    const labels = [...rebase.container.querySelectorAll('header button')].map((b) =>
+      b.textContent?.trim(),
+    );
+    expect(labels).toContain('Skip commit');
+
+    // `git merge --skip` does not exist: there is one commit being made, and skipping it is
+    // aborting.
+    const merge = render(MergeTool, { props: { merge: opened(false), onDone: noop } });
+    const during = [...merge.container.querySelectorAll('header button')].map((b) =>
+      b.textContent?.trim(),
+    );
+    expect(during).not.toContain('Skip commit');
   });
 });
