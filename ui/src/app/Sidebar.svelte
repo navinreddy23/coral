@@ -4,6 +4,7 @@
   import type { PlacedRef, RefGroups } from '../state/refs.svelte';
   import type { PlacedStash } from '../ipc/stash';
   import HostMark, { hostOf } from './HostMark.svelte';
+  import EyeMark from './EyeMark.svelte';
   import { elideRef } from './path';
 
   const {
@@ -27,6 +28,11 @@
     onSubmoduleMenu,
     collapsed,
     onCollapse,
+    scope,
+    onToggleHidden,
+    onLeaveSolo,
+    onShowEverything,
+    onSelectRef,
   }: {
     groups: RefGroups;
     head: string | null;
@@ -71,7 +77,41 @@
      */
     collapsed: Record<string, boolean>;
     onCollapse: (section: string, closed: boolean) => void;
+    /**
+     * Which refs the graph is walked from, by full name.
+     *
+     * Given rather than read here, because the panel renders and the shell decides: soloing is
+     * a change to what the engine walks, not to how this list is drawn.
+     */
+    scope: { solo: string | null; hidden: string[] };
+    /** Takes one ref out of the walk, or puts it back. */
+    onToggleHidden: (ref: PlacedRef) => void;
+    /**
+     * Leaves solo, and only solo.
+     *
+     * Whatever was hidden stays hidden: hiding is a standing preference somebody set earlier,
+     * and giving it back unasked puts a branch they deliberately got rid of back in the graph
+     * with nothing to say what did it.
+     */
+    onLeaveSolo: () => void;
+    /** Unhides everything, from the button on the hidden-count banner. */
+    onShowEverything: () => void;
+    /**
+     * A row was clicked. Separate from `onSelect` because a ref outside the current walk has no
+     * row to go to, and the answer for it is to widen the view rather than to do nothing.
+     */
+    onSelectRef: (ref: PlacedRef) => void;
   } = $props();
+
+  /** The name the scope is keyed by. Full, because `main` and `origin/main` are two tips. */
+  const soloed = $derived(scope.solo);
+  function isHidden(name: string): boolean {
+    return scope.hidden.includes(name);
+  }
+  /** Whether the graph on screen was walked from this ref. */
+  function walked(name: string): boolean {
+    return soloed === null ? !isHidden(name) : soloed === name;
+  }
 
   /** Ref being dragged, and the one under the pointer, so both can be marked. */
   let dragging = $state<string | null>(null);
@@ -141,10 +181,32 @@
     return out;
   });
 
+  /**
+   * What a row says on hover.
+   *
+   * A ref with no row used to say "not in the loaded graph", which is true and, once a branch
+   * is soloed, is what almost every row in the panel would say — a panel that reads as broken
+   * rather than as narrowed. When the user narrowed it themselves, it says so instead.
+   */
+  function refTitle(r: PlacedRef, outside: boolean, hidden: boolean): string {
+    if (hidden) return `${r.name}\nhidden from the graph`;
+    if (outside && soloed !== null) return `${r.name}\noutside the branch being soloed`;
+    if (r.row === null) return `${r.name}\nnot in the loaded graph`;
+    return r.name;
+  }
+
   /** The branch without its remote prefix, which is the only part that differs down the list. */
   function withoutRemote(short: string): string {
     const at = short.indexOf('/');
     return at < 0 ? short : short.slice(at + 1);
+  }
+
+  /** A full ref name as the panel writes it: `refs/remotes/origin/x` reads as `origin/x`. */
+  function shortOf(name: string): string {
+    return name
+      .replace(/^refs\/heads\//u, '')
+      .replace(/^refs\/remotes\//u, '')
+      .replace(/^refs\/tags\//u, '');
   }
 
   function urlOf(name: string): string {
@@ -181,8 +243,16 @@
 </script>
 
 {#snippet refRow(r: PlacedRef, label: string, draggable: boolean)}
+  {@const hidden = isHidden(r.name)}
+  {@const outside = !walked(r.name)}
   <li>
-    <div class="row" oncontextmenu={(e) => onRefMenu(e, r)} role="presentation">
+    <div
+      class="row"
+      class:outside
+      class:soloed={soloed === r.name}
+      oncontextmenu={(e) => onRefMenu(e, r)}
+      role="presentation"
+    >
     <button
       class="ref"
       class:current={r.short === head}
@@ -197,9 +267,8 @@
       ondragover={(e) => dragOver(e, r.short)}
       ondragleave={() => (over = over === r.short ? null : over)}
       ondrop={(e) => drop(e, r.short)}
-      disabled={r.row === null}
-      onclick={() => r.row !== null && onSelect(r.row)}
-      title={r.row === null ? `${r.name}\nnot in the loaded graph` : r.name}
+      onclick={() => onSelectRef(r)}
+      title={refTitle(r, outside, hidden)}
     >
       {#if r.short === head}<span class="tick" aria-hidden="true">✓</span>{/if}
       <span class="text">{elideRef(label, 28)}</span>
@@ -207,6 +276,15 @@
         <span class="track">{r.ahead}↑ {r.behind}↓</span>
       {/if}
     </button>
+    <button
+      class="eye"
+      class:off={hidden}
+      title={hidden ? `Show ${r.short} in the graph` : `Hide ${r.short} from the graph`}
+      onclick={(e) => {
+        e.stopPropagation();
+        onToggleHidden(r);
+      }}
+    ><EyeMark shown={!hidden} /></button>
     <button
       class="dots"
       title="What can be done with {r.short}"
@@ -217,6 +295,24 @@
 {/snippet}
 
 <aside>
+  <!--
+    Solo is a mode, and a mode the graph does not otherwise announce: the window would simply
+    be missing most of its commits, with nothing anywhere saying why or how to get them back.
+    Hiding needs no banner — the struck eye stays on the row it belongs to — but soloing takes
+    every other branch off the screen at once, so it says so where the branches were.
+  -->
+  {#if soloed !== null}
+    <div class="solo-banner">
+      <span class="tag">SOLO</span>
+      <span class="who" title={soloed}>{elideRef(shortOf(soloed), 20)}</span>
+      <button class="leave" onclick={onLeaveSolo}>Leave</button>
+    </div>
+  {:else if scope.hidden.length > 0}
+    <div class="solo-banner quiet">
+      <span class="who">{scope.hidden.length} hidden</span>
+      <button class="leave" onclick={onShowEverything}>Show all</button>
+    </div>
+  {/if}
   <p class="viewing">Viewing <strong>{total}</strong></p>
   <input class="filter" placeholder="Filter" bind:value={filter} />
 
@@ -562,6 +658,62 @@
   }
   .row:hover .dots, .row.current .dots { visibility: visible; }
   .dots:hover { color: var(--fg-0); }
+  /*
+   * The eye follows the dots, with one difference that matters: a hidden branch keeps it
+   * showing. Revealed only on hover, the single thing on screen saying a branch is hidden
+   * would be behind the pointer, and a list with three branches quietly missing from the graph
+   * would look like a list with nothing wrong with it.
+   */
+  .eye {
+    flex: 0 0 auto; display: flex; align-items: center; cursor: pointer;
+    padding: 0 var(--space-1); background: var(--bg-1); border: 0; color: var(--fg-2);
+    visibility: hidden;
+  }
+  .row:hover .eye, .eye.off { visibility: visible; }
+  .eye:hover { color: var(--fg-0); }
+  .eye.off { color: var(--fg-2); }
+  /* Dimmed, not hidden: a branch left out of the walk is still a branch, and still has a menu. */
+  .row.outside .ref, .row.outside .text { color: var(--fg-2); }
+  /*
+   * On the button, not on the row around it. Every surface carrying text paints its own opaque
+   * background, so a tint on the row is painted over by the name sitting on it and all that
+   * survives is a stub of colour past the end of the text.
+   *
+   * The bar and the weight, and deliberately not the tint the checked-out row carries. Soloing
+   * the branch above or below the one you are on gave two tinted rows in the same colour with
+   * no edge between them, which reads as one selection two rows tall. The banner is what says
+   * solo is on; this only has to make the row findable underneath it.
+   */
+  .row.soloed .ref {
+    color: var(--fg-0); font-weight: 600;
+    box-shadow: inset 2px 0 0 var(--accent-line);
+  }
+  /*
+   * The banner. It sits above the filter rather than below it because the filter is a thing
+   * the user is doing now and the mode is the thing they set earlier and may have forgotten.
+   */
+  .solo-banner {
+    display: flex; align-items: center; gap: var(--space-2);
+    margin: 0 0 var(--space-2); padding: var(--space-1) var(--space-2);
+    background: var(--accent-soft); border-radius: var(--radius-1);
+    box-shadow: inset 2px 0 0 var(--accent-line);
+  }
+  .solo-banner.quiet { background: var(--bg-2); box-shadow: inset 2px 0 0 var(--border-strong); }
+  .solo-banner .tag {
+    flex: 0 0 auto; font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+    color: var(--accent); background: var(--bg-0); border-radius: 3px;
+    padding: 1px var(--space-1);
+  }
+  .solo-banner .who {
+    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 11px; font-weight: 600; color: var(--fg-0);
+  }
+  .solo-banner .leave {
+    flex: 0 0 auto; font: inherit; font-size: 10px; cursor: pointer;
+    padding: 1px var(--space-2); border: 1px solid var(--border-strong);
+    border-radius: 3px; background: var(--bg-0); color: var(--fg-1);
+  }
+  .solo-banner .leave:hover { color: var(--fg-0); border-color: var(--accent); }
   /*
    * The checked-out branch, marked by a bar down its leading edge as well as a tint. The tint
    * alone is easy to lose against a hover, and this is the one row in the panel that has to

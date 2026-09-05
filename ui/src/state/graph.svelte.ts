@@ -112,6 +112,18 @@ export class GraphState {
     }
   }
 
+  /**
+   * Drops the record of which repository the held frame is of.
+   *
+   * So that the next {@link open} of the same repository takes the arriving path rather than
+   * the reloading one: it paints the fast commit-time screen first instead of keeping the rows
+   * that are on screen. Wanted when the walk itself is about to change shape — a branch soloed
+   * or hidden — where those rows are not a stale version of the answer but a different question.
+   */
+  forget(): void {
+    this.#framePath = '';
+  }
+
   async open(path: string): Promise<void> {
     this.loading = true;
     this.error = null;

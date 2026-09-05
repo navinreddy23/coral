@@ -73,6 +73,7 @@
   } from '../ipc/commands';
   import { GraphState } from '../state/graph.svelte';
   import { RefsState } from '../state/refs.svelte';
+  import { ScopeState } from '../state/scope.svelte';
   import { ThemeState } from '../state/theme.svelte';
   import { SelectionState } from '../state/selection.svelte';
   import { WorktreeState } from '../state/worktree.svelte';
@@ -101,6 +102,7 @@
   const graph = new GraphState();
   const theme = new ThemeState();
   const refs = new RefsState();
+  const scope = new ScopeState();
   const selection = new SelectionState();
   const worktree = new WorktreeState();
   let showWip = $state(false);
@@ -635,6 +637,32 @@
       label: 'Revert commit',
       disabled: busy,
       run: () => void act({ kind: 'revert', revs: [oid] }),
+    });
+
+    // What the graph is drawn from, which is a different question from what can be done to the
+    // branch, and so sits in its own group.
+    items.push({ kind: 'separator' });
+    if (scope.solo === ref.name) {
+      items.push({
+        kind: 'item',
+        label: 'Leave solo',
+        hint: 'show every branch again',
+        run: () => void soloRef(null),
+      });
+    } else {
+      items.push({
+        kind: 'item',
+        label: `Solo ${ref.short}`,
+        hint: 'walk only this one',
+        run: () => void soloRef(ref),
+      });
+    }
+    items.push({
+      kind: 'item',
+      label: scope.hidden.includes(ref.name) ? `Show ${ref.short}` : `Hide ${ref.short}`,
+      // No hint. What hiding actually does — leave the commits another branch still reaches —
+      // does not fit on a menu row, and the truncated half of it says the opposite.
+      run: () => void toggleHidden(ref),
     });
 
     items.push({ kind: 'separator' });
@@ -1680,6 +1708,67 @@
   }
 
   /**
+   * Walks the repository again after the set of tips changed, and replaces everything placed
+   * on it.
+   *
+   * The same sequence a ref move takes and in the same order: the walk first, then the refs
+   * and stashes that are resolved to rows against it. `forget` is the one addition — the graph
+   * skips its fast first paint when it is reopening the repository already on screen, which is
+   * right for a reload and wrong here, where the rows are about to mean a different set of
+   * commits.
+   */
+  async function rewalkForScope(path: string) {
+    graph.forget();
+    await graph.open(path);
+    await refs.load(path);
+    await stashes.load(path);
+  }
+
+  /** Takes a branch or tag out of the walk, or puts it back. */
+  async function toggleHidden(ref: PlacedRef) {
+    if (!info) return;
+    const path = info.path;
+    await scope.toggleHidden(path, ref.name);
+    await rewalkForScope(path);
+  }
+
+  /** Walks only this ref, or leaves solo when it is the one already soloed. */
+  async function soloRef(ref: PlacedRef | null) {
+    if (!info) return;
+    const path = info.path;
+    await scope.setSolo(path, ref?.name ?? null);
+    await rewalkForScope(path);
+  }
+
+  /** Back to the whole graph, from the banner. */
+  async function showEverything() {
+    if (!info) return;
+    const path = info.path;
+    await scope.showEverything(path);
+    await rewalkForScope(path);
+  }
+
+  /**
+   * Goes to a ref in the graph, widening the view first when it is not in it.
+   *
+   * Without this a soloed repository has a sidebar of rows that do nothing, since every branch
+   * but one is outside the walk and has no row to scroll to. Clicking one is a clear enough
+   * statement of wanting to see it.
+   */
+  async function selectRef(ref: PlacedRef) {
+    if (ref.row !== null) {
+      await reveal(ref.row);
+      return;
+    }
+    if (!info || scope.walks(ref.name)) return;
+    const path = info.path;
+    await scope.reveal(path, ref.name);
+    await rewalkForScope(path);
+    const again = refs.all.find((r) => r.name === ref.name);
+    if (again?.row != null) await reveal(again.row);
+  }
+
+  /**
    * Scrolls the commit list, rather than leaving it to the browser.
    *
    * Two reasons, and the second is why it is here at all. Above `MAX_SPACER_PX` the scrollable
@@ -1733,6 +1822,10 @@
     forgetTheLastRepository();
     try {
       info = await open(path);
+      // Deliberately not awaited. The engine holds the scope and walks by it, so a repository
+      // left soloed is already narrowed by the time the rows arrive; this is only what the
+      // panel draws with — which row carries the struck eye, and whether the banner is up.
+      void scope.load(info.path);
       // Before the walk rather than after it. The branch list needs a row per ref, and the
       // engine answers from whatever walk it has, so this fills the panel in a moment instead
       // of leaving it saying the kernel has no branches for the six seconds the real walk
@@ -1776,6 +1869,7 @@
     // is what the loading screen exists to replace.
     stashes.clear();
     refs.clear();
+    scope.clear();
     worktree.clear();
     showSubmodule = null;
     submoduleAt = null;
@@ -1860,6 +1954,12 @@
     if (!change.refs && !change.graph) return;
 
     info = await open(path).catch(() => info);
+    // Before the walk, and awaited, unlike on open. A ref change is how a soloed branch stops
+    // existing — deleted from a terminal, or by another client — and the engine walks by the
+    // name it was given. Reading the scope is what prunes a name the repository no longer has,
+    // so doing it after the walk left an empty graph under a banner naming a branch that had
+    // just been deleted, with the walk already done against the dead name.
+    if (change.refs) await scope.load(path);
     // The walk first, then the things that are placed on it. Refs and stashes are resolved to
     // the row they sit on by the graph store, so loading them against the previous walk left
     // anything new — a stash above all, whose commit no branch reaches — with no row and a row
@@ -2281,7 +2381,11 @@
           return 4;
       }
     };
-    return [...labels].sort((a, b) => rank(a) - rank(b));
+    // A hidden ref is not drawn at all. Its commits often stay, because a branch that is
+    // walked still reaches them, and leaving the label on one of them put the name of a branch
+    // the user had just hidden back on the graph — with the struck eye beside it in the panel
+    // saying the opposite.
+    return [...labels].filter((r) => !scope.hides(r.name)).sort((a, b) => rank(a) - rank(b));
   }
 
   /**
@@ -2453,6 +2557,11 @@
         collapsed={views.current.collapsed}
         onCollapse={(section, closed) => views.setCollapsed(section, closed)}
         onOpenPullRequest={(pr: PullRequest) => void openInBrowser(pr.webUrl)}
+        scope={{ solo: scope.solo, hidden: scope.hidden }}
+        onToggleHidden={(r) => void toggleHidden(r)}
+        onLeaveSolo={() => void soloRef(null)}
+        onShowEverything={() => void showEverything()}
+        onSelectRef={(r) => void selectRef(r)}
       />
       <Splitter
         label="Resize the sidebar"

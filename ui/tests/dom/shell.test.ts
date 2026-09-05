@@ -33,7 +33,15 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 vi.mock('../../src/ipc/invoke', () => ({ invoke, isPreview: () => false }));
 // The window subscribes to terminal output and to repository changes. Neither channel
 // exists without the Tauri shell, and the real `listen` throws rather than returning.
-vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => undefined }));
+// Handlers are kept so a test can deliver a repository change, which is the only way to
+// exercise what the window does when refs move underneath it.
+const listeners = vi.hoisted(() => new Map<string, (event: { payload: unknown }) => void>());
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: async (name: string, handler: (event: { payload: unknown }) => void) => {
+    listeners.set(name, handler);
+    return () => listeners.delete(name);
+  },
+}));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 
 import App from '../../src/app/App.svelte';
@@ -80,6 +88,8 @@ function answers(over: Record<string, unknown> = {}): Record<string, unknown> {
     })),
     repo_refs: [],
     repo_stashes: [],
+    graph_scope: { solo: null, hidden: [] },
+    set_graph_scope: { solo: null, hidden: [] },
     graph_rewalk: null,
     repo_submodules: [],
     repo_status: { entries: [], conflicted: [] },

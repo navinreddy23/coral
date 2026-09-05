@@ -90,6 +90,34 @@ export function repoRefs(path: string): Promise<PlacedRef[]> {
 }
 
 /**
+ * Which refs a repository's graph is walked from.
+ *
+ * Both by full ref name, because that is what survives: `origin/main` and a local `main` are
+ * one pill in the graph and two different tips.
+ */
+export interface RepoScope {
+  /** The one ref being soloed, or null when the graph is showing everything it is given. */
+  solo: string | null;
+  /** Refs left out of the walk. Kept while soloing, so leaving solo restores them. */
+  hidden: string[];
+}
+
+/** What this repository is showing, with any ref it no longer has already taken out. */
+export function graphScope(path: string): Promise<RepoScope> {
+  return invoke<RepoScope>('graph_scope', { path });
+}
+
+/**
+ * Sets what this repository shows, answering with what was actually stored.
+ *
+ * The answer is the pruned scope rather than nothing, so the window cannot come away believing
+ * it soloed a branch that has since been deleted and then name it in the banner.
+ */
+export function setGraphScope(path: string, scope: RepoScope): Promise<RepoScope> {
+  return invoke<RepoScope>('set_graph_scope', { path, scope });
+}
+
+/**
  * The row a commit sits on, or `null` when it is outside the graph that is loaded.
  *
  * For a commit no ref names: a detached HEAD has a row worth showing and no label to find it

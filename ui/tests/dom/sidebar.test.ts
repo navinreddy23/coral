@@ -74,6 +74,11 @@ function mount(over: Record<string, unknown> = {}) {
       onStashMenu: () => {},
       onRefMenu: () => {},
       detachedHead: null,
+      scope: { solo: null, hidden: [] },
+      onToggleHidden: () => {},
+      onLeaveSolo: () => {},
+      onShowEverything: () => {},
+      onSelectRef: () => {},
       ...over,
     },
   });
@@ -316,5 +321,79 @@ describe('the stash list', () => {
 
   it('says so when there is nothing stashed', () => {
     expect(mount().getByText('Nothing stashed.')).toBeTruthy();
+  });
+
+  it('offers to hide a branch, and keeps saying so once it is hidden', async () => {
+    // The eye is revealed by hovering, like the dots beside it — except when the branch is
+    // already hidden. Left to the hover, the only thing on screen saying a branch is missing
+    // from the graph would be behind the pointer.
+    const asked: string[] = [];
+    const view = mount({
+      groups: { local: [ref('master'), ref('spike')], remote: [], tags: [], stashes: [] },
+      scope: { solo: null, hidden: ['refs/heads/spike'] },
+      onToggleHidden: (r: PlacedRef) => asked.push(r.name),
+    });
+
+    const rows = view.container.querySelectorAll('li .row');
+    const shown = rows[0]?.querySelector('.eye');
+    const hidden = rows[1]?.querySelector('.eye');
+
+    expect(shown?.classList.contains('off')).toBe(false);
+    expect(hidden?.classList.contains('off')).toBe(true);
+    expect(rows[1]?.classList.contains('outside')).toBe(true);
+
+    await fireEvent.click(hidden as HTMLElement);
+    expect(asked).toEqual(['refs/heads/spike']);
+  });
+
+  it('says solo is on, names the branch, and offers the way out', async () => {
+    // Soloing takes every other branch off the graph at once. Without this the window is
+    // simply missing most of its commits, with nothing saying why or how to get them back.
+    let left = 0;
+    let unhidden = 0;
+    const view = mount({
+      groups: { local: [ref('master'), ref('spike')], remote: [], tags: [], stashes: [] },
+      scope: { solo: 'refs/heads/spike', hidden: ['refs/heads/old'] },
+      onLeaveSolo: () => (left += 1),
+      onShowEverything: () => (unhidden += 1),
+    });
+
+    expect(view.getByText('SOLO')).toBeTruthy();
+    // In the banner, not merely somewhere in the list: naming it is the whole point.
+    expect(view.container.querySelector('.solo-banner .who')?.textContent).toBe('spike');
+
+    const rows = view.container.querySelectorAll('li .row');
+    expect(rows[0]?.classList.contains('outside')).toBe(true);
+    expect(rows[1]?.classList.contains('soloed')).toBe(true);
+
+    // Leaving solo leaves solo and nothing else. Handing back the branches somebody hid
+    // deliberately puts them in the graph with nothing on screen saying what did it.
+    await fireEvent.click(view.getByText('Leave'));
+    expect(left).toBe(1);
+    expect(unhidden).toBe(0);
+  });
+
+  it('sends you to a branch the walk left out rather than doing nothing', async () => {
+    // Under solo almost every row has no row number, and a disabled list of branches reads as
+    // a panel that has broken rather than one that was narrowed on purpose.
+    const asked: string[] = [];
+    const view = mount({
+      groups: { local: [ref('master', null)], remote: [], tags: [], stashes: [] },
+      scope: { solo: 'refs/heads/spike', hidden: [] },
+      onSelectRef: (r: PlacedRef) => asked.push(r.name),
+    });
+
+    const row = view.getByText('master').closest('button');
+    expect(row?.hasAttribute('disabled')).toBe(false);
+    await fireEvent.click(row as HTMLElement);
+    expect(asked).toEqual(['refs/heads/master']);
+  });
+
+  it('counts what is hidden when nothing is soloed', () => {
+    const view = mount({
+      groups: { local: [ref('master'), ref('spike')], remote: [], tags: [], stashes: [] },
+      scope: { solo: null, hidden: ['refs/heads/spike'] },
+    });
+    expect(view.getByText('1 hidden')).toBeTruthy();
   });
 });
