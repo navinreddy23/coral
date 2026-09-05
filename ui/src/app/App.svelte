@@ -116,7 +116,7 @@
     'select.next', 'select.previous', 'select.first', 'select.last',
     'stage.all', 'unstage.all', 'tab.new', 'tab.close', 'tab.next', 'tab.previous',
     'palette', 'repo.open', 'terminal', 'search.commits',
-    'panel.left', 'panel.detail', 'help',
+    'panel.left', 'panel.detail', 'help', 'undo', 'redo',
   ]);
 
   function move(delta: number) {
@@ -172,6 +172,12 @@
       case 'help': showHelp = !showHelp; break;
       case 'palette': showPalette = !showPalette; break;
       case 'search.commits': openFind(); break;
+      // The same two the toolbar runs. They were listed and rebindable but did nothing, which
+      // for Ctrl+Z of all keys is worse than not offering it: the journal is what makes an
+      // action on somebody's history safe to try, and the key everyone reaches for to undo one
+      // was inert while the button beside it worked.
+      case 'undo': toolbarAction('undo'); break;
+      case 'redo': toolbarAction('redo'); break;
       case 'terminal': terminal.toggle(); break;
       case 'repo.open': void openAnother(); break;
       default: break;

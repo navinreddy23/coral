@@ -211,6 +211,30 @@ describe('the shell', () => {
     ).toBe(true);
   });
 
+  it('runs undo and redo from the keyboard, not only from the toolbar', async () => {
+    // Both were listed in the shortcut help and rebindable, and both did nothing: the key
+    // dispatch had no case for them. For Ctrl+Z of all keys that is worse than not offering it.
+    await shell({ repo_action: { what: 'undo', message: '', conflicted: false } });
+    invoke.mockClear();
+
+    await fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    await waitFor(() => {
+      const undo = invoke.mock.calls.find(
+        (c) => c[0] === 'repo_action' && (c[1] as { action?: { kind?: string } })?.action?.kind === 'undo',
+      );
+      if (!undo) throw new Error('no undo yet');
+    });
+
+    invoke.mockClear();
+    await fireEvent.keyDown(window, { key: 'y', ctrlKey: true });
+    await waitFor(() => {
+      const redo = invoke.mock.calls.find(
+        (c) => c[0] === 'repo_action' && (c[1] as { action?: { kind?: string } })?.action?.kind === 'redo',
+      );
+      if (!redo) throw new Error('no redo yet');
+    });
+  });
+
   it('gives the whole pane to the merge tool while an operation is stopped', async () => {
     // The panel beside it can only offer a commit to select, so it spent half the window
     // saying so while the two sides being merged were squeezed into a column too narrow to
