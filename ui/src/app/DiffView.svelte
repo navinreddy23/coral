@@ -424,7 +424,7 @@
       <div
         class="sheet"
         style:height="{split.rows.length * ROW}px"
-        style:--gutter="calc({digits}ch + var(--space-4))"
+        style:--gutter="calc({digits}ch + var(--space-3) + var(--space-2))"
       >
         <div class="window" style:transform="translateY({firstDrawn * ROW}px)">
           {#each drawn as row, i (firstDrawn + i)}
@@ -593,7 +593,7 @@
   }
   .no {
     width: 1%; white-space: nowrap; text-align: right; user-select: none;
-    padding: 0 var(--space-2); color: var(--fg-2); background: var(--bg-1);
+    padding: 0 var(--space-2) 0 var(--space-3); color: var(--fg-2); background: var(--bg-1);
     border-right: 1px solid var(--border);
     /* Numbers only ever read down the column, so they line up. */
     font-variant-numeric: tabular-nums;
@@ -621,8 +621,10 @@
     display: grid; height: 17px;
     grid-template-columns: var(--gutter) 1fr var(--gutter) 1fr;
   }
+  /* More room on the left than on the right: the widest number the file reaches fills the
+     column exactly, and with even padding its first digit landed against the pane's edge. */
   .line .no {
-    text-align: right; user-select: none; padding: 0 var(--space-2);
+    text-align: right; user-select: none; padding: 0 var(--space-2) 0 var(--space-3);
     color: var(--fg-2); background: var(--bg-1);
     border-right: 1px solid var(--border); box-sizing: border-box;
     font-variant-numeric: tabular-nums;

@@ -547,8 +547,11 @@
   }
   .line .tick { flex: 0 0 14px; text-align: center; }
   .line .tick input { margin: 0; vertical-align: middle; cursor: pointer; }
+  /* Wide enough for a four-digit file, with room on the left so the first digit is not
+     against the pane's edge. */
   .line .no {
-    flex: 0 0 34px; text-align: right; color: var(--fg-2);
+    flex: 0 0 40px; padding-left: var(--space-1); box-sizing: border-box;
+    text-align: right; color: var(--fg-2);
     font-variant-numeric: tabular-nums; user-select: none;
   }
   .line .text { flex: 1; min-width: 0; color: var(--fg-0); }
