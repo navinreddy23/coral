@@ -105,12 +105,16 @@
   /* Sized from the file's own length, with more room on the left than on the right: the
      widest number fills the column exactly, and even padding put its first digit against the
      edge of the pane. */
+  /* A strip of its own, and visibly so: the numbers belong beside the code, not in it. */
   .line .no {
     flex: 0 0 var(--gutter); box-sizing: border-box;
     padding: 0 var(--space-2) 0 var(--space-3);
     text-align: right; color: var(--fg-2);
+    background: var(--bg-2); border-right: 1px solid var(--border-strong);
     font-variant-numeric: tabular-nums; user-select: none;
   }
+  /* The tick sits in the gutter with the number, so the strip reads as one thing. */
+  .line .tick { background: var(--bg-2); }
   .line .text { flex: 1; min-width: 0; color: var(--fg-0); overflow: hidden; }
 
   /* A conflicting line is tinted by which side it is on, and marked when it has been taken.

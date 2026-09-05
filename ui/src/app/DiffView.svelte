@@ -591,10 +591,15 @@
     border-collapse: collapse; width: 100%;
     font-family: var(--font-mono); font-size: 11px; font-weight: 400; line-height: 17px;
   }
+  /*
+   * A gutter has to look like one. At `--bg-1` it is three percent off the page the code sits
+   * on, which at a glance is no strip at all: the numbers read as floating in the text rather
+   * than as sitting beside it, and a long number looks like it has escaped into the margin.
+   */
   .no {
     width: 1%; white-space: nowrap; text-align: right; user-select: none;
-    padding: 0 var(--space-2) 0 var(--space-3); color: var(--fg-2); background: var(--bg-1);
-    border-right: 1px solid var(--border);
+    padding: 0 var(--space-2) 0 var(--space-3); color: var(--fg-2); background: var(--bg-2);
+    border-right: 1px solid var(--border-strong);
     /* Numbers only ever read down the column, so they line up. */
     font-variant-numeric: tabular-nums;
   }
@@ -625,8 +630,8 @@
      column exactly, and with even padding its first digit landed against the pane's edge. */
   .line .no {
     text-align: right; user-select: none; padding: 0 var(--space-2) 0 var(--space-3);
-    color: var(--fg-2); background: var(--bg-1);
-    border-right: 1px solid var(--border); box-sizing: border-box;
+    color: var(--fg-2); background: var(--bg-2);
+    border-right: 1px solid var(--border-strong); box-sizing: border-box;
     font-variant-numeric: tabular-nums;
   }
   .cell {
