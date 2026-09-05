@@ -389,3 +389,42 @@ async fn a_tag_being_merged_is_named_not_abbreviated() {
     );
     assert_eq!(op.labels.ours, "main");
 }
+
+/// A conflicted index with nothing in the git dir to mark it.
+///
+/// `cherry-pick --no-commit` and `merge --no-commit` both leave one: the files are unmerged and
+/// there is no `CHERRY_PICK_HEAD` or `MERGE_HEAD` to find. Reading the git dir alone said nothing
+/// was happening, and the window offered no way to resolve them.
+#[test]
+fn an_unmerged_index_is_an_operation_even_with_no_marker_file() {
+    let repo = TestRepo::new()
+        .write("dummy.txt", "dummy file\n")
+        .commit("first");
+    repo.git(["checkout", "--quiet", "-b", "theirs"]);
+    let repo = repo.write("dummy.txt", "dummy2 file\n").commit("theirs");
+    repo.git(["checkout", "--quiet", "main"]);
+    let repo = repo.write("dummy.txt", "dummy1 file\n").commit("ours");
+
+    // git exits non-zero for the conflict; the fixture's own runner would panic on that.
+    let _ = repo
+        .command(["cherry-pick", "--no-commit", "theirs"])
+        .output()
+        .expect("spawn git");
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+        // Nothing in the git dir says so.
+        assert_eq!(loc.op_state(), OpState::Clean);
+
+        let op = loc.operation(&runner).await.unwrap();
+        assert_eq!(
+            op.state,
+            OpState::Merge,
+            "the window would show no merge tool"
+        );
+        assert_eq!(loc.conflicts(&runner).await.unwrap().len(), 1);
+    });
+}

@@ -79,6 +79,28 @@ impl RepoLocation {
                     interactive: false,
                 })
             }
+            OpState::Clean if self.has_unmerged(runner).await? => {
+                // A conflicted index with nothing to mark it. `cherry-pick --no-commit` and
+                // `merge --no-commit` both leave one: the files are unmerged and there is no
+                // CHERRY_PICK_HEAD or MERGE_HEAD to find, so reading the git dir alone said
+                // nothing was happening and the window offered no way to resolve them.
+                //
+                // Reported as a merge, which is what git's own status calls it, and finished
+                // by committing rather than by continuing, since there is no operation to
+                // continue.
+                Ok(Operation {
+                    state: OpState::Merge,
+                    labels: SideLabels {
+                        ours: self.current_branch(runner).await,
+                        theirs: "the incoming change".to_owned(),
+                        swapped: false,
+                    },
+                    progress: None,
+                    head_name: None,
+                    stopped_at: None,
+                    interactive: false,
+                })
+            }
             OpState::Bisect | OpState::Clean => Ok(Operation {
                 state,
                 labels: SideLabels {
@@ -92,6 +114,21 @@ impl RepoLocation {
                 interactive: false,
             }),
         }
+    }
+
+    /// Whether any path is left unmerged in the index.
+    ///
+    /// Asked only when the git dir shows nothing in progress, so the cost falls on the case
+    /// that would otherwise be reported as "nothing is happening" while files sit conflicted.
+    async fn has_unmerged(&self, runner: &GitRunner) -> Result<bool, CoralError> {
+        let out = runner
+            .output(GitCommand::read("diff", self.display_path()).args([
+                "diff",
+                "--name-only",
+                "--diff-filter=U",
+            ]))
+            .await?;
+        Ok(!out.stdout.is_empty())
     }
 
     async fn rebase_operation(&self, runner: &GitRunner) -> Result<Operation, CoralError> {

@@ -92,7 +92,12 @@ impl TestRepo {
 
     /// One hermetic git invocation. Unlike the engine's runner, a fixture ignores the
     /// developer's global and system config entirely and pins both identities and dates.
-    fn command<I, S>(&self, args: I) -> Command
+    /// A git invocation with the fixture's hermetic environment, for the cases a test has to
+    /// run itself: a command that exits non-zero on purpose, which [`git`](Self::git) panics on.
+    ///
+    /// # Panics
+    /// Never; the command is returned unstarted.
+    pub fn command<I, S>(&self, args: I) -> Command
     where
         I: IntoIterator<Item = S>,
         S: AsRef<std::ffi::OsStr>,
