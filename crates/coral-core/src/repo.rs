@@ -517,12 +517,20 @@ impl RepoLocation {
             return Ok(Vec::new());
         }
 
+        // Together rather than one after the other. Each pass is a walk of every commit in
+        // the repository — eleven seconds on the kernel — and run in sequence the window sat
+        // on "searching…" for the sum of them.
+        let (by_message, by_author) = tokio::try_join!(
+            self.matching(runner, "--grep", query, limit),
+            self.matching(runner, "--author", query, limit),
+        )?;
+
         let mut passes = Vec::new();
         if crate::history::looks_like_an_oid(query) {
             passes.push(self.resolve_oid(runner, query).await);
         }
-        passes.push(self.matching(runner, "--grep", query, limit).await?);
-        passes.push(self.matching(runner, "--author", query, limit).await?);
+        passes.push(by_message);
+        passes.push(by_author);
 
         let mut out = crate::history::merged(&passes);
         out.truncate(usize::try_from(limit).unwrap_or(usize::MAX));

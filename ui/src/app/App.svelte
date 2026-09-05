@@ -1733,6 +1733,11 @@
     forgetTheLastRepository();
     try {
       info = await open(path);
+      // Before the walk rather than after it. The branch list needs a row per ref, and the
+      // engine answers from whatever walk it has, so this fills the panel in a moment instead
+      // of leaving it saying the kernel has no branches for the six seconds the real walk
+      // takes. It is asked again below, once the rows are the real ones.
+      void refs.load(info.path);
       await graph.open(info.path);
       await refs.load(info.path);
       await stashes.load(info.path);

@@ -111,6 +111,24 @@ impl GraphCache {
         true
     }
 
+    /// The best walk in hand, without waiting for a better one to be built.
+    ///
+    /// The branch list needs a row per ref, and asking for the topological store meant waiting
+    /// the six seconds it takes to walk the kernel — during which the sidebar said the
+    /// repository had no branches, no remotes and no tags. The rows a commit-time walk gives
+    /// are the rows the frame on screen is using at that moment anyway; the window asks again
+    /// when the real walk lands.
+    async fn best_store(&self, path: &str) -> Result<Arc<RowStore>, CoralError> {
+        let slot = self.slot(path);
+        if let Ok(held) = slot.held.try_lock()
+            && let Some(cached) = held.as_ref().filter(|c| !c.provisional)
+        {
+            return Ok(Arc::clone(&cached.store));
+        }
+        drop(slot);
+        self.store(path, true).await
+    }
+
     /// Returns the store for `path`, building it if it is not held.
     async fn store(&self, path: &str, first_paint: bool) -> Result<Arc<RowStore>, CoralError> {
         let slot = self.slot(path);
@@ -254,7 +272,7 @@ pub async fn repo_refs(
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
     let refs = loc.refs(&runner).await?;
-    let store = cache.store(&path, false).await?;
+    let store = cache.best_store(&path).await?;
 
     Ok(refs
         .into_iter()
@@ -391,7 +409,9 @@ pub async fn search_commits(
         return Ok(Vec::new());
     }
 
-    let store = cache.store(&path, false).await?;
+    // Whatever walk is in hand: a search that has already taken ten seconds must not then
+    // wait on a walk, and the rows it places matches at are the rows on screen.
+    let store = cache.best_store(&path).await?;
     let mut out: Vec<FoundCommit> = found
         .into_iter()
         .filter_map(|oid| {
