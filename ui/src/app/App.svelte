@@ -2667,7 +2667,7 @@
                 {/if}
               </span>
               <span class="cell graph-col"></span>
-              <span class="cell message">
+              <span class="cell message" style:--row-tint="var(--lane-{laneOf(row)}-soft)">
                 <span class="summary">{visibleMeta.get(row)?.summary ?? ''}</span>
                 {#if showBody}
                   <span class="detail">{flatten(visibleMeta.get(row)?.body ?? '')}</span>
@@ -2956,6 +2956,12 @@
   .wip .summary { color: var(--fg-0); font-weight: 600; }
   .wip .wip-node { border-color: var(--warn); }
   .wip:hover { box-shadow: inset 3px 0 0 var(--warn); }
+  /*
+   * Each row's message wears the colour of the lane its commit sits in, which is what ties a
+   * line of text to a node three columns away. The soft mixes are the same ones the branch
+   * pills use, so a branch reads as one colour from its label to its last commit.
+   */
+  .row .cell.message { background: var(--row-tint, var(--bg-0)); }
   .row:hover .cell.message { background: var(--bg-1); }
   /* Every match tinted, the one being stood on ruled as well: a screen of identical tints
      says how many matched and nothing about which one the buttons are pointing at. */
