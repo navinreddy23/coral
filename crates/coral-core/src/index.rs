@@ -28,6 +28,8 @@ pub enum Direction {
     Stage,
     /// Index back out, which git applies in reverse.
     Unstage,
+    /// Out of the working tree altogether, which is the one that cannot be undone.
+    Discard,
 }
 
 /// Builds a patch containing only the selected hunks of one file, suitable for
@@ -119,7 +121,9 @@ fn render_hunk(
             hunk.old_start,
             u32::try_from(i64::from(hunk.old_start) + *drift).unwrap_or(hunk.new_start),
         ),
-        Direction::Unstage => (hunk.old_start, hunk.new_start),
+        // Both read the header as git will when applying in reverse: the side being rebuilt
+        // is the one the patch already describes.
+        Direction::Unstage | Direction::Discard => (hunk.old_start, hunk.new_start),
     };
     *drift += i64::from(new_count) - i64::from(old_count);
 
@@ -133,10 +137,17 @@ fn render_hunk(
 ///
 /// `--unidiff-zero` is required because a selection can leave a hunk with no context lines at
 /// all, which git otherwise refuses.
+///
+/// Discarding is the one that leaves the index alone: it takes the change back out of the
+/// working tree, which is why it has no `--cached` and why it is the only one of the three
+/// that cannot be undone.
 #[must_use]
 pub fn apply_args(direction: Direction) -> Vec<&'static str> {
-    let mut v = vec!["apply", "--cached", "--unidiff-zero", "--whitespace=nowarn"];
-    if direction == Direction::Unstage {
+    let mut v = vec!["apply", "--unidiff-zero", "--whitespace=nowarn"];
+    if direction != Direction::Discard {
+        v.insert(1, "--cached");
+    }
+    if direction != Direction::Stage {
         v.push("--reverse");
     }
     v

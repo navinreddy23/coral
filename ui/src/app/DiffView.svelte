@@ -5,7 +5,18 @@
   import { initialsOf } from '../graph/initials';
   import type { DiffState } from '../state/diff.svelte';
 
-  const { diff, onClose }: { diff: DiffState; onClose: () => void } = $props();
+  const { diff, onClose, onPart }: {
+    diff: DiffState;
+    onClose: () => void;
+    /**
+     * Stages, unstages or discards part of a file.
+     *
+     * `lines` indexes the hunk's own lines; empty means the whole hunk. Raised rather than
+     * done here: discarding is the one that cannot be undone, and the window owns the question
+     * that has to be answered first.
+     */
+    onPart: (part: 'stage' | 'unstage' | 'discard', hunk: number, lines: number[]) => void;
+  } = $props();
 
   /**
    * Lines rendered before the rest is summarised.
@@ -84,6 +95,53 @@
   });
 
   const sign: Record<string, string> = { add: '+', remove: '-', context: ' ' };
+
+  /**
+   * Whether part of this file can be staged, and which way round.
+   *
+   * Only for the working tree: a commit is written and there is nothing to move in or out of
+   * it, and a comparison of two commits is a reading, not a place to work.
+   */
+  const side = $derived(
+    diff.source === 'unstaged' ? 'stage' : diff.source === 'staged' ? 'unstage' : null,
+  );
+
+  /**
+   * Which lines of which hunk are picked out, keyed `hunk:line`.
+   *
+   * Cleared whenever the file or the layout changes: a selection is about the lines on screen,
+   * and after a reload the same indices are different lines.
+   */
+  let picked = $state<Set<string>>(new Set());
+  let pickedFor = '';
+  $effect(() => {
+    const key = `${diff.path ?? ''}\u0000${diff.source}\u0000${diff.mode}`;
+    void diff.file;
+    if (pickedFor !== key) {
+      pickedFor = key;
+      picked = new Set();
+    }
+  });
+
+  function togglePick(hunk: number, line: number) {
+    const key = `${hunk}:${line}`;
+    const next = new Set(picked);
+    if (!next.delete(key)) next.add(key);
+    picked = next;
+  }
+
+  /** The lines picked out of one hunk, in the order git wants them. */
+  function pickedIn(hunk: number): number[] {
+    return [...picked]
+      .filter((key) => key.startsWith(`${hunk}:`))
+      .map((key) => Number(key.slice(key.indexOf(':') + 1)))
+      .sort((a, b) => a - b);
+  }
+
+  /** A line worth picking: context is in both files and cannot be staged on its own. */
+  function pickable(kind: string): boolean {
+    return kind !== 'context';
+  }
 
   let scroller: HTMLElement | null = $state(null);
   /** Which file and layout the view has already been positioned for. */
@@ -315,13 +373,44 @@
     {:else if diff.mode === 'inline'}
       <table class="lines">
         <tbody>
-          {#each hunks as hunk (hunk.header + hunk.newStart)}
-            <tr class="hunk"><td colspan="3">{hunk.header}</td></tr>
+          {#each hunks as hunk, h (hunk.header + hunk.newStart)}
+            <tr class="hunk">
+              <td colspan="3">
+                <div class="hunk-bar">
+                <span class="where">{hunk.header}</span>
+                {#if side !== null}
+                  <span class="hunk-acts">
+                    {#if pickedIn(h).length > 0}
+                      <button onclick={() => onPart(side, h, pickedIn(h))}>
+                        {side === 'stage' ? 'Stage' : 'Unstage'} {pickedIn(h).length} line{pickedIn(h).length === 1 ? '' : 's'}
+                      </button>
+                    {/if}
+                    <button onclick={() => onPart(side, h, [])}>
+                      {side === 'stage' ? 'Stage hunk' : 'Unstage hunk'}
+                    </button>
+                    {#if side === 'stage'}
+                      <button class="risky" onclick={() => onPart('discard', h, pickedIn(h))}>
+                        Discard{pickedIn(h).length > 0 ? ' lines' : ' hunk'}
+                      </button>
+                    {/if}
+                  </span>
+                {/if}
+                </div>
+              </td>
+            </tr>
             {#each hunk.lines as line, i (i)}
-              <tr class={line.kind}>
+              <tr class={line.kind} class:picked={picked.has(`${h}:${i}`)}>
                 <td class="no">{line.oldNo ?? ''}</td>
                 <td class="no">{line.newNo ?? ''}</td>
-                <td class="text"><span class="sign">{sign[line.kind]}</span>{line.text}</td>
+                {#if side !== null && pickable(line.kind)}
+                  <td class="text">
+                    <button class="pick" onclick={() => togglePick(h, i)} title="Pick this line"
+                      ><span class="sign">{sign[line.kind]}</span>{line.text}</button
+                    >
+                  </td>
+                {:else}
+                  <td class="text"><span class="sign">{sign[line.kind]}</span>{line.text}</td>
+                {/if}
               </tr>
             {/each}
           {/each}
@@ -548,6 +637,30 @@
    * The hunk header is a divider with a location on it, not a line of the file. Ruled above
    * and below so a long diff reads as a sequence of regions rather than one wall.
    */
+  /* The hunk header carries its own actions, so it is a bar rather than a caption. The flex
+     row is inside the cell, not the cell itself: `display: flex` on a `td` takes it out of
+     table layout and `colspan` stops meaning anything, which left the bar a third as wide as
+     the diff under it. */
+  .hunk-bar { display: flex; align-items: center; gap: var(--space-3); }
+  .where { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .hunk-acts { flex: 0 0 auto; display: flex; gap: var(--space-1); }
+  .hunk-acts button {
+    font: inherit; font-family: var(--font-ui); font-size: 11px; cursor: pointer;
+    background: var(--bg-0); border: 1px solid var(--border); border-radius: 3px;
+    color: var(--fg-1); padding: 0 6px; line-height: 17px;
+  }
+  .hunk-acts button:hover { background: var(--bg-3); color: var(--fg-0); }
+  .hunk-acts button.risky { color: var(--danger); }
+  .hunk-acts button.risky:hover { background: var(--danger-soft); }
+
+  /* A changed line is a target, because picking lines is how part of a hunk gets staged. */
+  .pick {
+    display: block; width: 100%; text-align: left; font: inherit; cursor: pointer;
+    background: none; border: 0; padding: 0; color: inherit; white-space: pre;
+  }
+  tr.picked .text { box-shadow: inset 3px 0 0 var(--accent); }
+  tr.picked .sign { color: var(--accent); font-weight: 700; }
+
   tr.hunk td {
     background: var(--bg-2); color: var(--fg-2); padding: 3px var(--space-2);
     white-space: pre; user-select: none;

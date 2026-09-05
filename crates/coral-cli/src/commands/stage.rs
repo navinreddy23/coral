@@ -36,6 +36,9 @@ pub async fn whole(
     match direction {
         Direction::Stage => loc.stage(&runner, &refs).await?,
         Direction::Unstage => loc.unstage(&runner, &refs).await?,
+        // Whole paths are discarded by `coral discard`, which restores them outright rather
+        // than reversing a patch.
+        Direction::Discard => loc.discard(&runner, &refs).await?,
     }
     Ok(Staged {
         paths: paths.to_vec(),
@@ -99,5 +102,6 @@ const fn label(d: Direction) -> &'static str {
     match d {
         Direction::Stage => "staged",
         Direction::Unstage => "unstaged",
+        Direction::Discard => "discarded",
     }
 }

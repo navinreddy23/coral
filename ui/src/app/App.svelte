@@ -1178,6 +1178,43 @@
     menu = { x: event.clientX, y: event.clientY, items };
   }
 
+  /**
+   * Stages, unstages or discards part of the file on screen.
+   *
+   * Discarding asks first: it is the only one of the three that throws work away, and a hunk
+   * is small enough to click by accident.
+   */
+  async function applyPart(
+    part: 'stage' | 'unstage' | 'discard',
+    hunk: number,
+    lines: number[],
+  ) {
+    const file = diff.path;
+    if (!info || file === null) return;
+
+    if (part === 'discard') {
+      const what = lines.length === 0 ? 'this hunk' : count(lines.length, 'line');
+      const { choice } = await ask({
+        title: `Discard ${what}?`,
+        detail: `${file}\n\nThe change goes back to what is committed. It is not in any commit, ` +
+          'so there is nothing to bring it back from.',
+        asksText: false,
+        placeholder: '',
+        initial: '',
+        choices: [{ id: 'discard', label: `Discard ${what}` }],
+      });
+      if (choice !== 'discard') return;
+    }
+
+    await worktree.applyPart(file, part, hunk, lines);
+    if (worktree.error) {
+      toasts.push('error', 'Could not apply that', worktree.error);
+      return;
+    }
+    // The file's diff on this side is a different diff now, and may be empty.
+    await diff.reload(info.path);
+  }
+
   /** Deleting a file cannot be undone, so it is asked about by name. */
   async function confirmDelete(entry: StatusEntry) {
     const untracked = entry.worktree === 'untracked';
@@ -2193,7 +2230,7 @@
            takes the main pane outright rather than sitting behind the graph. -->
       <MergeTool {merge} onDone={reloadAll} />
     {:else if diff.path !== null}
-      <DiffView {diff} onClose={() => diff.close()} />
+      <DiffView {diff} onClose={() => diff.close()} onPart={applyPart} />
     {/if}
     <div
       class="graph"

@@ -290,3 +290,48 @@ fn asking_for_a_hunk_that_does_not_exist_is_an_error() {
     };
     assert!(build_patch(&file, &[(3, Selection::WholeHunk)], Direction::Stage).is_err());
 }
+
+/// Discarding takes the change out of the working tree and leaves the index where it was.
+#[test]
+fn discarding_one_hunk_leaves_the_index_alone() {
+    let repo = TestRepo::new()
+        .write(
+            "a.txt",
+            "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n",
+        )
+        .commit("base");
+    // Two changes far enough apart to be separate hunks.
+    std::fs::write(
+        repo.path().join("a.txt"),
+        "ONE\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nTEN\n",
+    )
+    .unwrap();
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+        let files = loc
+            .diff(&runner, false, &["a.txt"], DiffOptions::default())
+            .await
+            .unwrap();
+        assert_eq!(files[0].hunks.len(), 2, "two hunks to choose between");
+
+        let patch =
+            build_patch(&files[0], &[(0, Selection::WholeHunk)], Direction::Discard).unwrap();
+        loc.apply_to_index(&runner, &patch, Direction::Discard)
+            .await
+            .unwrap();
+
+        // The first change is gone from the file; the second is still there.
+        let on_disk = std::fs::read_to_string(repo.path().join("a.txt")).unwrap();
+        assert!(
+            on_disk.starts_with("one\n"),
+            "the discarded change came back"
+        );
+        assert!(on_disk.ends_with("TEN\n"), "the other change went too");
+        // And nothing was staged along the way.
+        assert_eq!(repo.git(["diff", "--cached", "--name-only"]), "");
+    });
+}

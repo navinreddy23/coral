@@ -497,6 +497,81 @@ pub async fn file_blame(
     Ok(loc.blame(&runner, &rev, &file).await?)
 }
 
+/// What to do with part of a file's changes.
+#[derive(Clone, Copy, Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Part {
+    Stage,
+    Unstage,
+    Discard,
+}
+
+impl Part {
+    const fn direction(self) -> coral_core::index::Direction {
+        match self {
+            Self::Stage => coral_core::index::Direction::Stage,
+            Self::Unstage => coral_core::index::Direction::Unstage,
+            Self::Discard => coral_core::index::Direction::Discard,
+        }
+    }
+
+    /// Which side of the working tree the hunk being named lives on.
+    const fn staged_side(self) -> bool {
+        matches!(self, Self::Unstage)
+    }
+}
+
+/// Stages, unstages or discards one hunk of a file, or only some of its lines.
+///
+/// `hunk` indexes the file's hunks as the panel is showing them, and `lines` indexes that
+/// hunk's own lines; an empty `lines` means the whole hunk. Both are read from the diff again
+/// here rather than sent from the window: a patch built against a stale hunk applies perfectly
+/// cleanly and stages the wrong thing.
+///
+/// # Errors
+/// Propagates git failures, and [`coral_core::CoralError::Protocol`] when the file has no
+/// changes on the side being asked about.
+#[tauri::command]
+pub async fn apply_part(
+    path: String,
+    file: String,
+    part: Part,
+    hunk: usize,
+    lines: Vec<usize>,
+) -> Result<coral_core::status::Status, crate::commands::IpcError> {
+    tracing::info!(path, file, ?part, hunk, count = lines.len(), "apply_part");
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+
+    let files = loc
+        .diff(
+            &runner,
+            part.staged_side(),
+            &[file.as_str()],
+            coral_core::diff::DiffOptions::default(),
+        )
+        .await?;
+    let target =
+        files
+            .iter()
+            .find(|f| f.path == file)
+            .ok_or_else(|| coral_core::CoralError::Protocol {
+                label: "apply",
+                detail: format!("{file} has no changes on that side"),
+            })?;
+
+    let selection = if lines.is_empty() {
+        coral_core::index::Selection::WholeHunk
+    } else {
+        coral_core::index::Selection::Lines(lines)
+    };
+    let generated = coral_core::index::build_patch(target, &[(hunk, selection)], part.direction())?;
+    loc.apply_to_index(&runner, &generated, part.direction())
+        .await?;
+    Ok(loc.status(&runner).await?)
+}
+
 /// The files that differ between two commits, for the panel to list.
 ///
 /// `from` is the older of the pair as the graph reads it, so what the newer one gained is an
