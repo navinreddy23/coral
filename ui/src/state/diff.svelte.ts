@@ -1,4 +1,11 @@
-import { fileBlame, fileDiff, fileHistory, fileText, worktreeDiff } from '../ipc/commands';
+import {
+  compareFileDiff,
+  fileBlame,
+  fileDiff,
+  fileHistory,
+  fileText,
+  worktreeDiff,
+} from '../ipc/commands';
 import type { Blame, Commit, FileDiff } from '../ipc/types';
 import type { DiffMode, FileView, ViewsState } from './views.svelte';
 import { messageOf } from '../ipc/error';
@@ -11,9 +18,11 @@ export const HISTORY_PAGE = 50;
 /** Where the diff on screen came from, so it can be read again. */
 interface Request {
   repo: string;
-  source: 'commit' | 'unstaged' | 'staged';
-  /** The commit, for a commit diff. */
+  source: 'commit' | 'unstaged' | 'staged' | 'compare';
+  /** The commit, for a commit diff; the older of the two when comparing. */
   rev: string;
+  /** The newer of the two, when comparing. */
+  to: string;
   path: string;
 }
 
@@ -133,7 +142,7 @@ export class DiffState {
     this.text = null;
     // A commit's blame is of the file as that commit left it; the working tree's is of HEAD,
     // since a line nobody has committed has nobody to attribute it to.
-    const rev = request.source === 'commit' ? request.rev : 'HEAD';
+    const rev = revisionOf(request);
     try {
       const [blame, text] = await Promise.all([
         fileBlame(request.repo, rev, request.path),
@@ -153,7 +162,7 @@ export class DiffState {
     const side = ++this.#side;
     try {
       // From the commit being looked at, so the list holds the change on screen.
-      const rev = request.source === 'commit' ? request.rev : 'HEAD';
+      const rev = revisionOf(request);
       const got = await fileHistory(request.repo, rev, request.path, this.#historyLimit);
       if (side !== this.#side) return;
       this.history = got;
@@ -164,7 +173,7 @@ export class DiffState {
   }
 
   /** What is being shown, so the header can say whether it is a commit or the working tree. */
-  source = $state<'commit' | 'unstaged' | 'staged'>('commit');
+  source = $state<'commit' | 'unstaged' | 'staged' | 'compare'>('commit');
 
   /** What the panel was opened on, so the history can hand it back. */
   #opened: Request | null = null;
@@ -172,8 +181,16 @@ export class DiffState {
   /** Opens one file's diff from a commit. A second call supersedes the first. */
   async open(repo: string, rev: string, path: string): Promise<void> {
     await this.#load(
-      { repo, source: 'commit', rev, path },
+      { repo, source: 'commit', rev, to: '', path },
       'This commit did not change that file.',
+    );
+  }
+
+  /** Opens one file's diff between two commits. */
+  async openCompare(repo: string, from: string, to: string, path: string): Promise<void> {
+    await this.#load(
+      { repo, source: 'compare', rev: from, to, path },
+      'That file is the same in both commits.',
     );
   }
 
@@ -185,7 +202,7 @@ export class DiffState {
    */
   async openWorking(repo: string, staged: boolean, path: string): Promise<void> {
     await this.#load(
-      { repo, source: staged ? 'staged' : 'unstaged', rev: '', path },
+      { repo, source: staged ? 'staged' : 'unstaged', rev: '', to: '', path },
       absent(staged),
     );
   }
@@ -266,21 +283,47 @@ export class DiffState {
   }
 }
 
+/**
+ * Which single revision a request is about.
+ *
+ * Blame and history each answer about one commit, and for a comparison that is the newer of
+ * the two: the file as it ends up, which is the side being read.
+ */
+function revisionOf(request: Request): string {
+  if (request.source === 'compare') return request.to;
+  return request.source === 'commit' ? request.rev : 'HEAD';
+}
+
 /** Side by side shows the file end to end; inline shows the hunks. */
 function wholeFileFor(mode: DiffMode): boolean {
   return mode === 'split';
 }
 
-function read(request: Request, wholeFile: boolean, ignoreWhitespace: boolean): Promise<FileDiff | null> {
-  return request.source === 'commit'
-    ? fileDiff(request.repo, request.rev, request.path, wholeFile, ignoreWhitespace)
-    : worktreeDiff(
-        request.repo,
-        request.source === 'staged',
-        request.path,
-        wholeFile,
-        ignoreWhitespace,
-      );
+function read(
+  request: Request,
+  wholeFile: boolean,
+  ignoreWhitespace: boolean,
+): Promise<FileDiff | null> {
+  if (request.source === 'compare') {
+    return compareFileDiff(
+      request.repo,
+      request.rev,
+      request.to,
+      request.path,
+      wholeFile,
+      ignoreWhitespace,
+    );
+  }
+  if (request.source === 'commit') {
+    return fileDiff(request.repo, request.rev, request.path, wholeFile, ignoreWhitespace);
+  }
+  return worktreeDiff(
+    request.repo,
+    request.source === 'staged',
+    request.path,
+    wholeFile,
+    ignoreWhitespace,
+  );
 }
 
 /** What to say when the side being shown has nothing in it for that file. */
@@ -289,5 +332,7 @@ function absent(staged: boolean): string {
 }
 
 function absentFor(source: Request['source']): string {
-  return source === 'commit' ? 'This commit did not change that file.' : absent(source === 'staged');
+  if (source === 'compare') return 'That file is the same in both commits.';
+  if (source === 'commit') return 'This commit did not change that file.';
+  return absent(source === 'staged');
 }

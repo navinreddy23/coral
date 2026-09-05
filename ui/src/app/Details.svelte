@@ -1,11 +1,28 @@
 <script lang="ts">
   import FileTree from './FileTree.svelte';
   import { buildTree } from '../diff/tree';
-  import type { CommitDetail } from '../ipc/types';
+  import type { ChangedFile, CommitDetail } from '../ipc/types';
   import type { Grouping } from '../state/views.svelte';
 
-  const { detail, loading, error, openPath, grouping, onGrouping, onOpenFile }: {
+  const {
+    detail,
+    compare,
+    loading,
+    error,
+    openPath,
+    grouping,
+    onGrouping,
+    onOpenFile,
+    onClearCompare,
+  }: {
     detail: CommitDetail | null;
+    /**
+     * The two commits being compared and what differs between them, when a second commit has
+     * been picked. Takes the place of the one commit's own details.
+     */
+    compare: { from: string; to: string; files: ChangedFile[] } | null;
+    /** Goes back to the newer of the two on its own. */
+    onClearCompare: () => void;
     loading: boolean;
     error: string | null;
     /** Path whose diff is on screen, so the list can mark it. */
@@ -32,7 +49,7 @@
   /** How many files are listed before the rest are summarised. */
   const LIMIT = 500;
 
-  const files = $derived(detail?.files ?? []);
+  const files = $derived(compare?.files ?? detail?.files ?? []);
   const shown = $derived(showAll ? files : files.slice(0, LIMIT));
   const tree = $derived(buildTree(shown));
 
@@ -58,8 +75,21 @@
     <p class="error">{error}</p>
   {:else if loading}
     <p class="muted">Loading…</p>
+  {:else if compare}
+    <!--
+      Two commits, so there is no one message or author to show: what the panel has to say is
+      what differs between them, and which two they are.
+    -->
+    <h2>Comparing two commits</h2>
+    <dl class="fields">
+      <dt>From</dt>
+      <dd class="mono">{compare.from.slice(0, 12)}</dd>
+      <dt>To</dt>
+      <dd class="mono">{compare.to.slice(0, 12)}</dd>
+    </dl>
+    <button class="single" onclick={onClearCompare}>Show just the newer commit</button>
   {:else if !detail}
-    <p class="muted">Select a commit.</p>
+    <p class="muted">Select a commit, or hold Ctrl and pick a second one to compare.</p>
   {:else}
     <h2>{detail.commit.summary}</h2>
     {#if detail.commit.body}
@@ -95,8 +125,12 @@
         </dd>
       {/if}
     </dl>
+  {/if}
 
-    <h3>{files.length} file{files.length === 1 ? '' : 's'}</h3>
+  {#if compare || detail}
+    <h3>
+      {files.length} file{files.length === 1 ? '' : 's'}{compare ? ' differ' : ''}
+    </h3>
     <div class="filebar">
       <div class="toggle">
         <button class:on={grouping === 'path'} onclick={() => onGrouping('path')}>Path</button>
@@ -166,6 +200,13 @@
   h3::after {
     content: ''; flex: 1; height: 1px; background: var(--border);
   }
+  /* Going back to one commit, which is a step out of a mode rather than an action on the
+     repository, so it is set as a link rather than as a button with a fill. */
+  .single {
+    align-self: flex-start; font: inherit; font-size: 12px; cursor: pointer;
+    background: none; border: 0; padding: 0; color: var(--accent);
+  }
+  .single:hover { text-decoration: underline; }
   .body {
     margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3);
     /* The page, and the strongest text on it. A grey message on a grey plate is the body of

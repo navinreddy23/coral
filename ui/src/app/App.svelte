@@ -340,11 +340,19 @@
     );
   });
 
-  function pick(row: number) {
+  /**
+   * Selects a commit, or compares it with the one already selected.
+   *
+   * Ctrl or Shift, as the reference takes either: what the modifier means here is "and this
+   * one too", not a range, so both do the same thing.
+   */
+  function pick(row: number, event?: MouseEvent) {
     const local = localRow(graph.frame, row);
     if (local === null || !graph.frame || !info) return;
     showWip = false;
-    void selection.select(info.path, row, oidOf(graph.frame, local));
+    const oid = oidOf(graph.frame, local);
+    const second = event !== undefined && (event.ctrlKey || event.metaKey || event.shiftKey);
+    void (second ? selection.compare(info.path, row, oid) : selection.select(info.path, row, oid));
   }
 
   /*
@@ -1122,11 +1130,25 @@
     void diff.openWorking(info.path, staged, file);
   }
 
-  /** Opens one of the selected commit's files in the diff viewer. */
+  /** Opens one of the selected commit's files in the diff viewer, or one of the pair's. */
   function openFile(file: string) {
+    if (!info) return;
+    const pair = selection.pair;
+    if (pair !== null) {
+      void diff.openCompare(info.path, pair.from.oid, pair.to.oid, file);
+      return;
+    }
     const rev = selection.detail?.commit.oid;
-    if (!info || rev === undefined) return;
+    if (rev === undefined) return;
     void diff.open(info.path, rev, file);
+  }
+
+  /** Drops the comparison and goes back to the newer of the two on its own. */
+  function clearCompare() {
+    const pair = selection.pair;
+    if (!info || pair === null) return;
+    diff.close();
+    void selection.select(info.path, pair.to.row, pair.to.oid);
   }
 
   /**
@@ -2217,12 +2239,16 @@
             <li
               class="row"
               class:merge={hasFlag(graph.frame.rowFlags[local ?? -1] ?? 0, RowFlag.Merge)}
-              class:selected={selection.row === row}
+              class:selected={selection.marks(row)}
             class:found={find.rows.has(row)}
             class:here={find.current === row}
               oncontextmenu={(e) => rightClickRow(e, row)}
             >
-              <button class="hit" onclick={() => pick(row)} aria-label="Select commit"></button>
+              <button
+                class="hit"
+                onclick={(e) => pick(row, e)}
+                aria-label="Select commit"
+              ></button>
               <!--
                 One name, and a count for the rest. Two pills stacked inside a 28px row left
                 each of them ten pixels tall and the name cut to fit, which is the state the
@@ -2253,7 +2279,7 @@
                     style:--tint="var(--lane-{laneOf(row)}-soft)"
                     style:--tint-line="var(--lane-{laneOf(row)})"
                     title="{label.short}&#10;{label.name}"
-                    onclick={() => pick(row)}
+                    onclick={(e) => pick(row, e)}
                   >
                     <!-- The cap says what the ref is; for a tracking branch that is the host
                          it came from, which is more than "a branch" says. -->
@@ -2319,12 +2345,20 @@
       {:else}
         <Details
           detail={selection.detail}
+          compare={selection.pair === null
+            ? null
+            : {
+                from: selection.pair.from.oid,
+                to: selection.pair.to.oid,
+                files: selection.compared,
+              }}
           loading={selection.loading}
           error={selection.error}
           openPath={diff.path}
           grouping={views.current.commitFiles}
           onGrouping={(g) => views.set('commitFiles', g)}
           onOpenFile={openFile}
+          onClearCompare={clearCompare}
         />
       {/if}
     {/if}
