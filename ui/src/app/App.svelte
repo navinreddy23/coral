@@ -139,6 +139,15 @@
       return;
     }
 
+    // Escape closes what is over the graph, wherever the focus went after it opened. The
+    // search bar had this on its own field alone, so clicking a result — which is what the
+    // bar is for — left no way to dismiss it but the mouse.
+    if (event.key === 'Escape' && find.open) {
+      find.close();
+      event.preventDefault();
+      return;
+    }
+
     const binding = resolve(e, isTextTarget(event.target) ? 'message' : 'global');
     if (!binding || !LIVE.has(binding.id)) return;
     event.preventDefault();
@@ -855,7 +864,8 @@
         { kind: 'separator' },
         {
           kind: 'item',
-          label: `Interactive rebase the children of ${short}`,
+          label: 'Interactive rebase from this commit',
+          hint: `${short} and newer`,
           run: () => info && void rebase.load(info.path, `${oid}~1`),
         },
         { kind: 'item', label: 'Edit commit message', run: () => void reword(oid, summary) },

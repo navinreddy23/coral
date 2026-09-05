@@ -196,6 +196,22 @@ describe('the shell', () => {
     });
   });
 
+  it('closes the search bar on Escape, wherever the focus went', async () => {
+    // Escape was bound to the search field alone, so clicking a result — which is the whole
+    // point of the bar — left no way to dismiss it but finding the small button.
+    const { container } = await shell();
+    await fireEvent.keyDown(window, { key: 'f', ctrlKey: true });
+    await waitFor(() => {
+      if (!container.querySelector('.find input')) throw new Error('no search bar');
+    });
+
+    (container.querySelector('li.row button.hit') as HTMLButtonElement | null)?.click();
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => {
+      if (container.querySelector('.find input')) throw new Error('the bar is still up');
+    });
+  });
+
   it('asks about the host when a repository opens', async () => {
     // Not awaited during open — a slow or unreachable host must not hold up the window — so
     // the only thing that says it happened is that the call was made at all.
