@@ -211,6 +211,25 @@ describe('the shell', () => {
     ).toBe(true);
   });
 
+  it('keeps the row click target above the cells that are positioned', async () => {
+    // The message cell is a positioned element, because the lane band hangs off it, and it
+    // comes after the click overlay in the row. Without a raise on the overlay the cell sat on
+    // top of it and clicking a commit's message did nothing at all — only the avatar, drawn on
+    // the canvas, still selected the row. happy-dom does not stack, so this reads the rule.
+    await shell();
+    const rules = [...document.styleSheets]
+      .flatMap((sheet) => [...(sheet.cssRules ?? [])])
+      .map((r) => r.cssText);
+
+    const hit = rules.find((text) => /\.hit[^{]*\{/u.test(text) && /position:\s*absolute/u.test(text));
+    expect(hit, 'the overlay rule').toBeDefined();
+    expect(hit, 'the overlay has to be raised above the positioned cells').toMatch(/z-index/u);
+
+    // And the pills stay above the overlay in turn, or a branch name loses its own click.
+    const refs = rules.find((text) => /\.cell\.refs[^{]*\{/u.test(text) && /z-index/u.test(text));
+    expect(refs, 'the ref column keeps its raise').toBeDefined();
+  });
+
   it('sizes the lane band to the empty part of the lane column', async () => {
     // The band fills the corridor between a row's outermost lane and its message, so its width
     // is per-row and comes from the geometry. It has been silently zero once already: a flex

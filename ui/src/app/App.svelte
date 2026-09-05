@@ -59,6 +59,7 @@
     fittedMetrics,
     GRAPH_COLUMN_PX,
     graphWidthFor,
+    laneX,
     listTop,
     REFS_COLUMN_PX,
     spacerHeight,
@@ -2333,7 +2334,11 @@
    */
   function laneGap(row: number): number {
     if (graph.frame === null || localRow(graph.frame, row) === null) return 0;
-    return Math.max(0, panes.widths.graph - graphWidthFor(widestLane(graph.frame, [row]), laneMetrics));
+    // To the centre of the outermost node, not past its edge: the band runs under the right
+    // half of it, which is what ties the colour to the commit rather than leaving it floating
+    // beside one. The canvas is drawn over the top, so the node stays a circle.
+    const from = laneX(widestLane(graph.frame, [row]), laneMetrics);
+    return Math.max(0, panes.widths.graph - from);
   }
 
   const laneFit = $derived.by(() => {
@@ -2809,7 +2814,11 @@
                 {/if}
               </span>
               <span class="cell graph-col"></span>
-              <span class="cell message" style:--row-tint="var(--lane-{laneOf(row)}-soft)">
+              <span
+                class="cell message"
+                style:--row-tint="var(--lane-{laneOf(row)}-soft)"
+                style:--row-line="var(--lane-{laneOf(row)})"
+              >
                 <span class="lane-strip" aria-hidden="true" style:--lane-gap="{laneGap(row)}px"
                 ></span>
                 <span class="summary">{visibleMeta.get(row)?.summary ?? ''}</span>
@@ -3063,9 +3072,15 @@
   /* Absolutely positioned at the same rounded offset the rows use, rather than sticky: one
      fewer composited layer in the scroller, and the lanes cannot drift half a pixel from the
      text they belong to. */
+  /*
+   * Above the rows, which is the whole reason the band can reach the nodes. The band is painted
+   * by the row it belongs to, and rows are drawn after this canvas, so without the raise it
+   * covered the right half of every node it ran up to. The canvas is only as wide as its own
+   * column and takes no pointer events, so nothing else is behind it.
+   */
   .lanes {
     position: absolute; left: calc(var(--refs-col) + var(--space-3));
-    height: 0; pointer-events: none;
+    height: 0; pointer-events: none; z-index: 1;
   }
   /* The list is positioned once and the rows stack inside it in normal flow. Positioning each
      row individually put every one of them at its own computed offset; laying them out
@@ -3110,7 +3125,12 @@
    * still ties the line of text to a node three columns away, and leaves the cell itself plain
    * for the accent to land on. The reference client paints the same gap for the same reason.
    */
-  .row .cell.message { background: var(--bg-0); }
+  .row .cell.message {
+    background: var(--bg-0);
+    /* The band stops at this edge and the bar starts it, so the eye is handed from the lane to
+       the text rather than left to cross a gap. State replaces the colour, never the bar. */
+    box-shadow: inset 2px 0 0 var(--row-line, transparent);
+  }
   .row:hover .cell.message { background: var(--bg-1); }
   /*
    * The band filling that corridor. It takes no room in the row: the width and the negative
@@ -3126,7 +3146,7 @@
        margin has to cancel it. `right: 100%` puts its right edge exactly on the message cell's
        leading edge, which leaves that cell's own inset bar — the one that marks the selected
        row — visible instead of painted over. */
-    position: absolute; right: 100%; top: 0; bottom: 0;
+    position: absolute; right: 100%; top: 1px; bottom: 1px;
     width: var(--lane-gap, 0px);
     background: var(--row-tint, transparent);
   }
@@ -3175,6 +3195,13 @@
   .hit {
     position: absolute; inset: 0; width: 100%; height: 100%;
     background: none; border: 0; padding: 0; margin: 0; cursor: pointer;
+    /*
+     * Raised, because the message cell is positioned too and comes after this in the row.
+     * Without it the cell sat over the overlay and a click anywhere on a commit's message did
+     * nothing at all — only the avatar, which is drawn on the canvas, still selected the row.
+     * The ref pills are raised above this in turn, so they keep their own clicks and titles.
+     */
+    z-index: 1;
   }
   /*
    * The ref column sits above the row's click overlay.
