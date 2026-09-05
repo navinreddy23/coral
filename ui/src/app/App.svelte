@@ -1130,6 +1130,73 @@
     void diff.openWorking(info.path, staged, file);
   }
 
+  /**
+   * What can be done with one file in the working tree.
+   *
+   * Deleting is the only thing here that leaves nothing behind, so it is set apart and asked
+   * about first. Everything else is reversible with the button beside it.
+   */
+  function fileMenu(event: MouseEvent, entry: StatusEntry, staged: boolean) {
+    event.preventDefault();
+    const busy = worktree.busy;
+    const items: MenuItem[] = [
+      {
+        kind: 'item',
+        label: 'Open the diff',
+        run: () => openWorkingFile(entry.path, staged),
+      },
+      { kind: 'separator' },
+      staged
+        ? {
+            kind: 'item',
+            label: 'Unstage it',
+            disabled: busy,
+            run: () => void worktree.stage([entry.path], false),
+          }
+        : {
+            kind: 'item',
+            label: 'Stage it',
+            disabled: busy,
+            run: () => void worktree.stage([entry.path], true),
+          },
+      {
+        kind: 'item',
+        label: 'Discard its changes',
+        hint: 'back to the last commit',
+        disabled: busy,
+        danger: true,
+        run: () => void discardChanges([entry]),
+      },
+      {
+        kind: 'item',
+        label: 'Delete the file',
+        disabled: busy,
+        danger: true,
+        run: () => void confirmDelete(entry),
+      },
+    ];
+    menu = { x: event.clientX, y: event.clientY, items };
+  }
+
+  /** Deleting a file cannot be undone, so it is asked about by name. */
+  async function confirmDelete(entry: StatusEntry) {
+    const untracked = entry.worktree === 'untracked';
+    const { choice } = await ask({
+      title: `Delete ${entry.path}?`,
+      detail: untracked
+        ? 'The file is removed from the working tree. It is in no commit, so there is nothing ' +
+          'to bring it back from.'
+        : 'The file is removed from the working tree and its deletion staged. Committing that ' +
+          'makes it permanent; until then the last commit still has it.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'delete', label: `Delete ${entry.path}` }],
+    });
+    if (choice !== 'delete') return;
+    await worktree.delete(untracked ? [] : [entry.path], untracked ? [entry.path] : []);
+  }
+
   /** Opens one of the selected commit's files in the diff viewer, or one of the pair's. */
   function openFile(file: string) {
     if (!info) return;
@@ -2340,6 +2407,7 @@
             onGrouping={(g) => views.set('changes', g)}
             onOpenFile={openWorkingFile}
             onDiscard={(entries) => void discardChanges(entries)}
+            onFileMenu={fileMenu}
           />
         </aside>
       {:else}

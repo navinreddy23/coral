@@ -33,7 +33,7 @@
   import Changes from './Changes.svelte';
   import { filesIn, type TreeNode } from '../diff/tree';
 
-  const { nodes, staged, openPath, closed, onToggleDir, onAct, onOpen, depth = 0 }: {
+  const { nodes, staged, openPath, closed, onToggleDir, onAct, onOpen, onMenu, depth = 0 }: {
     nodes: TreeNode<StatusEntry>[];
     /** Which side this list is, which decides the verb and the letter shown. */
     staged: boolean;
@@ -44,6 +44,8 @@
     /** Stage or unstage these paths — a file, or everything under a directory. */
     onAct: (paths: string[]) => void;
     onOpen: (path: string) => void;
+    /** What can be done with one file, asked for by right-clicking it. */
+    onMenu: (event: MouseEvent, path: string) => void;
     depth?: number;
   } = $props();
 
@@ -95,11 +97,12 @@
             {onToggleDir}
             {onAct}
             {onOpen}
+            {onMenu}
             depth={depth + 1}
           />
         {/if}
       {:else}
-        <div class="row">
+        <div class="row" role="presentation" oncontextmenu={(event) => onMenu(event, node.path)}>
           <button
             class="file"
             class:open={node.path === openPath}

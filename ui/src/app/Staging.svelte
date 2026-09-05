@@ -5,7 +5,16 @@
   import type { WorktreeState } from '../state/worktree.svelte';
   import type { Grouping } from '../state/views.svelte';
 
-  const { worktree, branch, openPath, grouping, onGrouping, onOpenFile, onDiscard }: {
+  const {
+    worktree,
+    branch,
+    openPath,
+    grouping,
+    onGrouping,
+    onOpenFile,
+    onDiscard,
+    onFileMenu,
+  }: {
     worktree: WorktreeState;
     /** What the changes are on, which is what the header names. */
     branch: string | null;
@@ -23,6 +32,13 @@
      * work, and the window owns the dialog that has to be answered first.
      */
     onDiscard: (entries: StatusEntry[]) => void;
+    /**
+     * What can be done with one file, asked for by right-clicking it.
+     *
+     * Raised rather than answered here: deleting a file is the one thing in this panel that
+     * cannot be undone, and the window owns both the menu and the question that precedes it.
+     */
+    onFileMenu: (event: MouseEvent, entry: StatusEntry, staged: boolean) => void;
   } = $props();
 
   let summary = $state('');
@@ -160,11 +176,15 @@
         onToggleDir={(p) => (closedUnstaged[p] = !closedUnstaged[p])}
         onAct={(paths) => worktree.stage(paths, true)}
         onOpen={(p) => onOpenFile(p, false)}
+        onMenu={(event, path) => {
+          const entry = worktree.unstaged.find((e) => e.path === path);
+          if (entry) onFileMenu(event, entry, false);
+        }}
       />
     {:else}
       <ul class="flat">
         {#each worktree.unstaged as e (e.path)}
-          <li>
+          <li oncontextmenu={(event) => onFileMenu(event, e, false)}>
             <button
               class="file"
               class:open={e.path === openPath}
@@ -180,6 +200,10 @@
       </ul>
     {/if}
   </section>
+
+  <!-- The two halves are different places, not one list with a heading in the middle: a file
+       moves between them, and the rule is what makes the move visible. -->
+  <hr class="between" />
 
   <section>
     <h3>
@@ -203,11 +227,15 @@
         onToggleDir={(p) => (closedStaged[p] = !closedStaged[p])}
         onAct={(paths) => worktree.stage(paths, false)}
         onOpen={(p) => onOpenFile(p, true)}
+        onMenu={(event, path) => {
+          const entry = worktree.staged.find((e) => e.path === path);
+          if (entry) onFileMenu(event, entry, true);
+        }}
       />
     {:else}
       <ul class="flat">
         {#each worktree.staged as e (e.path)}
-          <li>
+          <li oncontextmenu={(event) => onFileMenu(event, e, true)}>
             <button
               class="file"
               class:open={e.path === openPath}
@@ -306,6 +334,12 @@
     background: var(--bg-1); border: 0; color: var(--accent);
   }
   .expand:hover { text-decoration: underline; }
+  /* A real edge, not a hairline: the two halves are different places and a file moves between
+     them, which the eye has to be able to see happen. */
+  .between {
+    border: 0; height: 1px; margin: var(--space-3) 0;
+    background: var(--border-strong);
+  }
   .empty { margin: 0 0 var(--space-2) 4px; color: var(--fg-2); font-size: 11px; }
 
   .flat { list-style: none; margin: 0; padding: 0; }
