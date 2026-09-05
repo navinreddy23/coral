@@ -16,8 +16,12 @@ pub struct Remote {
 }
 
 /// One phase of a transfer, as git reports it on stderr.
+///
+/// Not exported to `types.ts`: the window never sees a transfer phase, and this shares a name
+/// with the rebase progress that it does see. Two types exporting under one name meant
+/// whichever test ran last decided what `Progress` was, and the window's own type was the one
+/// that lost.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "types.ts"))]
 #[serde(rename_all = "camelCase")]
 pub struct Progress {
     /// "Counting objects", "Receiving objects", and so on.
