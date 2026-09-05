@@ -262,3 +262,63 @@ fn nothing_is_ever_reserved_in_the_lane_of_last_resort() {
         assert_eq!(topo.open & (1 << (MAX_LANES - 1)), 0);
     }
 }
+
+/// Saturation must not push every commit into one column.
+///
+/// The kernel keeps sixty-odd branches open at once deep in its history. With thirty-one
+/// lanes every one was reserved for a merge parent tens of thousands of rows below, so from
+/// row 555 on every commit was drawn in the lane of last resort: one column of nodes beside
+/// thirty lines belonging to nothing on screen. The oldest reservation is recycled instead.
+#[test]
+fn a_full_graph_recycles_its_oldest_lane_rather_than_stacking_up() {
+    let mut assigner: LaneAssigner<u32> = LaneAssigner::new();
+
+    // Forty merges, each opening a lane for a parent that never arrives: more than the column
+    // holds, so the early ones have to give their lanes back.
+    let mut next = 10_000_u32;
+    let mut lanes = Vec::new();
+    for child in 0..40_u32 {
+        let parents = [next, next + 1];
+        next += 2;
+        lanes.push(assigner.push(&child, &parents).lane);
+    }
+
+    let spill = MAX_LANES - 1;
+    assert!(
+        !lanes[5..].contains(&spill),
+        "commits are still being stacked in the lane of last resort: {lanes:?}"
+    );
+    assert!(
+        lanes.iter().collect::<std::collections::HashSet<_>>().len() > 1,
+        "every commit landed in the same lane: {lanes:?}"
+    );
+}
+
+/// What eviction costs, stated once so it cannot change by accident.
+///
+/// The line from a merge to a parent far below stops rather than joining the wrong commit:
+/// the lane is closed in the `open` mask from the row it was taken back.
+#[test]
+fn a_recycled_lane_is_closed_before_it_is_handed_out_again() {
+    let mut assigner: LaneAssigner<u32> = LaneAssigner::new();
+
+    let mut next = 10_000_u32;
+    let mut rows = Vec::new();
+    for child in 0..60_u32 {
+        let parents = [next, next + 1];
+        next += 2;
+        rows.push(assigner.push(&child, &parents));
+    }
+
+    // No row ever claims a lane that a later row still says is open from above without a
+    // commit of its own having ended it.
+    for (i, row) in rows.iter().enumerate() {
+        assert!(row.lane < MAX_LANES, "row {i} is outside the column");
+        for lane in &row.parent_lanes {
+            assert!(
+                *lane == NO_LANE || *lane < MAX_LANES,
+                "row {i} points at a lane nothing is drawn in"
+            );
+        }
+    }
+}

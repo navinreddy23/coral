@@ -12,6 +12,16 @@ pub const NO_LANE: u16 = u16::MAX;
 /// the column and the graph looked empty.
 pub const MAX_LANES: u16 = 32;
 
+/// How many rows a lane may be held open for a parent that has not arrived.
+///
+/// A merge's second parent can be twenty thousand rows below it in the kernel, and a lane held
+/// that long is a line nobody ever sees both ends of — but it costs a whole column for its
+/// entire span. Sixty-odd of them are outstanding at once down there, which is more than the
+/// column can show, so they crowded every commit into the lane of last resort. Held for eight
+/// screenfuls and then given back, the graph stays about as wide as the branches actually in
+/// view, which is what makes it readable at all.
+const LINE_LIMIT: u64 = 500;
+
 /// The lane a commit is drawn in when every other one is taken.
 ///
 /// Never carries a reservation, and that is the whole point of setting it aside: a run in a
@@ -55,8 +65,16 @@ pub struct RowTopology {
 /// index in the tests. A parent's row number is not known when its child is emitted, so the
 /// key cannot be the row.
 pub struct LaneAssigner<K> {
-    /// Lane -> the commit it is reserved for, or `None` when free.
-    lanes: Vec<Option<K>>,
+    /// Lane -> the commit it is reserved for and when it was claimed, or `None` when free.
+    lanes: Vec<Option<(K, u64)>>,
+    /// Rows placed so far, which is what "claimed longest ago" is measured in.
+    clock: u64,
+    /// The earliest row at which any reservation could have gone stale.
+    ///
+    /// Without it every row scans every lane for one that has expired, which is thirty-one
+    /// checks a row and forty-six million over the kernel. This is the row that scan would
+    /// first find something at, so until then there is nothing to look for.
+    next_sweep: u64,
     /// Reservations still outstanding. Bounded by the graph's width, not its length: an entry
     /// lives only from the child that claims a lane until the parent that consumes it.
     reserved: std::collections::HashMap<K, u16>,
@@ -77,6 +95,8 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
     pub fn new() -> Self {
         Self {
             lanes: Vec::new(),
+            clock: 0,
+            next_sweep: u64::MAX,
             reserved: std::collections::HashMap::new(),
             freed_this_row: SmallVec::new(),
             max_width: 0,
@@ -95,6 +115,8 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
     /// Indices rather than object ids keep the assigner independent of the hash length.
     pub fn push(&mut self, key: &K, parents: &[K]) -> RowTopology {
         self.freed_this_row.clear();
+        self.clock += 1;
+        self.retire_stale();
         let open = self.open_mask();
 
         // A child may already have reserved a lane for me; otherwise I am a branch tip.
@@ -128,7 +150,8 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
                 parent_lanes.push(NO_LANE);
                 continue;
             };
-            self.lanes[pl as usize] = Some(p.clone());
+            self.lanes[pl as usize] = Some((p.clone(), self.clock));
+            self.next_sweep = self.next_sweep.min(self.clock.saturating_add(LINE_LIMIT));
             self.reserved.insert(p.clone(), pl);
             parent_lanes.push(pl);
         }
@@ -170,8 +193,8 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
 
     /// Leftmost free lane, skipping any freed on this row and the spill lane.
     ///
-    /// `None` once the graph is as wide as it may be, which the caller answers for: a parent
-    /// loses its edge, a tip is drawn in the spill lane.
+    /// When every lane is taken, the one claimed longest ago is taken back. `None` only when
+    /// even that is impossible, which is a row that has just claimed every lane itself.
     fn alloc(&mut self) -> Option<u16> {
         for (i, slot) in self.lanes.iter().enumerate() {
             let lane = u16::try_from(i).unwrap_or(u16::MAX);
@@ -182,11 +205,70 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
                 return Some(lane);
             }
         }
-        if u16::try_from(self.lanes.len()).unwrap_or(u16::MAX) >= SPILL {
-            return None;
+        if u16::try_from(self.lanes.len()).unwrap_or(u16::MAX) < SPILL {
+            self.lanes.push(None);
+            return u16::try_from(self.lanes.len() - 1).ok();
         }
-        self.lanes.push(None);
-        u16::try_from(self.lanes.len() - 1).ok()
+        self.evict()
+    }
+
+    /// Gives back every lane held longer than a line is worth drawing.
+    ///
+    /// The lane is closed in this row's `open` mask and not handed out again until the next
+    /// row, so the line stops with a gap under it rather than appearing to run on into
+    /// whatever is drawn there next.
+    fn retire_stale(&mut self) {
+        if self.clock < self.next_sweep {
+            return;
+        }
+        let Some(cutoff) = self.clock.checked_sub(LINE_LIMIT) else {
+            return;
+        };
+        let mut oldest = u64::MAX;
+        for i in 0..self.lanes.len() {
+            let stale = self.lanes[i]
+                .as_ref()
+                .is_some_and(|(_, at)| *at < cutoff)
+                .then(|| self.lanes[i].as_ref().map(|(key, _)| key.clone()))
+                .flatten();
+            if let Some(key) = stale {
+                self.reserved.remove(&key);
+                self.lanes[i] = None;
+                if let Ok(lane) = u16::try_from(i) {
+                    self.freed_this_row.push(lane);
+                }
+            } else if let Some((_, at)) = &self.lanes[i] {
+                oldest = oldest.min(*at);
+            }
+        }
+        self.next_sweep = oldest.saturating_add(LINE_LIMIT);
+        self.trim();
+    }
+
+    /// Takes back the lane whose reservation has been outstanding longest.
+    ///
+    /// The kernel keeps more branches open at once than a column can show: the frontier is
+    /// sixty-odd lanes deep in its history, so with thirty-one every lane was reserved for a
+    /// merge parent tens of thousands of rows below and every commit after row 555 was drawn
+    /// in the spill lane — one column of nodes beside thirty lines belonging to nothing on
+    /// screen. Recycling the oldest reservation keeps the graph the width it can draw. What is
+    /// lost is the line from a merge to a parent so far below that no screen shows both: the
+    /// `open` mask closes it at this row, so it stops rather than joining the wrong commit.
+    fn evict(&mut self) -> Option<u16> {
+        let oldest = self
+            .lanes
+            .iter()
+            .enumerate()
+            .take(SPILL as usize)
+            .filter_map(|(i, slot)| slot.as_ref().map(|(key, at)| (i, key, *at)))
+            .filter(|(i, _, _)| u16::try_from(*i).is_ok_and(|l| !self.freed_this_row.contains(&l)))
+            .min_by_key(|(_, _, at)| *at)
+            .map(|(i, key, _)| (i, key.clone()));
+
+        let (index, key) = oldest?;
+        self.reserved.remove(&key);
+        self.lanes[index] = None;
+        u16::try_from(index).ok()
     }
 
     fn free(&mut self, lane: u16) {
