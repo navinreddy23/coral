@@ -378,3 +378,27 @@ describe('the picture on a tab', () => {
     });
   });
 });
+
+describe('a collapsed group', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    invoke.mockResolvedValue(session());
+  });
+
+  /**
+   * The count lives on the chip, and its colours have to come from the chip's own rule.
+   * A second `.tally` elsewhere in the sheet once won the cascade and painted it the strip's
+   * grey while it still inherited the chip's white text, which left the number invisible.
+   */
+  it('shows how many tabs it is hiding, on the chip itself', () => {
+    const tabs = new TabsState();
+    const s = session();
+    s.groups[0].collapsed = true;
+    tabs.session = s;
+    const { container } = render(TabBar, { props: { tabs, onOpen: () => {}, onAsk: vi.fn() } });
+
+    const tally = container.querySelector('.group .tally');
+    expect(tally?.textContent?.trim()).toBe('2');
+    expect(container.querySelectorAll('.band .tab')).toHaveLength(0);
+  });
+});

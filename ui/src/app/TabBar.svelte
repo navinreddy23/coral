@@ -513,7 +513,15 @@
     padding: 2px var(--space-2); border: 0; border-radius: 999px;
     background: var(--band); color: var(--bg-0);
   }
-  .tally { opacity: 0.85; margin-left: var(--space-1); }
+  /*
+   * The count on a collapsed group, drawn in the chip's own two colours the other way round.
+   * Any other pair is a guess that has to hold for eight band colours in two themes; this one
+   * contrasts exactly as well as the name beside it does, by construction.
+   */
+  .group .tally {
+    margin-left: var(--space-1); padding: 0 5px; border-radius: 999px;
+    background: var(--bg-0); color: var(--band); font-size: 10px; font-weight: 700;
+  }
 
   .tab {
     display: flex; align-items: center; position: relative;
@@ -631,7 +639,7 @@
     font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
     color: var(--fg-2);
   }
-  .tally {
+  .heading .tally {
     margin-left: auto; background: var(--bg-2); border-radius: 999px; padding: 0 6px;
     font-size: 10px;
   }
