@@ -386,12 +386,52 @@ impl RepoLocation {
         paths: &[&str],
         options: crate::diff::DiffOptions,
     ) -> Result<Vec<crate::diff::FileDiff>, CoralError> {
+        // `--diff-merges=first-parent` and `--root` belong to the one-commit form only: they
+        // say how to find something to diff against, and a pair of commits already has one.
+        self.tree_diff(
+            runner,
+            &["--diff-merges=first-parent", "--root"],
+            &[rev],
+            paths,
+            options,
+        )
+        .await
+    }
+
+    /// Diffs one commit against another, optionally limited to `paths`.
+    ///
+    /// Trees, not the walk between them, so two commits on different branches compare as
+    /// readily as two on the same one.
+    ///
+    /// # Errors
+    /// Propagates git failures and [`CoralError::Protocol`] if the output does not parse.
+    pub async fn compare_diff(
+        &self,
+        runner: &GitRunner,
+        from: &str,
+        to: &str,
+        paths: &[&str],
+        options: crate::diff::DiffOptions,
+    ) -> Result<Vec<crate::diff::FileDiff>, CoralError> {
+        self.tree_diff(runner, &[], &[from, to], paths, options)
+            .await
+    }
+
+    /// The three invocations both tree diffs are built from.
+    async fn tree_diff(
+        &self,
+        runner: &GitRunner,
+        mode: &[&str],
+        revs: &[&str],
+        paths: &[&str],
+        options: crate::diff::DiffOptions,
+    ) -> Result<Vec<crate::diff::FileDiff>, CoralError> {
         let base = |args: &[&str]| {
             let c = GitCommand::read("diff-tree", self.display_path())
                 .args(["diff-tree", "-r", "-M", "--no-commit-id"])
-                .args(["--diff-merges=first-parent", "--root"])
+                .args(mode)
                 .args(args)
-                .arg(rev);
+                .args(revs);
             if paths.is_empty() {
                 c
             } else {

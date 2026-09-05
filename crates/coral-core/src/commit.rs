@@ -267,6 +267,38 @@ impl crate::repo::RepoLocation {
         })
     }
 
+    /// The files that differ between two commits.
+    ///
+    /// The pair as the graph reads it: `from` is the older of the two, so what it gained on the
+    /// way to `to` is an addition. Whichever way round they are given, git compares the trees
+    /// and not the walk between them, so a commit on a side branch compares perfectly well
+    /// with one on the mainline.
+    ///
+    /// # Errors
+    /// Propagates git failures, including an unknown revision.
+    pub async fn compare(
+        &self,
+        runner: &crate::process::GitRunner,
+        from: &str,
+        to: &str,
+    ) -> Result<Vec<ChangedFile>, crate::error::CoralError> {
+        let out = runner
+            .output(
+                crate::process::GitCommand::read("diff-tree", self.display_path())
+                    .args([
+                        "diff-tree",
+                        "-r",
+                        "-z",
+                        "--name-status",
+                        "-M",
+                        "--no-commit-id",
+                    ])
+                    .args([from, to]),
+            )
+            .await?;
+        Ok(parse_name_status(&out.stdout))
+    }
+
     /// The files one commit changed, against its first parent.
     ///
     /// Without a merge flag a merge commit reports no files at all. `--diff-merges=first-parent`

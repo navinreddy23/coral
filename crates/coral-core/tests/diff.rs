@@ -514,3 +514,80 @@ fn ignoring_whitespace_keeps_a_real_change() {
         assert_eq!((files[0].added, files[0].removed), (Some(1), Some(1)));
     });
 }
+
+/// Two commits picked out of the graph, compared directly.
+#[test]
+fn two_commits_compare_by_their_trees() {
+    let repo = TestRepo::new()
+        .write("a.txt", "one\n")
+        .commit("first")
+        .write("a.txt", "two\n")
+        .write("b.txt", "added later\n")
+        .commit("second")
+        .write("c.txt", "later still\n")
+        .commit("third");
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+        // Two commits apart, so the answer is not any one commit's own diff.
+        let files = loc.compare(&runner, "HEAD~2", "HEAD").await.unwrap();
+        let named: Vec<_> = files
+            .iter()
+            .map(|f| (f.path.to_string(), f.change))
+            .collect();
+        assert_eq!(
+            named,
+            [
+                ("a.txt".to_owned(), FileChange::Modified),
+                ("b.txt".to_owned(), FileChange::Added),
+                ("c.txt".to_owned(), FileChange::Added),
+            ]
+        );
+
+        // And the patch for one of them, which is what clicking a file asks for.
+        let patch = loc
+            .compare_diff(
+                &runner,
+                "HEAD~2",
+                "HEAD",
+                &["a.txt"],
+                DiffOptions::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(patch.len(), 1);
+        assert_eq!((patch[0].added, patch[0].removed), (Some(1), Some(1)));
+        let added: Vec<_> = patch[0].hunks[0]
+            .lines
+            .iter()
+            .filter(|l| l.kind == LineKind::Add)
+            .map(|l| l.text.to_string())
+            .collect();
+        assert_eq!(added, ["two"]);
+    });
+}
+
+/// Given the pair the other way round, git compares the same two trees in the other direction.
+#[test]
+fn comparing_backwards_reads_as_the_reverse() {
+    let repo = TestRepo::new()
+        .write("a.txt", "one\n")
+        .commit("first")
+        .write("b.txt", "new file\n")
+        .commit("second");
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+        let forward = loc.compare(&runner, "HEAD~1", "HEAD").await.unwrap();
+        assert_eq!(forward[0].change, FileChange::Added);
+
+        let backward = loc.compare(&runner, "HEAD", "HEAD~1").await.unwrap();
+        assert_eq!(backward[0].change, FileChange::Deleted);
+    });
+}
