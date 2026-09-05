@@ -906,7 +906,7 @@ impl GitRunner {
         argv: Vec<String>,
         out: &std::process::Output,
     ) -> CoralError {
-        let stderr = String::from_utf8_lossy(&out.stderr).trim().to_owned();
+        let stderr = why_it_failed(&String::from_utf8_lossy(&out.stderr));
         match out.status.code() {
             Some(code) => CoralError::GitExit {
                 label,
@@ -1197,5 +1197,133 @@ mod tests {
     fn status_class_keeps_the_index_writable() {
         assert!(!GitClass::Status.no_optional_locks());
         assert!(GitClass::Read.no_optional_locks());
+    }
+}
+
+/// What git said went wrong, without what it said while it was working.
+///
+/// A network command writes its progress to stderr and its reason at the end, so a failed pull
+/// was reported as "remote: Enumerating objects: 5, done. remote: Counting objects: 20% (1/5)…"
+/// — two hundred characters of counting where "Not possible to fast-forward" was the answer.
+///
+/// Where git names the failure outright, that is the whole message: its `hint:` lines advise
+/// running `git merge --no-ff` or `git rebase`, which is advice for a terminal and not for a
+/// window whose Pull button offers both. Otherwise everything that is not a counter, and
+/// failing that the last few lines, because a message nobody wrote a rule for beats none.
+fn why_it_failed(stderr: &str) -> String {
+    // Progress is redrawn with carriage returns, so "Rebasing (1/1)\rerror: could not apply" is
+    // one line to `lines()` and hides the `error:` that names the failure. Only what survives
+    // the last redraw of each line counts, which is also all a terminal would have shown.
+    let shown: Vec<String> = stderr
+        .lines()
+        .map(|line| {
+            line.rsplit('\r')
+                .next()
+                .unwrap_or(line)
+                .trim_end()
+                .to_owned()
+        })
+        .collect();
+    let lines: Vec<&str> = shown.iter().map(String::as_str).collect();
+    let named: Vec<&str> = lines
+        .iter()
+        .copied()
+        .filter(|l| names_a_failure(l))
+        .collect();
+    if !named.is_empty() {
+        return named.join("\n");
+    }
+
+    let kept: Vec<&str> = lines
+        .iter()
+        .copied()
+        .filter(|line| !line.trim().is_empty() && !is_progress(line))
+        .collect();
+    if kept.is_empty() {
+        let tail = lines.len().saturating_sub(3);
+        return lines[tail..].join("\n").trim().to_owned();
+    }
+    kept.join("\n")
+}
+
+/// A line that says what went wrong rather than what to do about it.
+fn names_a_failure(line: &str) -> bool {
+    let bare = line.trim().strip_prefix("remote:").unwrap_or(line).trim();
+    bare.starts_with("fatal:") || bare.starts_with("error:") || bare.starts_with("ERROR:")
+}
+
+/// A line git writes to say it is still going.
+fn is_progress(line: &str) -> bool {
+    const COUNTERS: [&str; 6] = [
+        "Enumerating objects:",
+        "Counting objects:",
+        "Compressing objects:",
+        "Writing objects:",
+        "Receiving objects:",
+        "Resolving deltas:",
+    ];
+    let bare = line.trim().strip_prefix("remote:").unwrap_or(line).trim();
+    COUNTERS.iter().any(|c| bare.starts_with(c))
+        || bare.starts_with("Total ")
+        || bare.starts_with("Unpacking objects:")
+        || bare.starts_with("Updating files:")
+}
+
+#[cfg(test)]
+mod failure_tests {
+    use super::why_it_failed;
+
+    #[test]
+    fn keeps_the_reason_and_drops_the_counting() {
+        // What a diverged `git pull --ff-only` actually writes, progress first.
+        let stderr = "remote: Enumerating objects: 5, done.\n\
+                      remote: Counting objects: 100% (5/5), done.\n\
+                      remote: Compressing objects: 100% (2/2), done.\n\
+                      remote: Total 3 (delta 1), reused 0 (delta 0)\n\
+                      hint: Diverging branches can't be fast-forwarded\n\
+                      fatal: Not possible to fast-forward, aborting.";
+        // The reason alone: git's hints say to run `git merge --no-ff` or `git rebase`, which
+        // is advice for a terminal, not for a window whose Pull button offers both.
+        assert_eq!(
+            why_it_failed(stderr),
+            "fatal: Not possible to fast-forward, aborting."
+        );
+    }
+
+    #[test]
+    fn sees_past_a_line_git_redrew() {
+        // What a stopped `git pull --rebase` writes: the progress counter and the failure share
+        // one line, separated by a carriage return.
+        let stderr = "From gitlab.com:someone/repo\n\
+                      Rebasing (1/1)\rerror: could not apply 051e21f… we changed hello";
+        assert_eq!(
+            why_it_failed(stderr),
+            "error: could not apply 051e21f… we changed hello"
+        );
+    }
+
+    #[test]
+    fn keeps_the_advice_when_nothing_names_the_failure() {
+        let stderr = "remote: Counting objects: 100% (5/5), done.\nhint: something to try";
+        assert_eq!(why_it_failed(stderr), "hint: something to try");
+    }
+
+    #[test]
+    fn keeps_what_the_host_says_even_though_it_starts_with_remote() {
+        let stderr = "remote: Enumerating objects: 1, done.\n\
+                      remote: ERROR: The project could not be found";
+        assert_eq!(
+            why_it_failed(stderr),
+            "remote: ERROR: The project could not be found"
+        );
+    }
+
+    #[test]
+    fn falls_back_to_the_last_of_it_when_every_line_is_progress() {
+        let stderr = "remote: Counting objects: 50% (1/2)\nremote: Counting objects: 100% (2/2)";
+        assert_eq!(
+            why_it_failed(stderr),
+            "remote: Counting objects: 50% (1/2)\nremote: Counting objects: 100% (2/2)"
+        );
     }
 }
