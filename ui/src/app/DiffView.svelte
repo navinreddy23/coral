@@ -253,13 +253,17 @@
         <span class="removed">−{diff.file.removed ?? 0}</span>
       </span>
     {/if}
-    <div class="toggle" role="group" aria-label="What to show about this file">
-      <button class:on={diff.view === 'diff'} onclick={() => diff.setView('diff')}>Diff</button>
-      <button class:on={diff.view === 'blame'} onclick={() => diff.setView('blame')}>Blame</button>
-      <button class:on={diff.view === 'history'} onclick={() => diff.setView('history')}>
-        History
-      </button>
-    </div>
+    <!-- Not for a comparison of two commits: blame and history are about one file's past,
+         and there is no single revision here to have one. -->
+    {#if diff.source !== 'compare'}
+      <div class="toggle" role="group" aria-label="What to show about this file">
+        <button class:on={diff.view === 'diff'} onclick={() => diff.setView('diff')}>Diff</button>
+        <button class:on={diff.view === 'blame'} onclick={() => diff.setView('blame')}>Blame</button>
+        <button class:on={diff.view === 'history'} onclick={() => diff.setView('history')}>
+          History
+        </button>
+      </div>
+    {/if}
 
     {#if diff.view === 'diff'}
       <div class="toggle" role="group" aria-label="Diff layout">

@@ -79,9 +79,16 @@ export class DiffState {
     if (wholeFileFor(mode) !== before) void this.#reread();
   }
 
-  /** The change, who wrote each line, or what has touched the file. Remembered like the mode. */
+  /**
+   * The change, who wrote each line, or what has touched the file. Remembered like the mode.
+   *
+   * Except for a comparison of two commits, which is always the change itself: blame and
+   * history are about one file's past, and opening a comparison while the panel was left on
+   * the history tab showed a file's history beside a range's diff, with nothing selected in
+   * the list. The remembered choice is left alone, so it comes back with the next file.
+   */
   get view(): FileView {
-    return this.#views.current.fileView;
+    return this.source === 'compare' ? 'diff' : this.#views.current.fileView;
   }
 
   setView(view: FileView): void {

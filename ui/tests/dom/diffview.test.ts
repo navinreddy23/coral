@@ -134,3 +134,46 @@ describe('the diff viewer', () => {
     expect(container.querySelector('.error')?.textContent).toContain('did not change');
   });
 });
+
+describe('a comparison of two commits', () => {
+  /** The panel as a compare opens it, with the remembered view left on history. */
+  function compared() {
+    const views = new ViewsState();
+    const diff = new DiffState(views);
+    diff.setView('history');
+    diff.setMode('inline');
+    diff.path = 'kernel/sched/core.c';
+    diff.file = fileDiff();
+    diff.source = 'compare';
+    return diff;
+  }
+
+  it('shows the change itself, whatever view the last file was left on', () => {
+    // Blame and history are about one file's past. A range has no single revision to have
+    // one, and the panel used to show a file's history beside the range's diff.
+    const diff = compared();
+    expect(diff.view).toBe('diff');
+    const { container } = render(DiffView, { props: { diff, onClose: () => {} } });
+    expect(container.querySelector('table.lines')).not.toBeNull();
+    expect(container.querySelector('table.lines.blame')).toBeNull();
+  });
+
+  it('offers no blame or history tab for it', () => {
+    const { container } = render(DiffView, {
+      props: { diff: compared(), onClose: () => {} },
+    });
+    const labels = [...container.querySelectorAll('header button')].map((b) => b.textContent?.trim());
+    expect(labels).not.toContain('Blame');
+    expect(labels).not.toContain('History');
+  });
+
+  it('leaves the remembered view alone, so the next file comes back to it', () => {
+    const views = new ViewsState();
+    const diff = new DiffState(views);
+    diff.setView('blame');
+    diff.source = 'compare';
+    expect(diff.view).toBe('diff');
+    diff.source = 'commit';
+    expect(diff.view).toBe('blame');
+  });
+});
