@@ -4,7 +4,8 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 vi.mock('../src/ipc/invoke', () => ({ invoke: vi.fn() }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 
-const { render } = await import('../src/state/merge.svelte');
+const { MergeState, render } = await import('../src/state/merge.svelte');
+const commands = await import('../src/ipc/commands');
 import type { Block } from '../src/ipc/types';
 
 const common = (...lines: string[]): Block => ({ kind: 'common', lines });
@@ -57,5 +58,51 @@ describe('rendering a resolved file', () => {
     // The second conflict is index 1 even though it is the fourth block.
     const blocks = [common('a'), conflict(['x'], ['y']), common('b'), conflict(['p'], ['q'])];
     expect(render(blocks, { 1: 'theirs' })).toBe('a\nx\nb\nq\n');
+  });
+});
+
+describe('stepping an operation on', () => {
+  /** A state already loaded against a repository, with the reads stubbed out. */
+  function loaded() {
+    const merge = new MergeState();
+    vi.spyOn(commands, 'repoOperation').mockResolvedValue({
+      state: 'rebase',
+      labels: { ours: 'main', theirs: 'topic', swapped: true },
+      progress: { current: 2, total: 2 },
+      headName: 'topic',
+      stoppedAt: null,
+      interactive: false,
+    });
+    vi.spyOn(commands, 'repoConflicts').mockResolvedValue([
+      { path: 'dummy.txt', kind: 'both_modified', binary: false, deleteModify: false },
+    ]);
+    return merge;
+  }
+
+  it('keeps git’s reason when the rebase stops on the next commit', async () => {
+    const merge = loaded();
+    vi.spyOn(commands, 'operationStep').mockResolvedValue({
+      completed: false,
+      state: 'rebase',
+      conflicts: ['dummy.txt'],
+      message: 'error: could not apply 91e605d... local: dummy1 file',
+    });
+
+    expect(await merge.step('continue')).toBe(false);
+    expect(merge.stopped).toContain('could not apply 91e605d');
+  });
+
+  it('drops it once the operation finishes', async () => {
+    const merge = loaded();
+    vi.spyOn(commands, 'operationStep').mockResolvedValue({
+      completed: true,
+      state: 'clean',
+      conflicts: [],
+      message: '',
+    });
+
+    merge.stopped = 'error: could not apply 91e605d... local: dummy1 file';
+    expect(await merge.step('continue')).toBe(true);
+    expect(merge.stopped).toBe('');
   });
 });

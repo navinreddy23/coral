@@ -30,6 +30,15 @@ export class MergeState {
   busy = $state(false);
   error = $state<string | null>(null);
 
+  /**
+   * Why the operation stopped, in git's own words.
+   *
+   * A rebase stops once per conflicting commit, so continuing often lands on the next one
+   * rather than finishing. Without this the window looked identical either way — the file list
+   * simply refilled — and nothing said which commit had failed to apply.
+   */
+  stopped = $state('');
+
   #path = '';
 
   /** True while git is mid-merge, mid-rebase, or otherwise stopped. */
@@ -51,6 +60,7 @@ export class MergeState {
       const [operation, files] = await Promise.all([repoOperation(path), repoConflicts(path)]);
       this.operation = operation;
       this.files = files;
+      if (operation.state === 'clean') this.stopped = '';
       if (this.active !== null && !files.some((f) => f.path === this.active)) this.close();
     } catch (e) {
       this.error = messageOf(e);
@@ -124,6 +134,7 @@ export class MergeState {
     this.error = null;
     try {
       const out = await operationStep(this.#path, step);
+      this.stopped = out.completed ? '' : out.message;
       await this.#reload();
       return out.completed;
     } catch (e) {

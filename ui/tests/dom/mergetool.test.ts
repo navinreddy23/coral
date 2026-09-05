@@ -114,4 +114,19 @@ describe('the merge tool', () => {
     expect(container.querySelector('.side.base')).toBeNull();
     expect(container.querySelectorAll('.side')).toHaveLength(2);
   });
+
+  it('says which commit failed to apply when a step stops on the next one', () => {
+    // A rebase stops once per conflicting commit. Continuing usually lands on the next one,
+    // and without this the window looked identical to having finished: the file list refills
+    // and nothing says why.
+    const merge = state([conflicted()], true);
+    merge.stopped = 'error: could not apply 91e605d... local: dummy1 file';
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+    expect(container.textContent).toContain('could not apply 91e605d');
+  });
+
+  it('says nothing of the kind before a step has stopped', () => {
+    const { container } = render(MergeTool, { props: { merge: state([conflicted()]), onDone: noop } });
+    expect(container.querySelector('.stopped')).toBeNull();
+  });
 });

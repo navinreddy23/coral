@@ -59,6 +59,12 @@
   {#if merge.error}
     <p class="error">{merge.error}</p>
   {/if}
+  <!-- A rebase stops once per conflicting commit, so continuing usually lands on the next one.
+       Saying which commit failed to apply is the difference between that and a file list that
+       has quietly refilled. -->
+  {#if merge.stopped !== ''}
+    <p class="stopped mono">{merge.stopped}</p>
+  {/if}
 
   <div class="body">
     <ul class="files">
@@ -233,4 +239,9 @@
   }
   .muted { color: var(--fg-2); padding: var(--space-3); font-size: 12px; }
   .error { color: var(--danger); padding: var(--space-2) var(--space-3); font-size: 12px; margin: 0; }
+  .stopped {
+    margin: 0; padding: var(--space-2) var(--space-3); font-size: 11px;
+    color: var(--warn); background: var(--warn-soft);
+    border-bottom: 1px solid var(--border); white-space: pre-wrap;
+  }
 </style>
