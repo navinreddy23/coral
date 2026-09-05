@@ -6,7 +6,7 @@ expression: out.json
   "schema": 1,
   "ok": true,
   "result": {
-    "coral": "0.1.0",
+    "coral": "[coralversion]",
     "git": "[gitversion]",
     "gitPath": "[gitpath]",
     "gitMinimum": "2.40.0"

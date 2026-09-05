@@ -97,8 +97,9 @@ benchmarks; `just kernel-test` runs the scenarios against it.
 Those four lines are Linux. `docs/build/os.md` has the whole of it for Linux, macOS and
 Windows, including the bundles and what to do when a build fails.
 
-See `CLAUDE.md` for the working rules, `docs/ARCHITECTURE.md` for the design, and
-`docs/DECISIONS.md` for why things are the way they are.
+See `CHANGELOG.md` for what changed, `CLAUDE.md` for the working rules,
+`docs/ARCHITECTURE.md` for the design, and `docs/DECISIONS.md` for why things are the way they
+are.
 
 ## License
 

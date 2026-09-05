@@ -108,7 +108,9 @@ breadcrumb back to the graph.
 **Staging panel** (WIP selected) — "Unstaged Files" with "Stage all files", "Staged Files" with
 "Unstage all files", each row with hover buttons to stage/unstage and to discard with
 confirmation; a conflicted files section during operations. Below: summary input with character
-count, description textarea, amend checkbox, and "Commit changes to N files" (Ctrl/Cmd+Enter).
+count, description textarea, an amend checkbox that fills the message in from the commit it
+would replace and takes it back if it is unticked untouched, and "Commit changes to N files"
+(Ctrl/Cmd+Enter).
 During an operation the button becomes "Commit and merge" / "Continue rebase" with an Abort
 link.
 

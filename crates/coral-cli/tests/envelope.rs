@@ -18,6 +18,9 @@ macro_rules! stable {
         r.add_redaction(".result.commonDir", "[commondir]");
         r.add_redaction(".result.gitVersion", "[gitversion]");
         r.add_redaction(".result.git", "[gitversion]");
+        // The number itself is asserted directly where it matters. Pinning it here would make
+        // every release edit a snapshot, which teaches everyone to accept snapshot changes.
+        r.add_redaction(".result.coral", "[coralversion]");
         r.add_redaction(".result.gitPath", "[gitpath]");
         r.add_redaction(".error.message", "[message]");
         r
@@ -70,6 +73,8 @@ async fn open_rejects_a_directory_that_is_not_a_repository() {
 async fn version_reports_the_resolved_git() {
     let out = coral_cli::run(argv(&["--json", "version"])).await;
 
+    // The CLI and the window have to report the same number, and both take it from the crate.
+    assert_eq!(out.json["result"]["coral"], env!("CARGO_PKG_VERSION"));
     stable!().bind(|| insta::assert_json_snapshot!("version", out.json));
 }
 

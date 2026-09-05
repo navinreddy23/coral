@@ -234,3 +234,25 @@ part of any path, case-insensitively, the way the message and author passes matc
 Searching diff content is worth having one day, but as its own thing with its own affordance and
 its own warning about the cost, not folded into a filter that is expected to answer while you
 type.
+
+## A shallow clone is grafted rather than refused or shelled out to
+
+gix's traversal does not read `.git/shallow`, so a shallow clone's boundary commit sent the
+walk after a parent that was never fetched and the graph came back as an error. Three ways out
+were on the table.
+
+Refusing to draw a shallow repository was never one worth having: `west` clones every module in
+a Zephyr workspace one commit deep, so that is a whole class of real workspace where most tabs
+would show nothing.
+
+Falling back to `git rev-list` for these repositories would have worked — git grafts natively,
+and a shallow clone is small by definition, so the subprocess cost would not have mattered. It
+was rejected because it makes the subprocess stream a production path rather than the oracle it
+is, and then two implementations have to agree about every later feature rather than one being
+checked against the other.
+
+Grafting at the point the walker reads an object is what git itself does, costs a copy of one
+commit, and leaves a single implementation in production. The one thing it forces is putting
+the commit-graph aside while grafting, since the graph records the parents the clone does not
+have; git refuses to write a commit-graph for a shallow clone for exactly that reason, so no
+real repository loses anything by it.

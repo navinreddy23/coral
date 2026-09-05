@@ -82,6 +82,14 @@ each repository's choice in `scope.json` and folds it into the graph cache's fre
 which otherwise hashes only the refs — hiding a branch moves no ref, so the cache would have
 served the walk of everything and the eye would have appeared to do nothing.
 
+**A shallow clone is grafted at its boundary.** `.git/shallow` names the commits whose parents
+were never fetched; git reads it and treats them as roots, and gix's traversal does not, so the
+walk asked the object database for a parent that is not there and failed. Those commits are
+handed to the walker with their `parent` lines removed, which is what grafting has always
+meant, and the commit-graph is put aside while it happens — it records the parents the clone
+does not have, and reading them from there would step straight past the graft. This is not a
+corner: `west` clones every module in a Zephyr workspace one commit deep.
+
 The window fetches frames rather than the graph. `wire::encode` caps a frame at
 `ROWS_PER_FRAME`, so on the kernel one frame is 4096 of 1.48M rows: rows are absolute
 everywhere in the UI and the frame is a window into them, refetched when the visible range
@@ -217,8 +225,10 @@ them and a table that size is one layer the engine repaints on every wheel notch
 history are read only when the view that shows them is asked for: each is a walk of the file's
 whole history and costs seconds on a large repository.
 
-**Finding a commit** matches the message, the author and the object id, which takes three git
-invocations because `--author` is ANDed with `--grep`. Matches are resolved to rows in Rust and
+**Finding a commit** matches the message, the author, the paths it touched and the object id.
+That is four git invocations rather than one, because `--author` is ANDed with `--grep` and a
+pathspec is ANDed with both; they run together rather than in sequence, since each is a walk of
+the whole repository and eleven seconds on the kernel. Matches are resolved to rows in Rust and
 sorted by row, so stepping through them moves down the list rather than about it.
 
 **Every surface carrying text paints its own opaque background.** WebKit antialiases text on a
