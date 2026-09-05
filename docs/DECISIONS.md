@@ -218,3 +218,19 @@ about that repository, and someone opening it on a second machine is not asking 
 spikes back. So it goes in `scope.json` beside `session.json`, keyed by repository path, and
 the CLI can be given the same selection with `--solo` and `--hide`.
 
+
+## The graph filter searches paths, not diff content
+
+The interface specification asked for `-S`, git's pickaxe. It answers a different question from
+the one a filter is asked. `-S` searches the *content* of every diff for a string, so searching
+`sidebar` returns every commit that added or removed that word anywhere, and it walks every
+commit and every diff to do it — minutes on a repository of any size, against the seconds the
+other three passes take.
+
+What somebody typing a file name into a filter means is "which commits touched this", and a
+pathspec answers exactly that from the index the walk already has. `:(icase)*query*` matches any
+part of any path, case-insensitively, the way the message and author passes match.
+
+Searching diff content is worth having one day, but as its own thing with its own affordance and
+its own warning about the cost, not folded into a filter that is expected to answer while you
+type.

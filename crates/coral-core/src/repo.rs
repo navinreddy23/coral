@@ -532,9 +532,10 @@ impl RepoLocation {
         // Together rather than one after the other. Each pass is a walk of every commit in
         // the repository — eleven seconds on the kernel — and run in sequence the window sat
         // on "searching…" for the sum of them.
-        let (by_message, by_author) = tokio::try_join!(
+        let (by_message, by_author, by_path) = tokio::try_join!(
             self.matching(runner, "--grep", query, limit),
             self.matching(runner, "--author", query, limit),
+            self.touching_path(runner, query, limit),
         )?;
 
         let mut passes = Vec::new();
@@ -543,6 +544,7 @@ impl RepoLocation {
         }
         passes.push(by_message);
         passes.push(by_author);
+        passes.push(by_path);
 
         let mut out = crate::history::merged(&passes);
         out.truncate(usize::try_from(limit).unwrap_or(usize::MAX));
@@ -567,6 +569,40 @@ impl RepoLocation {
                 .map(str::to_owned)
                 .collect(),
         }
+    }
+
+    /// Commits that touched a file whose path holds `query`.
+    ///
+    /// A pathspec rather than `-S`. The two answer different questions and only one of them is
+    /// the question a filter is asked: `-S` searches the *content* of every diff for a string,
+    /// which on a repository of any size is minutes of work and returns every commit that
+    /// happened to add or remove the word. What people mean by searching for `sidebar` is
+    /// "which commits touched that file", and a pathspec answers it from the same index the
+    /// walk already uses.
+    ///
+    /// `:(icase)` matches the way the other two passes do, and the `*` on each side means the
+    /// query can be any part of the path rather than a whole one. A query carrying pathspec
+    /// magic of its own is matched as the pattern it looks like, which is the ordinary risk of
+    /// a glob and never worse than finding nothing.
+    async fn touching_path(
+        &self,
+        runner: &GitRunner,
+        query: &str,
+        limit: u64,
+    ) -> Result<Vec<String>, CoralError> {
+        let out = runner
+            .output(
+                GitCommand::read("log", self.display_path())
+                    .args(["log", "--all", "--format=%H"])
+                    .arg(format!("--max-count={limit}"))
+                    .arg("--")
+                    .arg(format!(":(icase)*{query}*")),
+            )
+            .await?;
+        Ok(String::from_utf8_lossy(&out.stdout)
+            .split_whitespace()
+            .map(str::to_owned)
+            .collect())
     }
 
     async fn matching(

@@ -33,8 +33,9 @@ included. Panel splitters are draggable.
 Undo and Redo, disabled when the journal is empty, with a tooltip naming the operation. Pull
 with a dropdown: fast-forward if possible (default), fetch all, pull (rebase), pull (merge).
 Push. Branch, creating at the selected commit or HEAD with an inline name input in the graph.
-Stash. Pop. On the right, a graph filter searching message, author, SHA and file paths (`-S`
-via `git log`), with a result count and up/down navigation.
+Stash. Pop. Patch, which writes the commits between two picked ones out as a series or takes a
+patch file in. On the right, a graph filter searching message, author, SHA and file path, with a
+result count and up/down navigation.
 
 ## Sidebar
 

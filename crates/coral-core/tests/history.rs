@@ -304,3 +304,61 @@ fn searching_stops_at_the_limit() {
         );
     });
 }
+
+/// The fourth thing a filter is asked: which commits touched this file.
+///
+/// A pathspec rather than `-S`. `-S` searches the content of every diff, which answers a
+/// different question and takes minutes on a real repository.
+#[test]
+fn searching_matches_a_file_path() {
+    let repo = TestRepo::new()
+        .write("src/parser.rs", "1\n")
+        .commit("first")
+        .write("docs/guide.md", "2\n")
+        .commit("second")
+        .write("src/parser.rs", "3\n")
+        .commit("third");
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+        // Two commits touched that file, and no message or author mentions it.
+        let by_path = loc.search_commits(&runner, "parser.rs", 50).await.unwrap();
+        assert_eq!(by_path.len(), 2, "both commits that touched the parser");
+
+        // Any part of the path, not the whole of it, and not only the leaf.
+        assert_eq!(
+            loc.search_commits(&runner, "docs/", 50)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            loc.search_commits(&runner, "guide", 50)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+
+        // The same case-insensitivity the other passes have.
+        assert_eq!(
+            loc.search_commits(&runner, "PARSER.RS", 50)
+                .await
+                .unwrap()
+                .len(),
+            2
+        );
+
+        // A path nothing has is not a match, and not an error either.
+        assert!(
+            loc.search_commits(&runner, "nowhere.txt", 50)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    });
+}
