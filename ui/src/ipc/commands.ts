@@ -391,6 +391,18 @@ export function hostingLogout(path: string): Promise<HostView> {
   return invoke<HostView>('hosting_logout', { path });
 }
 
+/** Opens a pull or merge request on the host, and answers with the one it made. */
+export function hostingCreate(
+  path: string,
+  title: string,
+  body: string,
+  source: string,
+  target: string,
+  draft: boolean,
+): Promise<PullRequest> {
+  return invoke<PullRequest>('hosting_create', { path, title, body, source, target, draft });
+}
+
 export function hostingPullRequests(path: string): Promise<PullRequest[]> {
   return invoke<PullRequest[]>('hosting_pull_requests', { path });
 }

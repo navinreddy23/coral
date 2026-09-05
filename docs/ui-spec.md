@@ -42,7 +42,11 @@ result count and up/down navigation.
 Sections collapse and remember state; a filter box at the top filters all of them. Rows have
 hover actions. The current branch is bold with a check mark. Remote rows show a host icon and
 the signed-in avatar when a hosting provider matches, with branches nested beneath. Pull
-requests group by remote showing number, title, author avatar and state. Tags sort by version.
+requests group by remote showing number, title, author avatar and state, and a local branch's
+menu offers to open one on a form naming the branch it would land on, with a title, a
+description and a draft switch. That entry appears only where a host is signed in to talk to,
+and the branches it offers are the remote's: a branch this machine has never pushed is not one
+the host can be asked to merge into. Tags sort by version.
 Stashes show message and age. Submodules are listed only.
 
 Every branch and tag row carries an eye on its right, beside the dots, taking that ref out of

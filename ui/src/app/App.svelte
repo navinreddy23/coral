@@ -25,6 +25,7 @@
   import { ActionsState } from '../state/actions.svelte';
   import { CommitState } from '../state/commit.svelte';
   import MergeTool from './MergeTool.svelte';
+  import NewRequest from './NewRequest.svelte';
   import { MergeState } from '../state/merge.svelte';
   import RebasePicker from './RebasePicker.svelte';
   import { RebaseState } from '../state/rebase.svelte';
@@ -252,6 +253,29 @@
   let filterTick = $state(0);
   const merge = new MergeState();
   const hosting = new HostingState();
+
+  /** The branch a pull or merge request is being opened for, or null. */
+  let proposing = $state<string | null>(null);
+
+  /** What the host calls one. GitHub says pull, GitLab says merge. */
+  const requestWord = $derived(
+    hosting.view?.host?.kind === 'gitlab' ? 'Merge request' : 'Pull request',
+  );
+
+  /**
+   * Branches the host could merge into, by their bare names.
+   *
+   * From the remote rather than from the local list: a branch that exists only on this machine
+   * is not something the host can be asked to merge into, and offering it would produce a
+   * refusal from the API rather than an answer.
+   */
+  const remoteBranchNames = $derived([
+    ...new Set(
+      refs.groups.remote
+        .map((r) => r.short.slice(r.short.indexOf('/') + 1))
+        .filter((name) => name !== '' && name !== 'HEAD'),
+    ),
+  ].sort());
   const rebase = new RebaseState();
   const signing = new SigningState();
   const ssh = new SshState();
@@ -657,6 +681,16 @@
     if (!current) {
       const [label, hint] = checkoutOf(ref);
       items.push({ kind: 'item', label, hint, disabled: busy, run: () => void goTo(ref) });
+    }
+
+    if (ref.kind.kind === 'local_branch' && hosting.available) {
+      items.push({ kind: 'separator' });
+      items.push({
+        kind: 'item',
+        label: `Open a ${requestWord.toLowerCase()} from ${ref.short}`,
+        disabled: busy,
+        run: () => (proposing = ref.short),
+      });
     }
 
     if (!current && ref.kind.kind !== 'stash') {
@@ -2775,6 +2809,19 @@
         }}
         onUpdate={(remote) => void initSubmodule(showSubmodule?.path ?? null, remote)}
         onRemove={() => void removeSubmodule()}
+      />
+    {/if}
+    {#if proposing !== null && info}
+      <NewRequest
+        repo={info.path}
+        source={proposing}
+        targets={remoteBranchNames}
+        label={requestWord}
+        onClose={() => (proposing = null)}
+        onOpened={(made) => {
+          toasts.push('ok', `${requestWord} opened`, `#${made.number} ${made.title}`);
+          void hosting.load(info?.path ?? '');
+        }}
       />
     {/if}
     {#if showRemotes && info}
