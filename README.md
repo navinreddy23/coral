@@ -4,6 +4,11 @@ A desktop Git client that stays quick on a repository nobody else is quick on. R
 Tauri 2 shell, Svelte 5 interface, and a command-line front end over the same engine, so
 everything the window does can be driven and tested without one.
 
+The interface is modelled on GitKraken: someone who uses that daily should be able to sit down
+at Coral and work without reading anything. The layout, density and interactions follow it
+deliberately. None of its assets, icons or code are used — the icons are Lucide, the faces are
+Inter and JetBrains Mono, and everything under the window is this project's own.
+
 The measure is the Linux kernel: 1.48M commits and a 96k-file worktree. It opens to a painted
 graph in well under a second, walks the whole history in about five, and scrolls at 60 fps.
 Those are budgets rather than boasts — `docs/ARCHITECTURE.md` lists them, and the benchmarks
