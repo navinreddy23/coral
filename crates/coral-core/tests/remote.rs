@@ -278,6 +278,66 @@ async fn a_non_fast_forward_push_reports_the_rejection() {
     let _ = repo;
 }
 
+/// The whole loop a rejected push puts someone through, end to end.
+///
+/// Push refused, pull with a rebase that stops on the conflict, resolve it, continue, push
+/// again. Every part of this has a test of its own; what this one is about is that they fit
+/// together, because in the window they are four buttons pressed in a row.
+#[tokio::test]
+async fn a_rejected_push_is_settled_by_rebasing_and_pushing_again() {
+    let (repo, _home, origin) = with_origin();
+    let (runner, loc) = open(&repo).await;
+
+    let other = Clone::of(&origin);
+    other.write("f.txt", "theirs\n");
+    other.git(&["commit", "--quiet", "-am", "their work"]);
+    other.git(&["push", "--quiet", "origin", "main"]);
+
+    let repo = repo.write("f.txt", "ours\n").commit("our work");
+    let opts = || PushOpts {
+        remote: Some("origin".into()),
+        refspec: Some("main".into()),
+        ..PushOpts::default()
+    };
+
+    let (_, sink) = collector();
+    let refused = loc.push(&runner, &opts(), sink).await.unwrap();
+    assert!(refused.iter().any(|r| r.flag == PushFlag::Rejected));
+
+    // Pulling with a rebase replays our commit onto theirs, and the same line stops it.
+    let stopped = loc
+        .pull(&runner, Some("origin"), PullMode::Rebase)
+        .await
+        .unwrap();
+    assert!(!stopped.completed, "it stopped on the conflict");
+    assert_eq!(stopped.conflicts, vec!["f.txt"]);
+
+    loc.resolve(
+        &runner,
+        "f.txt",
+        &coral_core::conflict::Resolution::Content("theirs\nours\n".into()),
+    )
+    .await
+    .unwrap();
+    let done = loc
+        .op(&runner, coral_core::ops::OpAction::Continue)
+        .await
+        .unwrap();
+    assert!(done.completed);
+
+    let (_, sink) = collector();
+    let accepted = loc.push(&runner, &opts(), sink).await.unwrap();
+    assert!(
+        accepted.iter().all(|r| r.flag != PushFlag::Rejected),
+        "{accepted:?}"
+    );
+    assert_eq!(
+        repo.git(["rev-parse", "HEAD"]),
+        repo.git(["rev-parse", "origin/main"]),
+        "and the remote is where we are"
+    );
+}
+
 #[tokio::test]
 async fn fetch_brings_down_new_commits_and_reports_progress() {
     let (repo, _home, origin) = with_origin();

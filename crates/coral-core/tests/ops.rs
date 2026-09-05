@@ -1,6 +1,7 @@
 //! Every mutating operation, and the stop-resolve-continue and abort paths that the conflict
 //! milestone depends on.
 
+use coral_core::conflict::Resolution;
 use coral_core::ops::{CommitOpts, MergeMode, OpAction, ResetMode};
 use coral_core::process::GitRunner;
 use coral_core::repo::{Head, OpState, RepoLocation};
@@ -323,6 +324,198 @@ async fn a_fast_forward_only_merge_refuses_to_diverge() {
         loc.op_state(),
         OpState::Clean,
         "a refused merge leaves nothing behind"
+    );
+}
+
+/// A branch that is only behind, which is what fast-forward is for.
+fn behind() -> TestRepo {
+    let r = TestRepo::new().write("f.txt", "base\n").commit("base");
+    r.git(["checkout", "--quiet", "-b", "side"]);
+    let r = r.write("f.txt", "ahead\n").commit("side change");
+    r.git(["checkout", "--quiet", "main"]);
+    r
+}
+
+#[tokio::test]
+async fn a_fast_forward_only_merge_moves_the_branch_when_it_can() {
+    let repo = behind();
+    let (runner, loc) = open(&repo).await;
+
+    let outcome = loc
+        .merge(&runner, "side", MergeMode::FfOnly, None)
+        .await
+        .unwrap();
+    assert!(outcome.completed);
+    assert_eq!(
+        repo.git(["rev-parse", "HEAD"]),
+        repo.git(["rev-parse", "side"]),
+        "the branch is the other one now"
+    );
+    assert_eq!(
+        repo.git(["rev-list", "--count", "--merges", "HEAD"]),
+        "0",
+        "and no merge commit was made"
+    );
+}
+
+#[tokio::test]
+async fn a_squash_merge_stages_the_change_without_committing_it() {
+    let repo = TestRepo::new().write("f.txt", "base\n").commit("base");
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo.write("g.txt", "theirs\n").commit("side change");
+    repo.git(["checkout", "--quiet", "main"]);
+    let (runner, loc) = open(&repo).await;
+
+    loc.merge(&runner, "side", MergeMode::Squash, None)
+        .await
+        .unwrap();
+
+    assert_eq!(repo.git(["show", ":g.txt"]), "theirs");
+    assert_eq!(
+        repo.git(["rev-list", "--count", "HEAD"]),
+        "1",
+        "nothing was committed"
+    );
+}
+
+/// Two commits that both touch the line the other branch changed.
+///
+/// The one scenario a rebase has to get right and the hardest to get right: it stops once per
+/// conflicting commit, and continuing lands on the next rather than finishing.
+fn two_conflicting_commits() -> TestRepo {
+    let r = TestRepo::new().write("f.txt", "base\n").commit("base");
+    r.git(["checkout", "--quiet", "-b", "side"]);
+    let r = r.write("f.txt", "theirs\n").commit("their change");
+    r.git(["checkout", "--quiet", "main"]);
+    let r = r.write("f.txt", "ours one\n").commit("our first change");
+    r.write("f.txt", "ours two\n").commit("our second change")
+}
+
+#[tokio::test]
+async fn a_rebase_stops_once_for_every_commit_that_conflicts() {
+    let repo = two_conflicting_commits();
+    let (runner, loc) = open(&repo).await;
+
+    let first = loc.rebase(&runner, "side", false).await.unwrap();
+    assert!(!first.completed);
+    assert!(
+        first.message.contains("our first change"),
+        "it says which commit stopped it: {}",
+        first.message
+    );
+
+    // The upstream side, which is not what the second commit was written against — so that
+    // one cannot apply either. Taking the replayed side would leave the file exactly as the
+    // next commit expects, and the rebase would sail through it.
+    loc.resolve(&runner, "f.txt", &Resolution::TakeOurs)
+        .await
+        .unwrap();
+    let second = loc.op(&runner, OpAction::Continue).await.unwrap();
+    assert!(
+        !second.completed,
+        "continuing lands on the next conflicting commit, it does not finish"
+    );
+    assert_eq!(second.state, OpState::Rebase);
+    assert_eq!(second.conflicts, vec!["f.txt"]);
+    assert!(
+        second.message.contains("our second change"),
+        "and names that one: {}",
+        second.message
+    );
+
+    loc.resolve(&runner, "f.txt", &Resolution::TakeTheirs)
+        .await
+        .unwrap();
+    let done = loc.op(&runner, OpAction::Continue).await.unwrap();
+    assert!(done.completed);
+    assert_eq!(loc.op_state(), OpState::Clean);
+    assert_eq!(
+        repo.git(["rev-parse", "--abbrev-ref", "HEAD"]),
+        "main",
+        "and it lands back on the branch it started from"
+    );
+    // Resolving the first one to the upstream's own content left it with nothing to say, and
+    // git drops a commit that comes out empty. The second is replayed on top, which is the
+    // part that matters: the rebase ran to the end rather than stopping for good.
+    assert_eq!(
+        repo.git(["log", "--format=%s", "-2"]),
+        "our second change\ntheir change"
+    );
+}
+
+#[tokio::test]
+async fn a_rebase_can_skip_the_commit_that_will_not_apply() {
+    let repo = two_conflicting_commits();
+    let (runner, loc) = open(&repo).await;
+
+    let stopped = loc.rebase(&runner, "side", false).await.unwrap();
+    assert!(!stopped.completed);
+
+    // Dropping the commit rather than resolving it, which is what git's --skip does and what
+    // the window offers beside Continue.
+    let next = loc.op(&runner, OpAction::Skip).await.unwrap();
+    assert!(!next.completed, "the second commit conflicts as well");
+
+    loc.resolve(&runner, "f.txt", &Resolution::TakeTheirs)
+        .await
+        .unwrap();
+    let done = loc.op(&runner, OpAction::Continue).await.unwrap();
+    assert!(done.completed);
+    assert_eq!(
+        repo.git(["log", "--format=%s", "-2"]),
+        "our second change\ntheir change",
+        "the skipped commit is gone and the other one is not"
+    );
+}
+
+#[tokio::test]
+async fn a_rebase_aborted_mid_conflict_leaves_the_branch_where_it_was() {
+    let repo = two_conflicting_commits();
+    let (runner, loc) = open(&repo).await;
+    let before = repo.git(["rev-parse", "main"]);
+
+    loc.rebase(&runner, "side", false).await.unwrap();
+    loc.op(&runner, OpAction::Abort).await.unwrap();
+
+    assert_eq!(loc.op_state(), OpState::Clean);
+    assert_eq!(repo.git(["rev-parse", "main"]), before);
+    assert_eq!(repo.git(["rev-parse", "--abbrev-ref", "HEAD"]), "main");
+}
+
+#[tokio::test]
+async fn a_conflicting_merge_resolved_with_both_sides_records_the_merge() {
+    let repo = conflicting();
+    let (runner, loc) = open(&repo).await;
+
+    let stopped = loc
+        .merge(&runner, "side", MergeMode::Auto, None)
+        .await
+        .unwrap();
+    assert!(!stopped.completed);
+
+    // Both lines kept, in the order the window would have taken them: this is the resolution
+    // that neither `--ours` nor `--theirs` can express.
+    loc.resolve(
+        &runner,
+        "f.txt",
+        &Resolution::Content("side\nmain\n".into()),
+    )
+    .await
+    .unwrap();
+    let done = loc.op(&runner, OpAction::Continue).await.unwrap();
+    assert!(done.completed);
+
+    assert_eq!(
+        repo.git(["show", "HEAD:f.txt"]),
+        "side\nmain",
+        "the file is what was written, not one side of it"
+    );
+    assert_eq!(
+        repo.git(["rev-list", "--parents", "-n", "1", "HEAD"])
+            .split_whitespace()
+            .count(),
+        3,
+        "and the commit has both parents"
     );
 }
 
