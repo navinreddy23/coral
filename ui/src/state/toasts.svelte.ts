@@ -76,7 +76,12 @@ export function describe(
 ): { kind: ToastKind; title: string; detail: string } {
   const text = message.trim();
   if (conflicted) {
-    return { kind: 'warn', title: `${what} stopped on conflicts`, detail: text };
+    // A push that comes back rejected has not conflicted with anything: the branch moved on
+    // the remote while this one was being written, and the answer is to fetch, not to resolve.
+    const stopped = /\[rejected]|\[remote rejected]|non-fast-forward/i.test(text)
+      ? `${what} was rejected`
+      : `${what} stopped on conflicts`;
+    return { kind: 'warn', title: stopped, detail: text };
   }
   // git has two wordings for "nothing happened": merge and pull say "Already up to date.",
   // push says "Everything up-to-date". Both mean the same thing to the person reading it.

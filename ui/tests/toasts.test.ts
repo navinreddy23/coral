@@ -84,3 +84,22 @@ describe('phrasing an outcome', () => {
     expect(phrase('push', 'Everything up-to-date', false).kind).toBe('info');
   });
 });
+
+describe('what to call an outcome that did not complete', () => {
+  it('calls a rejected push rejected, because nothing conflicted', () => {
+    // The branch moved on the remote while this one was being written. The answer is to
+    // fetch, not to resolve anything.
+    const said = phrase(
+      'push',
+      'refs/heads/topic -> refs/heads/topic [rejected] (fetch first)',
+      true,
+    );
+    expect(said.title).toBe('push was rejected');
+    expect(said.kind).toBe('warn');
+  });
+
+  it('still calls a stopped rebase a conflict', () => {
+    const said = phrase('rebase onto main', 'error: could not apply 1a2b3c4', true);
+    expect(said.title).toBe('rebase onto main stopped on conflicts');
+  });
+});
