@@ -125,6 +125,22 @@ underneath uncommitted work silently changes what that work means. Restoring ref
 the worktree explicitly: checking out the branch you are already on is a no-op, so moving its
 ref underneath would otherwise leave the index describing the old commit.
 
+## Patches
+
+`format-patch` writes them and `git am --3way` takes them back in; `git apply --3way` is the
+landing that leaves the change uncommitted. `--3way` in both is what makes them usable: without
+it a patch whose context has moved by a line is refused with a message about a failing hunk,
+and with it the ordinary stale patch lands and the genuinely conflicting one stops in the
+conflict tool.
+
+`git am` leaves `rebase-apply` behind, which is also what a rebase on that backend leaves, so
+the operation state reports both as a rebase and the window settles them the same way. They are
+not the same to git: `am` writes an `applying` marker inside that directory, and continuing one
+with `git rebase --continue` fails saying no rebase is in progress. The sides differ too — a
+rebase reverses them and applying a patch does not — so the operation carries an `applying` flag
+and the window names the branch and the patch rather than warning about a reversal that is not
+happening.
+
 ## Conflicts
 
 Blocks are **rebuilt from index stages 1, 2 and 3** with an explicit

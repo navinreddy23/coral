@@ -28,11 +28,42 @@ impl crate::output::Human for Written {
 ///
 /// # Errors
 /// Propagates git failures, including an unwritable directory.
-pub async fn write(repo: &Path, rev: &str, directory: &Path) -> Result<Written, CoralError> {
+pub async fn write(
+    repo: &Path,
+    rev: &str,
+    from: Option<&str>,
+    directory: &Path,
+) -> Result<Written, CoralError> {
     let runner = GitRunner::discover().await?;
     let loc = RepoLocation::discover(&runner, repo).await?;
-    let files = loc.format_patch(&runner, rev, directory).await?;
+    let files = match from {
+        Some(from) => {
+            loc.format_patch_range(&runner, from, rev, directory)
+                .await?
+        }
+        None => loc.format_patch(&runner, rev, directory).await?,
+    };
     Ok(Written {
         files: files.iter().map(|p| p.display().to_string()).collect(),
     })
+}
+
+/// Applies patch files to the current branch.
+///
+/// # Errors
+/// Propagates git failures. A patch that conflicts is an outcome rather than a failure, and
+/// comes back as a stop.
+pub async fn apply(
+    repo: &Path,
+    files: &[std::path::PathBuf],
+    commit: bool,
+) -> Result<coral_core::ops::OpOutcome, CoralError> {
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, repo).await?;
+    let landing = if commit {
+        coral_core::patch::PatchLanding::Commit
+    } else {
+        coral_core::patch::PatchLanding::WorkingTree
+    };
+    loc.apply_patches(&runner, files, landing).await
 }

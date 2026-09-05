@@ -453,6 +453,9 @@ impl RepoLocation {
         };
         let subcommand = match self.op_state() {
             OpState::Merge => "merge",
+            // `rebase-apply` is left by `git am` as well, and the two are settled by different
+            // subcommands however alike they look on screen.
+            OpState::Rebase if self.applying_patches() => "am",
             OpState::Rebase => "rebase",
             OpState::CherryPick => "cherry-pick",
             OpState::Revert => "revert",

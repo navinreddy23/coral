@@ -124,11 +124,20 @@ pub enum Action {
         path: String,
         force: bool,
     },
-    /// Write a commit out as a patch file.
+    /// Write a commit, or a range of them, out as patch files.
     Patch {
+        /// The commit to export, or the newer end of a range.
         rev: String,
+        /// The older end, exclusive. `None` exports `rev` on its own.
+        from: Option<String>,
         /// Directory to write into.
         directory: String,
+    },
+    /// Apply patch files to the current branch.
+    ApplyPatch {
+        files: Vec<String>,
+        /// Record a commit per patch, keeping its author. False leaves the changes uncommitted.
+        commit: bool,
     },
     Undo,
     Redo,
@@ -293,7 +302,14 @@ impl Action {
             Self::SubmoduleInit { path: None, .. } => "update the submodules".to_owned(),
             Self::SubmoduleSetUrl { path, .. } => format!("re-point {path}"),
             Self::SubmoduleRemove { path, .. } => format!("remove {path}"),
-            Self::Patch { rev, .. } => format!("patch for {}", named(rev)),
+            Self::Patch { rev, from, .. } => match from {
+                Some(from) => format!("patches for {}..{}", named(from), named(rev)),
+                None => format!("patch for {}", named(rev)),
+            },
+            Self::ApplyPatch { files, .. } => match files.len() {
+                1 => "apply a patch".to_owned(),
+                n => format!("apply {n} patches"),
+            },
             Self::Undo => "undo".to_owned(),
             Self::Redo => "redo".to_owned(),
         }
@@ -380,7 +396,8 @@ async fn run(
         | Action::Reset { .. }
         | Action::Rewrite { .. }
         | Action::TagCreate { .. }
-        | Action::TagDelete { .. } => run_refs(loc, runner, action).await,
+        | Action::TagDelete { .. }
+        | Action::ApplyPatch { .. } => run_refs(loc, runner, action).await,
         _ => run_tree(loc, runner, action).await,
     }
 }
@@ -466,6 +483,17 @@ async fn run_refs(
             return Ok(Done::from(&out));
         }
         Action::Reset { rev, mode } => loc.reset(runner, &rev, mode.into()).await?,
+        Action::ApplyPatch { files, commit } => {
+            let landing = if commit {
+                coral_core::patch::PatchLanding::Commit
+            } else {
+                coral_core::patch::PatchLanding::WorkingTree
+            };
+            let paths: Vec<std::path::PathBuf> =
+                files.iter().map(std::path::PathBuf::from).collect();
+            let out = loc.apply_patches(runner, &paths, landing).await?;
+            return Ok(Done::from(&out));
+        }
         Action::Rewrite { rev, how, message } => {
             let rewrite = match how {
                 RewriteKind::Drop => coral_core::sequence::Rewrite::Drop,
@@ -522,9 +550,16 @@ async fn run_tree(
         Action::SubmoduleRemove { path, force } => {
             loc.submodule_remove(runner, &path, force).await?;
         }
-        Action::Patch { rev, directory } => {
-            loc.format_patch(runner, &rev, std::path::Path::new(&directory))
-                .await?;
+        Action::Patch {
+            rev,
+            from,
+            directory,
+        } => {
+            let into = std::path::Path::new(&directory);
+            match from {
+                Some(from) => loc.format_patch_range(runner, &from, &rev, into).await?,
+                None => loc.format_patch(runner, &rev, into).await?,
+            };
         }
         Action::Undo | Action::Redo => unreachable!("stepped above"),
         _ => unreachable!("routed by `run`"),

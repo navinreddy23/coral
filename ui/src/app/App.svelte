@@ -16,7 +16,12 @@
   import DiffView from './DiffView.svelte';
   import { DiffState } from '../state/diff.svelte';
   import { HostingState } from '../state/hosting.svelte';
-  import { openInBrowser, type PullRequest } from '../ipc/commands';
+  import {
+    openInBrowser,
+    patchRangeSize,
+    pickPatchFiles,
+    type PullRequest,
+  } from '../ipc/commands';
   import { ActionsState } from '../state/actions.svelte';
   import MergeTool from './MergeTool.svelte';
   import { MergeState } from '../state/merge.svelte';
@@ -982,6 +987,13 @@
         { kind: 'item', label: 'Copy commit sha', hint: short, run: () => void copySha(oid) },
         { kind: 'item', label: 'Copy link to this commit', run: () => void copyLink(oid) },
         { kind: 'item', label: 'Create patch from commit', run: () => void patchOf(oid) },
+        {
+          kind: 'item',
+          label: 'Apply a patch file…',
+          hint: 'onto this branch',
+          disabled: actions.busy,
+          run: () => void applyPatch(),
+        },
         { kind: 'separator' },
         { kind: 'item', label: 'Create tag here', run: () => void tagAt(oid, false) },
         { kind: 'item', label: 'Create annotated tag here', run: () => void tagAt(oid, true) },
@@ -1027,10 +1039,86 @@
     });
   }
 
+  /**
+   * Applies patch files somebody sent.
+   *
+   * The choice is the same one cherry picking asks, and for the same reason: a patch is either
+   * a commit you want on this branch now, or a change you want to look at before anything is
+   * recorded. The file dialog takes several, because a series is several files.
+   */
+  async function applyPatch() {
+    if (!info) return;
+    const files = await pickPatchFiles('Which patch files should be applied?');
+    if (files.length === 0) return;
+    const { choice } = await ask({
+      title: files.length === 1 ? 'Commit the patch?' : `Commit the ${files.length} patches?`,
+      detail:
+        'Yes records a commit for each patch, keeping the author and message it carries.\n' +
+        'No leaves the changes in the working copy, so they can be read and edited before ' +
+        'anything is recorded.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [
+        { id: 'yes', label: 'Yes', primary: true },
+        { id: 'no', label: 'No' },
+      ],
+    });
+    if (choice === null) return;
+    await act({ kind: 'applyPatch', files, commit: choice === 'yes' });
+  }
+
+  /**
+   * What the P button does, which depends on what is selected.
+   *
+   * Two commits picked is a request to export what lies between them; anything else is a
+   * request to take a patch in. One button because they are the two halves of the same
+   * exchange, and the selection says plainly which half is meant.
+   */
+  /** Past this many, exporting a range is worth confirming rather than just doing. */
+  const MANY_PATCHES = 50;
+
+  async function patchButton() {
+    if (!info) return;
+    const pair = selection.pair;
+    if (pair === null) {
+      await applyPatch();
+      return;
+    }
+    // How many, before a directory is chosen. Two commits picked far apart is a file per
+    // commit between them, and on a repository the size of the kernel that is very nearly a
+    // million and a half files written into whichever folder was clicked.
+    const count = await patchRangeSize(info.path, pair.from.oid, pair.to.oid).catch(() => -1);
+    if (count === 0) {
+      toasts.push('warn', 'Nothing to write', 'There are no commits between those two.');
+      return;
+    }
+    if (count > MANY_PATCHES) {
+      const { choice } = await ask({
+        title: `Write about ${count.toLocaleString()} patch files?`,
+        detail:
+          'About, because a merge has no single patch and is skipped: that is the number of ' +
+          'commits between the two you picked, and the number of files will be that or fewer. ' +
+          'Picking two commits far apart on a large repository can be a great many of them.',
+        asksText: false,
+        placeholder: '',
+        initial: '',
+        // One choice: the dialog carries its own Cancel, and offering a second one beside it
+        // put two buttons saying Cancel next to each other.
+        choices: [{ id: 'yes', label: 'Write them' }],
+      });
+      if (choice !== 'yes') return;
+    }
+
+    const where = await pickDirectory('Where should the patches be written?');
+    if (where === null) return;
+    await act({ kind: 'patch', rev: pair.to.oid, from: pair.from.oid, directory: where });
+  }
+
   async function patchOf(oid: string) {
     const where = await pickDirectory('Where should the patch be written?');
     if (where === null) return;
-    await act({ kind: 'patch', rev: oid, directory: where });
+    await act({ kind: 'patch', rev: oid, from: null, directory: where });
   }
 
   async function reword(oid: string, summary: string) {
@@ -1645,6 +1733,7 @@
   function toolbarAction(name: string) {
     const branch = headName;
     switch (name) {
+      case 'patch': return void patchButton();
       case 'undo': return void act({ kind: 'undo' });
       case 'redo': return void act({ kind: 'redo' });
       case 'fetch': return void act({ kind: 'fetch', remote: null });
@@ -2499,6 +2588,7 @@
       submodule={tabs.active?.submodule ?? null}
       branch={headName ?? 'detached'}
       busy={worktree.busy || actions.busy}
+      comparing={selection.pair !== null}
       terminalOpen={terminal.open}
       onAction={toolbarAction}
       onLeaveSubmodule={() => void leaveSubmodule()}

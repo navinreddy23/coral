@@ -296,7 +296,8 @@ export type Action =
   | { kind: 'submoduleInit'; path: string | null; recursive: boolean; remote: boolean }
   | { kind: 'submoduleSetUrl'; path: string; url: string }
   | { kind: 'submoduleRemove'; path: string; force: boolean }
-  | { kind: 'patch'; rev: string; directory: string }
+  | { kind: 'patch'; rev: string; from: string | null; directory: string }
+  | { kind: 'applyPatch'; files: string[]; commit: boolean }
   | { kind: 'undo' }
   | { kind: 'redo' };
 
@@ -480,6 +481,24 @@ export async function pickDirectory(title: string): Promise<string | null> {
   return typeof chosen === 'string' ? chosen : null;
 }
 
+/**
+ * Patch files to apply, in the order the dialog returns them.
+ *
+ * A series is several files that must land oldest first, and git names them `0001-`, `0002-`
+ * and so on for exactly that reason, so the list is sorted rather than taken as it comes: a
+ * file dialog's order is its own business and a series applied out of order fails on the
+ * second patch.
+ */
+export async function pickPatchFiles(title: string): Promise<string[]> {
+  const chosen = await openDialog({
+    multiple: true,
+    title,
+    filters: [{ name: 'Patches', extensions: ['patch', 'diff', 'eml', 'mbox', 'txt'] }],
+  });
+  const files = Array.isArray(chosen) ? chosen : typeof chosen === 'string' ? [chosen] : [];
+  return [...files].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+}
+
 /** The worktree, and the two things that change it. */
 export function repoStatus(path: string): Promise<Status> {
   return invoke<Status>('repo_status', { path });
@@ -579,6 +598,11 @@ export interface AppVersion {
   number: string;
   commit: string | null;
   debug: boolean;
+}
+
+/** How many patch files a range would write, asked before anything is written. */
+export function patchRangeSize(path: string, from: string, to: string): Promise<number> {
+  return invoke<number>('patch_range_size', { path, from, to });
 }
 
 export function appVersion(): Promise<AppVersion> {

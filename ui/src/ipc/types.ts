@@ -197,7 +197,16 @@ stoppedAt: string | null,
 /**
  * True for `rebase -i`.
  */
-interactive: boolean, };
+interactive: boolean, 
+/**
+ * True when this is `git am` rather than a rebase.
+ *
+ * The two leave the same files behind and are settled the same way, so the state is
+ * `Rebase` for both. What differs is what to call it and which sides it has: applying a
+ * patch does not reverse them, and telling somebody who just opened a patch file that a
+ * rebase is in progress with its sides reversed is two pieces of wrong information.
+ */
+applying: boolean, };
 
 /**
  * How far through a multi-step operation git has got.

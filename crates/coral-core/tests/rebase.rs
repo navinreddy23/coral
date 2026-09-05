@@ -1,5 +1,7 @@
 //! Interactive rebase driven by a prepared todo list, with no editor on the path.
 
+use coral_core::ops::OpAction;
+use coral_core::patch::PatchLanding;
 use coral_core::process::GitRunner;
 use coral_core::repo::RepoLocation;
 use coral_core::sequence::{Step, Todo};
@@ -318,4 +320,225 @@ fn an_edit_the_user_asked_for_still_stops() {
     // The reword before it went through; the rebase is waiting at the edit.
     assert!(repo.git(["log", "--format=%s"]).contains("first, renamed"));
     repo.git(["rebase", "--abort"]);
+}
+
+/// A patch file made by one repository, applied to another.
+///
+/// The whole point of the format: the commit crosses a machine with its author and message
+/// intact, and lands as a commit rather than as a pile of working-tree changes.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_patch_file_applies_as_a_commit_with_its_author_kept() {
+    let runner = GitRunner::discover().await.unwrap();
+    let source = TestRepo::new().write("a.txt", "one\n").commit("base");
+    let source = source
+        .write("a.txt", "two\n")
+        .commit("the change worth sending");
+    let out = tempfile::tempdir().unwrap();
+    let loc = RepoLocation::discover(&runner, source.path())
+        .await
+        .unwrap();
+    let files = loc.format_patch(&runner, "HEAD", out.path()).await.unwrap();
+    assert_eq!(files.len(), 1);
+
+    let target = TestRepo::new().write("a.txt", "one\n").commit("base");
+    let there = RepoLocation::discover(&runner, target.path())
+        .await
+        .unwrap();
+    let outcome = there
+        .apply_patches(&runner, &files, PatchLanding::Commit)
+        .await
+        .unwrap();
+
+    assert!(outcome.completed, "a clean patch should not stop");
+    assert_eq!(
+        target.git(["log", "-1", "--format=%s"]).trim(),
+        "the change worth sending"
+    );
+    assert_eq!(
+        std::fs::read_to_string(target.path().join("a.txt")).unwrap(),
+        "two\n"
+    );
+    assert_eq!(target.git(["status", "--short"]).trim(), "");
+}
+
+/// The other landing: the change is there to look at, and nothing has been recorded.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_patch_can_be_left_in_the_working_tree_instead() {
+    let runner = GitRunner::discover().await.unwrap();
+    let source = TestRepo::new().write("a.txt", "one\n").commit("base");
+    let source = source
+        .write("a.txt", "two\n")
+        .commit("a change to look at first");
+    let out = tempfile::tempdir().unwrap();
+    let loc = RepoLocation::discover(&runner, source.path())
+        .await
+        .unwrap();
+    let files = loc.format_patch(&runner, "HEAD", out.path()).await.unwrap();
+
+    let target = TestRepo::new().write("a.txt", "one\n").commit("base");
+    let there = RepoLocation::discover(&runner, target.path())
+        .await
+        .unwrap();
+    there
+        .apply_patches(&runner, &files, PatchLanding::WorkingTree)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(target.path().join("a.txt")).unwrap(),
+        "two\n"
+    );
+    assert_eq!(target.git(["log", "-1", "--format=%s"]).trim(), "base");
+    assert!(
+        !target.git(["status", "--short"]).trim().is_empty(),
+        "the change is uncommitted"
+    );
+}
+
+/// A patch that cannot be applied stops in the conflict tool rather than failing, and is
+/// continued as `git am` — not as the rebase its state files look like.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_conflicting_patch_stops_and_is_settled_as_an_am() {
+    let runner = GitRunner::discover().await.unwrap();
+    let source = TestRepo::new().write("a.txt", "one\n").commit("base");
+    let source = source
+        .write("a.txt", "from the patch\n")
+        .commit("their change");
+    let out = tempfile::tempdir().unwrap();
+    let loc = RepoLocation::discover(&runner, source.path())
+        .await
+        .unwrap();
+    let files = loc.format_patch(&runner, "HEAD", out.path()).await.unwrap();
+
+    let target = TestRepo::new().write("a.txt", "one\n").commit("base");
+    let target = target.write("a.txt", "ours instead\n").commit("our change");
+    let there = RepoLocation::discover(&runner, target.path())
+        .await
+        .unwrap();
+    let outcome = there
+        .apply_patches(&runner, &files, PatchLanding::Commit)
+        .await
+        .unwrap();
+
+    assert!(!outcome.completed, "a conflicting patch has to stop");
+    assert!(
+        there.applying_patches(),
+        "it is an am, whatever the directory is called"
+    );
+    assert_eq!(there.op_state(), coral_core::repo::OpState::Rebase);
+
+    // The window offers Abort on that stop; it has to reach `git am --abort`.
+    there.op(&runner, OpAction::Abort).await.unwrap();
+    assert_eq!(there.op_state(), coral_core::repo::OpState::Clean);
+    assert_eq!(
+        target.git(["log", "-1", "--format=%s"]).trim(),
+        "our change"
+    );
+}
+
+/// Applying the same series twice is the ordinary result of a re-sent mail, and must not stop
+/// halfway through asking a question the window has no way to answer.
+#[tokio::test(flavor = "multi_thread")]
+async fn applying_a_patch_that_has_already_landed_is_not_a_stop() {
+    let runner = GitRunner::discover().await.unwrap();
+    let source = TestRepo::new().write("a.txt", "one\n").commit("base");
+    let source = source.write("a.txt", "two\n").commit("the change");
+    let out = tempfile::tempdir().unwrap();
+    let loc = RepoLocation::discover(&runner, source.path())
+        .await
+        .unwrap();
+    let files = loc.format_patch(&runner, "HEAD", out.path()).await.unwrap();
+
+    let target = TestRepo::new().write("a.txt", "one\n").commit("base");
+    let there = RepoLocation::discover(&runner, target.path())
+        .await
+        .unwrap();
+    there
+        .apply_patches(&runner, &files, PatchLanding::Commit)
+        .await
+        .unwrap();
+    let again = there
+        .apply_patches(&runner, &files, PatchLanding::Commit)
+        .await
+        .unwrap();
+
+    assert!(again.completed, "the second run should not stop");
+    assert_eq!(there.op_state(), coral_core::repo::OpState::Clean);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn naming_no_patch_file_is_refused_rather_than_run() {
+    let runner = GitRunner::discover().await.unwrap();
+    let repo = TestRepo::new().write("a.txt", "one\n").commit("base");
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+    let refused = loc.apply_patches(&runner, &[], PatchLanding::Commit).await;
+    assert!(matches!(
+        refused,
+        Err(coral_core::CoralError::Refused { .. })
+    ));
+}
+
+/// Two commits picked in the window means "what lies between them", which is `from..to`:
+/// exclusive at the older end, one patch per commit after it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_range_exports_one_patch_per_commit_after_the_older_end() {
+    let runner = GitRunner::discover().await.unwrap();
+    let repo = stack();
+    let out = tempfile::tempdir().unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+    let files = loc
+        .format_patch_range(&runner, "HEAD~3", "HEAD", out.path())
+        .await
+        .unwrap();
+
+    assert_eq!(files.len(), 3, "three commits after the base");
+    let names: Vec<String> = files
+        .iter()
+        .map(|f| f.file_name().unwrap().to_string_lossy().into_owned())
+        .collect();
+    assert!(
+        names[0].starts_with("0001-"),
+        "numbered so a series keeps its order: {names:?}"
+    );
+    assert!(names[2].starts_with("0003-"), "{names:?}");
+
+    // And the range is exclusive at the older end: the base is not in it.
+    assert!(
+        !names.iter().any(|n| n.contains("base")),
+        "the older end is excluded: {names:?}"
+    );
+}
+
+/// The whole exchange, both halves, against a second repository.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_range_written_out_applies_as_the_same_commits_elsewhere() {
+    let runner = GitRunner::discover().await.unwrap();
+    let source = stack();
+    let out = tempfile::tempdir().unwrap();
+    let loc = RepoLocation::discover(&runner, source.path())
+        .await
+        .unwrap();
+    let files = loc
+        .format_patch_range(&runner, "HEAD~3", "HEAD", out.path())
+        .await
+        .unwrap();
+    let subjects = source.git(["log", "--format=%s", "-3", "--reverse"]);
+
+    // A repository holding only the base those patches were made against.
+    let target = TestRepo::new().write("base.txt", "base\n").commit("base");
+    let there = RepoLocation::discover(&runner, target.path())
+        .await
+        .unwrap();
+    let outcome = there
+        .apply_patches(&runner, &files, PatchLanding::Commit)
+        .await
+        .unwrap();
+
+    assert!(outcome.completed);
+    assert_eq!(
+        target.git(["log", "--format=%s", "-3", "--reverse"]),
+        subjects
+    );
+    assert_eq!(target.git(["status", "--short"]).trim(), "");
 }

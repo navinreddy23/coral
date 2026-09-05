@@ -43,6 +43,7 @@ vi.mock('@tauri-apps/api/event', () => ({
   },
 }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 
 import App from '../../src/app/App.svelte';
 
@@ -92,6 +93,9 @@ function answers(over: Record<string, unknown> = {}): Record<string, unknown> {
     set_graph_scope: { solo: null, hidden: [] },
     graph_rewalk: null,
     repo_submodules: [],
+    patch_range_size: 3,
+    compare_commits: [],
+    commit_detail: null,
     repo_status: { entries: [], conflicted: [] },
     repo_operation: {
       state: 'clean',
@@ -209,6 +213,59 @@ describe('the shell', () => {
       rules.some((text) => /lane-strip/u.test(text) && /--row-tint/u.test(text)),
       'the strip must be what wears it',
     ).toBe(true);
+  });
+
+  it('offers to apply a patch when nothing is being compared', async () => {
+    const { container } = await shell();
+    const dialog = vi.mocked(openDialog);
+    dialog.mockClear();
+    dialog.mockResolvedValue(null);
+
+    const patch = [...container.querySelectorAll('button.action')].find(
+      (b) => b.textContent?.includes('Patch'),
+    ) as HTMLButtonElement;
+    expect(patch, 'the toolbar carries a patch button').toBeDefined();
+    await fireEvent.click(patch);
+
+    await waitFor(() => {
+      if (dialog.mock.calls.length === 0) throw new Error('no dialog yet');
+    });
+    // Several files, because a series is several files, and not a directory.
+    expect(dialog.mock.calls[0]?.[0]).toMatchObject({ multiple: true });
+  });
+
+  it('offers to write patches out when two commits are being compared', async () => {
+    const { container } = await shell();
+    const rows = [...container.querySelectorAll('li.row')] as HTMLElement[];
+    await fireEvent.click(rows[2]?.querySelector('button.hit') as HTMLButtonElement);
+    await fireEvent.click(rows[0]?.querySelector('button.hit') as HTMLButtonElement, {
+      ctrlKey: true,
+    });
+    // The button says which of its two jobs it will do, so that is what says the pair took.
+    const patchButton = () =>
+      [...container.querySelectorAll('button.action')].find((b) =>
+        b.textContent?.includes('Patch'),
+      ) as HTMLButtonElement;
+    await waitFor(() => {
+      if (!patchButton().title.includes('Write')) throw new Error('not comparing yet');
+    });
+
+    const dialog = vi.mocked(openDialog);
+    dialog.mockClear();
+    dialog.mockResolvedValue(null);
+    invoke.mockClear();
+    await fireEvent.click(patchButton());
+
+    // The size of the range is asked first: two commits picked far apart is a file per commit
+    // between them, and on a large repository that is a great many files.
+    await waitFor(() => {
+      const asked = invoke.mock.calls.some((c) => c[0] === 'patch_range_size');
+      if (!asked) throw new Error('did not ask how many');
+    });
+    await waitFor(() => {
+      if (dialog.mock.calls.length === 0) throw new Error('no dialog yet');
+    });
+    expect(dialog.mock.calls[0]?.[0]).toMatchObject({ directory: true });
   });
 
   it('runs undo and redo from the keyboard, not only from the toolbar', async () => {

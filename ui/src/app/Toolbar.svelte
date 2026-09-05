@@ -4,6 +4,7 @@
     submodule,
     branch,
     busy,
+    comparing,
     terminalOpen,
     onAction,
     onLeaveSubmodule,
@@ -15,6 +16,8 @@
     submodule: string | null;
     branch: string;
     busy: boolean;
+    /** Whether two commits are picked, which is what decides what the patch button does. */
+    comparing: boolean;
     terminalOpen: boolean;
     onAction: (name: string) => void;
     onLeaveSubmodule: () => void;
@@ -46,6 +49,14 @@
       { name: 'branch', label: 'Branch', glyph: '⑂', hint: 'Create a branch here' },
       { name: 'stash', label: 'Stash', glyph: '⤓', hint: 'Stash the working copy' },
       { name: 'pop', label: 'Pop', glyph: '⤒', hint: 'Apply the latest stash and drop it' },
+      {
+        name: 'patch',
+        label: 'Patch',
+        glyph: 'P',
+        hint: comparing
+          ? 'Write the commits between the two picked ones out as patch files'
+          : 'Apply a patch file somebody sent',
+      },
     ],
     [
       {

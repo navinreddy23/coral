@@ -282,6 +282,25 @@ pub async fn row_metadata(
     Ok(loc.commit_metadata(&runner, &oids).await?)
 }
 
+/// How many patch files a range would write.
+///
+/// Asked before the directory is chosen, so a pair of commits picked far apart can be refused
+/// or confirmed rather than silently writing a file per commit — on the kernel that is very
+/// nearly a million and a half of them.
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn patch_range_size(
+    path: String,
+    from: String,
+    to: String,
+) -> Result<u64, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc.count_range(&runner, &from, &to).await?)
+}
+
 /// Everything the details panel shows for one commit.
 /// # Errors
 /// [`coral_core::CoralError::Refused`] for an unknown revision.

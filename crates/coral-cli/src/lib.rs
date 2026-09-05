@@ -314,9 +314,21 @@ pub enum Command {
         /// The commit to export. Defaults to HEAD.
         #[arg(long, default_value = "HEAD")]
         rev: String,
+        /// Export everything after this commit up to --rev, rather than --rev alone.
+        #[arg(long)]
+        from: Option<String>,
         /// Directory to write into.
         #[arg(long, default_value = ".")]
         out: PathBuf,
+    },
+    /// Apply patch files to the current branch.
+    ApplyPatch {
+        /// A patch file. Repeat for a series; they are applied in the order given.
+        #[arg(long = "file", required = true, value_name = "PATH")]
+        files: Vec<PathBuf>,
+        /// Leave the changes in the worktree instead of recording a commit for each patch.
+        #[arg(long)]
+        no_commit: bool,
     },
     /// Drop, reword or reorder one commit, replaying everything above it.
     Rewrite {
@@ -638,14 +650,28 @@ async fn dispatch_write(command: Command, repo: &std::path::Path) -> output::Ren
         Command::ConflictResolve { file, how } => {
             output::render(&commands::conflicts::resolve(repo, &file, how).await)
         }
+        // Everything that touches the working tree, a linked one, or a file on disk.
+        other => dispatch_tree(other, repo).await,
+    }
+}
+
+/// The second half of the write dispatcher.
+///
+/// Split for the line count, and along the seam the commands already have: what moves refs
+/// is above, what touches the working tree or a file on disk is here.
+async fn dispatch_tree(command: Command, repo: &std::path::Path) -> output::Rendered {
+    match command {
         Command::WorktreeAdd { path, rev, branch } => {
             output::render(&commands::worktree::add(repo, &path, &rev, branch).await)
         }
         Command::WorktreeRemove { path, force } => {
             output::render(&commands::worktree::remove(repo, &path, force).await)
         }
-        Command::Patch { rev, out } => {
-            output::render(&commands::patch::write(repo, &rev, &out).await)
+        Command::Patch { rev, from, out } => {
+            output::render(&commands::patch::write(repo, &rev, from.as_deref(), &out).await)
+        }
+        Command::ApplyPatch { files, no_commit } => {
+            output::render_op(&commands::patch::apply(repo, &files, !no_commit).await)
         }
         Command::Rewrite { rev, kind, message } => {
             output::render_op(&commands::rewrite::run(repo, &rev, kind, message).await)

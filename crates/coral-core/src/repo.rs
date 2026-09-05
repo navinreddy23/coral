@@ -138,6 +138,18 @@ impl RepoLocation {
 
     /// Reads the in-progress operation from the git dir. Faster and more reliable than
     /// porcelain, which only tells you that files are unmerged.
+    /// Whether the stopped operation is `git am` rather than a rebase.
+    ///
+    /// Both leave `rebase-apply` behind, and git tells them apart by a marker inside it: `am`
+    /// writes `applying`, a rebase on the same backend writes `rebasing`. The distinction is
+    /// invisible in the window — the two stop the same way and are settled the same way — but
+    /// it decides which subcommand continues them, and `git rebase --continue` during an `am`
+    /// fails saying no rebase is in progress.
+    #[must_use]
+    pub fn applying_patches(&self) -> bool {
+        self.git_path("rebase-apply/applying").exists()
+    }
+
     #[must_use]
     pub fn op_state(&self) -> OpState {
         // rebase-merge covers interactive and merge-backend rebases; rebase-apply covers the

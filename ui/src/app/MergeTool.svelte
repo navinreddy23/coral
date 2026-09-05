@@ -109,7 +109,11 @@
 
   /** What to call the operation. The state is an enum name; `cherry_pick` is not a word. */
   const verb = $derived.by(() => {
-    const state = merge.operation?.state ?? 'merge';
+    const op = merge.operation;
+    // `git am` leaves the files a rebase leaves, so the engine reports it as one. Saying
+    // "rebase" to somebody who has just opened a patch file names the wrong thing entirely.
+    if (op?.applying === true) return 'patch';
+    const state = op?.state ?? 'merge';
     if (state === 'cherry_pick') return 'cherry-pick';
     return state === 'clean' || state === 'bisect' ? 'merge' : state;
   });

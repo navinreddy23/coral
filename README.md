@@ -25,6 +25,11 @@ The file panel answers four questions about one file: what changed, who wrote ea
 has touched it, and the same again with whitespace discounted. Diffs read inline or side by
 side, with word-level highlighting.
 
+**Patches.** Two commits picked in the graph are written out as a numbered series with one
+button; the same button takes patch files back in, either as commits with their original
+authors or as changes left in the working copy to read first. A patch that no longer applies
+cleanly stops in the conflict tool rather than failing.
+
 **Rewriting history.** Merge, rebase, interactive rebase with a picker for reword, squash,
 fixup, edit, drop and reorder, cherry-pick, revert, and reset. Every one of them is journalled,
 so **undo** reverses an operation it knows nothing about by restoring the refs it moved — and it

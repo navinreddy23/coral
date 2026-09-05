@@ -45,6 +45,13 @@ pub struct Operation {
     pub stopped_at: Option<String>,
     /// True for `rebase -i`.
     pub interactive: bool,
+    /// True when this is `git am` rather than a rebase.
+    ///
+    /// The two leave the same files behind and are settled the same way, so the state is
+    /// `Rebase` for both. What differs is what to call it and which sides it has: applying a
+    /// patch does not reverse them, and telling somebody who just opened a patch file that a
+    /// rebase is in progress with its sides reversed is two pieces of wrong information.
+    pub applying: bool,
 }
 
 impl RepoLocation {
@@ -84,6 +91,7 @@ impl RepoLocation {
                     head_name: None,
                     stopped_at: stopped,
                     interactive: false,
+                    applying: false,
                 })
             }
             OpState::Clean if self.has_unmerged(runner).await? => {
@@ -106,6 +114,7 @@ impl RepoLocation {
                     head_name: None,
                     stopped_at: None,
                     interactive: false,
+                    applying: false,
                 })
             }
             OpState::Bisect | OpState::Clean => Ok(Operation {
@@ -119,6 +128,7 @@ impl RepoLocation {
                 head_name: None,
                 stopped_at: None,
                 interactive: false,
+                applying: false,
             }),
         }
     }
@@ -174,27 +184,44 @@ impl RepoLocation {
         let head_name = read("head-name").map(|n| short_ref(&n));
         let onto = read("onto");
 
-        let onto_label = match &onto {
-            Some(oid) => self.describe(runner, oid).await,
-            None => "the target branch".to_owned(),
-        };
+        let applying = self.applying_patches();
 
-        Ok(Operation {
-            state: OpState::Rebase,
-            labels: SideLabels {
+        // `git am` keeps HEAD on the branch and puts the patch on the other side, which is the
+        // ordinary orientation. A rebase is the one that reverses them.
+        let labels = if applying {
+            SideLabels {
+                ours: self.current_branch(runner).await,
+                theirs: read("final-commit")
+                    .and_then(|m| m.lines().next().map(str::to_owned))
+                    .filter(|l| !l.is_empty())
+                    .unwrap_or_else(|| "the patch".to_owned()),
+                swapped: false,
+            }
+        } else {
+            let onto_label = match &onto {
+                Some(oid) => self.describe(runner, oid).await,
+                None => "the target branch".to_owned(),
+            };
+            SideLabels {
                 // Stage 2 during a rebase is the target, not the user's work.
                 ours: onto_label,
                 theirs: head_name
                     .clone()
                     .unwrap_or_else(|| "your commits".to_owned()),
                 swapped: true,
-            },
+            }
+        };
+
+        Ok(Operation {
+            state: OpState::Rebase,
+            labels,
             progress: current
                 .zip(total)
                 .map(|(current, total)| Progress { current, total }),
             head_name,
             stopped_at: read("stopped-sha"),
             interactive: self.git_path(dir).join("interactive").exists(),
+            applying,
         })
     }
 
@@ -215,6 +242,7 @@ impl RepoLocation {
             head_name: None,
             stopped_at: incoming,
             interactive: false,
+            applying: false,
         })
     }
 

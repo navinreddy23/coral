@@ -58,6 +58,18 @@ current, rebase current onto, create PR/MR, hide, solo, copy name. Remote branch
 edit, remove, prune, open on web. Tag: checkout, push, delete, copy. Stash: apply, pop, drop,
 view diff.
 
+## Patches
+
+The toolbar's **P** does whichever of the two the selection asks for. Two commits picked means
+"write out what lies between them": it says how many files that is before a directory is chosen,
+since two commits far apart on a large repository is a file per commit between them. Anything
+else means "take a patch in", through a file dialog that accepts a series. Applying asks whether
+to record a commit per patch, keeping the author the file carries, or to leave the changes in
+the working copy to read first. The same two sit on a commit's context menu.
+
+A patch that no longer applies stops in the conflict tool like any other operation, named after
+the branch and the patch rather than "ours" and "theirs", and is continued or abandoned there.
+
 ## Graph
 
 Columns: lanes (canvas), message with inline label pills, author avatar, relative date
