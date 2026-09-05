@@ -132,6 +132,8 @@ fn window() {
             graph::file_history,
             graph::file_text,
             graph::search_commits,
+            graph::compare_commits,
+            graph::compare_file_diff,
             actions::repo_action,
             remotes::remote_list,
             remotes::remote_edit,

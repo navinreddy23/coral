@@ -497,6 +497,55 @@ pub async fn file_blame(
     Ok(loc.blame(&runner, &rev, &file).await?)
 }
 
+/// The files that differ between two commits, for the panel to list.
+///
+/// `from` is the older of the pair as the graph reads it, so what the newer one gained is an
+/// addition. Names only: a comparison across a hundred commits touches thousands of files and
+/// their patches together are far more than the panel can show at once.
+///
+/// # Errors
+/// Propagates git failures, including an unknown revision.
+#[tauri::command]
+pub async fn compare_commits(
+    path: String,
+    from: String,
+    to: String,
+) -> Result<Vec<coral_core::commit::ChangedFile>, crate::commands::IpcError> {
+    tracing::info!(path, from, to, "compare_commits");
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc.compare(&runner, &from, &to).await?)
+}
+
+/// One file's diff between two commits.
+///
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn compare_file_diff(
+    path: String,
+    from: String,
+    to: String,
+    file: String,
+    whole_file: bool,
+    ignore_whitespace: bool,
+) -> Result<Option<coral_core::diff::FileDiff>, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    let files = loc
+        .compare_diff(
+            &runner,
+            &from,
+            &to,
+            &[file.as_str()],
+            options(whole_file, ignore_whitespace),
+        )
+        .await?;
+    Ok(files.into_iter().next())
+}
+
 /// One file's contents at one revision, for the blame view to put its chunks beside.
 ///
 /// # Errors

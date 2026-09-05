@@ -5,6 +5,7 @@ import type { GroupColour, Session } from '../state/tabs.svelte';
 import type {
   Blame,
   Blocks,
+  ChangedFile,
   Commit,
   CommitDetail,
   Todo,
@@ -135,6 +136,30 @@ export function fileDiff(
 /** Who last changed each line of a file, and in which commit. */
 export function fileBlame(path: string, rev: string, file: string): Promise<Blame> {
   return invoke<Blame>('file_blame', { path, rev, file });
+}
+
+/** The files that differ between two commits, oldest first. */
+export function compareCommits(path: string, from: string, to: string): Promise<ChangedFile[]> {
+  return invoke<ChangedFile[]>('compare_commits', { path, from, to });
+}
+
+/** One file's diff between two commits. */
+export function compareFileDiff(
+  path: string,
+  from: string,
+  to: string,
+  file: string,
+  wholeFile: boolean,
+  ignoreWhitespace: boolean,
+): Promise<FileDiff | null> {
+  return invoke<FileDiff | null>('compare_file_diff', {
+    path,
+    from,
+    to,
+    file,
+    wholeFile,
+    ignoreWhitespace,
+  });
 }
 
 /** One file's contents at one revision, for the blame view to put its chunks beside. */
