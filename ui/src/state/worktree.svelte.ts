@@ -1,4 +1,12 @@
-import { commitStaged, discardPaths, repoStatus, stagePaths } from '../ipc/commands';
+import {
+  applyPart,
+  commitStaged,
+  deletePaths,
+  discardPaths,
+  repoStatus,
+  stagePaths,
+  type Part,
+} from '../ipc/commands';
 
 import type { Status, StatusEntry } from '../ipc/types';
 import { messageOf } from '../ipc/error';
@@ -54,6 +62,19 @@ export class WorktreeState {
   async stage(paths: string[], stage: boolean): Promise<void> {
     if (paths.length === 0) return;
     await this.#run(() => stagePaths(this.#path, paths, stage));
+  }
+
+  /** Stages, unstages or discards one hunk of a file, or only some of its lines. */
+  async applyPart(file: string, part: Part, hunk: number, lines: number[]): Promise<void> {
+    const path = this.#path;
+    await this.#run(() => applyPart(path, file, part, hunk, lines));
+  }
+
+  /** Deletes files outright. The caller asks first; this does not. */
+  async delete(tracked: string[], untracked: string[]): Promise<void> {
+    if (tracked.length === 0 && untracked.length === 0) return;
+    const path = this.#path;
+    await this.#run(() => deletePaths(path, tracked, untracked));
   }
 
   async commit(message: string, amend = false): Promise<void> {

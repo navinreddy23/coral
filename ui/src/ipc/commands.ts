@@ -138,6 +138,33 @@ export function fileBlame(path: string, rev: string, file: string): Promise<Blam
   return invoke<Blame>('file_blame', { path, rev, file });
 }
 
+/** What to do with part of a file's changes. */
+export type Part = 'stage' | 'unstage' | 'discard';
+
+/**
+ * Stages, unstages or discards one hunk of a file, or only some of its lines.
+ *
+ * `lines` indexes the hunk's own lines; empty means the whole hunk.
+ */
+export function applyPart(
+  path: string,
+  file: string,
+  part: Part,
+  hunk: number,
+  lines: number[],
+): Promise<Status> {
+  return invoke<Status>('apply_part', { path, file, part, hunk, lines });
+}
+
+/** Deletes files outright: gone from the working tree, and staged as removed if tracked. */
+export function deletePaths(
+  path: string,
+  tracked: string[],
+  untracked: string[],
+): Promise<Status> {
+  return invoke<Status>('delete_paths', { path, tracked, untracked });
+}
+
 /** The files that differ between two commits, oldest first. */
 export function compareCommits(path: string, from: string, to: string): Promise<ChangedFile[]> {
   return invoke<ChangedFile[]>('compare_commits', { path, from, to });

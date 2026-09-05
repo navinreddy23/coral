@@ -199,6 +199,42 @@ pub async fn discard_paths(
     Ok(loc.status(&runner).await?)
 }
 
+/// Deletes files outright: gone from the working tree, and for tracked ones staged as removed.
+///
+/// Separate from discarding, which puts a file back to what HEAD holds. This is the one that
+/// leaves nothing behind, which is why the window asks before calling it.
+///
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn delete_paths(
+    path: String,
+    tracked: Vec<String>,
+    untracked: Vec<String>,
+) -> Result<coral_core::Status, IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    let known: Vec<&str> = tracked.iter().map(String::as_str).collect();
+    let new: Vec<&str> = untracked.iter().map(String::as_str).collect();
+
+    let count = tracked.len() + untracked.len();
+    let logged = crate::activity::started(&path, &format!("delete {count} file(s)"));
+    let done = async {
+        loc.delete_tracked(&runner, &known).await?;
+        loc.remove_untracked(&runner, &new).await
+    }
+    .await;
+    match done {
+        Ok(()) => logged.finished(),
+        Err(e) => {
+            logged.failed(&e.to_string());
+            return Err(e.into());
+        }
+    }
+    Ok(loc.status(&runner).await?)
+}
+
 /// What the log calls a discard. It names the deletions separately, because that is the half
 /// nothing can bring back and the half worth being able to find afterwards.
 fn discard_label(restore: &[String], remove: &[String]) -> String {

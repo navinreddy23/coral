@@ -689,6 +689,28 @@ impl RepoLocation {
         runner.output(cmd).await.map(|_| ())
     }
 
+    /// Removes tracked `paths` from the working tree, staging the deletion.
+    ///
+    /// `git rm -f`, so the file goes and the index is told: anything less leaves a deletion
+    /// half-done, sitting in the panel as a change nobody asked for. Untracked paths are not
+    /// git's to remove and go through [`remove_untracked`](Self::remove_untracked).
+    ///
+    /// # Errors
+    /// Propagates git failures.
+    pub async fn delete_tracked(
+        &self,
+        runner: &GitRunner,
+        paths: &[&str],
+    ) -> Result<(), CoralError> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+        let cmd = GitCommand::write("rm", self.display_path())
+            .args(["rm", "--force", "--"])
+            .args(paths);
+        runner.output(cmd).await.map(|_| ())
+    }
+
     /// Deletes untracked files and directories under `paths`.
     ///
     /// Never `-x`: ignored paths are build output, caches and editor state that the user did
