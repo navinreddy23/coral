@@ -144,6 +144,17 @@ pub fn tab_leave_submodule(tabs: tauri::State<'_, Tabs>, id: u32) -> Session {
     tabs.update(|s| s.leave_submodule(id))
 }
 
+/// Sets the picture on a tab, or puts it back to the default with `None`.
+#[tauri::command]
+#[must_use]
+pub fn tab_icon(
+    tabs: tauri::State<'_, Tabs>,
+    id: u32,
+    icon: Option<crate::session::TabIcon>,
+) -> Session {
+    tabs.update(|s| s.set_icon(id, icon))
+}
+
 #[tauri::command]
 #[must_use]
 pub fn group_rename(tabs: tauri::State<'_, Tabs>, id: u32, name: String) -> Session {

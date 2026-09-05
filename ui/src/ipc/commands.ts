@@ -1,7 +1,7 @@
 import { invoke } from './invoke';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import type { GroupColour, Session } from '../state/tabs.svelte';
+import type { GroupColour, Session, TabIcon } from '../state/tabs.svelte';
 import type {
   Blame,
   Blocks,
@@ -447,6 +447,9 @@ export const session = {
     invoke<Session>('tab_enter_submodule', { id, path }),
   leaveSubmodule: (id: number): Promise<Session> =>
     invoke<Session>('tab_leave_submodule', { id }),
+  /** Sets the picture on a tab; null puts it back to the window's default. */
+  icon: (id: number, icon: TabIcon | null): Promise<Session> =>
+    invoke<Session>('tab_icon', { id, icon }),
   rename: (id: number, name: string): Promise<Session> =>
     invoke<Session>('group_rename', { id, name }),
   recolour: (id: number, colour: GroupColour): Promise<Session> =>

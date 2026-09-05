@@ -142,10 +142,21 @@ everyone.
 branch, `Cmd+Shift+G` add current tab to a group, `Cmd+1…9` jump to tab, `Ctrl+Tab` next tab.
 All rebindable.
 
+## Tabs
+
+Shaped like a browser's: rounded above, flared at the base, and the current one wearing the
+toolbar's own fill so the two read as one surface, with an accent line along its top edge.
+Neighbours are parted by a hairline that fades wherever a fill already separates them.
+
+Each tab carries a picture, which is a repository's nearest thing to a favicon. It is a branch
+unless the tab's context menu was used to pick another from the twelve on offer, and it is drawn
+in a colour hashed from the path, so a strip of tabs is as scannable as a browser's without
+anyone having chosen anything. The choice persists per tab.
+
 ## Tab groups
 
 Chrome's tab groups applied to repositories. Tabs stay individual; a group is a named, coloured
-band around a contiguous run of them.
+tray around a contiguous run of them, with its name on a chip at the leading edge.
 
 - Create from a tab's context menu, from `Cmd+Shift+G`, or by dragging one tab onto another and
   holding. A popover asks for a name and one of the eight lane colours.

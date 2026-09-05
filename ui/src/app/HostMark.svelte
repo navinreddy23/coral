@@ -19,7 +19,7 @@
 </script>
 
 <script lang="ts">
-  const { kind, title }: { kind: HostMarkKind; title?: string } = $props();
+  const { kind, title, size = 12 }: { kind: HostMarkKind; title?: string; size?: number } = $props();
 </script>
 
 <!--
@@ -33,8 +33,8 @@
 <svg
   class="mark {kind}"
   viewBox="0 0 16 16"
-  width="12"
-  height="12"
+  width={size}
+  height={size}
   aria-hidden={title === undefined}
   role={title === undefined ? 'presentation' : 'img'}
   fill="currentColor"

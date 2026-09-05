@@ -320,3 +320,61 @@ describe('the tab and group menus', () => {
     expect(invoke.mock.calls.some(([cmd]) => cmd === 'group_close')).toBe(false);
   });
 });
+
+describe('the picture on a tab', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    invoke.mockResolvedValue(session());
+  });
+
+  it('draws one on every tab, and a colour that is the same for the same repository', () => {
+    const { container } = bar();
+    const marks = [...container.querySelectorAll('.tab .icon')];
+    expect(marks).toHaveLength(3);
+    expect(marks.every((m) => m.querySelector('svg') !== null)).toBe(true);
+
+    const hue = (name: string) =>
+      (chipFor(container, name).querySelector('.icon') as HTMLElement).style.getPropertyValue(
+        '--hue',
+      );
+    expect(hue('alpha')).toMatch(/^var\(--lane-[1-8]\)$/u);
+    // Two checkouts differing only in their last segment must not collide, or the colour says
+    // nothing. Not a property of the hash in general, but it has to hold for what is on screen.
+    expect(new Set([hue('alpha'), hue('beta'), hue('gamma')]).size).toBeGreaterThan(1);
+  });
+
+  it('opens a grid from the tab menu and sends the one that is clicked', async () => {
+    const { container } = bar();
+    await fireEvent.contextMenu(chipFor(container, 'gamma'));
+    const open = [...container.querySelectorAll('.menu .label')].find(
+      (e) => e.textContent?.trim() === 'Change icon…',
+    ) as HTMLElement;
+    await fireEvent.click(open);
+
+    const cells = [...container.querySelectorAll('.picker .cell')];
+    expect(cells).toHaveLength(12);
+    const rocket = cells.find((c) => c.getAttribute('aria-label') === 'Release') as HTMLElement;
+    await fireEvent.click(rocket);
+
+    await waitFor(() => {
+      const call = invoke.mock.calls.filter(([cmd]) => cmd === 'tab_icon').at(-1);
+      expect(call?.[1]).toEqual({ id: 3, icon: 'rocket' });
+    });
+  });
+
+  it('puts a tab back to the default with null rather than with a name', async () => {
+    const { container } = bar();
+    await fireEvent.contextMenu(chipFor(container, 'gamma'));
+    await fireEvent.click(
+      [...container.querySelectorAll('.menu .label')].find(
+        (e) => e.textContent?.trim() === 'Change icon…',
+      ) as HTMLElement,
+    );
+    await fireEvent.click(container.querySelector('.picker .reset') as HTMLElement);
+
+    await waitFor(() => {
+      const call = invoke.mock.calls.filter(([cmd]) => cmd === 'tab_icon').at(-1);
+      expect(call?.[1]).toEqual({ id: 3, icon: null });
+    });
+  });
+});

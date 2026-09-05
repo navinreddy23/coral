@@ -1,6 +1,7 @@
 <script lang="ts">
   import Menu, { type MenuItem } from './Menu.svelte';
-  import { TabsState, type GroupColour, type Tab, type TabGroup } from '../state/tabs.svelte';
+  import TabMark, { TAB_ICONS } from './TabMark.svelte';
+  import { TabsState, type GroupColour, type Tab, type TabGroup, type TabIcon } from '../state/tabs.svelte';
 
   const { tabs, onOpen, onCloseNew, newTab, onAsk }: {
     tabs: TabsState;
@@ -101,6 +102,15 @@
     event.preventDefault();
     const others = tabs.session.groups.filter((g) => g.id !== tab.group);
     const items: MenuItem[] = [
+      {
+        kind: 'item',
+        label: 'Change icon…',
+        run: () => {
+          pickAt = { left: event.clientX, top: event.clientY };
+          picking = tab;
+        },
+      },
+      { kind: 'separator' },
       { kind: 'item', label: 'New tab group…', run: () => void newGroup(tab) },
     ];
     if (others.length > 0) {
@@ -167,13 +177,52 @@
     };
   }
 
-  /** A group is a coloured band around a contiguous run of tabs, as Chrome draws them. */
-  function bandColour(colour: string | undefined): string {
-    return colour ? `var(--${colour.replace('lane', 'lane-')})` : 'transparent';
+  /**
+   * A group is a coloured band around a contiguous run of tabs, as Chrome draws them.
+   *
+   * `soft` asks for the tinted form, which is what fills the band; the full strength is for
+   * its name chip and its edge, where the colour has to be unmistakable.
+   */
+  function bandColour(colour: string | undefined, soft = false): string {
+    if (!colour) return 'transparent';
+    return `var(--${colour.replace('lane', 'lane-')}${soft ? '-soft' : ''})`;
   }
 
   function title(tab: Tab): string {
     return TabsState.title(tab);
+  }
+
+  /** The picture a tab shows: what was chosen for it, or a branch. */
+  function iconOf(tab: Tab): TabIcon {
+    return tab.icon ?? 'branch';
+  }
+
+  /**
+   * The colour that picture is drawn in, from the path rather than from a preference.
+   *
+   * A browser's tab strip is legible at a glance because every favicon is a different colour,
+   * and a strip of identical grey marks would be worse than none. Hashing the path gives each
+   * checkout a colour that is its own, is the same on every launch, and costs the user no
+   * decision — including for the eight tabs somebody opens before they read this sentence.
+   */
+  function hueOf(tab: Tab): string {
+    let h = 0;
+    for (let i = 0; i < tab.path.length; i += 1) h = (h * 31 + tab.path.charCodeAt(i)) % 4096;
+    return `var(--lane-${(h % 8) + 1})`;
+  }
+
+  /**
+   * The icon picker.
+   *
+   * A grid of the pictures themselves rather than a list of their names: choosing one by
+   * reading the word "Beaker" is a worse way to pick a picture than looking at it.
+   */
+  let picking = $state<Tab | null>(null);
+  let pickAt = $state({ left: 0, top: 0 });
+
+  function pickIcon(tab: Tab, icon: TabIcon | null) {
+    picking = null;
+    void tabs.setIcon(tab.id, icon);
   }
 
   /** The tab being dragged, and what it is currently over. */
@@ -285,7 +334,8 @@
     oncontextmenu={(e) => tabMenu(e, tab)}
   >
     <button class="pick" onclick={() => tabs.activate(tab.id)} title={tab.path}>
-      {title(tab)}
+      <span class="icon" style:--hue={hueOf(tab)}><TabMark kind={iconOf(tab)} /></span>
+      <span class="name">{title(tab)}</span>
     </button>
     <button class="shut" onclick={() => tabs.close(tab.id)} title="Close">×</button>
   </div>
@@ -305,7 +355,8 @@
       <div
         class="band"
         class:target={joining === group.id}
-        style:--band="{bandColour(group.colour)}"
+        style:--band={bandColour(group.colour)}
+        style:--band-soft={bandColour(group.colour, true)}
         role="presentation"
         ondragover={(e) => overBand(e, group.id)}
         ondragleave={() => leaveBand(group.id)}
@@ -335,7 +386,9 @@
 
   {#if newTab}
     <div class="tab active new">
-      <button class="pick" onclick={onOpen} title="Pick a repository to open">New tab</button>
+      <button class="pick" onclick={onOpen} title="Pick a repository to open">
+        <span class="name">New tab</span>
+      </button>
       {#if tabs.session.tabs.length > 0}
         <button class="shut" onclick={onCloseNew} title="Close">×</button>
       {/if}
@@ -377,7 +430,7 @@
             }}
             title={tab.path}
           >
-            <span class="glyph" aria-hidden="true">⑂</span>
+            <span class="icon" style:--hue={hueOf(tab)}><TabMark kind={iconOf(tab)} /></span>
             <span class="what">
               <span class="name">{title(tab)}</span>
               <span class="where">{tab.path}</span>
@@ -396,82 +449,151 @@
   </div>
 {/if}
 
+<svelte:window onkeydown={(e) => (e.key === 'Escape' && picking ? (picking = null) : null)} />
+
+{#if picking}
+  {@const tab = picking}
+  <div class="scrim" role="presentation" onclick={() => (picking = null)}></div>
+  <div class="picker" style:left="{pickAt.left}px" style:top="{pickAt.top}px">
+    <p class="heading">Icon for {title(tab)}</p>
+    <div class="grid" style:--hue={hueOf(tab)}>
+      {#each TAB_ICONS as choice (choice.id)}
+        <button
+          class="cell"
+          class:on={iconOf(tab) === choice.id}
+          title={choice.label}
+          aria-label={choice.label}
+          onclick={() => pickIcon(tab, choice.id)}
+        >
+          <TabMark kind={choice.id} size={16} />
+        </button>
+      {/each}
+    </div>
+    <button class="reset" onclick={() => pickIcon(tab, null)}>Use the default</button>
+  </div>
+{/if}
+
 {#if menu}
   <Menu x={menu.x} y={menu.y} items={menu.items} onClose={() => (menu = null)} />
 {/if}
 
 <style>
+  /*
+   * The strip the tabs stand on.
+   *
+   * The line along the bottom is an inset shadow rather than a border, because the active tab
+   * has to cover it: a tab that merges into the panel below is the whole of the shape, and a
+   * border would draw a hairline straight across the seam.
+   */
   .bar {
-    display: flex; align-items: stretch; gap: var(--space-1);
-    padding: var(--space-1) var(--space-2) 0;
-    background: var(--bg-2); border-bottom: 1px solid var(--border);
+    /* The face the current tab wears, which is the toolbar's own: the two are meant to read as
+       one surface stepping up out of the strip, and a tab painted any other colour is a tab
+       sitting on the toolbar rather than joined to it. */
+    --tab-face: var(--bg-1);
+    display: flex; align-items: flex-end; gap: 0;
+    padding: var(--space-2) var(--space-2) 0;
+    background: var(--bg-2); box-shadow: inset 0 -1px 0 var(--border);
     overflow-x: auto;
   }
+  /* A group is a tinted tray the tabs sit in, with its name on a chip at the leading edge. */
   .band {
-    display: flex; align-items: stretch; gap: var(--space-1);
-    padding: 0 var(--space-1) 2px;
-    border-bottom: 2px solid var(--band);
+    display: flex; align-items: flex-end; gap: 0;
+    padding: 3px 4px 0;
+    background: var(--band-soft);
+    border-radius: 10px 10px 0 0;
   }
   /* The band a drop would join, outlined rather than filled so the group's own colour still
      reads as its identity. */
-  .band.target {
-    outline: 2px solid var(--accent); outline-offset: -1px;
-    border-radius: var(--radius-1) var(--radius-1) 0 0;
-  }
+  .band.target { outline: 2px solid var(--accent); outline-offset: -1px; }
   /* Dropping here takes the tab out of every group, which needs saying while it is happening. */
-  .bar.loose { box-shadow: inset 0 -2px 0 var(--accent); }
+  .bar.loose { box-shadow: inset 0 -3px 0 var(--accent); }
   .group {
-    font: inherit; font-size: 11px; cursor: pointer; white-space: nowrap;
-    padding: 0 var(--space-2); border: 0; border-radius: 3px 3px 0 0;
+    font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap;
+    align-self: center; margin: 0 var(--space-1) 4px var(--space-1);
+    padding: 2px var(--space-2); border: 0; border-radius: 999px;
     background: var(--band); color: var(--bg-0);
   }
-  .tally { opacity: 0.8; margin-left: var(--space-1); }
+  .tally { opacity: 0.85; margin-left: var(--space-1); }
 
   .tab {
     display: flex; align-items: center; position: relative;
-    border-radius: var(--radius-1) var(--radius-1) 0 0; background: transparent;
+    margin: 0 3px; min-height: 32px;
+    border-radius: 10px 10px 0 0; background: transparent;
   }
   /*
-   * The active tab is filled, not underlined.
-   *
-   * A two-pixel line along the top edge is what the reference used to do and it is easy to
-   * lose: with a dozen tabs open, all the same shade, finding which one is showing meant
-   * reading them. A solid fill is findable without reading anything.
+   * A hairline between neighbours, the way a browser separates tabs that carry no fill of
+   * their own. It goes wherever a tab is filled — its own hover, or the one before it — since
+   * two edges meeting at a fill is already a boundary and the line only muddies it.
    */
-  .tab.active, .tab.active .pick, .tab.active .shut { background: var(--accent); }
-  .tab.active .pick { color: var(--accent-fg); font-weight: 600; }
-  .tab.active .shut { color: var(--accent-fg); }
-  .tab.active .shut:hover { background: var(--accent-line); }
+  .tab:not(.active) + .tab:not(.active)::before {
+    content: ''; position: absolute; left: -2px; top: 8px; bottom: 8px; width: 1px;
+    background: var(--border-strong); opacity: 0.55;
+  }
+  .tab:not(.active):hover::before,
+  .tab:hover + .tab:not(.active)::before,
+  .tab.active + .tab:not(.active)::before { opacity: 0; }
+  /*
+   * The active tab is a step out of the strip and into the panel below it.
+   *
+   * It carries the panel's own fill and no bottom edge, so the two read as one surface, and
+   * the two ears flare its base outward to meet the strip — which is the shape that makes a
+   * browser's current tab findable without reading a word of it. The accent line along the
+   * top is the second cue, for a strip where every tab is the same shade of white.
+   */
+  .tab.active {
+    background: var(--tab-face); z-index: 2;
+    box-shadow: inset 0 2px 0 var(--accent);
+  }
+  .tab.active .pick { color: var(--fg-0); font-weight: 600; }
+  .tab.active::before, .tab.active::after {
+    content: ''; position: absolute; bottom: 0; width: 10px; height: 10px;
+    opacity: 1; pointer-events: none;
+  }
+  .tab.active::before {
+    left: -10px;
+    background: radial-gradient(circle at 0 0, transparent 10px, var(--tab-face) 10.5px);
+  }
+  .tab.active::after {
+    right: -10px;
+    background: radial-gradient(circle at 100% 0, transparent 10px, var(--tab-face) 10.5px);
+  }
   .tab:hover:not(.active) { background: var(--bg-3); }
   .tab.dragging { opacity: 0.4; }
   /* Where it would land, drawn as an insertion line down the tab's leading edge rather than a
      fill, so the tab under the pointer stays readable. */
-  .tab.before::after {
-    content: ''; position: absolute; inset: 2px auto 2px -2px; width: 2px;
-    background: var(--accent); border-radius: 1px;
-  }
-  .tab.missing .pick { text-decoration: line-through; color: var(--fg-2); }
+  .tab.before { box-shadow: inset 2px 0 0 var(--accent); }
+  .tab.missing .name { text-decoration: line-through; color: var(--fg-2); }
+  .tab.missing .icon { color: var(--fg-2); }
 
   .pick {
+    display: flex; align-items: center; gap: var(--space-2);
     font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap;
-    max-width: 14em; overflow: hidden; text-overflow: ellipsis;
-    padding: var(--space-2) var(--space-1) var(--space-2) var(--space-3);
-    background: var(--bg-2); border: 0; color: var(--fg-1);
+    max-width: 13em; min-width: 0;
+    align-self: stretch; padding: 0 var(--space-1) 0 var(--space-3);
+    background: transparent; border: 0; color: var(--fg-1);
   }
+  .pick .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  /* The picture, in the colour that repository always gets. It keeps its colour on the tab
+     that is not current: a strip of grey marks is no easier to read than no marks at all. */
+  .icon { display: flex; flex: 0 0 auto; color: var(--hue, var(--fg-2)); }
   /* The close button appears on the tab being pointed at, and on the active one always: a row
      of crosses is noise, and a tab with no visible way to close it is a trap. */
   .shut {
-    font: inherit; cursor: pointer; padding: 0 var(--space-2);
-    background: var(--bg-2); border: 0; color: var(--fg-2); align-self: stretch;
+    font: inherit; font-size: 13px; line-height: 1; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; margin-right: var(--space-2);
+    padding: 0; border-radius: 50%;
+    background: transparent; border: 0; color: var(--fg-2);
     visibility: hidden;
   }
   .tab:hover .shut, .tab.active .shut { visibility: visible; }
-  .shut:hover { color: var(--danger); }
+  .shut:hover { color: var(--danger); background: var(--danger-soft); }
 
   .add {
-    font: inherit; font-size: 15px; line-height: 1; cursor: pointer; align-self: center;
-    padding: 3px var(--space-2); margin-left: var(--space-1);
-    background: var(--bg-2); border: 0; border-radius: var(--radius-1); color: var(--fg-2);
+    font: inherit; font-size: 16px; line-height: 1; cursor: pointer; align-self: center;
+    display: flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; margin: 0 var(--space-1) 3px;
+    padding: 0; background: transparent; border: 0; border-radius: 50%; color: var(--fg-2);
   }
   .add:hover { color: var(--fg-0); background: var(--bg-3); }
   .error { align-self: center; color: var(--danger); font-size: 11px; }
@@ -523,9 +645,8 @@
   }
   .hit:hover { background: var(--bg-2); }
   .hit.active { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent-line); }
-  .glyph { flex: 0 0 auto; color: var(--fg-2); }
   .what { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-  .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .what .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .where {
     font-size: 10px; color: var(--fg-2);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -541,4 +662,32 @@
   }
   .drop:hover { color: var(--danger); }
   .none { padding: var(--space-3); color: var(--fg-2); font-size: 12px; }
+
+  /* The icon picker, hung where the menu was rather than under the tab: the menu is where the
+     click that asked for it happened, and the bar may have scrolled since. */
+  .picker {
+    position: fixed; z-index: 41; width: 15em;
+    padding: var(--space-2);
+    background: var(--bg-0); color: var(--fg-0);
+    border: 1px solid var(--border-strong); border-radius: var(--radius-2);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+  }
+  .grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-1);
+    margin-bottom: var(--space-2);
+  }
+  .cell {
+    display: flex; align-items: center; justify-content: center;
+    aspect-ratio: 1; cursor: pointer; padding: 0;
+    background: var(--bg-1); border: 1px solid transparent; border-radius: var(--radius-1);
+    color: var(--hue, var(--fg-1));
+  }
+  .cell:hover { background: var(--bg-2); }
+  .cell.on { border-color: var(--accent); background: var(--accent-soft); }
+  .reset {
+    width: 100%; font: inherit; font-size: 11px; cursor: pointer;
+    padding: var(--space-2); border-radius: var(--radius-1);
+    background: var(--bg-1); border: 1px solid var(--border); color: var(--fg-1);
+  }
+  .reset:hover { background: var(--bg-2); color: var(--fg-0); }
 </style>

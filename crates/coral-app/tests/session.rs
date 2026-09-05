@@ -1,7 +1,7 @@
 //! Tabs and groups. The property that matters is that a session survives a restart intact,
 //! including a repository that has gone missing in the meantime.
 
-use coral_app_lib::session::{GroupColour, Session};
+use coral_app_lib::session::{GroupColour, Session, TabIcon};
 use coral_core::testutil::TestRepo;
 
 fn saved(session: &Session, dir: &tempfile::TempDir) -> Session {
@@ -425,4 +425,42 @@ fn renaming_a_group_that_is_not_there_changes_nothing() {
     let (mut s, group) = grouped();
     s.rename_group(group + 999, "nowhere".to_owned());
     assert_eq!(s.groups[0].name, "work");
+}
+
+/// A tab nobody has had an opinion about carries no icon, which is not the same as carrying
+/// the default: changing what the default is has to reach those tabs.
+#[test]
+fn a_new_tab_has_no_icon_of_its_own() {
+    let mut s = Session::default();
+    s.open(std::path::PathBuf::from("/repo"));
+    assert_eq!(s.tabs[0].icon, None);
+}
+
+#[test]
+fn a_chosen_icon_survives_a_restart_and_can_be_put_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut s = Session::default();
+    let tab = s.open(std::path::PathBuf::from("/repo"));
+    s.set_icon(tab, Some(TabIcon::Rocket));
+
+    let mut back = saved(&s, &dir);
+    assert_eq!(back.tabs[0].icon, Some(TabIcon::Rocket));
+
+    back.set_icon(tab, None);
+    assert_eq!(saved(&back, &dir).tabs[0].icon, None);
+}
+
+/// A session written before tabs had icons must still load, with every tab on the default.
+#[test]
+fn a_session_from_before_icons_loads() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("session.json");
+    std::fs::write(
+        &path,
+        r#"{"tabs":[{"id":1,"path":"/repo","group":null}],"groups":[],"active":1,"nextId":2}"#,
+    )
+    .unwrap();
+    let s = Session::load(&path);
+    assert_eq!(s.tabs.len(), 1);
+    assert_eq!(s.tabs[0].icon, None);
 }

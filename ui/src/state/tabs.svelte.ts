@@ -5,6 +5,17 @@ export type GroupColour =
   | 'lane1' | 'lane2' | 'lane3' | 'lane4'
   | 'lane5' | 'lane6' | 'lane7' | 'lane8';
 
+/**
+ * The picture on a tab.
+ *
+ * A fixed set, drawn in the window. An arbitrary image is a smudge at fourteen pixels, and a
+ * file on disk is one more thing that breaks when somebody tidies their home directory.
+ */
+export type TabIcon =
+  | 'branch' | 'github' | 'gitlab' | 'package'
+  | 'terminal' | 'globe' | 'book' | 'beaker'
+  | 'wrench' | 'star' | 'bug' | 'rocket';
+
 export interface Tab {
   id: number;
   path: string;
@@ -12,6 +23,8 @@ export interface Tab {
   submodule: string | null;
   group: number | null;
   missing: boolean;
+  /** What the user picked, or null to leave it to the window. */
+  icon?: TabIcon | null;
 }
 
 export interface TabGroup {
@@ -121,6 +134,11 @@ export class TabsState {
 
   async leaveSubmodule(id: number): Promise<void> {
     await this.#run(() => ipc.leaveSubmodule(id));
+  }
+
+  /** Sets the picture on a tab. Null puts it back to the window's default. */
+  async setIcon(id: number, icon: TabIcon | null): Promise<void> {
+    await this.#run(() => ipc.icon(id, icon));
   }
 
   async rename(id: number, name: string): Promise<void> {

@@ -179,6 +179,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         tabs::group_collapse,
         tabs::tab_enter_submodule,
         tabs::tab_leave_submodule,
+        tabs::tab_icon,
         tabs::group_rename,
         tabs::group_recolour,
         tabs::group_dissolve,

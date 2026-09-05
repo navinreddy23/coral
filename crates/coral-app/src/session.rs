@@ -52,6 +52,29 @@ impl GroupColour {
     }
 }
 
+/// The picture on a tab.
+///
+/// A fixed set rather than a file the user points at. A tab shows fourteen pixels of picture:
+/// an arbitrary image is a smudge at that size, and a path into somebody's home directory is
+/// one more thing that breaks when they tidy up. These are drawn in the window, so they take
+/// the theme with them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TabIcon {
+    Branch,
+    Github,
+    Gitlab,
+    Package,
+    Terminal,
+    Globe,
+    Book,
+    Beaker,
+    Wrench,
+    Star,
+    Bug,
+    Rocket,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TabGroup {
@@ -79,6 +102,11 @@ pub struct Tab {
     /// not dropped: a disconnected drive should not silently lose someone's workspace.
     #[serde(default)]
     pub missing: bool,
+    /// The picture the user chose for this tab. `None` leaves the window to its default, which
+    /// is not the same as choosing the default: a later change to what that is should reach a
+    /// tab nobody has had an opinion about.
+    #[serde(default)]
+    pub icon: Option<TabIcon>,
 }
 
 /// Everything the window restores on launch.
@@ -138,6 +166,7 @@ impl Session {
             submodule: None,
             group: None,
             missing: false,
+            icon: None,
         });
         self.active = Some(id);
         id
@@ -232,6 +261,13 @@ impl Session {
     pub fn leave_submodule(&mut self, tab: u32) {
         if let Some(t) = self.tabs.iter_mut().find(|t| t.id == tab) {
             t.submodule = None;
+        }
+    }
+
+    /// Sets the picture on a tab. `None` puts it back to the window's default.
+    pub fn set_icon(&mut self, tab: u32, icon: Option<TabIcon>) {
+        if let Some(t) = self.tabs.iter_mut().find(|t| t.id == tab) {
+            t.icon = icon;
         }
     }
 
