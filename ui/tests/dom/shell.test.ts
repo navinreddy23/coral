@@ -753,3 +753,28 @@ describe('a git too old to open anything', () => {
     expect(panes.join(' ')).not.toContain('SSH');
   });
 });
+
+describe('a repository that will not open', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  /**
+   * The loading screen shows while there are no rows yet, which is nearly always because the
+   * walk is running. It must not show when the walk is never going to start: a window saying
+   * "reading the repository" under a banner explaining that it could not be read has hung, as
+   * far as anyone looking at it is concerned.
+   */
+  it('says why instead of loading forever', async () => {
+    wire({ open_repo: new Error('not a git repository') });
+    const { container } = render(App);
+
+    await waitFor(() => {
+      const banner = container.querySelector('.banner.error');
+      if (!banner) throw new Error('no banner yet');
+      expect(banner.textContent).toContain('not a git repository');
+    });
+    expect(container.querySelector('.splash')).toBeNull();
+  });
+});

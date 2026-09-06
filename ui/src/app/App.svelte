@@ -2923,12 +2923,16 @@
       onClose={tabs.session.tabs.length === 0 ? null : () => (showStart = false)}
     />
   <!--
-    Anything with a repository open and no rows yet, not only the moment the walk is running.
-    Between the session loading and the walk starting there is a beat where none of the three
-    branches matched and the body was empty — which is a fifth of a second on a small
-    repository and the first thing the window shows, since it is what the shell waits for.
+    Anything with a repository open and no rows yet, not only the moment the walk is running:
+    between the session loading and the walk starting there is a beat where none of the other
+    branches matched and the body was empty, and that beat is the first thing the window shows.
+
+    Both errors have to be excluded, not just the graph's. A repository that could not be
+    opened never reaches the walk, so the graph has no error to report — and a screen that says
+    "reading the repository" under a banner explaining that it could not be read is a window
+    that has hung, whatever it is really doing.
   -->
-  {:else if !graph.frame && graph.error === null}
+  {:else if !graph.frame && graph.error === null && error === null}
     <Splash
       repo={loadedPath.split('/').filter(Boolean).at(-1) ?? loadedPath}
       path={loadedPath}
