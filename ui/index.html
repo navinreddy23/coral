@@ -20,25 +20,56 @@
     -->
     <style>
       html, body { margin: 0; height: 100%; background: #f7f8fa; }
+
       #boot {
-        position: fixed; inset: 0; display: flex; gap: 10px;
+        position: fixed; inset: 0; display: flex; gap: 14px;
         align-items: center; justify-content: center;
         font: 600 13px/1 Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
-        letter-spacing: 0.22em; text-transform: uppercase; color: #4a5568;
+        text-transform: uppercase; color: #4a5568;
       }
-      #boot span { width: 9px; height: 9px; border-radius: 50%; background: #0d7a6f; }
+
+      /* A commit node with rings leaving it, which is the shape the loading screen after this
+         one is built from. Two rings out of phase read as a pulse rather than a blink. */
+      #boot i {
+        position: relative; width: 10px; height: 10px; border-radius: 50%;
+        background: #0d7a6f; flex: 0 0 auto;
+      }
+      #boot i::before, #boot i::after {
+        content: ''; position: absolute; inset: -5px; border-radius: 50%;
+        border: 2px solid #0d7a6f;
+        animation: boot-ring 1800ms ease-out infinite;
+      }
+      #boot i::after { animation-delay: 900ms; }
+
+      /* Settling from wide to set, so the word arrives rather than appearing. */
+      #boot b { font-weight: 600; animation: boot-word 900ms ease-out both; }
+
+      @keyframes boot-ring {
+        0% { transform: scale(0.55); opacity: 0.7; }
+        100% { transform: scale(1.7); opacity: 0; }
+      }
+      @keyframes boot-word {
+        from { letter-spacing: 0.5em; opacity: 0; }
+        to { letter-spacing: 0.22em; opacity: 1; }
+      }
 
       @media (prefers-color-scheme: dark) {
         html, body { background: #15181d; }
         #boot { color: #8b95a2; }
-        #boot span { background: #16a094; }
+        #boot i, #boot i::before, #boot i::after { background: #16a094; border-color: #16a094; }
+        #boot i::before, #boot i::after { background: none; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #boot i::before, #boot i::after { animation: none; opacity: 0.35; transform: scale(1.2); }
+        #boot b { animation: none; letter-spacing: 0.22em; }
       }
     </style>
   </head>
   <body>
     <div id="app"></div>
     <!-- Removed by main.ts the moment the application mounts over it. -->
-    <div id="boot"><span></span>Coral</div>
+    <div id="boot"><i></i><b>Coral</b></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

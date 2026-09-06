@@ -84,6 +84,7 @@
   import { GraphState } from '../state/graph.svelte';
   import { RefsState } from '../state/refs.svelte';
   import { ScopeState } from '../state/scope.svelte';
+  import ChromeMark from './ChromeMark.svelte';
   import { ThemeState } from '../state/theme.svelte';
   import { SelectionState } from '../state/selection.svelte';
   import { WorktreeState } from '../state/worktree.svelte';
@@ -2736,19 +2737,31 @@
       {/if}
     {/if}
     <button
-      class="theme"
+      class="chrome"
       onclick={() => openActivity()}
       title="Activity logs: what Coral has been doing"
       aria-label="Activity logs"
-    >☰</button>
+    ><ChromeMark kind="logs" /></button>
     <button
-      class="theme"
+      class="chrome"
       onclick={() => openPreferences()}
       title="SSH keys, signing and preferences"
       aria-label="Settings"
-    >⚙</button>
-    <button class="theme" onclick={() => theme.toggle()} title="Switch theme">
-      {theme.current === 'light' ? 'Dark' : 'Light'}
+    ><ChromeMark kind="settings" /></button>
+    <!--
+      Both faces are drawn and one is turned away, rather than swapped in and out. A theme
+      switch that changes under the pointer with no movement reads as a redraw; turning is
+      the one thing that says the button did something.
+    -->
+    <button
+      class="chrome swap"
+      class:dark={theme.current === 'dark'}
+      onclick={() => theme.toggle()}
+      title={theme.current === 'light' ? 'Switch to the dark theme' : 'Switch to the light theme'}
+      aria-label="Switch theme"
+    >
+      <span class="face moon"><ChromeMark kind="moon" /></span>
+      <span class="face sun"><ChromeMark kind="sun" /></span>
     </button>
   </header>
 
@@ -3297,13 +3310,29 @@
   .chip.warn { background: var(--warn-soft); color: var(--warn); }
   /* The window's own controls, which act on the application rather than on the repository.
      Only the first is pushed away from the path; the rest sit against it. */
-  .theme {
-    font: inherit; font-size: 11px; cursor: pointer;
-    padding: 2px var(--space-2); border-radius: 3px;
-    border: 1px solid var(--border); background: var(--bg-2); color: var(--fg-1);
+  .chrome {
+    display: flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; padding: 0; cursor: pointer;
+    border-radius: var(--radius-1);
+    border: 1px solid transparent; background: transparent; color: var(--fg-2);
   }
-  .theme:first-of-type { margin-left: auto; }
-  .theme:hover { background: var(--bg-3); color: var(--fg-0); }
+  .chrome:first-of-type { margin-left: auto; }
+  .chrome:hover { background: var(--bg-2); border-color: var(--border); color: var(--fg-0); }
+
+  /* The two faces occupy the same 16 pixels; only their rotation says which is showing. */
+  .swap { position: relative; }
+  .face {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    transition: transform 260ms cubic-bezier(0.34, 1.3, 0.64, 1), opacity 200ms ease;
+  }
+  .swap .moon { transform: rotate(0deg) scale(1); opacity: 1; }
+  .swap .sun { transform: rotate(-90deg) scale(0.4); opacity: 0; }
+  .swap.dark .moon { transform: rotate(90deg) scale(0.4); opacity: 0; }
+  .swap.dark .sun { transform: rotate(0deg) scale(1); opacity: 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .face { transition: none; }
+  }
   .banner { margin: 0; padding: var(--space-2) var(--space-4); background: var(--bg-2); color: var(--fg-1); font-size: 12px; }
   .banner.error { color: var(--danger); }
   .muted { color: var(--fg-2); }
