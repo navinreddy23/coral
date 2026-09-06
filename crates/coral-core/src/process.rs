@@ -906,7 +906,10 @@ impl GitRunner {
         argv: Vec<String>,
         out: &std::process::Output,
     ) -> CoralError {
-        let stderr = why_it_failed(&String::from_utf8_lossy(&out.stderr));
+        let mut stderr = why_it_failed(&String::from_utf8_lossy(&out.stderr));
+        if stderr.is_empty() {
+            stderr = why_it_failed_on_stdout(&String::from_utf8_lossy(&out.stdout));
+        }
         match out.status.code() {
             Some(code) => CoralError::GitExit {
                 label,
@@ -1244,6 +1247,22 @@ fn why_it_failed(stderr: &str) -> String {
         return lines[tail..].join("\n").trim().to_owned();
     }
     kept.join("\n")
+}
+
+/// The tail of stdout, for the commands that explain a failure there rather than on stderr.
+///
+/// `git stash pop` on a conflict prints "CONFLICT (content): Merge conflict in <file>" to
+/// stdout and nothing at all to stderr, so the message reaching the user was "git stash exited
+/// with 1:" and then nothing. Bounded to the last few lines because stdout is the command's
+/// answer, not its complaint, and some of them are long.
+fn why_it_failed_on_stdout(stdout: &str) -> String {
+    const LINES: usize = 3;
+    let kept: Vec<&str> = stdout
+        .lines()
+        .map(str::trim_end)
+        .filter(|line| !line.trim().is_empty() && !is_progress(line))
+        .collect();
+    kept[kept.len().saturating_sub(LINES)..].join("\n")
 }
 
 /// A line that says what went wrong rather than what to do about it.
