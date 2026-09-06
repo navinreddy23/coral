@@ -177,11 +177,12 @@ impl RepoLocation {
 
     /// Restores refs to a snapshot.
     ///
-    /// Refuses when the worktree has changes, because moving refs underneath uncommitted work
-    /// silently changes what those changes mean.
+    /// Refuses when the worktree has changes that the restore would overwrite, because moving
+    /// refs underneath uncommitted work silently changes what those changes mean.
     ///
     /// # Errors
-    /// [`CoralError::Protocol`] if the worktree is dirty; otherwise propagates git failures.
+    /// [`CoralError::Refused`] if the worktree would lose work; otherwise propagates git
+    /// failures.
     pub async fn restore_refs(
         &self,
         runner: &GitRunner,
@@ -189,7 +190,7 @@ impl RepoLocation {
         from: &RefSnapshot,
     ) -> Result<(), CoralError> {
         let status = self.status(runner).await?;
-        if !status.is_clean() {
+        if !status.is_clean() && !self.already_holds(runner, target).await? {
             return Err(CoralError::Refused {
                 label: "undo",
                 detail: "the worktree has changes; commit or stash them first".to_owned(),
@@ -232,11 +233,44 @@ impl RepoLocation {
 
         // Checking out the branch you are already on is a no-op, so moving its ref underneath
         // leaves the index and worktree describing the old commit. Syncing them is safe here
-        // precisely because the worktree was verified clean above.
+        // precisely because the guard above established that they hold nothing this would
+        // overwrite.
         if let (Some(_), Some(oid)) = (&target.head_branch, &target.head_oid) {
             self.reset(runner, oid, crate::ops::ResetMode::Hard).await?;
         }
         Ok(())
+    }
+
+    /// Whether the tracked worktree already holds exactly what `target` points at.
+    ///
+    /// A soft or mixed reset leaves the worktree dirty by construction: what shows as changed
+    /// is the content of the commits it just took off the branch. Undoing one puts those
+    /// commits back and syncs the worktree to them, which writes nothing the files do not
+    /// already contain — so the dirty-worktree refusal has nothing to protect, and refusing
+    /// meant the one action people most want back was the one that could never be taken back.
+    ///
+    /// Anything the user actually wrote makes this false and the refusal stands. Untracked
+    /// files do not enter into it: `diff` does not see them and `reset --hard` does not touch
+    /// them.
+    async fn already_holds(
+        &self,
+        runner: &GitRunner,
+        target: &RefSnapshot,
+    ) -> Result<bool, CoralError> {
+        let Some(oid) = target.head_oid.as_deref() else {
+            return Ok(false);
+        };
+        // `--name-only` rather than `--quiet`, whose answer is the exit code: a non-zero exit
+        // is an error to the runner, and this one is not an error.
+        let out = runner
+            .output(GitCommand::read("diff", self.display_path()).args([
+                "diff",
+                "--name-only",
+                oid,
+                "--",
+            ]))
+            .await?;
+        Ok(out.stdout.is_empty())
     }
 }
 

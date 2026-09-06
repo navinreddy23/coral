@@ -267,3 +267,61 @@ async fn undo_refuses_plainly_once_a_ref_has_moved_underneath_it() {
     );
     assert_eq!(repo.git(["log", "--oneline", "-1", "--format=%s"]), "third");
 }
+
+/// The one action people most want back used to be the one that could never be taken back.
+///
+/// A soft or a mixed reset leaves the worktree dirty by construction, and undo refused on a
+/// dirty worktree, so undoing a reset was refused every single time.
+#[tokio::test]
+async fn undoes_a_soft_reset_even_though_it_leaves_the_worktree_dirty() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let repo = repo.write("a.txt", "2\n").commit("second");
+    let (runner, loc) = open(&repo).await;
+    let at_second = repo.git(["rev-parse", "HEAD"]);
+
+    let before = loc.snapshot_refs(&runner).await.unwrap();
+    loc.reset(&runner, "HEAD~1", ResetMode::Soft).await.unwrap();
+    let after = loc.snapshot_refs(&runner).await.unwrap();
+    let mut journal = Journal::load(&loc);
+    journal.record(entry("reset to HEAD~1", before, after));
+    journal.save(&loc).unwrap();
+
+    // The reset left its own output staged, which is what the refusal used to catch.
+    assert!(!loc.status(&runner).await.unwrap().is_clean());
+
+    let said = loc.undo_step(&runner, true).await.expect("undo applies");
+    assert_eq!(said, "undid reset to HEAD~1");
+    assert_eq!(repo.git(["rev-parse", "HEAD"]), at_second);
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("a.txt")).unwrap(),
+        "2\n"
+    );
+}
+
+/// And work the user actually wrote still stops it, which is the whole reason for the guard.
+#[tokio::test]
+async fn refuses_when_the_worktree_holds_something_the_undo_would_overwrite() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let repo = repo.write("a.txt", "2\n").commit("second");
+    let (runner, loc) = open(&repo).await;
+
+    let before = loc.snapshot_refs(&runner).await.unwrap();
+    loc.reset(&runner, "HEAD~1", ResetMode::Soft).await.unwrap();
+    let after = loc.snapshot_refs(&runner).await.unwrap();
+    let mut journal = Journal::load(&loc);
+    journal.record(entry("reset to HEAD~1", before, after));
+    journal.save(&loc).unwrap();
+
+    // Now something that is not the reset's own output.
+    std::fs::write(repo.path().join("a.txt"), "written by hand\n").unwrap();
+
+    let refused = loc.undo_step(&runner, true).await.unwrap_err();
+    assert!(
+        refused.to_string().contains("worktree has changes"),
+        "{refused}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("a.txt")).unwrap(),
+        "written by hand\n"
+    );
+}
