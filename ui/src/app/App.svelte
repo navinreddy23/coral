@@ -3361,6 +3361,22 @@
           </span>
         </button>
       {/if}
+      <!--
+        A graph with no rows in it. Before this the pane was simply blank, which is what a new
+        repository shows on the first screen anybody sees of it, and what a scope that hides
+        everything shows on the screen the user is trying to understand.
+      -->
+      {#if graph.totalRows === 0}
+        <p class="nothing">
+          {#if scope.solo !== null || scope.hidden.length > 0}
+            Nothing is in view. The branch list on the left says what is hidden.
+          {:else if worktree.dirty}
+            Nothing is committed yet. The panel on the right makes the first commit.
+          {:else}
+            Nothing is committed yet, and nothing has changed.
+          {/if}
+        </p>
+      {/if}
       <div
         class="spacer"
         style:height="{spacerHeight(graph.totalRows, DEFAULT_METRICS)}px"
@@ -3547,6 +3563,7 @@
                 to: selection.pair.to.oid,
                 files: selection.compared,
               }}
+          nothing={graph.totalRows === 0}
           loading={selection.loading}
           error={selection.error}
           openPath={diff.path}
@@ -3717,6 +3734,12 @@
 
   @media (prefers-reduced-motion: reduce) {
     .face { transition: none; }
+  }
+  /* Centred across the pane rather than hung under the column headings, because it is
+     answering "where is the graph" and that question is about the whole pane. */
+  .nothing {
+    margin: 0; padding: var(--space-5) var(--space-4);
+    text-align: center; color: var(--fg-2); font-size: 13px;
   }
   .banner { margin: 0; padding: var(--space-2) var(--space-4); background: var(--bg-2); color: var(--fg-1); font-size: 12px; }
   .banner.error { color: var(--danger); }

@@ -11,6 +11,7 @@
     detail,
     repo,
     compare,
+    nothing,
     loading,
     error,
     openPath,
@@ -29,6 +30,8 @@
     compare: { from: string; to: string; files: ChangedFile[] } | null;
     /** Goes back to the newer of the two on its own. */
     onClearCompare: () => void;
+    /** True when the graph holds no commits, so there is nothing to invite a click on. */
+    nothing: boolean;
     loading: boolean;
     error: string | null;
     /** Path whose diff is on screen, so the list can mark it. */
@@ -152,7 +155,13 @@
     </dl>
     <button class="single" onclick={onClearCompare}>Show just the newer commit</button>
   {:else if !detail}
-    <p class="muted">Select a commit, or hold Ctrl and pick a second one to compare.</p>
+    <p class="muted">
+      {#if nothing}
+        A commit's author, message and files appear here.
+      {:else}
+        Select a commit, or hold Ctrl and pick a second one to compare.
+      {/if}
+    </p>
   {:else}
     <h2>{detail.commit.summary}</h2>
     {#if detail.commit.body}
