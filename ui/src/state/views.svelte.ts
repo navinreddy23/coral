@@ -101,8 +101,12 @@ function read(): Views {
     }
     if (stored.changes === 'path' || stored.changes === 'tree') out.changes = stored.changes;
     if (stored.diff === 'inline' || stored.diff === 'split') out.diff = stored.diff;
+    // `fileView` is deliberately not restored. Blame and history are things you go and look
+    // at, not a way you want every file opened from the next launch onwards.
+    if (typeof stored.ignoreWhitespace === 'boolean') out.ignoreWhitespace = stored.ignoreWhitespace;
     if (typeof stored.sidebar === 'boolean') out.sidebar = stored.sidebar;
     if (typeof stored.details === 'boolean') out.details = stored.details;
+    if (typeof stored.toolbar === 'boolean') out.toolbar = stored.toolbar;
     if (stored.terminalDock === 'bottom' || stored.terminalDock === 'right') {
       out.terminalDock = stored.terminalDock;
     }
