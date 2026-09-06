@@ -127,7 +127,11 @@ scenario_refs() {
     echo "2c. refs"
     local out; out="$("$CORAL" --repo "$REPO" --json refs)"
     local n; n=$(jq -r '.result.refs | length' <<<"$out")
-    local expected; expected=$(git -C "$REPO" for-each-ref --format='%(refname)' | wc -l)
+    # A remote's own HEAD is left out on purpose: it is a symbolic pointer at one of the
+    # branches already listed, and drawing it put a second label on that branch's tip.
+    local expected
+    expected=$(git -C "$REPO" for-each-ref --format='%(refname)' \
+        | grep -Ecv '^refs/remotes/[^/]+/HEAD$')
     [ "$n" = "$expected" ] && ok "listed $n refs, matching for-each-ref" || bad "listed $n refs, git says $expected"
 }
 # Resolves two adjacent release tags at runtime, so the scenarios follow the kernel forward.
