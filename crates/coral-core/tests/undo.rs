@@ -235,3 +235,35 @@ async fn a_corrupt_journal_loads_as_empty() {
 
     assert!(Journal::load(&loc).entries.is_empty());
 }
+
+/// A ref that moved outside Coral makes the step unsafe, and saying so is the whole point.
+///
+/// `update-ref` catches this too, and refuses with "cannot lock ref 'refs/heads/main': is at
+/// <sha> but expected <sha>" — which is git explaining itself to somebody who pressed Undo.
+#[tokio::test]
+async fn undo_refuses_plainly_once_a_ref_has_moved_underneath_it() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let (runner, loc) = open(&repo).await;
+
+    let before = loc.snapshot_refs(&runner).await.unwrap();
+    let repo = repo.write("a.txt", "2\n").commit("second");
+    let after = loc.snapshot_refs(&runner).await.unwrap();
+    let mut journal = Journal::load(&loc);
+    journal.record(entry("second commit", before, after));
+    journal.save(&loc).unwrap();
+
+    // Somebody commits in a terminal beside the window.
+    let repo = repo.write("a.txt", "3\n").commit("third");
+
+    let refused = loc.undo_step(&runner, true).await.unwrap_err();
+    let said = refused.to_string();
+    assert!(said.contains("refs/heads/main"), "names the ref: {said}");
+    assert!(said.contains("moved since"), "says what happened: {said}");
+    assert!(!said.contains("cannot lock"), "not git's words: {said}");
+    // And nothing was touched on the way to refusing.
+    assert_eq!(
+        repo.git(["rev-parse", "HEAD"]),
+        repo.git(["rev-parse", "main"])
+    );
+    assert_eq!(repo.git(["log", "--oneline", "-1", "--format=%s"]), "third");
+}

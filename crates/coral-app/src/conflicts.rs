@@ -72,6 +72,11 @@ pub async fn resolve_conflict(path: String, file: String, choice: Choice) -> Res
 
 /// Continues, aborts, or skips the operation in progress.
 ///
+/// Bracketed by a ref snapshot like every other mutation, because this is where a conflicted
+/// merge or rebase actually lands its commit. Without it the operation left nothing in the
+/// journal, and the next Undo reached past it to an older entry whose refs had moved — which
+/// git refused, in git's words, under a button that says Undo.
+///
 /// # Errors
 /// Propagates git failures, including a continue that hits the next conflict.
 #[tauri::command]
@@ -85,5 +90,29 @@ pub async fn operation_step(
         "skip" => OpAction::Skip,
         _ => OpAction::Continue,
     };
-    Ok(loc.op(&runner, action).await?)
+    // Read before the step, since finishing it is what clears the state.
+    let label = journal_label(loc.operation(&runner).await?.state, &step);
+    let before = loc.snapshot_refs(&runner).await?;
+    let outcome = loc.op(&runner, action).await?;
+    let after = loc.snapshot_refs(&runner).await?;
+    loc.journal_change(&label, before, after)?;
+    Ok(outcome)
+}
+
+/// What the journal, and so the undo tooltip, should call this step.
+fn journal_label(state: coral_core::repo::OpState, step: &str) -> String {
+    use coral_core::repo::OpState;
+    let what = match state {
+        OpState::Merge => "merge",
+        OpState::Rebase => "rebase",
+        OpState::CherryPick => "cherry-pick",
+        OpState::Revert => "revert",
+        OpState::Bisect => "bisect",
+        OpState::Clean => "operation",
+    };
+    match step {
+        "abort" => format!("abort the {what}"),
+        "skip" => format!("skip a commit in the {what}"),
+        _ => format!("finish the {what}"),
+    }
 }

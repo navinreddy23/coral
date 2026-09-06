@@ -34,6 +34,17 @@ impl RefSnapshot {
     }
 }
 
+/// The first ref the step would move that is no longer where the journal left it.
+///
+/// A ref that moved outside Coral — a commit in a terminal, another client — makes the whole
+/// step unsafe, not just that one ref: restoring the rest would leave a half-undone state.
+fn moved_since(now: &RefSnapshot, from: &RefSnapshot, target: &RefSnapshot) -> Option<String> {
+    from.diff(target)
+        .into_iter()
+        .find(|(name, expected, _)| now.refs.get(name) != expected.as_ref())
+        .map(|(name, _, _)| name)
+}
+
 /// One reversible operation.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct JournalEntry {
@@ -284,6 +295,20 @@ impl RepoLocation {
         } else {
             (&entry.after, &entry.before)
         };
+        // Checked here rather than left to `update-ref`, which refuses with its own message:
+        // "cannot lock ref 'refs/heads/main': is at <sha> but expected <sha>" says nothing
+        // about the step being taken, and the user is looking at an Undo button, not at git.
+        let now = self.snapshot_refs(runner).await?;
+        if let Some(name) = moved_since(&now, from, target) {
+            return Err(CoralError::Refused {
+                label: if backwards { "undo" } else { "redo" },
+                detail: format!(
+                    "{name} has moved since {}; there is nothing safe to {} here",
+                    entry.label,
+                    if backwards { "undo" } else { "redo" }
+                ),
+            });
+        }
         self.restore_refs(runner, target, from).await?;
 
         if backwards {
