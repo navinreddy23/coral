@@ -4,9 +4,41 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Coral</title>
+    <!--
+      Written here rather than in the stylesheet, because the stylesheet arrives with the
+      bundle and this has to be true before it does. Until then a webview paints its own
+      white, and the window opened as a white rectangle for as long as the bundle took to
+      load. The values are `--bg-1`, `--fg-2` and `--accent` from tokens.css, copied because
+      nothing that could read the tokens has loaded yet.
+
+      Coral's own theme is an explicit choice kept in the page's storage, which cannot be read
+      before the bundle either — an inline script would do it and the content policy refuses
+      one. The desktop's preference is the best guess available without either, and it is the
+      right guess for anyone whose two settings agree. Somebody running a dark desktop and a
+      light Coral gets a dark half second, which is the price of the dark desktop and a dark
+      Coral not getting a light one.
+    -->
+    <style>
+      html, body { margin: 0; height: 100%; background: #f7f8fa; }
+      #boot {
+        position: fixed; inset: 0; display: flex; gap: 10px;
+        align-items: center; justify-content: center;
+        font: 600 13px/1 Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+        letter-spacing: 0.22em; text-transform: uppercase; color: #4a5568;
+      }
+      #boot span { width: 9px; height: 9px; border-radius: 50%; background: #0d7a6f; }
+
+      @media (prefers-color-scheme: dark) {
+        html, body { background: #15181d; }
+        #boot { color: #8b95a2; }
+        #boot span { background: #16a094; }
+      }
+    </style>
   </head>
   <body>
     <div id="app"></div>
+    <!-- Removed by main.ts the moment the application mounts over it. -->
+    <div id="boot"><span></span>Coral</div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

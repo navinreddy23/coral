@@ -2824,7 +2824,13 @@
       onConfirm={confirmThat}
       onClose={tabs.session.tabs.length === 0 ? null : () => (showStart = false)}
     />
-  {:else if graph.loading && !graph.frame}
+  <!--
+    Anything with a repository open and no rows yet, not only the moment the walk is running.
+    Between the session loading and the walk starting there is a beat where none of the three
+    branches matched and the body was empty — which is a fifth of a second on a small
+    repository and the first thing the window shows, since it is what the shell waits for.
+  -->
+  {:else if !graph.frame && graph.error === null}
     <Splash
       repo={loadedPath.split('/').filter(Boolean).at(-1) ?? loadedPath}
       path={loadedPath}
