@@ -1010,6 +1010,7 @@
         disabled: busy,
         run: () => void deleteTag(ref.short),
       });
+      items.push(...deleteTagRemoteItems(ref.short));
     }
 
     if (items.length === 0) return;
@@ -1093,10 +1094,52 @@
     });
   }
 
+  /**
+   * Takes a tag off a remote, leaving the local one alone.
+   *
+   * Pushing a tag was the only half of it the window had. Once a tag was out there the only
+   * way back was a terminal, and deleting it here said as much: "a copy on a remote stays
+   * until it is deleted there too", with nothing offering to do that.
+   */
+  async function deleteRemoteTag(name: string, remote: string) {
+    const { choice } = await ask({
+      title: `Delete ${name} from ${remote}?`,
+      detail:
+        'The tag goes for everyone, not only here. Anyone who has already fetched it keeps ' +
+        'their own copy. The tag in this repository is left alone.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'delete', label: `Delete ${name} from ${remote}` }],
+    });
+    if (choice !== 'delete') return;
+    await act({
+      kind: 'push',
+      remote,
+      setUpstream: false,
+      refspec: `refs/tags/${name}`,
+      tags: false,
+      forceWithLease: false,
+      delete: true,
+    });
+  }
+
   /** The menu items for pushing one tag: one remote, or a choice of them. */
   function pushTagItems(name: string): MenuItem[] {
+    return tagRemoteItems(name, false);
+  }
+
+  /** The same list again for taking the tag off a remote, which is the other half of pushing. */
+  function deleteTagRemoteItems(name: string): MenuItem[] {
+    return tagRemoteItems(name, true);
+  }
+
+  function tagRemoteItems(name: string, remove: boolean): MenuItem[] {
     if (remotes.list.length === 0) return [];
     const busy = actions.busy || worktree.busy;
+    const verb = remove ? 'Delete' : 'Push';
+    const at = (remote: string) =>
+      remove ? void deleteRemoteTag(name, remote) : pushTag(name, remote);
     // One remote is one item; more than one is a choice, whether or not one of them is called
     // origin. Falling back to the default when there were several made every other remote
     // unreachable for tags — a repository with a mirror could push a tag to origin and had no
@@ -1106,23 +1149,25 @@
       return [
         {
           kind: 'item',
-          label: `Push ${name} to ${remote}`,
+          label: `${verb} ${name} ${remove ? 'from' : 'to'} ${remote}${remove ? '…' : ''}`,
+          danger: remove,
           disabled: busy,
-          run: () => pushTag(name, remote),
+          run: () => at(remote),
         },
       ];
     }
     return [
       {
         kind: 'submenu',
-        label: `Push ${name}`,
+        label: `${verb} ${name}${remove ? ' from a remote' : ''}`,
         items: [...remotes.list]
           .sort((a, b) => Number(b.name === defaultRemote) - Number(a.name === defaultRemote))
           .map((r) => ({
             kind: 'item' as const,
             label: r.name,
+            danger: remove,
             disabled: busy,
-            run: () => pushTag(name, r.name),
+            run: () => at(r.name),
           })),
       },
     ];
@@ -3050,6 +3095,7 @@
       newTab={showStart || tabs.session.tabs.length === 0}
       onOpen={openAnother}
       onCloseNew={() => (showStart = false)}
+      onPick={() => (showStart = false)}
       onAsk={askText}
     />
 
