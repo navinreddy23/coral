@@ -565,7 +565,16 @@
     const said = describe(outcome.what, outcome.message, outcome.conflicted);
     toasts.push(said.kind, said.title, said.detail);
 
-    if (action.kind === 'push' && !action.forceWithLease && wasRejected(outcome.message)) {
+    // Not for a deletion. A refused delete is refused because the remote will not part with
+    // that branch — it is protected, or it is the default one — and neither pulling it nor
+    // forcing it changes that. Offering both would be offering to force a deletion, which is
+    // not a thing anybody should be one click from.
+    if (
+      action.kind === 'push' &&
+      !action.forceWithLease &&
+      !action.delete &&
+      wasRejected(outcome.message)
+    ) {
       await offerToForce(action, outcome.message);
     }
 
@@ -3256,6 +3265,7 @@
                   <button
                     class="more"
                     title={`Also here: ${rest.map((r) => r.short).join(', ')}`}
+                    aria-label={`${rest.length} more ref${rest.length === 1 ? '' : 's'} on this commit: ${rest.map((r) => r.short).join(', ')}`}
                     onclick={(e) => refsMenu(e, rest)}
                   >
                     {#if rest.length <= 3}

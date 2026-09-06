@@ -849,3 +849,88 @@ describe('what an action leaves behind', () => {
     expect(invoke.mock.calls.some(([cmd]) => cmd === 'graph_rewalk')).toBe(false);
   });
 });
+
+describe('the labels a row cannot fit', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  /** `n` refs all on the same commit: one local branch and the rest tracking branches. */
+  function crowded(n: number) {
+    const remotes = ['origin', 'github', 'gitlab', 'mirror', 'backup'];
+    const refs = [
+      {
+        name: 'refs/heads/main',
+        short: 'main',
+        kind: { kind: 'local_branch' },
+        target: frameOids[1],
+        peeled: null,
+        upstream: null,
+        ahead: 0,
+        behind: 0,
+        row: 1,
+      },
+    ];
+    for (let i = 0; i < n - 1; i += 1) {
+      const remote = remotes[i % remotes.length];
+      refs.push({
+        name: `refs/remotes/${remote}/main`,
+        short: `${remote}/main`,
+        kind: { kind: 'remote_branch' },
+        target: frameOids[1],
+        peeled: null,
+        upstream: null,
+        ahead: 0,
+        behind: 0,
+        row: 1,
+      });
+    }
+    return refs;
+  }
+
+  /**
+   * A row holding a branch and its tracking branches is one branch in several places. A count
+   * says how many and not which, so up to three the chip carries their marks instead.
+   */
+  it('shows a mark for each label it hides, while there are few enough to read', async () => {
+    const { container } = await shell({ repo_refs: crowded(3) });
+    const chip = await waitFor(() => {
+      const found = container.querySelector('button.more');
+      if (!found) throw new Error('no chip yet');
+      return found;
+    });
+    expect(chip.querySelectorAll('svg')).toHaveLength(2);
+    expect(chip.textContent?.trim()).toBe('');
+    // The marks are decorative, so the name has to come from somewhere a reader can use.
+    expect(chip.getAttribute('aria-label')).toContain('origin/main');
+    expect(chip.getAttribute('aria-label')).toContain('github/main');
+  });
+
+  /** Past three, marks stop being read at a glance and the count says more than they do. */
+  it('counts instead once there are more marks than can be taken in', async () => {
+    const { container } = await shell({ repo_refs: crowded(6) });
+    const chip = await waitFor(() => {
+      const found = container.querySelector('button.more');
+      if (!found) throw new Error('no chip yet');
+      return found;
+    });
+    expect(chip.querySelectorAll('svg')).toHaveLength(0);
+    expect(chip.textContent?.trim()).toBe('+5');
+  });
+
+  it('opens the rest of them when it is clicked', async () => {
+    const { container } = await shell({ repo_refs: crowded(3) });
+    const chip = (await waitFor(() => {
+      const found = container.querySelector('button.more');
+      if (!found) throw new Error('no chip yet');
+      return found;
+    })) as HTMLElement;
+
+    await fireEvent.click(chip);
+    const labels = [...container.querySelectorAll('.menu .label')].map((e) =>
+      e.textContent?.trim(),
+    );
+    expect(labels.some((l) => l?.includes('origin/main'))).toBe(true);
+  });
+});
