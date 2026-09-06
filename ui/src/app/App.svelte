@@ -57,7 +57,7 @@
   import { TerminalState } from '../state/terminal.svelte';
   import { SigningState } from '../state/signing.svelte';
   import { SshState } from '../state/ssh.svelte';
-  import { elidePath, elideRef } from './path';
+  import { elideRef } from './path';
   import { shortAge } from './age';
   import { initialsOf } from '../graph/initials';
   import type { Action } from '../ipc/commands';
@@ -93,6 +93,7 @@
     minimize as minimise,
     onResized,
     setDecorations,
+    startDragging,
     toggleMaximize as toggleMaximise,
   } from '../ipc/window';
   import { ThemeState } from '../state/theme.svelte';
@@ -622,6 +623,22 @@
         },
       ],
     };
+  }
+
+  /**
+   * Moves the window, by pressing anywhere in the strip that is not something to press.
+   *
+   * Written here rather than left to `data-tauri-drag-region`, whose handler also maximises
+   * the window on a double click. A tab strip is somewhere people click twice by accident and
+   * having the window jump to full screen for it is not worth the gesture.
+   */
+  function stripDrag(event: MouseEvent) {
+    if (event.button !== 0) return;
+    const target = event.target as HTMLElement | null;
+    // Tabs are dragged with the pointer too, and every control has its own job.
+    if (target?.closest('button, a, input, textarea, select, .tab')) return;
+    event.preventDefault();
+    void startDragging();
   }
 
   async function useSystemTitleBar(on: boolean) {
@@ -2988,7 +3005,7 @@
     way a browser does it, and everything the header held sits along them.
   -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <header class="strip" data-tauri-drag-region oncontextmenu={stripMenu}>
+  <header class="strip" onmousedown={stripDrag} oncontextmenu={stripMenu}>
     <!-- The application's own mark, the same one the icon carries: one commit and the two
          branches that leave it. -->
     <svg class="logo sit" viewBox="0 0 512 512" width="18" height="18" aria-hidden="true">
@@ -3014,17 +3031,10 @@
       onAsk={askText}
     />
 
-    {#if info}
-      <!-- Last to be given room and first to give it back: with a strip full of tabs this is
-           down to nothing, and the same path is on every tab's own tooltip. -->
-      <span class="path mono sit" title={info.path} data-tauri-drag-region>
-        {elidePath(info.path, 44)}
+    {#if graph.provisional}
+      <span class="chip warn sit" title="Commit-time order, being replaced by the topological walk">
+        provisional order
       </span>
-      {#if graph.provisional}
-        <span class="chip warn sit" title="Commit-time order, being replaced by the topological walk">
-          provisional order
-        </span>
-      {/if}
     {/if}
 
     <div class="tools sit">
@@ -3089,6 +3099,7 @@
     {#if views.current.toolbar}
     <Toolbar
       repo={TabsState.title(tabs.active ?? { id: 0, path: info.path, submodule: null, group: null, missing: false })}
+      path={info.path}
       submodule={tabs.active?.submodule ?? null}
       branch={headName ?? 'detached'}
       busy={worktree.busy || actions.busy}
@@ -3657,12 +3668,6 @@
   h1 {
     font-size: 13px; font-weight: 700; margin: 0; color: var(--accent);
     letter-spacing: 0.01em; flex: 0 0 auto;
-  }
-  /* Shortened in script, not by `direction: rtl`: see `elidePath` for why that trick draws
-     `/home/x` as `home/x/`. */
-  .path {
-    flex: 0 1 auto; min-width: 0; color: var(--fg-2); font-size: 12px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .tools { display: flex; align-items: center; gap: 2px; margin-left: auto; }
   /* The window's own three, set apart from Coral's three: one set acts on what the window is

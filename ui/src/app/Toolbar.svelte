@@ -1,6 +1,7 @@
 <script lang="ts">
   const {
     repo,
+    path,
     submodule,
     branch,
     busy,
@@ -12,6 +13,8 @@
     onPushMenu,
   }: {
     repo: string;
+    /** Where the repository is on disk. Shown on the crumb rather than in the title bar. */
+    path: string;
     /** The submodule being looked at inside this tab, or null for the repository itself. */
     submodule: string | null;
     branch: string;
@@ -79,7 +82,7 @@
     into the tab rather than a tab of its own.
   -->
   <div class="where">
-    <span class="step">
+    <span class="step" title={path}>
       <span class="label">repository</span>
       <span class="value">{repo}</span>
     </span>

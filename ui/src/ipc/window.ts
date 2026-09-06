@@ -43,6 +43,11 @@ export async function isMaximized(): Promise<boolean> {
   return (await current()?.isMaximized()) ?? false;
 }
 
+/** Moves the window, from a press anywhere Coral has decided is the title bar. */
+export async function startDragging(): Promise<void> {
+  await current()?.startDragging();
+}
+
 /**
  * Hands the drag to the window manager, which then owns the pointer until the button comes up.
  *

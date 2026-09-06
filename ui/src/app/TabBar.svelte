@@ -345,7 +345,6 @@
 <nav
   class="bar"
   class:loose={dragging !== null && overBar}
-  data-tauri-drag-region
   role="presentation"
   ondragover={overLoose}
   ondragleave={() => (overBar = false)}
@@ -485,8 +484,8 @@
    *
    * The strip is the window's title bar and paints the ground and the line along its bottom;
    * this is the stretch of it the tabs occupy, and it takes whatever the rest of the strip
-   * leaves. Empty space in it drags the window, which is the whole reason the tabs are up
-   * here rather than on a row of their own.
+   * leaves. Empty space in it moves the window, which the strip itself handles, and which is
+   * the whole reason the tabs are up here rather than on a row of their own.
    */
   .bar {
     /* The face the current tab wears, which is the toolbar's own: the two are meant to read as

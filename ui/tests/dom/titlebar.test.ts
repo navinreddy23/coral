@@ -31,6 +31,7 @@ const win = vi.hoisted(() => ({
 
 vi.mock('../../src/ipc/window', () => ({
   minimize: async () => void win.calls.push('minimize'),
+  startDragging: async () => void win.calls.push('startDragging'),
   toggleMaximize: async () => void win.calls.push('toggleMaximize'),
   close: async () => void win.calls.push('close'),
   startResize: async (at: string) => void win.calls.push(`resize:${at}`),
@@ -148,6 +149,42 @@ describe('the title bar Coral draws', () => {
     await fireEvent.click(named(container, 'Maximise') as HTMLElement);
     await fireEvent.click(named(container, 'Close') as HTMLElement);
     expect(win.calls).toEqual(['minimize', 'toggleMaximize', 'close']);
+  });
+
+  it('moves the window from the bare strip, and never from a control', async () => {
+    const { container } = await shell();
+    const strip = container.querySelector('.strip') as HTMLElement;
+
+    await fireEvent.mouseDown(strip, { button: 0 });
+    expect(win.calls, 'the bare strip moves it').toEqual(['startDragging']);
+
+    // The empty stretch of the tab strip is the same surface, and the tabs are dragged with
+    // the pointer themselves, so neither a tab nor a button may start a window drag.
+    win.calls = [];
+    await fireEvent.mouseDown(container.querySelector('nav.bar') as HTMLElement, { button: 0 });
+    await fireEvent.mouseDown(container.querySelector('.tab .pick') as HTMLElement, { button: 0 });
+    await fireEvent.mouseDown(named(container, 'Settings') as HTMLElement, { button: 0 });
+    expect(win.calls).toEqual(['startDragging']);
+  });
+
+  it('leaves a double click alone, rather than maximising on it', async () => {
+    const { container } = await shell();
+    const strip = container.querySelector('.strip') as HTMLElement;
+    // Tauri's own drag region maximises on the second press. This strip is not one, which is
+    // the only thing keeping a stray double click off the whole screen.
+    expect(strip.getAttribute('data-tauri-drag-region'), 'not Tauri\'s drag region').toBeNull();
+
+    await fireEvent.mouseDown(strip, { button: 0, detail: 2 });
+    expect(win.calls).not.toContain('toggleMaximize');
+  });
+
+  it('shows the path on the repository crumb, not in the strip', async () => {
+    const { container } = await shell();
+    expect(container.querySelector('.strip .path'), 'no path in the strip').toBeNull();
+    const crumb = [...container.querySelectorAll('.where .step')].find((s) =>
+      s.querySelector('.label')?.textContent?.trim() === 'repository',
+    );
+    expect(crumb?.getAttribute('title')).toBe(REPO);
   });
 
   it('offers to restore once the window is maximised', async () => {

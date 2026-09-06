@@ -227,8 +227,9 @@ whole history and costs seconds on a large repository.
 
 **The window opens undecorated and draws its own title bar**, which is the tab strip. The
 desktop's bar, an application header and a tab strip were three rows saying between them that
-the window was called Coral; they are one row of forty pixels. Dragging and the double-click to
-maximise are Tauri's own drag region; the buttons and the eight resize grips go through
+the window was called Coral; they are one row of forty pixels. Moving the window is a press on the strip
+handled in the page rather than Tauri's own drag region, whose handler also maximises on a
+double click; the buttons and the eight resize grips go through
 `ui/src/ipc/window.ts`, which resolves the window lazily so the same page still runs under
 vitest, where there is no window to act on. Whether Coral draws the bar is read back from the
 window with `isDecorated` rather than assumed from the platform, so a platform whose
