@@ -539,6 +539,24 @@
     await diff.reload(info.path);
   }
 
+  /**
+   * The webview's own context menu, which Coral does not want and mostly did not ask about.
+   *
+   * Right-clicking anywhere this window has no menu of its own — the graph's empty space, a
+   * panel's background, the dimmed backdrop of a dialog — brought up Back, Forward, Reload and
+   * Inspect Element. Reload restarts the interface and takes a half-written commit message
+   * with it, and Back navigates a page nobody using this knows is a page.
+   *
+   * Left alone in the two places the platform menu is the only way to reach the clipboard:
+   * inside a field, and over selected text.
+   */
+  function platformMenu(event: MouseEvent) {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('input, textarea')) return;
+    if ((window.getSelection()?.toString() ?? '') !== '') return;
+    event.preventDefault();
+  }
+
   /** Every ref and where it points, as one string, to tell whether an action moved anything. */
   function refSignature(): string {
     return refs.all.map((r) => `${r.name}@${r.target}`).join('\u0000');
@@ -2885,7 +2903,7 @@
 
 </script>
 
-<svelte:window onkeydown={onKey} onfocus={() => void refreshOnFocus()} />
+<svelte:window onkeydown={onKey} onfocus={() => void refreshOnFocus()} oncontextmenu={platformMenu} />
 
 <main>
   <header>

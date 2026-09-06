@@ -934,3 +934,35 @@ describe('the labels a row cannot fit', () => {
     expect(labels.some((l) => l?.includes('origin/main'))).toBe(true);
   });
 });
+
+describe("the webview's own context menu", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  /**
+   * Right-clicking where this window has no menu of its own used to bring up the webview's:
+   * Back, Forward, Reload, and Inspect Element in a debug build. Reload restarts the
+   * interface and takes a half-written commit message with it.
+   */
+  it('is refused where Coral has nothing of its own to show', async () => {
+    const { container } = await shell();
+    const body = container.querySelector('main') as HTMLElement;
+
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    body.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  /** Except in a field, where it is the only way to reach the clipboard. */
+  it('is left alone inside a text field', async () => {
+    const { container } = await shell();
+    const field = container.querySelector('input') as HTMLInputElement;
+    expect(field, 'the window has a field to test with').toBeTruthy();
+
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    field.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+  });
+});
