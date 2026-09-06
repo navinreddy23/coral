@@ -14,6 +14,10 @@
 <!--
   Stacked bottom-up in the corner, newest nearest the edge, each closable on its own. A fetch of
   three remotes has three things to say and the second must not overwrite the first.
+
+  The left corner, not the right: a warning waits to be dismissed rather than timing out, and
+  on the right it sat over the commit message and the Commit button for as long as it waited.
+  Nothing in the window puts a control in the bottom left.
 -->
 {#if toasts.items.length > 0}
   <div class="stack" role="status" aria-live="polite">
@@ -35,8 +39,8 @@
 
 <style>
   .stack {
-    position: fixed; right: var(--space-4); bottom: var(--space-5); z-index: 50;
-    display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-2);
+    position: fixed; left: var(--space-4); bottom: var(--space-5); z-index: 50;
+    display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2);
     max-width: min(30em, calc(100vw - 2 * var(--space-4)));
   }
   .toast {
