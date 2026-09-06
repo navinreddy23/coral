@@ -40,6 +40,9 @@ pub enum Action {
         /// fetched. `--force-with-lease`, never a bare force; see `remote.rs`.
         #[serde(default)]
         force_with_lease: bool,
+        /// Remove the named ref from the remote instead of updating it.
+        #[serde(default)]
+        delete: bool,
     },
     Checkout {
         rev: String,
@@ -260,6 +263,13 @@ impl Action {
         match self {
             Self::Fetch { .. } => "fetch".to_owned(),
             Self::Pull { .. } => "pull".to_owned(),
+            // Before the arm below it, which matches any push naming a ref and would
+            // otherwise swallow this one and journal a deletion as a push.
+            Self::Push {
+                delete: true,
+                refspec: Some(refspec),
+                ..
+            } => format!("delete {} from the remote", bare_ref(refspec)),
             Self::Push {
                 refspec: Some(refspec),
                 ..
@@ -433,6 +443,7 @@ async fn run_remote(
             refspec,
             tags,
             force_with_lease,
+            delete,
         } => {
             let opts = PushOpts {
                 remote,
@@ -440,7 +451,7 @@ async fn run_remote(
                 refspec,
                 tags,
                 force_with_lease,
-                ..PushOpts::default()
+                delete,
             };
             let results = loc.push(runner, &opts, |_| {}).await?;
             // git's per-ref answers, which is the only place "Everything up-to-date" and a
@@ -662,6 +673,7 @@ mod tests {
             refspec: None,
             tags: false,
             force_with_lease: true,
+            delete: false,
         };
         assert_eq!(forced.label(), "force push");
 
@@ -671,8 +683,25 @@ mod tests {
             refspec: None,
             tags: false,
             force_with_lease: false,
+            delete: false,
         };
         assert_eq!(plain.label(), "push");
+    }
+
+    /// The journal is what somebody reads to find out what removed a branch from a remote.
+    /// "push probe" is not that, and the arm that says so has to come before the one that
+    /// matches any push naming a ref.
+    #[test]
+    fn deleting_a_branch_from_a_remote_is_journalled_as_a_deletion() {
+        let removed = Action::Push {
+            remote: Some("github".to_owned()),
+            set_upstream: false,
+            refspec: Some("probe/one".to_owned()),
+            tags: false,
+            force_with_lease: false,
+            delete: true,
+        };
+        assert_eq!(removed.label(), "delete probe/one from the remote");
     }
 
     #[test]
@@ -683,6 +712,7 @@ mod tests {
             refspec: Some("refs/tags/v1.0".to_owned()),
             tags: false,
             force_with_lease: false,
+            delete: false,
         };
         assert_eq!(action.label(), "push v1.0");
 
@@ -692,6 +722,7 @@ mod tests {
             refspec: None,
             tags: true,
             force_with_lease: false,
+            delete: false,
         };
         assert_eq!(all.label(), "push every tag");
     }

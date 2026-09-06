@@ -282,6 +282,8 @@ export type Action =
        * fetched. Always `--force-with-lease`; there is no bare force anywhere in Coral.
        */
       forceWithLease: boolean;
+      /** Remove the named ref from the remote instead of updating it. */
+      delete: boolean;
     }
   | { kind: 'checkout'; rev: string }
   | { kind: 'branchCreate'; name: string; at: string | null; checkout: boolean }

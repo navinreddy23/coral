@@ -865,6 +865,15 @@
         disabled: busy,
         run: () => void deleteBranch(ref.short),
       });
+    } else if (ref.kind.kind === 'remote_branch') {
+      items.push({ kind: 'separator' });
+      items.push({
+        kind: 'item',
+        label: `Delete ${ref.short} from the remote…`,
+        danger: true,
+        disabled: busy,
+        run: () => void deleteRemoteBranch(ref.short),
+      });
     } else if (ref.kind.kind === 'tag') {
       items.push({ kind: 'separator' });
       items.push(...pushTagItems(ref.short));
@@ -879,6 +888,41 @@
 
     if (items.length === 0) return;
     menu = { x: event.clientX, y: event.clientY, items };
+  }
+
+  /**
+   * Removes a branch from the remote it lives on.
+   *
+   * The remote and the branch are split out of the tracking name, since git wants them apart:
+   * `git push github --delete probe/one`, not the name the panel shows. Only the leading
+   * segment is the remote; the rest is the branch, however many slashes it has of its own.
+   */
+  async function deleteRemoteBranch(tracking: string) {
+    const at = tracking.indexOf('/');
+    if (at < 0) return;
+    const remote = tracking.slice(0, at);
+    const branch = tracking.slice(at + 1);
+    const { choice } = await ask({
+      title: `Delete ${branch} from ${remote}?`,
+      detail:
+        'It goes for everyone, not only here. Anyone who has already fetched it keeps their ' +
+        'own copy, and any commit only this branch reached is left with no name on it. ' +
+        'Nothing local is touched.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'delete', label: `Delete ${branch}` }],
+    });
+    if (choice !== 'delete') return;
+    await act({
+      kind: 'push',
+      remote,
+      setUpstream: false,
+      refspec: branch,
+      tags: false,
+      forceWithLease: false,
+      delete: true,
+    });
   }
 
   /**
@@ -906,6 +950,7 @@
       refspec: `refs/tags/${name}`,
       tags: false,
       forceWithLease: false,
+      delete: false,
     });
   }
 
@@ -1550,6 +1595,7 @@
               refspec: null,
               tags: false,
               forceWithLease: false,
+              delete: false,
             }),
         },
         {
@@ -1573,6 +1619,7 @@
               refspec: null,
               tags: true,
               forceWithLease: false,
+              delete: false,
             }),
         },
       ],
@@ -1607,6 +1654,7 @@
       refspec: null,
       tags: false,
       forceWithLease: true,
+      delete: false,
     });
   }
 
@@ -1677,6 +1725,7 @@
               refspec: headName,
               tags: false,
               forceWithLease: false,
+              delete: false,
             }),
         },
         {
@@ -1878,7 +1927,7 @@
       { id: 'fetch', label: 'Fetch', group: 'Remote', run: () => void act({ kind: 'fetch', remote: null }) },
       { id: 'pull', label: 'Pull (fast-forward only)', group: 'Remote', run: () => void act({ kind: 'pull', remote: null, mode: 'ffOnly' }) },
       { id: 'pull-rebase', label: 'Pull, rebasing', group: 'Remote', run: () => void act({ kind: 'pull', remote: null, mode: 'rebase' }) },
-      { id: 'push', label: 'Push', group: 'Remote', run: () => void act({ kind: 'push', remote: null, setUpstream: true, refspec: null, tags: false, forceWithLease: false }) },
+      { id: 'push', label: 'Push', group: 'Remote', run: () => void act({ kind: 'push', remote: null, setUpstream: true, refspec: null, tags: false, forceWithLease: false, delete: false }) },
       { id: 'stash', label: 'Stash changes', group: 'Stash', run: () => void act({ kind: 'stashPush', message: null }) },
       { id: 'pop', label: 'Pop the latest stash', group: 'Stash', run: () => void act({ kind: 'stashApply', index: 0, pop: true }) },
       { id: 'undo', label: 'Undo', group: 'History', run: () => void act({ kind: 'undo' }) },
@@ -1980,7 +2029,7 @@
     // The same pair of names in the opposite order, which is the whole of the gesture.
     const sameBranch = withoutRemote(source) === withoutRemote(target);
     if (sameBranch && !isRemoteRef(source) && isRemoteRef(target)) {
-      await act({ kind: 'push', remote: null, setUpstream: true, refspec: null, tags: false, forceWithLease: false });
+      await act({ kind: 'push', remote: null, setUpstream: true, refspec: null, tags: false, forceWithLease: false, delete: false });
       return;
     }
     if (sameBranch && isRemoteRef(source) && !isRemoteRef(target)) {
@@ -2031,7 +2080,7 @@
       case 'pull': return void act({ kind: 'pull', remote: null, mode: 'ffOnly' });
       // set-upstream on every push: it is a no-op once one is configured, and without it the
       // first push of a new branch fails with advice instead of pushing.
-      case 'push': return void act({ kind: 'push', remote: null, setUpstream: true, refspec: null, tags: false, forceWithLease: false });
+      case 'push': return void act({ kind: 'push', remote: null, setUpstream: true, refspec: null, tags: false, forceWithLease: false, delete: false });
       case 'stash': return void act({ kind: 'stashPush', message: null });
       case 'pop': return void act({ kind: 'stashApply', index: 0, pop: true });
       case 'terminal': return terminal.toggle();

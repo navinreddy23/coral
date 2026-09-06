@@ -511,6 +511,7 @@ describe('the branch and tag menu', () => {
         refspec: 'refs/tags/v1.2.0',
         tags: false,
         forceWithLease: false,
+        delete: false,
       });
     });
   });

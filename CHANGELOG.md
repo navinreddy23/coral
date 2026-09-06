@@ -14,6 +14,8 @@ and gave the window the operations that were still only in the engine.
   which is every module in a `west` workspace. The boundary is grafted the way git grafts it.
 - **Drag and drop between pills.** A branch onto its tracking branch pushes, the other way
   round pulls, and anything else asks whether to merge, rebase, or open a request.
+- **Delete a branch from a remote** from its own row, behind a dialog that says the deletion
+  is for everyone and that nothing local is touched.
 - **A rejected push offers a way out.** The window had no force at all, so a non-fast-forward
   rejection could only be resolved in a terminal. It now shows git's reason and offers to pull
   and rebase or to force, and the push menu carries a deliberate force as well. Always

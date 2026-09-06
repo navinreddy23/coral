@@ -633,6 +633,7 @@ describe('the shell', () => {
         refspec: null,
         tags: true,
         forceWithLease: false,
+        delete: false,
       });
     });
   });

@@ -93,3 +93,16 @@ fn a_push_that_does_not_ask_to_force_does_not() {
         }
     ));
 }
+
+/// Deleting is a push that says so. A push that does not is an update, and a stored action
+/// written before the flag existed must not come back as a deletion.
+#[test]
+fn a_push_that_does_not_ask_to_delete_does_not() {
+    let plain = accepts(r#"{"kind":"push","remote":"origin","setUpstream":false}"#);
+    assert!(matches!(plain, Action::Push { delete: false, .. }));
+
+    let removed = accepts(
+        r#"{"kind":"push","remote":"github","setUpstream":false,"refspec":"probe","delete":true}"#,
+    );
+    assert!(matches!(removed, Action::Push { delete: true, .. }));
+}
