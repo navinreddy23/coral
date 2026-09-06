@@ -57,6 +57,12 @@ marked and every other row dimmed; a repository with refs merely hidden shows a 
 and a Show all. A row outside the current walk stays clickable, and clicking it widens the view
 rather than doing nothing.
 
+The push button's caret offers an ordinary push, a force push, and a push that carries the
+tags. A push git refuses is not the end of the road: the rejection is shown with git's own
+reason and the two ways out of it, pulling and rebasing or forcing. Forcing always asks first
+and is always `--force-with-lease`, so it refuses when the remote has moved since Coral last
+fetched and cannot overwrite a change it has not seen.
+
 Context menus — local branch: checkout, rename, delete, push, pull, set upstream, merge into
 current, rebase current onto, create PR/MR, hide, solo, copy name. Remote branch: checkout
 (creating a tracking local), delete from remote, merge, rebase, create PR/MR. Remote: fetch,

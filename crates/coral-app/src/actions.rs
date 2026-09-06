@@ -36,6 +36,10 @@ pub enum Action {
         /// Send every tag as well. Tags travel only when they are asked for.
         #[serde(default)]
         tags: bool,
+        /// Overwrite what is on the remote, provided nothing has moved it since it was last
+        /// fetched. `--force-with-lease`, never a bare force; see `remote.rs`.
+        #[serde(default)]
+        force_with_lease: bool,
     },
     Checkout {
         rev: String,
@@ -261,6 +265,10 @@ impl Action {
                 ..
             } => format!("push {}", bare_ref(refspec)),
             Self::Push { tags: true, .. } => "push every tag".to_owned(),
+            Self::Push {
+                force_with_lease: true,
+                ..
+            } => "force push".to_owned(),
             Self::Push { .. } => "push".to_owned(),
             Self::Checkout { rev } => format!("checkout {rev}"),
             Self::BranchCreate { name, .. } => format!("create branch {name}"),
@@ -424,12 +432,14 @@ async fn run_remote(
             set_upstream,
             refspec,
             tags,
+            force_with_lease,
         } => {
             let opts = PushOpts {
                 remote,
                 set_upstream,
                 refspec,
                 tags,
+                force_with_lease,
                 ..PushOpts::default()
             };
             let results = loc.push(runner, &opts, |_| {}).await?;
@@ -642,6 +652,29 @@ mod tests {
         assert_eq!(named(&format!("{}^2", "c".repeat(40))), "cccccccc^2");
     }
 
+    /// The journal is read to find out what happened, and "push" and "force push" are not the
+    /// same thing to anybody looking for the one that replaced a branch on a remote.
+    #[test]
+    fn a_forced_push_is_journalled_as_one() {
+        let forced = Action::Push {
+            remote: None,
+            set_upstream: true,
+            refspec: None,
+            tags: false,
+            force_with_lease: true,
+        };
+        assert_eq!(forced.label(), "force push");
+
+        let plain = Action::Push {
+            remote: None,
+            set_upstream: true,
+            refspec: None,
+            tags: false,
+            force_with_lease: false,
+        };
+        assert_eq!(plain.label(), "push");
+    }
+
     #[test]
     fn pushing_a_tag_is_labelled_with_the_tag() {
         let action = Action::Push {
@@ -649,6 +682,7 @@ mod tests {
             set_upstream: false,
             refspec: Some("refs/tags/v1.0".to_owned()),
             tags: false,
+            force_with_lease: false,
         };
         assert_eq!(action.label(), "push v1.0");
 
@@ -657,6 +691,7 @@ mod tests {
             set_upstream: false,
             refspec: None,
             tags: true,
+            force_with_lease: false,
         };
         assert_eq!(all.label(), "push every tag");
     }

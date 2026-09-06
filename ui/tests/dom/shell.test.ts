@@ -613,7 +613,11 @@ describe('the shell', () => {
       if (found.length === 0) throw new Error('no menu');
       return found;
     });
-    expect(labels).toEqual(['Push this branch', 'Push this branch and every tag']);
+    expect(labels).toEqual([
+      'Push this branch',
+      'Force push this branch',
+      'Push this branch and every tag',
+    ]);
 
     const withTags = [...container.querySelectorAll('.menu .label')].find(
       (e) => e.textContent?.trim() === 'Push this branch and every tag',
@@ -628,6 +632,7 @@ describe('the shell', () => {
         setUpstream: true,
         refspec: null,
         tags: true,
+        forceWithLease: false,
       });
     });
   });

@@ -510,6 +510,7 @@ describe('the branch and tag menu', () => {
         setUpstream: false,
         refspec: 'refs/tags/v1.2.0',
         tags: false,
+        forceWithLease: false,
       });
     });
   });

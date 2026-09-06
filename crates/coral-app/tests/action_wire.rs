@@ -68,3 +68,28 @@ fn the_field_that_was_wrong_is_named_the_way_the_window_names_it() {
         "snake_case is not what the window sends, and accepting both hides the next mismatch"
     );
 }
+
+/// Forcing is a choice the window has to make explicitly. A push that says nothing about it is
+/// an ordinary push, so a journal entry or a queued action written before the flag existed
+/// cannot come back as a force.
+#[test]
+fn a_push_that_does_not_ask_to_force_does_not() {
+    let plain = accepts(r#"{"kind":"push","remote":null,"setUpstream":true}"#);
+    assert!(matches!(
+        plain,
+        Action::Push {
+            force_with_lease: false,
+            ..
+        }
+    ));
+
+    let forced =
+        accepts(r#"{"kind":"push","remote":null,"setUpstream":true,"forceWithLease":true}"#);
+    assert!(matches!(
+        forced,
+        Action::Push {
+            force_with_lease: true,
+            ..
+        }
+    ));
+}

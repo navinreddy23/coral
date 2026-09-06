@@ -277,6 +277,11 @@ export type Action =
       refspec: string | null;
       /** Send every tag as well. Tags travel only when they are asked for. */
       tags: boolean;
+      /**
+       * Overwrite what is on the remote, provided nothing has moved it since it was last
+       * fetched. Always `--force-with-lease`; there is no bare force anywhere in Coral.
+       */
+      forceWithLease: boolean;
     }
   | { kind: 'checkout'; rev: string }
   | { kind: 'branchCreate'; name: string; at: string | null; checkout: boolean }

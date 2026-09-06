@@ -565,6 +565,10 @@
     const said = describe(outcome.what, outcome.message, outcome.conflicted);
     toasts.push(said.kind, said.title, said.detail);
 
+    if (action.kind === 'push' && !action.forceWithLease && wasRejected(outcome.message)) {
+      await offerToForce(action, outcome.message);
+    }
+
     await Promise.all([refs.load(path), worktree.load(path), merge.load(path)]);
     const after = refSignature();
     if (before !== after) await graph.open(path);
@@ -576,6 +580,45 @@
       await focusHead();
     }
     return true;
+  }
+
+  /**
+   * Whether git refused a ref rather than failing to reach the remote.
+   *
+   * Read from the porcelain summary rather than from the exit code, which is the same for a
+   * rejection and for a server that would not answer. Only a rejection has a next move.
+   */
+  function wasRejected(message: string): boolean {
+    return /\[rejected\]|non-fast-forward|fetch first|stale info/iu.test(message);
+  }
+
+  /**
+   * What to do about a push git would not take.
+   *
+   * Offered from here because a toast cannot be acted on, and until now the rejection was the
+   * end of the road: the window had no force at all, so the only way past it was a terminal.
+   */
+  async function offerToForce(action: Extract<Action, { kind: 'push' }>, message: string) {
+    const { choice } = await ask({
+      title: 'The remote refused it',
+      detail:
+        `${message.trim()}\n\n` +
+        'The remote has commits this branch does not. Pulling brings them in and keeps them. ' +
+        'Forcing replaces them with what is here, and git allows it only while nobody else has ' +
+        'moved the branch since Coral last fetched it.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [
+        { id: 'pull', label: 'Pull and rebase', primary: true },
+        { id: 'force', label: 'Force push' },
+      ],
+    });
+    if (choice === 'pull') {
+      await act({ kind: 'pull', remote: action.remote, mode: 'rebase' });
+      return;
+    }
+    if (choice === 'force') await act({ ...action, forceWithLease: true });
   }
 
   /** The row under the pointer, if the loaded frame reaches it. */
@@ -854,6 +897,7 @@
       setUpstream: false,
       refspec: `refs/tags/${name}`,
       tags: false,
+      forceWithLease: false,
     });
   }
 
@@ -1497,7 +1541,16 @@
               setUpstream: true,
               refspec: null,
               tags: false,
+              forceWithLease: false,
             }),
+        },
+        {
+          kind: 'item',
+          label: 'Force push this branch',
+          hint: 'with lease',
+          danger: true,
+          disabled: busy,
+          run: () => void confirmForcePush(),
         },
         {
           kind: 'item',
@@ -1511,10 +1564,42 @@
               setUpstream: true,
               refspec: null,
               tags: true,
+              forceWithLease: false,
             }),
         },
       ],
     };
+  }
+
+  /**
+   * Forcing on purpose, rather than after git has already said no.
+   *
+   * Asked for every time. `--force-with-lease` refuses when the remote has moved since Coral
+   * last fetched, which is the case that would destroy somebody else's work — but it does not
+   * refuse when the commits being replaced are only the user's own, and that is worth a
+   * sentence before it happens rather than a toast afterwards.
+   */
+  async function confirmForcePush() {
+    const { choice } = await ask({
+      title: `Force push ${headName ?? 'this branch'}?`,
+      detail:
+        'The remote branch is replaced by this one. Commits on it that are not here are lost ' +
+        'to anyone who has not already fetched them. git refuses if the remote has moved since ' +
+        'Coral last fetched it, so this cannot overwrite a change it has not seen.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'force', label: 'Force push' }],
+    });
+    if (choice !== 'force') return;
+    await act({
+      kind: 'push',
+      remote: null,
+      setUpstream: true,
+      refspec: null,
+      tags: false,
+      forceWithLease: true,
+    });
   }
 
   function pullMenu(event: MouseEvent) {
@@ -1766,7 +1851,7 @@
       { id: 'fetch', label: 'Fetch', group: 'Remote', run: () => void act({ kind: 'fetch', remote: null }) },
       { id: 'pull', label: 'Pull (fast-forward only)', group: 'Remote', run: () => void act({ kind: 'pull', remote: null, mode: 'ffOnly' }) },
       { id: 'pull-rebase', label: 'Pull, rebasing', group: 'Remote', run: () => void act({ kind: 'pull', remote: null, mode: 'rebase' }) },
-      { id: 'push', label: 'Push', group: 'Remote', run: () => void act({ kind: 'push', remote: null, setUpstream: true, refspec: null, tags: false }) },
+      { id: 'push', label: 'Push', group: 'Remote', run: () => void act({ kind: 'push', remote: null, setUpstream: true, refspec: null, tags: false, forceWithLease: false }) },
       { id: 'stash', label: 'Stash changes', group: 'Stash', run: () => void act({ kind: 'stashPush', message: null }) },
       { id: 'pop', label: 'Pop the latest stash', group: 'Stash', run: () => void act({ kind: 'stashApply', index: 0, pop: true }) },
       { id: 'undo', label: 'Undo', group: 'History', run: () => void act({ kind: 'undo' }) },
@@ -1868,7 +1953,7 @@
     // The same pair of names in the opposite order, which is the whole of the gesture.
     const sameBranch = withoutRemote(source) === withoutRemote(target);
     if (sameBranch && !isRemoteRef(source) && isRemoteRef(target)) {
-      await act({ kind: 'push', remote: null, setUpstream: true, refspec: null, tags: false });
+      await act({ kind: 'push', remote: null, setUpstream: true, refspec: null, tags: false, forceWithLease: false });
       return;
     }
     if (sameBranch && isRemoteRef(source) && !isRemoteRef(target)) {
@@ -1919,7 +2004,7 @@
       case 'pull': return void act({ kind: 'pull', remote: null, mode: 'ffOnly' });
       // set-upstream on every push: it is a no-op once one is configured, and without it the
       // first push of a new branch fails with advice instead of pushing.
-      case 'push': return void act({ kind: 'push', remote: null, setUpstream: true, refspec: null, tags: false });
+      case 'push': return void act({ kind: 'push', remote: null, setUpstream: true, refspec: null, tags: false, forceWithLease: false });
       case 'stash': return void act({ kind: 'stashPush', message: null });
       case 'pop': return void act({ kind: 'stashApply', index: 0, pop: true });
       case 'terminal': return terminal.toggle();
