@@ -422,3 +422,19 @@ describe('the start page and the tabs', () => {
     expect(onPick).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('a strip with more tabs than fit', () => {
+  /**
+   * The new-tab button and the tab search used to sit after the last tab, inside the strip
+   * that scrolls, so they went off the end with it. Past a dozen repositories there was no way
+   * to open another and no way to reach the search that exists for exactly that many.
+   */
+  it('keeps the new-tab button and the search out of the scrolling strip', () => {
+    const { container } = bar();
+    const nav = container.querySelector('nav.bar') as HTMLElement;
+    expect(nav.querySelector('.add'), 'the plus is not in the scroll').toBeNull();
+    expect(nav.querySelector('.find'), 'nor the search').toBeNull();
+    expect(container.querySelector('.tail .add'), 'both are in the tail').not.toBeNull();
+    expect(container.querySelector('.tail .find')).not.toBeNull();
+  });
+});

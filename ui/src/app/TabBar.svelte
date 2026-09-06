@@ -410,9 +410,16 @@
       {/if}
     </div>
   {/if}
-  <button class="add" onclick={onOpen} title="Open a repository">+</button>
   {#if tabs.error}<span class="error">{tabs.error}</span>{/if}
+</nav>
 
+<!--
+  Outside the strip that scrolls, because these two are what you reach for when it does. Inside
+  it they sat after the last tab and went with it: past a dozen repositories there was no way
+  to open another and no way to reach the search that exists for exactly that many.
+-->
+<div class="tail">
+  <button class="add" onclick={onOpen} title="Open a repository">+</button>
   <button
     class="find"
     class:on={searching}
@@ -420,7 +427,7 @@
     title="Search open tabs"
     aria-expanded={searching}
   ><ChromeMark kind="chevron" size={15} /></button>
-</nav>
+</div>
 
 {#if searching}
   <div class="scrim" role="presentation" onclick={() => (searching = false)}></div>
@@ -618,10 +625,16 @@
   .tab:hover .shut, .tab.active .shut { visibility: visible; }
   .shut:hover { color: var(--danger); background: var(--danger-soft); }
 
+  /* On the tabs' own centre line, which in a strip of this height is four pixels below the
+     middle. Matches the rule the window applies to everything else beside the tabs. */
+  .tail {
+    flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-1);
+    margin-top: var(--space-2);
+  }
   .add {
-    font: inherit; font-size: 16px; line-height: 1; cursor: pointer; align-self: center;
+    font: inherit; font-size: 16px; line-height: 1; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    width: 26px; height: 26px; margin: 0 var(--space-1) 3px;
+    width: 26px; height: 26px;
     padding: 0; background: transparent; border: 0; border-radius: 50%; color: var(--fg-2);
   }
   .add:hover { color: var(--fg-0); background: var(--bg-3); }
@@ -629,14 +642,10 @@
 
   /* Pinned to the trailing edge so it stays reachable however far the bar has scrolled — which
      is exactly the case it exists for. */
-  /*
-   * Beside the tabs it searches rather than at the far end of the strip, and pinned to the
-   * right edge only once the bar has scrolled — which is the case it exists for.
-   */
   .find {
-    position: sticky; right: 0; flex: 0 0 auto; align-self: center;
+    flex: 0 0 auto;
     display: flex; align-items: center; justify-content: center; cursor: pointer;
-    width: 26px; height: 26px; margin-bottom: 3px;
+    width: 26px; height: 26px;
     padding: 0; border-radius: 50%;
     background: transparent; border: 0; color: var(--fg-2);
   }
