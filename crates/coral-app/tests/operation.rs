@@ -62,3 +62,32 @@ async fn aborting_records_nothing_when_it_moved_nothing() {
     // An abort puts every ref back where it was, and the journal only records what moved.
     assert!(Journal::load(&loc).entries.is_empty());
 }
+
+/// Labels carry a short object id, whatever the window sent.
+///
+/// Four of them did not: revert, cherry-pick, merge and checkout interpolated the revision
+/// straight in, so a failure reported "revert 1f98d424e506cf1dcce211f7b42e967ab48bb485 stopped
+/// on conflicts" while every other surface in the window showed eight characters.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_label_never_carries_a_full_object_id() {
+    let repo = TestRepo::new().write("f.txt", "one\n").commit("base");
+    let repo = repo.write("f.txt", "two\n").commit("second");
+    let path = repo.path().display().to_string();
+    let full = repo.git(["rev-parse", "HEAD"]);
+    assert_eq!(full.len(), 40);
+
+    app::actions::repo_action(
+        path,
+        app::actions::Action::Revert {
+            revs: vec![full.clone()],
+        },
+    )
+    .await
+    .expect("the revert applies");
+
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+    let last = Journal::load(&loc).entries.pop().expect("an entry");
+    assert_eq!(last.label, format!("revert {}", &full[..8]));
+}
+

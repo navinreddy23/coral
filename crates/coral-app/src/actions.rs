@@ -257,6 +257,14 @@ fn named(rev: &str) -> std::borrow::Cow<'_, str> {
     }
 }
 
+/// A list of revisions, each shortened the way [`named`] shortens one.
+fn shortened(revs: &[String]) -> String {
+    revs.iter()
+        .map(|r| named(r).into_owned())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 impl Action {
     /// What the journal should call this, and the label a failure is reported under.
     fn label(&self) -> String {
@@ -280,23 +288,23 @@ impl Action {
                 ..
             } => "force push".to_owned(),
             Self::Push { .. } => "push".to_owned(),
-            Self::Checkout { rev } => format!("checkout {rev}"),
+            Self::Checkout { rev } => format!("checkout {}", named(rev)),
             Self::BranchCreate { name, .. } => format!("create branch {name}"),
             Self::BranchDelete { name, .. } => format!("delete branch {name}"),
             Self::Merge { rev, mode } => match mode {
-                MergeMode::FfOnly => format!("fast-forward to {rev}"),
-                _ => format!("merge {rev}"),
+                MergeMode::FfOnly => format!("fast-forward to {}", named(rev)),
+                _ => format!("merge {}", named(rev)),
             },
             Self::Rebase { onto } => format!("rebase onto {}", named(onto)),
             Self::CherryPick { revs, commit } => {
-                let what = revs.join(" ");
+                let what = shortened(revs);
                 if *commit {
                     format!("cherry-pick {what}")
                 } else {
                     format!("cherry-pick {what} without committing")
                 }
             }
-            Self::Revert { revs } => format!("revert {}", revs.join(" ")),
+            Self::Revert { revs } => format!("revert {}", shortened(revs)),
             Self::StashPush { .. } => "stash".to_owned(),
             Self::StashApply { pop: true, .. } => "stash pop".to_owned(),
             Self::StashApply { .. } => "stash apply".to_owned(),
