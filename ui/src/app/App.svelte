@@ -571,7 +571,15 @@
 
     await Promise.all([refs.load(path), worktree.load(path), merge.load(path)]);
     const after = refSignature();
-    if (before !== after) await graph.open(path);
+    if (before !== after) {
+      await graph.open(path);
+      // Again, after the walk. The row a ref carries belongs to the walk it was read from,
+      // and an action that moves a ref usually changes the shape of the walk as well — a
+      // fetch that brings one commit in shifts every row below it by one. Read before the
+      // walk, as they have to be to tell whether anything moved at all, every pill then sat
+      // one commit out. The watcher path has always done it in this order and says why.
+      await Promise.all([refs.load(path), stashes.load(path)]);
+    }
 
     // A checkout moves HEAD, and leaving the view where it was is the commonest way to end up
     // reading the branch that was just left.
