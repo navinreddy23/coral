@@ -4,7 +4,7 @@
   import TabMark, { TAB_ICONS } from './TabMark.svelte';
   import { TabsState, type GroupColour, type Tab, type TabGroup, type TabIcon } from '../state/tabs.svelte';
 
-  const { tabs, onOpen, onCloseNew, newTab, onAsk }: {
+  const { tabs, onOpen, onCloseNew, newTab, onAsk, onPick }: {
     tabs: TabsState;
     onOpen: () => void;
     /**
@@ -17,6 +17,13 @@
     newTab: boolean;
     /** Puts the start page away, when there is a repository to go back to. */
     onCloseNew: () => void;
+    /**
+     * Called whenever a tab is picked, including one that was already current.
+     *
+     * The start page is not a tab and does not go away when another is activated, so picking
+     * one left the repository loaded underneath a page nobody had asked to stay.
+     */
+    onPick: () => void;
     /** Asks the user for a line of text. Returns null when they cancelled. */
     onAsk: (title: string, detail: string, initial: string) => Promise<string | null>;
   } = $props();
@@ -71,6 +78,7 @@
     if (event.key === 'Enter') {
       const first = found[0];
       if (first) {
+        onPick();
         void tabs.activate(first.id);
         searching = false;
       }
@@ -334,7 +342,14 @@
     ondrop={(e) => dropOnTab(e, tab)}
     oncontextmenu={(e) => tabMenu(e, tab)}
   >
-    <button class="pick" onclick={() => tabs.activate(tab.id)} title={tab.path}>
+    <button
+      class="pick"
+      onclick={() => {
+        onPick();
+        void tabs.activate(tab.id);
+      }}
+      title={tab.path}
+    >
       <span class="icon" style:--hue={hueOf(tab)}><TabMark kind={iconOf(tab)} /></span>
       <span class="name">{title(tab)}</span>
     </button>
@@ -426,6 +441,7 @@
             class="hit"
             class:active={tabs.session.active === tab.id}
             onclick={() => {
+              onPick();
               void tabs.activate(tab.id);
               searching = false;
             }}

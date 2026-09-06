@@ -34,10 +34,12 @@ function bar() {
   const tabs = new TabsState();
   tabs.session = session();
   const onAsk = vi.fn(async () => 'named');
+  const onPick = vi.fn();
   return {
     tabs,
     onAsk,
-    ...render(TabBar, { props: { tabs, onOpen: () => {}, onAsk } }),
+    onPick,
+    ...render(TabBar, { props: { tabs, onOpen: () => {}, onAsk, onPick } }),
   };
 }
 
@@ -400,5 +402,23 @@ describe('a collapsed group', () => {
     const tally = container.querySelector('.group .tally');
     expect(tally?.textContent?.trim()).toBe('2');
     expect(container.querySelectorAll('.band .tab')).toHaveLength(0);
+  });
+});
+
+describe('the start page and the tabs', () => {
+  /**
+   * The start page is not a tab. Picking a real one used to leave it up: the repository loaded
+   * behind a page nobody had asked to keep, and the only way out was its own close button.
+   */
+  it('says a tab was picked, so the page over it can go', async () => {
+    const { container, onPick } = bar();
+    await fireEvent.click(chipFor(container, 'gamma').querySelector('.pick') as HTMLElement);
+    expect(onPick).toHaveBeenCalledTimes(1);
+  });
+
+  it('says so for the tab that is already current, which is the one over the page', async () => {
+    const { container, onPick } = bar();
+    await fireEvent.click(chipFor(container, 'alpha').querySelector('.pick') as HTMLElement);
+    expect(onPick).toHaveBeenCalledTimes(1);
   });
 });
