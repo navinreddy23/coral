@@ -778,3 +778,73 @@ describe('a repository that will not open', () => {
     expect(container.querySelector('.splash')).toBeNull();
   });
 });
+
+describe('what an action leaves behind', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  /** The same branch, on a different commit, so a fetch counts as a real change. */
+  function spikeOn(row: number) {
+    return [
+      {
+        name: 'refs/heads/spike',
+        short: 'spike',
+        kind: { kind: 'local_branch' },
+        target: frameOids[row],
+        peeled: null,
+        upstream: null,
+        ahead: 0,
+        behind: 0,
+        row,
+      },
+    ];
+  }
+
+  const fetched = { repo_action: { what: 'fetch', message: '', conflicted: false } };
+
+  /**
+   * The row a ref carries belongs to the walk it was read from. An action reads the refs
+   * before the walk, because that is the only way to tell whether anything moved and a rewalk
+   * is needed at all — and if it stops there, one commit fetched in shifts every row and
+   * leaves every label a commit behind. Which is what the window did.
+   */
+  it('reads the refs again after the walk, not only before it', async () => {
+    const { container } = await shell({ ...fetched, repo_refs: spikeOn(1) });
+    wire({ ...fetched, repo_refs: spikeOn(2) });
+    invoke.mockClear();
+
+    const fetch = [...container.querySelectorAll('button.action')].find((b) =>
+      b.textContent?.includes('Fetch'),
+    ) as HTMLButtonElement;
+    expect(fetch, 'the toolbar carries a fetch button').toBeDefined();
+    await fireEvent.click(fetch);
+
+    await waitFor(() => {
+      const order = invoke.mock.calls.map(([cmd]) => cmd as string);
+      const walked = order.lastIndexOf('graph_rewalk');
+      const read = order.lastIndexOf('repo_refs');
+      if (walked === -1) throw new Error(`no rewalk: ${order.join(',')}`);
+      expect(read).toBeGreaterThan(walked);
+    });
+  });
+
+  /** A ref that has not moved must not cost a walk of the whole repository. */
+  it('does not rewalk when nothing moved', async () => {
+    const { container } = await shell({ ...fetched, repo_refs: spikeOn(1) });
+    wire({ ...fetched, repo_refs: spikeOn(1) });
+    invoke.mockClear();
+
+    await fireEvent.click(
+      [...container.querySelectorAll('button.action')].find((b) =>
+        b.textContent?.includes('Fetch'),
+      ) as HTMLButtonElement,
+    );
+
+    await waitFor(() => {
+      if (!invoke.mock.calls.some(([cmd]) => cmd === 'repo_action')) throw new Error('not yet');
+    });
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'graph_rewalk')).toBe(false);
+  });
+});
