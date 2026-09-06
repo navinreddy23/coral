@@ -40,6 +40,7 @@
     modified: 'M',
     renamed: 'R',
     copied: 'C',
+    unmerged: '!',
   };
 </script>
 

@@ -102,7 +102,7 @@ deleteModify: boolean, };
 /**
  * What happened to a file between two trees.
  */
-export type FileChange = "added" | "deleted" | "modified" | "renamed" | "copied";
+export type FileChange = "added" | "deleted" | "modified" | "renamed" | "copied" | "unmerged";
 
 export type FileDiff = { path: string, oldPath: string | null, change: FileChange, binary: boolean, 
 /**

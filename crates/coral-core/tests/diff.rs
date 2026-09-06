@@ -44,6 +44,31 @@ async fn staged(repo: &TestRepo) -> Vec<coral_core::diff::FileDiff> {
         .unwrap()
 }
 
+/// A path left conflicted, which git names `U` and gives no patch for.
+///
+/// The parser used to refuse the letter outright, and the panel that opened a conflicted file
+/// showed "malformed git diff output" where the conflict should have been.
+#[tokio::test]
+async fn a_conflicted_path_is_unmerged_rather_than_an_error() {
+    let r = TestRepo::new().write("f.txt", "one\ntwo\n").commit("base");
+    r.git(["checkout", "-q", "-b", "side"]);
+    let r = r.write("f.txt", "one\nSIDE\n").commit("side");
+    r.git(["checkout", "-q", "-"]);
+    let r = r.write("f.txt", "one\nMAIN\n").commit("main");
+    // Conflicts, and is expected to, so it is run through `command` rather than `git`.
+    r.command(["merge", "side"]).output().expect("spawn git");
+
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, r.path()).await.unwrap();
+    let files = loc
+        .diff(&runner, true, &[], DiffOptions::default())
+        .await
+        .expect("a conflicted index still parses");
+
+    let f = files.iter().find(|f| f.path == "f.txt").expect("f.txt");
+    assert_eq!(f.change, FileChange::Unmerged);
+}
+
 #[tokio::test]
 async fn classifies_every_kind_of_change() {
     let repo = every_shape();

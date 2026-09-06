@@ -282,7 +282,15 @@ export class DiffState {
       // Clicking down a long file list must not let an earlier, slower read win.
       if (token !== this.#token) return;
       this.file = got;
-      if (got === null) this.error = absent;
+      if (got === null) {
+        this.error = absent;
+      } else if (got.change === 'unmerged') {
+        // git has no patch for a path with conflict stages: it prints `* Unmerged path` and
+        // counts nothing. Showing that as an empty diff says the file is unchanged, which is
+        // the opposite of what is wrong with it.
+        this.file = null;
+        this.error = 'That file is conflicted. Resolve it, and the change will be here.';
+      }
     } catch (e) {
       if (token !== this.#token) return;
       this.error = messageOf(e);

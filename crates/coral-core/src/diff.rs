@@ -98,6 +98,12 @@ pub enum FileChange {
     Modified,
     Renamed,
     Copied,
+    /// A path left with conflict stages in the index, which git reports as `U`.
+    ///
+    /// It has no patch of its own: `git diff` prints `* Unmerged path <file>` and numstat
+    /// counts it as nothing changed. What the file actually holds is the conflict, which is
+    /// read through `crate::conflict` rather than from here.
+    Unmerged,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
@@ -244,6 +250,7 @@ pub fn apply_name_status(files: &mut [FileDiff], input: &[u8]) -> Result<(), Cor
             b'M' | b'T' => FileChange::Modified,
             b'R' => FileChange::Renamed,
             b'C' => FileChange::Copied,
+            b'U' => FileChange::Unmerged,
             _ => return Err(protocol("unknown name-status letter")),
         };
         // The path follows as its own record, and a rename or copy has two.
