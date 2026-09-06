@@ -56,6 +56,10 @@ pub enum Action {
         name: String,
         force: bool,
     },
+    BranchRename {
+        from: String,
+        to: String,
+    },
     Merge {
         rev: String,
         /// `FfOnly` refuses anything but a fast-forward, which is what "fast-forward to this"
@@ -291,6 +295,7 @@ impl Action {
             Self::Checkout { rev } => format!("checkout {}", named(rev)),
             Self::BranchCreate { name, .. } => format!("create branch {name}"),
             Self::BranchDelete { name, .. } => format!("delete branch {name}"),
+            Self::BranchRename { from, to } => format!("rename {from} to {to}"),
             Self::Merge { rev, mode } => match mode {
                 MergeMode::FfOnly => format!("fast-forward to {}", named(rev)),
                 _ => format!("merge {}", named(rev)),
@@ -415,6 +420,7 @@ async fn run(
         Action::Checkout { .. }
         | Action::BranchCreate { .. }
         | Action::BranchDelete { .. }
+        | Action::BranchRename { .. }
         | Action::Merge { .. }
         | Action::Rebase { .. }
         | Action::CherryPick { .. }
@@ -491,6 +497,7 @@ async fn run_refs(
                 .await?;
         }
         Action::BranchDelete { name, force } => loc.branch_delete(runner, &name, force).await?,
+        Action::BranchRename { from, to } => loc.branch_rename(runner, &from, &to).await?,
         Action::Merge { rev, mode } => {
             let out = loc.merge(runner, &rev, mode, None).await?;
             return Ok(Done::from(&out));

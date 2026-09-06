@@ -91,3 +91,30 @@ async fn a_label_never_carries_a_full_object_id() {
     assert_eq!(last.label, format!("revert {}", &full[..8]));
 }
 
+/// Renaming a branch, which the engine and the CLI have always been able to do and the window
+/// could not: the action did not exist, so the branch menu had no item to put it behind.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_branch_can_be_renamed_from_the_window() {
+    let repo = TestRepo::new().write("f.txt", "one\n").commit("base");
+    repo.git(["branch", "feature"]);
+    let path = repo.path().display().to_string();
+
+    app::actions::repo_action(
+        path,
+        app::actions::Action::BranchRename {
+            from: "feature".to_owned(),
+            to: "feature/renamed".to_owned(),
+        },
+    )
+    .await
+    .expect("the rename applies");
+
+    let branches = repo.git(["branch", "--format=%(refname:short)"]);
+    assert!(branches.contains("feature/renamed"), "{branches}");
+    assert!(!branches.contains("\nfeature\n"), "{branches}");
+
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+    let last = Journal::load(&loc).entries.pop().expect("an entry");
+    assert_eq!(last.label, "rename feature to feature/renamed");
+}

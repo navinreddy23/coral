@@ -973,8 +973,17 @@
     });
     items.push({ kind: 'item', label: 'Copy commit sha', run: () => void copySha(oid) });
 
-    if (ref.kind.kind === 'local_branch' && !current) {
+    if (ref.kind.kind === 'local_branch') {
       items.push({ kind: 'separator' });
+      items.push({
+        kind: 'item',
+        label: `Rename ${ref.short}…`,
+        disabled: busy,
+        run: () => void renameBranch(ref.short),
+      });
+    }
+
+    if (ref.kind.kind === 'local_branch' && !current) {
       items.push({
         kind: 'item',
         label: `Delete ${ref.short}…`,
@@ -1005,6 +1014,19 @@
 
     if (items.length === 0) return;
     menu = { x: event.clientX, y: event.clientY, items };
+  }
+
+  /**
+   * Renames a local branch, including the one that is checked out.
+   *
+   * The engine and the CLI have had this since the beginning; the window was the one place it
+   * could not be done. It leaves the upstream alone: git keeps the tracking configuration, and
+   * the branch on the remote keeps the name it was pushed under until it is pushed again.
+   */
+  async function renameBranch(from: string) {
+    const to = await askText('Rename the branch', `${from} becomes:`, from);
+    if (to === null || to.trim() === '' || to === from) return;
+    await act({ kind: 'branchRename', from, to: to.trim() });
   }
 
   /**
