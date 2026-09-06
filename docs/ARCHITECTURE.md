@@ -225,6 +225,16 @@ them and a table that size is one layer the engine repaints on every wheel notch
 history are read only when the view that shows them is asked for: each is a walk of the file's
 whole history and costs seconds on a large repository.
 
+**The window opens undecorated and draws its own title bar**, which is the tab strip. The
+desktop's bar, an application header and a tab strip were three rows saying between them that
+the window was called Coral; they are one row of forty pixels. Dragging and the double-click to
+maximise are Tauri's own drag region; the buttons and the eight resize grips go through
+`ui/src/ipc/window.ts`, which resolves the window lazily so the same page still runs under
+vitest, where there is no window to act on. Whether Coral draws the bar is read back from the
+window with `isDecorated` rather than assumed from the platform, so a platform whose
+configuration keeps the native bar does not get two sets of buttons. A right-click on the strip
+hands the bar back, for a window manager that handles an undecorated window badly.
+
 **Finding a commit** matches the message, the author, the paths it touched and the object id.
 That is four git invocations rather than one, because `--author` is ANDed with `--grep` and a
 pathspec is ANDed with both; they run together rather than in sequence, since each is a walk of

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ChromeMark from './ChromeMark.svelte';
   import Menu, { type MenuItem } from './Menu.svelte';
   import TabMark, { TAB_ICONS } from './TabMark.svelte';
   import { TabsState, type GroupColour, type Tab, type TabGroup, type TabIcon } from '../state/tabs.svelte';
@@ -344,6 +345,7 @@
 <nav
   class="bar"
   class:loose={dragging !== null && overBar}
+  data-tauri-drag-region
   role="presentation"
   ondragover={overLoose}
   ondragleave={() => (overBar = false)}
@@ -403,7 +405,7 @@
     onclick={(e) => (searching ? (searching = false) : openSearch(e))}
     title="Search open tabs"
     aria-expanded={searching}
-  >⌄</button>
+  ><ChromeMark kind="chevron" size={15} /></button>
 </nav>
 
 {#if searching}
@@ -479,21 +481,25 @@
 
 <style>
   /*
-   * The strip the tabs stand on.
+   * The tabs, standing on the title strip.
    *
-   * The line along the bottom is an inset shadow rather than a border, because the active tab
-   * has to cover it: a tab that merges into the panel below is the whole of the shape, and a
-   * border would draw a hairline straight across the seam.
+   * The strip is the window's title bar and paints the ground and the line along its bottom;
+   * this is the stretch of it the tabs occupy, and it takes whatever the rest of the strip
+   * leaves. Empty space in it drags the window, which is the whole reason the tabs are up
+   * here rather than on a row of their own.
    */
   .bar {
     /* The face the current tab wears, which is the toolbar's own: the two are meant to read as
        one surface stepping up out of the strip, and a tab painted any other colour is a tab
        sitting on the toolbar rather than joined to it. */
     --tab-face: var(--bg-1);
+    flex: 1 1 auto; min-width: 0; align-self: stretch;
     display: flex; align-items: flex-end; gap: 0;
-    padding: var(--space-2) var(--space-2) 0;
-    background: var(--bg-2); box-shadow: inset 0 -1px 0 var(--border);
+    padding: var(--space-2) 0 0;
     overflow-x: auto;
+    /* A scrollbar here would be drawn inside the title bar and take a third of its height. The
+       overflow still scrolls, by wheel and by the search panel beside it. */
+    scrollbar-width: none;
   }
   /* A group is a tinted tray the tabs sit in, with its name on a chip at the leading edge. */
   .band {
@@ -608,11 +614,16 @@
 
   /* Pinned to the trailing edge so it stays reachable however far the bar has scrolled — which
      is exactly the case it exists for. */
+  /*
+   * Beside the tabs it searches rather than at the far end of the strip, and pinned to the
+   * right edge only once the bar has scrolled — which is the case it exists for.
+   */
   .find {
-    position: sticky; right: 0; margin-left: auto; align-self: center; flex: 0 0 auto;
-    font: inherit; font-size: 13px; line-height: 1; cursor: pointer;
-    padding: 3px var(--space-2); border-radius: var(--radius-1);
-    background: var(--bg-2); border: 1px solid var(--border); color: var(--fg-1);
+    position: sticky; right: 0; flex: 0 0 auto; align-self: center;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    width: 26px; height: 26px; margin-bottom: 3px;
+    padding: 0; border-radius: 50%;
+    background: transparent; border: 0; color: var(--fg-2);
   }
   .find:hover, .find.on { background: var(--bg-3); color: var(--fg-0); }
 

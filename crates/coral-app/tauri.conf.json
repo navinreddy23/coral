@@ -24,7 +24,8 @@
         "minWidth": 900,
         "minHeight": 600,
         "resizable": true,
-        "backgroundColor": "#f7f8fa"
+        "backgroundColor": "#f7f8fa",
+        "decorations": false
       }
     ],
     "security": {

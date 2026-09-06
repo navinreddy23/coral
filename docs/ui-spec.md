@@ -9,7 +9,7 @@ JetBrains Mono.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ ☰  [kernel ▾][linux][stable][mods]  [tools ▾]  [repo tab]  [+]  ⚙ avatar │
+│ ⑂ Coral [kernel][linux][stable]  [+] ⌄      /path/to/repo  ☰ ⚙ ☾ │ ─ □ ✕ │
 ├─────────────────────────────────────────────────────────────────────────┤
 │ ↶ ↷ │ Pull ▾   Push   Branch   Stash   Pop                   🔍 filter   │
 ├──────────────┬──────────────────────────────────────────┬───────────────┤
@@ -27,6 +27,26 @@ JetBrains Mono.
 
 Left and right panels collapse; widths persist per repo. Default dark theme; light theme
 included. Panel splitters are draggable.
+
+## Title bar
+
+Coral draws its own, and the window opens without the desktop's. The tab strip is the title
+bar: the mark and the wordmark at the leading edge, the tabs, the repository's path in whatever
+room is left, then the log, preferences and theme buttons, then minimise, maximise and close.
+Forty pixels, where the desktop's bar, Coral's own header row and a separate tab strip took a
+hundred and twenty between them.
+
+- Empty strip drags the window; double-clicking it maximises and restores.
+- The window's three buttons are full height and the last one ends at the corner, so the
+  pointer cannot overshoot them.
+- Four pixels along each edge and twelve at each corner resize the window, which is what the
+  desktop's border used to do.
+- The path gives up its room before the tabs do and disappears entirely on a full strip; every
+  tab carries the same path on its tooltip.
+- Right-clicking the strip offers the desktop's title bar back, for a window manager that
+  handles an undecorated window badly. The choice persists.
+- Preferences and the activity log fill the window under the strip, never over it: with no
+  desktop title bar, covering it would leave no way to move or close the window.
 
 ## Toolbar
 

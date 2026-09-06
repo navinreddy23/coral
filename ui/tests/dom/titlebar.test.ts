@@ -1,0 +1,214 @@
+// @vitest-environment happy-dom
+import { render, waitFor } from '@testing-library/svelte';
+import { fireEvent } from '@testing-library/dom';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+/**
+ * The title bar Coral draws for itself.
+ *
+ * The window is opened without decorations, which means the buttons that minimise, maximise
+ * and close it are ordinary elements in the page. If they are missing, or the strip stops
+ * offering the way back to the desktop's own title bar, a window manager that handles an
+ * undecorated window badly leaves someone with a window they cannot close.
+ */
+const frameBytes = readFileSync(resolve(process.cwd(), 'tests/fixtures/frame.bin'));
+
+const invoke = vi.hoisted(() => vi.fn());
+vi.mock('@tauri-apps/api/core', () => ({ invoke }));
+vi.mock('../../src/ipc/invoke', () => ({ invoke, isPreview: () => false }));
+vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => undefined }));
+vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
+
+const win = vi.hoisted(() => ({
+  decorated: false,
+  maximized: false,
+  /** What the window was last told, so a click can be checked against it. */
+  calls: [] as string[],
+  resized: null as (() => void) | null,
+}));
+
+vi.mock('../../src/ipc/window', () => ({
+  minimize: async () => void win.calls.push('minimize'),
+  toggleMaximize: async () => void win.calls.push('toggleMaximize'),
+  close: async () => void win.calls.push('close'),
+  startResize: async (at: string) => void win.calls.push(`resize:${at}`),
+  isMaximized: async () => win.maximized,
+  isDecorated: async () => win.decorated,
+  setDecorations: async (on: boolean) => {
+    win.calls.push(`setDecorations:${String(on)}`);
+    win.decorated = on;
+  },
+  onResized: async (run: () => void) => {
+    win.resized = run;
+    return () => (win.resized = null);
+  },
+}));
+
+import App from '../../src/app/App.svelte';
+
+const REPO = '/repo';
+const SESSION = {
+  tabs: [{ id: 1, path: REPO, submodule: null, group: null, missing: false }],
+  active: 1,
+  groups: [],
+};
+
+function answers(): Record<string, unknown> {
+  return {
+    initial_repo: REPO,
+    open_repo: {
+      path: REPO,
+      gitDir: `${REPO}/.git`,
+      gitVersion: '2.43.0',
+      head: { kind: 'branch', name: 'master' },
+      state: 'clean',
+      commitGraph: true,
+    },
+    binary_self_test: Uint8Array.from({ length: 4096 }, (_, i) => i % 251).buffer,
+    graph_frame: frameBytes.buffer.slice(
+      frameBytes.byteOffset,
+      frameBytes.byteOffset + frameBytes.byteLength,
+    ),
+    row_metadata: [],
+    repo_refs: [],
+    repo_stashes: [],
+    graph_rewalk: null,
+    repo_submodules: [],
+    repo_status: { entries: [], conflicted: [] },
+    repo_operation: {
+      state: 'clean',
+      labels: { ours: 'ours', theirs: 'theirs', swapped: false },
+      progress: null,
+      headName: null,
+      stoppedAt: null,
+      interactive: false,
+    },
+    repo_conflicts: [],
+    hosting_status: { host: null, detail: 'no remotes', signedIn: false },
+    hosting_pull_requests: [],
+    remote_list: [],
+    commit_detail: null,
+    watch_repo: { complete: true, detail: null },
+    unwatch_repo: null,
+    session_get: SESSION,
+    tab_open: SESSION,
+    tab_activate: SESSION,
+    graph_scope: { solo: null, hidden: [] },
+    set_graph_scope: null,
+  };
+}
+
+async function shell() {
+  const table = answers();
+  invoke.mockImplementation(async (cmd: string) => {
+    if (!(cmd in table)) throw new Error(`unstubbed command ${cmd}`);
+    return table[cmd];
+  });
+  const view = render(App);
+  await waitFor(() => {
+    if (view.container.querySelectorAll('li.row').length === 0) throw new Error('no rows yet');
+  });
+  return view;
+}
+
+function named(container: HTMLElement, label: string): HTMLElement | null {
+  return container.querySelector(`.strip button[aria-label="${label}"]`);
+}
+
+beforeEach(() => {
+  localStorage.clear();
+  invoke.mockReset();
+  win.decorated = false;
+  win.maximized = false;
+  win.calls = [];
+  win.resized = null;
+});
+
+describe('the title bar Coral draws', () => {
+  it('is one strip carrying the tabs, the tools and the window buttons', async () => {
+    const { container } = await shell();
+    const strip = container.querySelector('.strip');
+    expect(strip, 'the strip').not.toBeNull();
+    // The tabs live in it rather than on a row of their own, which is the whole point.
+    expect(strip?.querySelector('nav.bar'), 'the tabs').not.toBeNull();
+    for (const label of ['Activity logs', 'Settings', 'Switch theme']) {
+      expect(named(container, label), label).not.toBeNull();
+    }
+  });
+
+  it('minimises, maximises and closes the window', async () => {
+    const { container } = await shell();
+    await waitFor(() => {
+      if (!named(container, 'Minimise')) throw new Error('not yet undecorated');
+    });
+
+    await fireEvent.click(named(container, 'Minimise') as HTMLElement);
+    await fireEvent.click(named(container, 'Maximise') as HTMLElement);
+    await fireEvent.click(named(container, 'Close') as HTMLElement);
+    expect(win.calls).toEqual(['minimize', 'toggleMaximize', 'close']);
+  });
+
+  it('offers to restore once the window is maximised', async () => {
+    const { container } = await shell();
+    await waitFor(() => {
+      if (!named(container, 'Maximise')) throw new Error('not yet undecorated');
+    });
+
+    win.maximized = true;
+    win.resized?.();
+    await waitFor(() => {
+      if (!named(container, 'Restore')) throw new Error('still says maximise');
+    });
+    expect(named(container, 'Maximise'), 'no longer offers to maximise').toBeNull();
+  });
+
+  it('draws the edges the desktop no longer draws, and resizes from one', async () => {
+    const { container } = await shell();
+    await waitFor(() => {
+      if (container.querySelectorAll('.grip').length === 0) throw new Error('no grips yet');
+    });
+    // Four edges and four corners.
+    expect(container.querySelectorAll('.grip')).toHaveLength(8);
+
+    const corner = container.querySelector('.grip.southeast') as HTMLElement;
+    await fireEvent.mouseDown(corner, { button: 0 });
+    expect(win.calls).toEqual(['resize:SouthEast']);
+  });
+
+  it('hands the window back to the desktop, and remembers that it did', async () => {
+    const { container } = await shell();
+    await waitFor(() => {
+      if (!named(container, 'Close')) throw new Error('not yet undecorated');
+    });
+
+    const strip = container.querySelector('.strip') as HTMLElement;
+    await fireEvent.contextMenu(strip);
+    const item = [...container.querySelectorAll('.menu .label')].find(
+      (e) => e.textContent?.trim() === 'Use the system title bar',
+    );
+    expect(item, 'the way back').toBeDefined();
+    await fireEvent.click((item as HTMLElement).closest('button') as HTMLElement);
+
+    await waitFor(() => {
+      if (named(container, 'Close')) throw new Error('still drawing its own buttons');
+    });
+    expect(win.calls).toContain('setDecorations:true');
+    // No grips either: the desktop's own border is back.
+    expect(container.querySelectorAll('.grip')).toHaveLength(0);
+    expect(localStorage.getItem('coral.views')).toContain('"systemTitleBar":true');
+  });
+
+  it('draws no buttons of its own where the desktop draws the title bar', async () => {
+    win.decorated = true;
+    const { container } = await shell();
+    await waitFor(() => {
+      if (!container.querySelector('.strip')) throw new Error('no strip');
+    });
+    for (const label of ['Minimise', 'Maximise', 'Close']) {
+      expect(named(container, label), label).toBeNull();
+    }
+    expect(container.querySelectorAll('.grip')).toHaveLength(0);
+  });
+});

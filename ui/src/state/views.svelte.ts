@@ -36,6 +36,14 @@ export interface Views {
   toolbar: boolean;
   terminalDock: Dock;
   terminalSize: number;
+  /**
+   * Whether the desktop draws the title bar instead of Coral.
+   *
+   * Off by default, which is what buys back the row: Coral's tab strip is the title bar. It is
+   * here at all because a window manager that handles an undecorated window badly leaves no
+   * way back from inside the window, and this is that way back.
+   */
+  systemTitleBar: boolean;
   /** Which sections of the sidebar are closed, by key. */
   collapsed: Record<string, boolean>;
 }
@@ -54,6 +62,7 @@ function defaults(): Views {
     toolbar: true,
     terminalDock: 'bottom',
     terminalSize: 260,
+    systemTitleBar: false,
     // Remote and tag lists run to hundreds on a real repository, so they start closed; local
     // branches are what people look at.
     collapsed: { remote: true, tags: true },
@@ -107,6 +116,7 @@ function read(): Views {
     if (typeof stored.sidebar === 'boolean') out.sidebar = stored.sidebar;
     if (typeof stored.details === 'boolean') out.details = stored.details;
     if (typeof stored.toolbar === 'boolean') out.toolbar = stored.toolbar;
+    if (typeof stored.systemTitleBar === 'boolean') out.systemTitleBar = stored.systemTitleBar;
     if (stored.terminalDock === 'bottom' || stored.terminalDock === 'right') {
       out.terminalDock = stored.terminalDock;
     }

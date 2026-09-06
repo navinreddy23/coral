@@ -85,6 +85,16 @@
   import { RefsState } from '../state/refs.svelte';
   import { ScopeState } from '../state/scope.svelte';
   import ChromeMark from './ChromeMark.svelte';
+  import Border from './Border.svelte';
+  import {
+    close as shut,
+    isDecorated,
+    isMaximized,
+    minimize as minimise,
+    onResized,
+    setDecorations,
+    toggleMaximize as toggleMaximise,
+  } from '../ipc/window';
   import { ThemeState } from '../state/theme.svelte';
   import { SelectionState } from '../state/selection.svelte';
   import { WorktreeState } from '../state/worktree.svelte';
@@ -119,6 +129,30 @@
   let showWip = $state(false);
   const tabs = new TabsState();
   let showHelp = $state(false);
+
+  /**
+   * Whether the desktop is drawing the window's border, and whether the window fills the
+   * screen.
+   *
+   * Both are the window manager's answers rather than Coral's assumptions. The configuration
+   * asks for an undecorated window, but a platform where that is the wrong shape keeps its own
+   * title bar, and then Coral must not draw a second set of buttons underneath it.
+   */
+  let decorated = $state(true);
+  let maximised = $state(false);
+
+  $effect(() => {
+    let off: (() => void) | null = null;
+    void (async () => {
+      // Only ever turned on from here. Off is what the configuration already asked for, and
+      // forcing it would strip the title bar from a platform that was meant to keep it.
+      if (views.current.systemTitleBar) await setDecorations(true);
+      decorated = await isDecorated();
+      maximised = await isMaximized();
+      off = await onResized(() => void isMaximized().then((on) => (maximised = on)));
+    })();
+    return () => off?.();
+  });
 
   /** Which shortcuts actually do something today; the help overlay dims the rest. */
   const LIVE = new Set([
@@ -555,6 +589,45 @@
     if (target?.closest('input, textarea')) return;
     if ((window.getSelection()?.toString() ?? '') !== '') return;
     event.preventDefault();
+  }
+
+  /**
+   * The title strip's own menu, which is where a browser puts this same choice.
+   *
+   * There is no Preferences pane for it because the case it exists for is a window manager
+   * that handles an undecorated window badly, and somebody in that case needs the way out to
+   * be on the thing that is misbehaving rather than three clicks inside it.
+   */
+  function stripMenu(event: MouseEvent) {
+    const target = event.target as HTMLElement | null;
+    // The tabs carry their own menu, and a group its own; only the bare strip answers here.
+    if (target?.closest('.tab, .band, button')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const system = views.current.systemTitleBar;
+    menu = {
+      x: event.clientX,
+      y: event.clientY,
+      items: [
+        {
+          kind: 'item',
+          label: system ? 'Hide the system title bar' : 'Use the system title bar',
+          run: () => void useSystemTitleBar(!system),
+        },
+        { kind: 'separator' },
+        {
+          kind: 'item',
+          label: maximised ? 'Restore' : 'Maximise',
+          run: () => void toggleMaximise(),
+        },
+      ],
+    };
+  }
+
+  async function useSystemTitleBar(on: boolean) {
+    views.set('systemTitleBar', on);
+    await setDecorations(on);
+    decorated = await isDecorated();
   }
 
   /** Every ref and where it points, as one string, to tell whether an action moved anything. */
@@ -2905,11 +2978,20 @@
 
 <svelte:window onkeydown={onKey} onfocus={() => void refreshOnFocus()} oncontextmenu={platformMenu} />
 
+<Border active={!decorated} />
+
 <main>
-  <header>
+  <!--
+    One strip where there were three: the desktop's title bar, Coral's own header and the tab
+    strip each carried a row, and between them they took a hundred and twenty pixels off the
+    top of the graph to say the window was called Coral. The tabs are the title bar now, the
+    way a browser does it, and everything the header held sits along them.
+  -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <header class="strip" data-tauri-drag-region oncontextmenu={stripMenu}>
     <!-- The application's own mark, the same one the icon carries: one commit and the two
          branches that leave it. -->
-    <svg class="logo" viewBox="0 0 512 512" width="18" height="18" aria-hidden="true">
+    <svg class="logo sit" viewBox="0 0 512 512" width="18" height="18" aria-hidden="true">
       <g fill="none" stroke="currentColor" stroke-width="52" stroke-linecap="round">
         <path d="M256 392 L256 300" />
         <path d="M256 300 Q256 212 152 172" />
@@ -2921,51 +3003,87 @@
         <circle cx="360" cy="164" r="52" />
       </g>
     </svg>
-    <h1>Coral</h1>
+    <!-- The window has no title bar to carry the name any more, so the strip does. -->
+    <h1 class="sit">Coral</h1>
+
+    <TabBar
+      {tabs}
+      newTab={showStart || tabs.session.tabs.length === 0}
+      onOpen={openAnother}
+      onCloseNew={() => (showStart = false)}
+      onAsk={askText}
+    />
+
     {#if info}
-      <span class="path mono" title={info.path}>{elidePath(info.path, 64)}</span>
+      <!-- Last to be given room and first to give it back: with a strip full of tabs this is
+           down to nothing, and the same path is on every tab's own tooltip. -->
+      <span class="path mono sit" title={info.path} data-tauri-drag-region>
+        {elidePath(info.path, 44)}
+      </span>
       {#if graph.provisional}
-        <span class="chip warn" title="Commit-time order, being replaced by the topological walk">
+        <span class="chip warn sit" title="Commit-time order, being replaced by the topological walk">
           provisional order
         </span>
       {/if}
     {/if}
-    <button
-      class="chrome"
-      onclick={() => openActivity()}
-      title="Activity logs: what Coral has been doing"
-      aria-label="Activity logs"
-    ><ChromeMark kind="logs" /></button>
-    <button
-      class="chrome"
-      onclick={() => openPreferences()}
-      title="SSH keys, signing and preferences"
-      aria-label="Settings"
-    ><ChromeMark kind="settings" /></button>
-    <!--
-      Both faces are drawn and one is turned away, rather than swapped in and out. A theme
-      switch that changes under the pointer with no movement reads as a redraw; turning is
-      the one thing that says the button did something.
-    -->
-    <button
-      class="chrome swap"
-      class:dark={theme.current === 'dark'}
-      onclick={() => theme.toggle()}
-      title={theme.current === 'light' ? 'Switch to the dark theme' : 'Switch to the light theme'}
-      aria-label="Switch theme"
-    >
-      <span class="face moon"><ChromeMark kind="moon" /></span>
-      <span class="face sun"><ChromeMark kind="sun" /></span>
-    </button>
-  </header>
 
-  <TabBar
-    {tabs}
-    newTab={showStart || tabs.session.tabs.length === 0}
-    onOpen={openAnother}
-    onCloseNew={() => (showStart = false)}
-    onAsk={askText}
-  />
+    <div class="tools sit">
+      <button
+        class="chrome"
+        onclick={() => openActivity()}
+        title="Activity logs: what Coral has been doing"
+        aria-label="Activity logs"
+      ><ChromeMark kind="logs" /></button>
+      <button
+        class="chrome"
+        onclick={() => openPreferences()}
+        title="SSH keys, signing and preferences"
+        aria-label="Settings"
+      ><ChromeMark kind="settings" /></button>
+      <!--
+        Both faces are drawn and one is turned away, rather than swapped in and out. A theme
+        switch that changes under the pointer with no movement reads as a redraw; turning is
+        the one thing that says the button did something.
+      -->
+      <button
+        class="chrome swap"
+        class:dark={theme.current === 'dark'}
+        onclick={() => theme.toggle()}
+        title={theme.current === 'light' ? 'Switch to the dark theme' : 'Switch to the light theme'}
+        aria-label="Switch theme"
+      >
+        <span class="face moon"><ChromeMark kind="moon" /></span>
+        <span class="face sun"><ChromeMark kind="sun" /></span>
+      </button>
+
+    </div>
+
+    {#if !decorated}
+      <span class="split sit" aria-hidden="true"></span>
+      <!--
+        Full height and hard against the corner, the way a title bar's buttons have always
+        been. A rounded 26 pixel button set eight pixels in is a comfortable target in the
+        middle of a window and a poor one here, where the whole point of the corner is that
+        the pointer cannot overshoot it.
+      -->
+      <div class="sysbar">
+        <button class="sys" onclick={() => void minimise()} title="Minimise" aria-label="Minimise">
+          <ChromeMark kind="minimise" size={14} />
+        </button>
+        <button
+          class="sys"
+          onclick={() => void toggleMaximise()}
+          title={maximised ? 'Restore' : 'Maximise'}
+          aria-label={maximised ? 'Restore' : 'Maximise'}
+        >
+          <ChromeMark kind={maximised ? 'restore' : 'maximise'} size={14} />
+        </button>
+        <button class="sys shut" onclick={() => void shut()} title="Close" aria-label="Close">
+          <ChromeMark kind="close" size={14} />
+        </button>
+      </div>
+    {/if}
+  </header>
 
   {#if info && !showStart}
     {#if views.current.toolbar}
@@ -3000,6 +3118,7 @@
     said why.
   -->
   {#if showPrefs}
+    <div class="screen">
     <Preferences
       {signing}
       {ssh}
@@ -3012,9 +3131,12 @@
           ? toasts.push('ok', `Copied the ${what}`)
           : toasts.push('error', `Could not copy the ${what}`)}
     />
+    </div>
   {/if}
   {#if showActivity}
-    <Activity {activity} onClose={() => (showActivity = false)} />
+    <div class="screen">
+      <Activity {activity} onClose={() => (showActivity = false)} />
+    </div>
   {/if}
 
   <!--
@@ -3503,24 +3625,65 @@
 <Toasts {toasts} />
 
 <style>
-  :root { --refs-col: 190px; --graph-col: 170px; }
-  main { display: flex; flex-direction: column; height: 100%; }
+  :root { --refs-col: 190px; --graph-col: 170px; --strip: 40px; }
+  main { display: flex; flex-direction: column; height: 100%; position: relative; }
+  /*
+   * Preferences and the log take the whole window under the title bar, and stay until they are
+   * closed. Under it, not over it: with no desktop title bar there is nothing else on screen
+   * that can move, minimise or close the window, and a screen that covered the strip would
+   * take all three away for as long as it was open.
+   */
+  .screen { position: absolute; inset: var(--strip) 0 0; z-index: 12; display: flex; }
   .logo { flex: 0 0 auto; color: var(--accent); }
-  header {
-    display: flex; align-items: center; gap: var(--space-3);
-    height: 44px; box-sizing: border-box; padding: 0 var(--space-4);
-    border-bottom: 1px solid var(--border); background: var(--bg-1);
+  /*
+   * The title bar, the tab strip and the window's own buttons, on one line.
+   *
+   * Its height is the tab's: the strip is what the tabs stand on and nothing else in it is
+   * allowed to make the window taller.
+   */
+  .strip {
+    display: flex; align-items: center; gap: var(--space-2);
+    height: var(--strip); box-sizing: border-box; padding: 0 var(--space-2) 0 var(--space-3);
+    background: var(--bg-2); box-shadow: inset 0 -1px 0 var(--border);
   }
+  /*
+   * Everything that is not a tab, on the tabs' centre line.
+   *
+   * The tabs are 32 pixels tall against the bottom edge of a 40 pixel strip, so their middle
+   * is four pixels below the strip's. A centred item with eight pixels of space above it lands
+   * there whatever its own height is, which is why this is one rule and not one per item.
+   */
+  .sit { align-self: center; margin-top: var(--space-2); }
   h1 {
-    font-size: 14px; font-weight: 700; margin: 0; color: var(--accent);
-    letter-spacing: 0.01em;
+    font-size: 13px; font-weight: 700; margin: 0; color: var(--accent);
+    letter-spacing: 0.01em; flex: 0 0 auto;
   }
   /* Shortened in script, not by `direction: rtl`: see `elidePath` for why that trick draws
      `/home/x` as `home/x/`. */
   .path {
-    flex: 1; min-width: 0; color: var(--fg-2); font-size: 12px;
+    flex: 0 1 auto; min-width: 0; color: var(--fg-2); font-size: 12px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  .tools { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+  /* The window's own three, set apart from Coral's three: one set acts on what the window is
+     showing, the other on the window. */
+  .split { width: 1px; height: 16px; background: var(--border-strong); opacity: 0.6; }
+  /* Pulled out over the strip's own padding, so the last button ends at the window's edge. */
+  .sysbar {
+    display: flex; align-self: stretch;
+    margin-left: var(--space-2); margin-right: calc(-1 * var(--space-2));
+  }
+  .sys {
+    display: flex; align-items: center; justify-content: center;
+    /* Full height so the target runs to the top edge, with the glyph pushed down onto the
+       same line as everything else in the strip. */
+    width: 44px; padding: var(--space-2) 0 0; cursor: pointer;
+    border: 0; background: transparent; color: var(--fg-1);
+  }
+  .sys:hover { background: var(--bg-3); color: var(--fg-0); }
+  /* The one button that cannot be undone, which is the one convention has painted red since
+     windows had buttons. */
+  .sys.shut:hover { background: var(--danger); color: #fff; }
   .chip {
     font-size: 11px; padding: 1px var(--space-2); border-radius: 999px;
     background: var(--bg-2); color: var(--fg-1); flex: 0 0 auto;
@@ -3534,7 +3697,6 @@
     border-radius: var(--radius-1);
     border: 1px solid transparent; background: transparent; color: var(--fg-2);
   }
-  .chrome:first-of-type { margin-left: auto; }
   .chrome:hover { background: var(--bg-2); border-color: var(--border); color: var(--fg-0); }
 
   /* The two faces occupy the same 16 pixels; only their rotation says which is showing. */
