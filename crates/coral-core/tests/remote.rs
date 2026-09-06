@@ -627,3 +627,48 @@ fn a_first_push_sets_its_own_upstream() {
         );
     });
 }
+
+/// Pulling from a remote that is not the branch's upstream.
+///
+/// `git pull <remote>` works out which branch to integrate from the current branch's
+/// upstream, so naming a second remote answered "there is no tracking information for the
+/// current branch" and integrated nothing — while the fetch inside it had already succeeded,
+/// which made the failure read as a network problem. That is every pull from a mirror, and
+/// pulling from a named remote is the only reason to name one.
+#[tokio::test]
+async fn a_pull_from_a_remote_that_is_not_the_upstream_still_integrates() {
+    let (repo, home, origin) = with_origin();
+    let (runner, loc) = open(&repo).await;
+
+    // A second remote holding the same history, and a commit that only it has.
+    let mirror = home.path().join("mirror.git");
+    repo.git(["init", "--quiet", "--bare", mirror.to_str().unwrap()]);
+    repo.git([
+        "--git-dir",
+        mirror.to_str().unwrap(),
+        "symbolic-ref",
+        "HEAD",
+        "refs/heads/main",
+    ]);
+    repo.git(["remote", "add", "mirror", mirror.to_str().unwrap()]);
+    repo.git(["push", "--quiet", "mirror", "main"]);
+
+    let other = Clone::of(&mirror);
+    other.write("f.txt", "from the mirror\n");
+    other.git(&["commit", "--quiet", "-am", "the mirror's own commit"]);
+    other.git(&["push", "--quiet", "origin", "main"]);
+
+    // The branch still tracks origin, which has not moved.
+    let out = loc
+        .pull(&runner, Some("mirror"), PullMode::FfOnly)
+        .await
+        .expect("a pull from a named remote is not an error");
+    assert!(out.completed, "it should have fast-forwarded");
+
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("f.txt")).expect("read"),
+        "from the mirror\n",
+        "the mirror's commit is the one that landed"
+    );
+    let _ = origin;
+}

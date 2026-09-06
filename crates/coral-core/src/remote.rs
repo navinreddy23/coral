@@ -460,6 +460,14 @@ impl RepoLocation {
         };
         if let Some(name) = remote {
             cmd = cmd.arg(name);
+            // And the branch, whenever there is one. `git pull <remote>` asks git to work out
+            // which branch to integrate, and it works that out from the current branch's
+            // upstream — so naming a remote that is not the upstream's answers "there is no
+            // tracking information for the current branch" and pulls nothing. That is every
+            // pull from a second remote, which is the only reason to name one at all.
+            if let crate::repo::Head::Branch { name: branch } = self.head(runner).await? {
+                cmd = cmd.arg(branch);
+            }
         }
 
         self.run_stoppable(runner, cmd).await
