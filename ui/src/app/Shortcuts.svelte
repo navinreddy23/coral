@@ -6,13 +6,14 @@
   const groups = ['Repo actions', 'Navigation', 'Command palette', 'UI'] as const;
 </script>
 
-<div
-  class="scrim"
-  role="button"
-  tabindex="0"
-  onclick={onClose}
-  onkeydown={(e) => e.key === 'Escape' && onClose()}
->
+<!--
+  On the window, as `Activity` and `Menu` do it. Hung on the scrim itself the handler needed
+  the scrim to hold focus, which nothing ever gave it, so Escape did nothing and the sheet
+  could only be dismissed by clicking it.
+-->
+<svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />
+
+<div class="scrim" role="presentation" onclick={onClose}>
   <div class="sheet" role="dialog" aria-label="Keyboard shortcuts">
     <h2>Keyboard shortcuts</h2>
     <p class="note">Dimmed entries are not wired up yet.</p>
