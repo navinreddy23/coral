@@ -66,7 +66,9 @@ fetched and cannot overwrite a change it has not seen.
 Context menus — local branch: checkout, rename, delete, push, pull, set upstream, merge into
 current, rebase current onto, create PR/MR, hide, solo, copy name. Remote branch: checkout
 (creating a tracking local), delete from remote, merge, rebase, create PR/MR. Remote: fetch,
-edit, remove, prune, open on web. Tag: checkout, push, delete, copy. Stash: apply, pop, drop,
+push the current branch to it, edit, remove, prune, open on web. Pushing to a remote that is
+not the upstream names the branch, since git will not work it out for a remote the branch has
+never been to, and leaves the upstream where it was. Tag: checkout, push, delete, copy. Stash: apply, pop, drop,
 view diff.
 
 ## Patches

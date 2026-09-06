@@ -1654,6 +1654,25 @@
         { kind: 'item', label: `Fetch ${remote}`, run: () => void act({ kind: 'fetch', remote }) },
         {
           kind: 'item',
+          label: `Push ${headName ?? 'this branch'} to ${remote}`,
+          // Named rather than left to git. `git push <remote>` with no refspec asks git to
+          // work out which branch, and with no upstream on that remote it answers "the
+          // current branch has no upstream branch" instead of pushing — which is every push
+          // to a second remote until one exists.
+          hint: 'the upstream stays where it is',
+          disabled: headName === null || actions.busy || worktree.busy,
+          run: () =>
+            void act({
+              kind: 'push',
+              remote,
+              setUpstream: false,
+              refspec: headName,
+              tags: false,
+              forceWithLease: false,
+            }),
+        },
+        {
+          kind: 'item',
           label: 'Prune branches that are gone',
           run: () => void pruneRemote(remote),
         },
