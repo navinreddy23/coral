@@ -216,3 +216,32 @@ describe('the staging panel', () => {
     expect(empties[1]).toContain('A commit needs something in here');
   });
 });
+
+describe('a conflicted file', () => {
+  it('is listed under conflicts and nowhere else', async () => {
+    // git writes `UU` for a path with both sides in the index, so its index column reads as a
+    // change. It is not a staged one: nothing commits until the conflict is settled, and the
+    // file was being drawn twice with the commit button counting it.
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd !== 'repo_status') throw new Error(`unstubbed ${cmd}`);
+      return {
+        ...status(),
+        entries: [
+          entry('README.md', {
+            index: 'modified',
+            worktree: 'modified',
+            conflict: 'both_modified',
+          }),
+        ],
+      };
+    });
+    const { container, worktree } = await panel();
+
+    expect(worktree.conflicted.map((e) => e.path)).toEqual(['README.md']);
+    expect(worktree.staged, 'not staged as well').toEqual([]);
+    expect(worktree.unstaged, 'nor unstaged').toEqual([]);
+
+    const named = [...container.querySelectorAll('.file .name')].map((e) => e.textContent);
+    expect(named.filter((n) => n === 'README.md'), 'drawn once').toHaveLength(1);
+  });
+});

@@ -24,10 +24,21 @@ export class WorktreeState {
 
   #path = '';
 
-  /** Changes that are in the index and would go into a commit. */
+  /**
+   * Changes that are in the index and would go into a commit.
+   *
+   * A conflicted path is not one of them, however its index column reads: it has stages rather
+   * than a resolution, nothing will commit until it is settled, and it is already listed under
+   * its own heading. Counting it here listed the same file twice and put it in the tally on
+   * the commit button.
+   */
   staged = $derived<StatusEntry[]>(
     (this.status?.entries ?? []).filter(
-      (e) => e.index !== 'unmodified' && e.index !== 'untracked' && e.index !== 'ignored',
+      (e) =>
+        !e.conflict &&
+        e.index !== 'unmodified' &&
+        e.index !== 'untracked' &&
+        e.index !== 'ignored',
     ),
   );
 
