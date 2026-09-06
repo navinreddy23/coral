@@ -826,7 +826,7 @@
       {
         kind: 'item',
         label: `Fast-forward ${headName} to ${rev}`,
-        hint: 'refuses to merge',
+        hint: 'never a merge commit',
         disabled: busy,
         run: () => void act({ kind: 'merge', rev, mode: 'ffOnly' }),
       },
@@ -894,7 +894,7 @@
       items.push({
         kind: 'item',
         label: `Fast-forward ${head} to ${ref.short}`,
-        hint: 'refuses to merge',
+        hint: 'never a merge commit',
         disabled: busy,
         run: () => void act({ kind: 'merge', rev: ref.short, mode: 'ffOnly' }),
       });
@@ -1790,7 +1790,7 @@
         {
           kind: 'item',
           label: 'Pull, fast-forward only',
-          hint: 'refuses to merge',
+          hint: 'never a merge commit',
           run: () => void act({ kind: 'pull', remote: null, mode: 'ffOnly' }),
         },
         {
