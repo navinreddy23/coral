@@ -465,8 +465,13 @@ impl RepoLocation {
             // upstream — so naming a remote that is not the upstream's answers "there is no
             // tracking information for the current branch" and pulls nothing. That is every
             // pull from a second remote, which is the only reason to name one at all.
-            if let crate::repo::Head::Branch { name: branch } = self.head(runner).await? {
-                cmd = cmd.arg(branch);
+            // An unborn branch counts. `git pull origin main` into a fresh repository is how
+            // one is seeded, and it is the case with no upstream by definition.
+            match self.head(runner).await? {
+                crate::repo::Head::Branch { name: branch }
+                | crate::repo::Head::Unborn { name: branch } => cmd = cmd.arg(branch),
+                // Nothing to integrate into, and git says so better than a guess would.
+                crate::repo::Head::Detached { .. } => {}
             }
         }
 

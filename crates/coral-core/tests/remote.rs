@@ -672,3 +672,29 @@ async fn a_pull_from_a_remote_that_is_not_the_upstream_still_integrates() {
     );
     let _ = origin;
 }
+
+/// Seeding an empty repository from a remote by name.
+///
+/// A branch with no commit on it has no upstream by definition, so this is the case the
+/// naming exists for and the one most likely to be someone's first minute with a repository.
+#[tokio::test]
+async fn a_pull_into_an_unborn_branch_names_it_too() {
+    let (source, home, origin) = with_origin();
+    let _ = source;
+
+    // A fresh repository with nothing in it, pointed at the same bare one.
+    let empty = TestRepo::new();
+    empty.git(["remote", "add", "origin", origin.to_str().unwrap()]);
+    let (runner, loc) = open(&empty).await;
+
+    let out = loc
+        .pull(&runner, Some("origin"), PullMode::FfOnly)
+        .await
+        .expect("a pull that seeds a repository is not an error");
+    assert!(out.completed, "it should have taken the remote's history");
+    assert!(
+        empty.path().join("f.txt").exists(),
+        "the remote's file is in the working tree"
+    );
+    let _ = home;
+}
