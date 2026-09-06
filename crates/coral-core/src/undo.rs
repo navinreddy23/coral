@@ -58,9 +58,10 @@ pub struct JournalEntry {
 
 /// A bounded, persisted history of ref-changing operations.
 ///
-/// Only refs are journaled. A discard has no ref to restore and is handled separately by
-/// saving a patch; a worktree that has moved on since the operation makes an undo unsafe, and
-/// [`Journal::undo`] refuses rather than overwriting the user's work.
+/// Only refs are journaled, so only what moved a ref can be stepped back. A discard moves no
+/// ref and keeps nothing: the window says so before doing it. A worktree that has moved on
+/// since the operation makes an undo unsafe, and [`RepoLocation::restore_refs`] refuses rather
+/// than overwriting the user's work.
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct Journal {
     pub entries: Vec<JournalEntry>,
