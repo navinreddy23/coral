@@ -3246,11 +3246,30 @@
               -->
               <span class="cell refs">
                 {#if labels.length > 1}
+                  <!--
+                    The marks of what is not shown, rather than only how much. A row carrying
+                    `main`, `origin/main` and `github/main` is one branch in three places, and
+                    a chip reading "+2" says the number and not the fact. Three marks is where
+                    it stops being read at a glance, so past that it counts again.
+                  -->
+                  {@const rest = labels.slice(1)}
                   <button
                     class="more"
-                    title="Show the other refs on this commit"
-                    onclick={(e) => refsMenu(e, labels.slice(1))}
-                  >+{labels.length - 1}</button>
+                    title={`Also here: ${rest.map((r) => r.short).join(', ')}`}
+                    onclick={(e) => refsMenu(e, rest)}
+                  >
+                    {#if rest.length <= 3}
+                      {#each rest as other (other.name)}
+                        {#if other.kind.kind === 'remote_branch'}
+                          <HostMark kind={hostFor(other.short)} size={11} />
+                        {:else}
+                          <RefMark kind={other.kind.kind} />
+                        {/if}
+                      {/each}
+                    {:else}
+                      +{rest.length}
+                    {/if}
+                  </button>
                 {/if}
                 {#each labels.slice(0, 1) as label (label.name)}
                   <!--
@@ -3787,7 +3806,8 @@
   .pill.detached { cursor: default; }
   /* A control, not a label: the count opens the refs it stands for. */
   .more {
-    color: var(--fg-2); background: none; padding: 0 4px;
+    display: inline-flex; align-items: center; gap: 3px;
+    color: var(--fg-2); background: none; padding: 1px 4px;
     border: 1px dashed var(--border); border-radius: 7px;
     flex: 0 0 auto; font: inherit; font-size: 10px; line-height: 13px; cursor: pointer;
     position: relative; z-index: 1;

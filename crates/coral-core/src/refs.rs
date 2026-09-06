@@ -55,7 +55,20 @@ pub fn parse(input: &[u8]) -> Result<Vec<GitRef>, CoralError> {
         .split(|b| *b == b'\n')
         .filter(|line| !line.is_empty())
         .map(parse_line)
+        .filter(|r| !matches!(r, Ok(g) if is_remote_head(&g.name)))
         .collect()
+}
+
+/// Whether a name is a remote's own `HEAD`, which is not a branch.
+///
+/// `refs/remotes/origin/HEAD` is a symbolic ref at whichever branch that remote calls its
+/// default, so it always points at a ref this list already carries. Drawn as a branch it is a
+/// second label on a commit that already has one, saying nothing the first did not — and with
+/// two remotes configured it is two of them.
+fn is_remote_head(name: &str) -> bool {
+    name.strip_prefix("refs/remotes/")
+        .and_then(|rest| rest.split_once('/'))
+        .is_some_and(|(_, branch)| branch == "HEAD")
 }
 
 fn parse_line(line: &[u8]) -> Result<GitRef, CoralError> {
@@ -195,5 +208,67 @@ mod tests {
     #[test]
     fn an_empty_listing_is_not_an_error() {
         assert!(parse(b"").unwrap().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod head_tests {
+    use super::{FORMAT, parse};
+
+    fn line(fields: &[&str]) -> Vec<u8> {
+        fields.join("\0").into_bytes()
+    }
+
+    #[test]
+    fn a_remote_s_own_head_is_not_listed_as_a_branch() {
+        let _ = FORMAT;
+        let mut input = line(&["refs/remotes/origin/main", "aaa", "commit", "", "", ""]);
+        input.push(b'\n');
+        input.extend(line(&[
+            "refs/remotes/origin/HEAD",
+            "aaa",
+            "commit",
+            "",
+            "",
+            "",
+        ]));
+        input.push(b'\n');
+        input.extend(line(&[
+            "refs/remotes/github/HEAD",
+            "aaa",
+            "commit",
+            "",
+            "",
+            "",
+        ]));
+
+        let refs = parse(&input).expect("parses");
+        let names: Vec<&str> = refs.iter().map(|r| r.name.as_str()).collect();
+        assert_eq!(names, vec!["refs/remotes/origin/main"]);
+    }
+
+    /// A branch that merely ends in HEAD is a branch. Only the remote's own is dropped.
+    #[test]
+    fn a_branch_whose_name_ends_in_head_is_kept() {
+        let mut input = line(&[
+            "refs/remotes/origin/spike/HEAD",
+            "aaa",
+            "commit",
+            "",
+            "",
+            "",
+        ]);
+        input.push(b'\n');
+        input.extend(line(&[
+            "refs/heads/HEAD-first",
+            "bbb",
+            "commit",
+            "",
+            "",
+            "",
+        ]));
+
+        let refs = parse(&input).expect("parses");
+        assert_eq!(refs.len(), 2, "only a remote's own HEAD goes");
     }
 }
