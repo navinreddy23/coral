@@ -958,8 +958,12 @@
   function pushTagItems(name: string): MenuItem[] {
     if (remotes.list.length === 0) return [];
     const busy = actions.busy || worktree.busy;
-    if (remotes.list.length === 1 || defaultRemote !== null) {
-      const remote = defaultRemote ?? remotes.list[0]?.name ?? 'origin';
+    // One remote is one item; more than one is a choice, whether or not one of them is called
+    // origin. Falling back to the default when there were several made every other remote
+    // unreachable for tags — a repository with a mirror could push a tag to origin and had no
+    // way at all to send it anywhere else.
+    if (remotes.list.length === 1) {
+      const remote = remotes.list[0]?.name ?? 'origin';
       return [
         {
           kind: 'item',
@@ -973,12 +977,14 @@
       {
         kind: 'submenu',
         label: `Push ${name}`,
-        items: remotes.list.map((r) => ({
-          kind: 'item' as const,
-          label: r.name,
-          disabled: busy,
-          run: () => pushTag(name, r.name),
-        })),
+        items: [...remotes.list]
+          .sort((a, b) => Number(b.name === defaultRemote) - Number(a.name === defaultRemote))
+          .map((r) => ({
+            kind: 'item' as const,
+            label: r.name,
+            disabled: busy,
+            run: () => pushTag(name, r.name),
+          })),
       },
     ];
   }
