@@ -281,6 +281,14 @@ cannot be signed from Linux. It earns its place anyway as the only check that th
 compiles for Windows at all: every dependency of `coral-app` but `webkit2gtk` was once
 declared Linux-only, and nothing short of building for another platform would have said so.
 
+**A debug binary loads the page from the dev server, not from `ui/dist`.** `devUrl` is set, so
+`cargo build -p coral-app` produces a binary that fetches `http://localhost:5173`; `npm run
+build` has no effect on what it shows. Two consequences, both of which have cost time: with no
+dev server running the window opens and never paints, and a dev server left running long
+enough to go stale serves a `504 Outdated Optimize Dep` for any dependency imported since it
+started, which fails the whole module graph and looks exactly like the new code being broken.
+Restarting it is the fix. Only a release build embeds `ui/dist`.
+
 `cargo build --release -p coral-app` is *not* a build. The frontend is embedded by the Tauri
 CLI's build step, so a plain cargo release build produces a binary that starts, opens a window,
 and never loads a page. Verified both ways with the same freshly built `ui/dist` in place.
