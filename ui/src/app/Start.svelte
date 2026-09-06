@@ -81,129 +81,136 @@
 </script>
 
 <div class="start">
-  <header>
-    <h2>Repositories</h2>
-    {#if onClose}
-      <button class="shut" title="Back" onclick={onClose}>✕</button>
-    {/if}
-  </header>
-
-  <div class="actions">
-    <button class="action" onclick={() => void openOne()}>
-      <span class="glyph" aria-hidden="true">🖿</span>Open
-    </button>
-    <button
-      class="action"
-      class:on={start.form === 'clone'}
-      onclick={() => (start.form = start.form === 'clone' ? 'none' : 'clone')}
-    >
-      <span class="glyph" aria-hidden="true">⤓</span>Clone
-    </button>
-    <button
-      class="action"
-      class:on={start.form === 'create'}
-      onclick={() => (start.form = start.form === 'create' ? 'none' : 'create')}
-    >
-      <span class="glyph" aria-hidden="true">＋</span>Create
-    </button>
-  </div>
-
-  {#if start.error}
-    <p class="error">{start.error}</p>
-  {/if}
-
-  {#if start.form === 'clone'}
-    <section class="form">
-      <label>
-        <span class="name">URL</span>
-        <input bind:value={cloneUrl} placeholder="https://host/team/thing.git" />
-      </label>
-      <label>
-        <span class="name">Into</span>
-        <input bind:value={cloneParent} placeholder="choose a directory" readonly />
-        <button class="pick" onclick={() => void pickInto('clone')}>Choose…</button>
-      </label>
-      <label>
-        <span class="name">Called</span>
-        <input bind:value={cloneName} placeholder={nameFromUrl(cloneUrl) || 'from the URL'} />
-      </label>
-      {#if cloneParent && clonedAs}
-        <p class="says">It will be at <span class="mono">{cloneParent}/{clonedAs}</span></p>
+  <!--
+    A column with a measure, in the middle of the window. Everything here used to be pinned to
+    the left edge at its natural width, so on any real screen the page people see most often
+    was a narrow strip in one corner of a large empty rectangle.
+  -->
+  <div class="page">
+    <header>
+      <h2>Repositories</h2>
+      {#if onClose}
+        <button class="shut" title="Back" onclick={onClose}>✕</button>
       {/if}
-      <div class="go">
-        <button class="primary" disabled={!canClone} onclick={() => void doClone()}>
-          {start.busy ? 'Cloning…' : 'Clone'}
-        </button>
-      </div>
-    </section>
-  {:else if start.form === 'create'}
-    <section class="form">
-      <label>
-        <span class="name">In</span>
-        <input bind:value={createParent} placeholder="choose a directory" readonly />
-        <button class="pick" onclick={() => void pickInto('create')}>Choose…</button>
-      </label>
-      <label>
-        <span class="name">Called</span>
-        <input bind:value={createName} placeholder="the repository's name" />
-      </label>
-      <label>
-        <span class="name">First branch</span>
-        <input bind:value={createBranch} placeholder="leave empty for git's default" />
-      </label>
-      {#if start.lfs}
-        <!-- Offered only where git-lfs is installed. A tick box that fails because the program
-             is not there is worse than one that is not shown. -->
-        <label class="tick">
-          <input type="checkbox" bind:checked={createLfs} />
-          <span>Set up Large File Storage in it</span>
+    </header>
+
+    <div class="actions">
+      <button class="action" onclick={() => void openOne()}>
+        <span class="glyph" aria-hidden="true">🖿</span>Open
+      </button>
+      <button
+        class="action"
+        class:on={start.form === 'clone'}
+        onclick={() => (start.form = start.form === 'clone' ? 'none' : 'clone')}
+      >
+        <span class="glyph" aria-hidden="true">⤓</span>Clone
+      </button>
+      <button
+        class="action"
+        class:on={start.form === 'create'}
+        onclick={() => (start.form = start.form === 'create' ? 'none' : 'create')}
+      >
+        <span class="glyph" aria-hidden="true">＋</span>Create
+      </button>
+    </div>
+
+    {#if start.error}
+      <p class="error">{start.error}</p>
+    {/if}
+
+    {#if start.form === 'clone'}
+      <section class="form">
+        <label>
+          <span class="name">URL</span>
+          <input bind:value={cloneUrl} placeholder="https://host/team/thing.git" />
         </label>
-      {/if}
-      {#if createParent && createName.trim()}
-        <p class="says">
-          It will be at <span class="mono">{createParent}/{createName.trim()}</span>
-        </p>
-      {/if}
-      <div class="go">
-        <button class="primary" disabled={!canCreate} onclick={() => void doCreate()}>
-          {start.busy ? 'Creating…' : 'Create'}
-        </button>
-      </div>
-    </section>
-  {/if}
+        <label>
+          <span class="name">Into</span>
+          <input bind:value={cloneParent} placeholder="choose a directory" readonly />
+          <button class="pick" onclick={() => void pickInto('clone')}>Choose…</button>
+        </label>
+        <label>
+          <span class="name">Called</span>
+          <input bind:value={cloneName} placeholder={nameFromUrl(cloneUrl) || 'from the URL'} />
+        </label>
+        {#if cloneParent && clonedAs}
+          <p class="says">It will be at <span class="mono">{cloneParent}/{clonedAs}</span></p>
+        {/if}
+        <div class="go">
+          <button class="primary" disabled={!canClone} onclick={() => void doClone()}>
+            {start.busy ? 'Cloning…' : 'Clone'}
+          </button>
+        </div>
+      </section>
+    {:else if start.form === 'create'}
+      <section class="form">
+        <label>
+          <span class="name">In</span>
+          <input bind:value={createParent} placeholder="choose a directory" readonly />
+          <button class="pick" onclick={() => void pickInto('create')}>Choose…</button>
+        </label>
+        <label>
+          <span class="name">Called</span>
+          <input bind:value={createName} placeholder="the repository's name" />
+        </label>
+        <label>
+          <span class="name">First branch</span>
+          <input bind:value={createBranch} placeholder="leave empty for git's default" />
+        </label>
+        {#if start.lfs}
+          <!-- Offered only where git-lfs is installed. A tick box that fails because the program
+               is not there is worse than one that is not shown. -->
+          <label class="tick">
+            <input type="checkbox" bind:checked={createLfs} />
+            <span>Set up Large File Storage in it</span>
+          </label>
+        {/if}
+        {#if createParent && createName.trim()}
+          <p class="says">
+            It will be at <span class="mono">{createParent}/{createName.trim()}</span>
+          </p>
+        {/if}
+        <div class="go">
+          <button class="primary" disabled={!canCreate} onclick={() => void doCreate()}>
+            {start.busy ? 'Creating…' : 'Create'}
+          </button>
+        </div>
+      </section>
+    {/if}
 
-  <input class="filter" placeholder="Search repositories" bind:value={start.filter} />
+    <input class="filter" placeholder="Search repositories" bind:value={start.filter} />
 
-  <div class="recent-head">
-    <h3>Recent</h3>
-    {#if start.recents.length > 0}
-      <!-- The list is a record of which repositories this person works on, which is not
-           always something they want on the page. -->
-      <button class="clear" onclick={() => void clearAll()}>Clear all</button>
+    <div class="recent-head">
+      <h3>Recent</h3>
+      {#if start.recents.length > 0}
+        <!-- The list is a record of which repositories this person works on, which is not
+             always something they want on the page. -->
+        <button class="clear" onclick={() => void clearAll()}>Clear all</button>
+      {/if}
+    </div>
+    {#if start.recents.length === 0}
+      <p class="none">Nothing yet. Open, clone or create one and it will be listed here.</p>
+    {:else if start.shown.length === 0}
+      <p class="none">Nothing matches “{start.filter}”.</p>
+    {:else}
+      <ul class="recents">
+        {#each start.shown as repo (repo.path)}
+          <li>
+            <button class="repo" onclick={() => onOpen(repo.path)} title={repo.path}>
+              <span class="repo-name">{repo.name}</span>
+              <span class="repo-path mono">{elidePath(repo.path, 72)}</span>
+              <span class="repo-when">{when(repo.opened)}</span>
+            </button>
+            <button
+              class="forget"
+              title="Take {repo.name} off this list"
+              onclick={() => void start.forget(repo.path)}
+            >✕</button>
+          </li>
+        {/each}
+      </ul>
     {/if}
   </div>
-  {#if start.recents.length === 0}
-    <p class="none">Nothing yet. Open, clone or create one and it will be listed here.</p>
-  {:else if start.shown.length === 0}
-    <p class="none">Nothing matches “{start.filter}”.</p>
-  {:else}
-    <ul class="recents">
-      {#each start.shown as repo (repo.path)}
-        <li>
-          <button class="repo" onclick={() => onOpen(repo.path)} title={repo.path}>
-            <span class="repo-name">{repo.name}</span>
-            <span class="repo-path mono">{elidePath(repo.path, 72)}</span>
-            <span class="repo-when">{when(repo.opened)}</span>
-          </button>
-          <button
-            class="forget"
-            title="Take {repo.name} off this list"
-            onclick={() => void start.forget(repo.path)}
-          >✕</button>
-        </li>
-      {/each}
-    </ul>
-  {/if}
 </div>
 
 <style>
@@ -215,6 +222,7 @@
     padding: var(--space-5) var(--space-5) var(--space-4);
     font-size: 12px;
   }
+  .page { max-width: 64em; margin: 0 auto; }
   header { display: flex; align-items: center; gap: var(--space-3); }
   h2 {
     flex: 1; margin: 0 0 var(--space-4); font-size: 20px; font-weight: 600; color: var(--fg-0);
@@ -273,33 +281,38 @@
   .none { color: var(--fg-2); margin: 0; background: var(--bg-0); }
 
   .filter {
-    width: 100%; max-width: 46em; box-sizing: border-box; font: inherit; font-size: 12px;
+    width: 100%; box-sizing: border-box; font: inherit; font-size: 12px;
     padding: 5px var(--space-3);
     background: var(--bg-0); color: var(--fg-0);
     border: 1px solid var(--border-strong); border-radius: var(--radius-1);
   }
   .filter:focus { border-color: var(--accent); outline: none; }
 
-  .recent-head { display: flex; align-items: baseline; gap: var(--space-3); max-width: 60em; }
+  .recent-head { display: flex; align-items: baseline; gap: var(--space-3); }
   .clear {
     margin-left: auto; font: inherit; font-size: 11px; cursor: pointer;
     background: none; border: 0; color: var(--fg-2); padding: 0;
   }
   .clear:hover { color: var(--danger); text-decoration: underline; }
-  .recents { list-style: none; margin: 0; padding: 0; max-width: 60em; }
+  .recents { list-style: none; margin: 0; padding: 0; }
   .recents li { display: flex; align-items: center; border-radius: var(--radius-1); }
   .recents li:hover { background: var(--bg-1); }
+  /*
+   * Two lines rather than three columns. Squeezed onto one line the path was the only part
+   * that could give, so two checkouts of the same repository — the case the path is there to
+   * tell apart — showed the same name beside the same elided middle.
+   */
   .repo {
-    display: flex; align-items: baseline; gap: var(--space-3);
+    display: grid; grid-template-columns: 1fr auto; gap: 1px var(--space-3);
     flex: 1; min-width: 0; text-align: left; font: inherit; cursor: pointer;
-    padding: 3px var(--space-2); background: none; border: 0; color: var(--fg-1);
+    padding: var(--space-2); background: none; border: 0; color: var(--fg-1);
   }
-  .repo-name { flex: 0 0 auto; color: var(--accent); font-weight: 600; }
+  .repo-name { grid-area: 1 / 1; color: var(--accent); font-weight: 600; font-size: 13px; }
+  .repo-when { grid-area: 1 / 2; color: var(--fg-2); font-size: 11px; }
   .repo-path {
-    flex: 1; min-width: 0; color: var(--fg-2); font-size: 11px;
+    grid-area: 2 / 1 / 3 / 3; min-width: 0; color: var(--fg-2); font-size: 11px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .repo-when { flex: 0 0 auto; color: var(--fg-2); font-size: 11px; }
   /* On the row being pointed at only: a column of crosses beside a list of repositories reads
      as a list of things to delete. */
   .forget {
