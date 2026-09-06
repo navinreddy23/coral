@@ -50,16 +50,16 @@ pub fn build_patch(
     let mut out = BString::from(Vec::new());
     let old_path = file.old_path.as_ref().unwrap_or(&file.path);
 
-    out.extend_from_slice(b"diff --git a/");
-    out.extend_from_slice(old_path);
-    out.extend_from_slice(b" b/");
-    out.extend_from_slice(&file.path);
+    out.extend_from_slice(b"diff --git ");
+    side(b'a', old_path, &mut out);
+    out.push(b' ');
+    side(b'b', &file.path, &mut out);
     out.push(b'\n');
-    out.extend_from_slice(b"--- a/");
-    out.extend_from_slice(old_path);
+    out.extend_from_slice(b"--- ");
+    side(b'a', old_path, &mut out);
     out.push(b'\n');
-    out.extend_from_slice(b"+++ b/");
-    out.extend_from_slice(&file.path);
+    out.extend_from_slice(b"+++ ");
+    side(b'b', &file.path, &mut out);
     out.push(b'\n');
 
     // Each retained hunk shifts the lines after it on the side being rebuilt.
@@ -73,6 +73,58 @@ pub fn build_patch(
         out.extend_from_slice(&rendered);
     }
     Ok(out)
+}
+
+/// Writes one side of a patch header — `a/<path>` — quoted the way git quotes it.
+///
+/// git splits `diff --git a/x b/y` on a space and reads `--- ` up to a tab or the end of the
+/// line, so a path holding a tab, a newline or a quote makes a header that no longer says what
+/// it means: `git apply` answered "diff header lacks filename information" and staged nothing.
+///
+/// Spaces are deliberately left alone. git does not quote them either, and resolves the
+/// ambiguity from the `---` and `+++` lines instead; quoting them here would differ from every
+/// patch git writes for no gain. Bytes above 0x7f are left alone for the same reason: `core.
+/// quotePath` decides whether git escapes them, and its reader accepts either.
+fn side(prefix: u8, path: &[u8], out: &mut BString) {
+    let mut token = vec![prefix, b'/'];
+    token.extend_from_slice(path);
+    if !token.iter().any(|b| needs_quoting(*b)) {
+        out.extend_from_slice(&token);
+        return;
+    }
+    out.push(b'"');
+    for byte in token {
+        escape(byte, out);
+    }
+    out.push(b'"');
+}
+
+const fn needs_quoting(byte: u8) -> bool {
+    byte == b'"' || byte == b'\\' || byte < 0x20 || byte == 0x7f
+}
+
+/// One byte in C-quoted form, as `quote_c_style` writes it.
+fn escape(byte: u8, out: &mut BString) {
+    let named: &[u8] = match byte {
+        b'"' => b"\\\"",
+        b'\\' => b"\\\\",
+        0x07 => b"\\a",
+        0x08 => b"\\b",
+        0x09 => b"\\t",
+        0x0a => b"\\n",
+        0x0b => b"\\v",
+        0x0c => b"\\f",
+        0x0d => b"\\r",
+        b if b < 0x20 || b == 0x7f => {
+            out.extend_from_slice(format!("\\{b:03o}").as_bytes());
+            return;
+        }
+        b => {
+            out.push(b);
+            return;
+        }
+    };
+    out.extend_from_slice(named);
 }
 
 /// Emits one hunk with only `selection` applied.

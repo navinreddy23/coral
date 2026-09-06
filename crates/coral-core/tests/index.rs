@@ -335,3 +335,30 @@ fn discarding_one_hunk_leaves_the_index_alone() {
         assert_eq!(repo.git(["diff", "--cached", "--name-only"]), "");
     });
 }
+
+/// A path git has to quote, staged one hunk at a time.
+///
+/// The header was written raw, so `diff --git a/new\nline.txt …` became two lines and
+/// `git apply` refused with "diff header lacks filename information", staging nothing. A tab
+/// was worse: git reads `--- ` up to the first tab, so the name silently lost its second half.
+#[tokio::test]
+async fn stages_a_hunk_of_a_file_whose_name_git_has_to_quote() {
+    for name in ["new\nline.txt", "tab\tsep.txt", "quote\"and\\slash.txt"] {
+        let repo = TestRepo::new().write(name, "one\n").commit("base");
+        let repo = repo.write(name, "one\ntwo\n");
+        let (runner, loc) = open(&repo).await;
+
+        let files = unstaged_diff(&repo).await;
+        let file = files.iter().find(|f| f.path == name).expect(name);
+        let patch = build_patch(file, &[(0, Selection::WholeHunk)], Direction::Stage).unwrap();
+        // Exactly what git writes for the same file, so the two cannot drift.
+        let theirs = repo.git_bytes(["diff", "--", name]);
+        let header = |p: &[u8]| p.split(|b| *b == b'\n').next().unwrap_or_default().to_vec();
+        assert_eq!(header(&patch), header(&theirs), "header for {name:?}");
+
+        loc.apply_to_index(&runner, &patch, Direction::Stage)
+            .await
+            .unwrap_or_else(|e| panic!("apply for {name:?}: {e}"));
+        assert_eq!(repo.git(["show", &format!(":{name}")]), "one\ntwo");
+    }
+}
