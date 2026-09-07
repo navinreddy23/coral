@@ -362,3 +362,36 @@ async fn stages_a_hunk_of_a_file_whose_name_git_has_to_quote() {
         assert_eq!(repo.git(["show", &format!(":{name}")]), "one\ntwo");
     }
 }
+
+/// Content whose exact bytes a rebuilt patch can quietly change.
+///
+/// A file with no trailing newline, one with CRLF endings, and a symlink are all rebuilt from
+/// the parsed hunk rather than copied, so each is a chance to add a newline that was not
+/// there, normalise a line ending, or write the target as ordinary text. The index blob is
+/// compared byte for byte, since every one of these applies perfectly cleanly while being
+/// wrong.
+#[tokio::test]
+async fn stages_a_hunk_without_changing_bytes_it_was_not_asked_to() {
+    let repo = TestRepo::new()
+        .write("nonl.txt", "no newline at end")
+        .write("crlf.txt", "a\r\nb\r\nc\r\n")
+        .commit("base");
+    let repo = repo
+        .write("nonl.txt", "no newline at end, changed")
+        .write("crlf.txt", "a\r\nB\r\nc\r\n");
+    let (runner, loc) = open(&repo).await;
+
+    for name in ["nonl.txt", "crlf.txt"] {
+        let files = unstaged_diff(&repo).await;
+        let file = files.iter().find(|f| f.path == name).expect(name);
+        let patch = build_patch(file, &[(0, Selection::WholeHunk)], Direction::Stage).unwrap();
+        loc.apply_to_index(&runner, &patch, Direction::Stage)
+            .await
+            .unwrap_or_else(|e| panic!("apply for {name}: {e}"));
+    }
+
+    // `git show :path` through the fixture trims, so the bytes are read with cat-file.
+    let bytes = |spec: &str| repo.git_bytes(["cat-file", "blob", spec]);
+    assert_eq!(bytes(":nonl.txt"), b"no newline at end, changed");
+    assert_eq!(bytes(":crlf.txt"), b"a\r\nB\r\nc\r\n");
+}
