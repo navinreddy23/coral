@@ -91,11 +91,6 @@ export function rowY(row: number, first: number, m: Metrics): number {
  */
 export const MAX_SPACER_PX = 2_000_000;
 
-/** How tall the scrollable area should be for a graph of `totalRows`. */
-export function spacerHeight(totalRows: number, m: Metrics): number {
-  return Math.min(totalRows * m.rowHeight, MAX_SPACER_PX);
-}
-
 /**
  * Height of the sticky column header, which sits inside the scroller and over the rows.
  *
@@ -105,6 +100,37 @@ export function spacerHeight(totalRows: number, m: Metrics): number {
  * sat below the fold and could not be scrolled to.
  */
 export const COLUMN_HEADER_PX = 26;
+
+/**
+ * How tall the scrollable area should be for a graph of `totalRows`.
+ *
+ * The rows are not scrolled through: the list is pinned under the sticky header and redrawn a
+ * whole row at a time, so the scroll range has to cover a whole number of rows *plus* whatever
+ * the last screenful leaves over. Without that remainder — up to one row short of it — the
+ * final rows sat below the fold with nowhere left to scroll, which on a repository of
+ * thirty-six commits meant the last two could not be reached by the wheel at all.
+ *
+ * `viewportHeight` of zero is the answer before the pane has been measured, and gives the
+ * exact-rows height it always gave.
+ */
+export function spacerHeight(totalRows: number, m: Metrics, viewportHeight = 0): number {
+  const exact = totalRows * m.rowHeight;
+  if (exact > MAX_SPACER_PX) return MAX_SPACER_PX;
+  const usable = Math.max(0, viewportHeight - COLUMN_HEADER_PX);
+  return exact + (usable % m.rowHeight);
+}
+
+/**
+ * The furthest the commit list can be scrolled.
+ *
+ * The scroller holds the column header as well as the rows, so the range is taller than the
+ * spacer by the header. Reading it off the DOM would be the same number; computing it keeps
+ * `scrollToRow` and the wheel agreeing with what the list will actually draw.
+ */
+export function maxScroll(totalRows: number, m: Metrics, viewportHeight: number): number {
+  const content = COLUMN_HEADER_PX + spacerHeight(totalRows, m, viewportHeight);
+  return Math.max(0, content - viewportHeight);
+}
 
 /** How many whole rows a scroller of `viewportHeight` can show at once. */
 export function rowsPerScreen(viewportHeight: number, m: Metrics): number {

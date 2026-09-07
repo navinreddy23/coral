@@ -65,6 +65,8 @@
     DEFAULT_METRICS,
     firstRowFor,
     fittedMetrics,
+    isCompressed,
+    maxScroll,
     GRAPH_COLUMN_PX,
     graphWidthFor,
     laneX,
@@ -170,6 +172,10 @@
     if (!graph.frame) return;
     const at = selection.row ?? -1;
     const next = Math.min(graph.totalRows - 1, Math.max(0, at + delta));
+    // Held at either end, `next` stops moving. Selecting the same row again re-reads the
+    // commit and re-scrolls to where the list already is, which at thirty key repeats a second
+    // is the panel flickering and the list twitching under a key that is doing nothing.
+    if (next === at) return;
     pick(next);
     scrollToRow(next);
   }
@@ -2420,8 +2426,7 @@
     if (rows === 0) return;
 
     const total = graph.totalRows;
-    const height = spacerHeight(total, DEFAULT_METRICS);
-    const reach = Math.max(1, height - viewport);
+    const reach = Math.max(1, maxScroll(total, DEFAULT_METRICS, viewport));
     // Below the cap a row is a whole pixel; above it the scrollable area is compressed, so the
     // same number of rows is a smaller number of pixels.
     const perRow = total > 0 ? reach / Math.max(1, total - 1) : DEFAULT_METRICS.rowHeight;
@@ -2436,15 +2441,21 @@
 
   function scrollToRow(row: number) {
     if (!graph.frame || !scroller) return;
-    // Above the height cap a row is a fraction of a pixel, so the target is the fraction of
-    // the scrollable range rather than the row's pixel offset.
     const total = graph.totalRows;
-    const height = spacerHeight(total, DEFAULT_METRICS);
-    // The same count `firstRowFor` uses, or a jump lands somewhere else than the scrollbar
-    // would put it.
+    const reach = maxScroll(total, DEFAULT_METRICS, viewport);
+    // Three rows of context above the target, where there is history to show above it.
+    const above = Math.max(0, row - 3);
+
+    // Below the height cap a row is a whole pixel and the offset is exact. The fraction below
+    // is for the compressed range only: applied here it overshot by the ratio between the rows
+    // on screen and the rows in the graph, which on a small repository is several times over.
+    if (!isCompressed(total, DEFAULT_METRICS)) {
+      scroller.scrollTo({ top: Math.min(reach, above * DEFAULT_METRICS.rowHeight) });
+      return;
+    }
+    // Above it a row is a fraction of a pixel, so the target is a fraction of the range.
     const lastTop = Math.max(1, total - rowsPerScreen(viewport, DEFAULT_METRICS));
-    const fraction = Math.max(0, row - 3) / lastTop;
-    scroller.scrollTo({ top: Math.min(height - viewport, fraction * (height - viewport)) });
+    scroller.scrollTo({ top: Math.min(reach, (above / lastTop) * reach) });
   }
 
   async function load(path: string) {
@@ -3456,7 +3467,7 @@
       {/if}
       <div
         class="spacer"
-        style:height="{spacerHeight(graph.totalRows, DEFAULT_METRICS)}px"
+        style:height="{spacerHeight(graph.totalRows, DEFAULT_METRICS, viewport)}px"
       >
         <div class="lanes" style:top="{listTop(scrollTop)}px">
           <GraphCanvas

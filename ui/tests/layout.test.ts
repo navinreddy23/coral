@@ -9,6 +9,7 @@ import {
   isCompressed,
   laneColour,
   laneX,
+  maxScroll,
   MAX_SPACER_PX,
   rowsPerScreen,
   listTop,
@@ -209,5 +210,40 @@ describe('fitting the lanes into the column there is', () => {
     const m = fittedMetrics(200, 120);
     expect(m.laneWidth).toBeGreaterThanOrEqual(7);
     expect(m.nodeRadius).toBeGreaterThanOrEqual(3);
+  });
+});
+
+/**
+ * A graph just past a screenful, which is most repositories.
+ *
+ * The rows are pinned under the sticky header and redrawn a whole row at a time rather than
+ * scrolled through, so the range has to cover a whole number of rows plus what the last
+ * screenful leaves over. It covered only the rows, so on thirty-six commits in a 791px pane
+ * the last two could not be reached by the wheel at all.
+ */
+describe('a graph a little taller than the pane', () => {
+  const m = DEFAULT_METRICS;
+
+  it('can scroll far enough to show the last row', () => {
+    for (const viewport of [400, 601, 791, 800, 1013]) {
+      for (const total of [36, 29, 200, 1000]) {
+        const reach = maxScroll(total, m, viewport);
+        const first = firstRowFor(reach, viewport, total, m);
+        expect(first + rowsPerScreen(viewport, m), `${total} rows in ${viewport}px`)
+          .toBeGreaterThanOrEqual(total);
+      }
+    }
+  });
+
+  it('cannot scroll past it', () => {
+    const viewport = 791;
+    const total = 36;
+    const first = firstRowFor(maxScroll(total, m, viewport), viewport, total, m);
+    // The topmost row at the bottom of the range still has a full screen of rows under it.
+    expect(first).toBeLessThanOrEqual(total - rowsPerScreen(viewport, m));
+  });
+
+  it('leaves the height alone before the pane has been measured', () => {
+    expect(spacerHeight(36, m)).toBe(36 * m.rowHeight);
   });
 });
