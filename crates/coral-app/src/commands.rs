@@ -9,6 +9,14 @@ pub struct IpcError {
     pub message: String,
 }
 
+impl IpcError {
+    /// Whether this is somebody stopping the work rather than the work going wrong.
+    #[must_use]
+    pub fn is_cancelled(&self) -> bool {
+        self.code == "cancelled"
+    }
+}
+
 impl std::fmt::Display for IpcError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.message)
@@ -168,6 +176,10 @@ pub async fn repo_clone(
             logged.finished();
             crate::profile::stamp_new_repository(&settings, &made).await;
             Ok(made.display().to_string())
+        }
+        Err(e) if matches!(e, coral_core::CoralError::Cancelled { .. }) => {
+            logged.cancelled();
+            Err(e.into())
         }
         Err(e) => {
             logged.failed(&e.to_string());

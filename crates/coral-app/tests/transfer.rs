@@ -60,3 +60,20 @@ fn an_operation_dropped_without_being_ended_says_nothing_at_all() {
     );
     assert!(after.last().unwrap().message.contains("started"));
 }
+
+#[test]
+fn a_cancellation_is_not_written_down_as_a_failure() {
+    // The engine's own words: a cancelled fetch has not gone wrong, it has been called off.
+    // "failed" in the log sends somebody looking for a fault that never happened.
+    let path = "/tmp/coral-test-cancelled-entry";
+    app::activity::started(path, "Fetch").cancelled();
+
+    let last = app::activity::entries(Some(path)).pop().expect("an entry");
+    assert!(last.message.contains("cancelled"), "{}", last.message);
+    assert!(!last.message.contains("failed"), "{}", last.message);
+    assert_ne!(
+        last.level,
+        app::activity::Level::Error,
+        "and it is not coloured as an error"
+    );
+}

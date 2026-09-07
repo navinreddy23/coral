@@ -140,6 +140,12 @@ impl Operation {
         self.end(Level::Error, &format!("failed. {why}"));
     }
 
+    /// Called off by the user. Not an error, and reading one in the log sends somebody
+    /// looking for a fault that never happened.
+    pub fn cancelled(self) {
+        self.end(Level::Info, "cancelled.");
+    }
+
     /// Ran, and did not do what it set out to do: a merge that stopped on conflicts, a push
     /// the remote rejected. Not a failure — git did what it was asked and reported back — but
     /// "finished" is not true either, and this log is what somebody reads afterwards to find

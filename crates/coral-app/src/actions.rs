@@ -405,6 +405,10 @@ pub async fn repo_action(
             }
             Ok(done)
         }
+        Err(e) if e.is_cancelled() => {
+            entry.cancelled();
+            Err(e)
+        }
         Err(e) => {
             entry.failed(&e.message);
             Err(e)
