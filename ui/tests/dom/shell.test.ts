@@ -115,6 +115,18 @@ function answers(over: Record<string, unknown> = {}): Record<string, unknown> {
   };
 }
 
+/** Enough of an ssh answer for the pane to render. */
+function sshScopes() {
+  const blank = { useAgent: true, privateKey: '', publicKey: '', command: '', credentialHelper: '' };
+  return { effective: blank, global: blank, local: {} };
+}
+
+/** The same for signing. */
+function signingScopes() {
+  const blank = { format: 'openpgp', program: '', key: '', signCommits: false, signTags: false };
+  return { effective: blank, global: blank, local: {} };
+}
+
 function wire(over: Record<string, unknown> = {}) {
   const table = answers(over);
   invoke.mockImplementation(async (cmd: string) => {
@@ -752,6 +764,71 @@ describe('a git too old to open anything', () => {
     const panes = [...view.container.querySelectorAll('nav .pane')].map((b) => b.textContent);
     expect(panes.join(' ')).toContain('Experimental');
     expect(panes.join(' ')).not.toContain('SSH');
+  });
+});
+
+describe('the settings page and the tab strip', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  it('follows the tab, rather than showing the repository you have left', async () => {
+    /**
+     * Two of the four panes are about one repository. Nothing reloaded them, so clicking a tab
+     * with settings open left the ssh key and the signing configuration of the repository you
+     * had just navigated away from on screen, with the tab strip underneath already showing
+     * the other one. There is no way to tell from the page which of the two it is describing,
+     * which is why the pane also names the repository now.
+     */
+    const other = '/srv/other';
+    const both = {
+      tabs: [
+        { id: 1, path: REPO, group: null },
+        { id: 2, path: other, group: null },
+      ],
+      groups: [],
+    };
+    const asked: string[] = [];
+    const table = answers({
+      session_get: { ...both, active: 1 },
+      // The window opens the repository it was started on, which answers with the session
+      // again; without this the default single-tab answer would replace both.
+      tab_open: { ...both, active: 1 },
+      tab_activate: { ...both, active: 2 },
+      ssh_read: sshScopes(),
+      ssh_keys: [],
+      signing_read: signingScopes(),
+      experimental_git: { chosen: { kind: 'system' }, candidates: [], effective: '/usr/bin/git' },
+    });
+    invoke.mockImplementation(async (cmd: string, args: { path?: string } = {}) => {
+      if (cmd === 'ssh_read') asked.push(args.path ?? '');
+      if (!(cmd in table)) throw new Error(`unstubbed command ${cmd}`);
+      return table[cmd];
+    });
+
+    const view = render(App);
+    await waitFor(() => {
+      if (view.container.querySelectorAll('li.row').length === 0) throw new Error('no rows yet');
+    });
+    await fireEvent.click(view.getByLabelText('Settings'));
+    await waitFor(() => {
+      if (asked.length === 0) throw new Error('the ssh pane has not loaded');
+    });
+    expect(asked.at(-1), 'the repository it was opened on').toBe(REPO);
+
+    const tabs = [...view.container.querySelectorAll('nav.bar .tab .pick')];
+    await fireEvent.click(tabs[1] as HTMLElement);
+
+    await waitFor(() => {
+      if (asked.at(-1) !== other) throw new Error('still on the first repository');
+    });
+    // And it says which, so nobody has to infer it from the tab strip behind the page.
+    await waitFor(() => {
+      if (!view.container.querySelector('.prefs')?.textContent?.includes('other')) {
+        throw new Error('the pane does not name the repository');
+      }
+    });
   });
 });
 

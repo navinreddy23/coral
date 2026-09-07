@@ -1760,9 +1760,6 @@
   function openPreferences() {
     showPrefs = true;
     void experimental.load();
-    if (!info) return;
-    void signing.load(info.path);
-    void ssh.load(info.path);
   }
 
   /** Points Coral at a git of the user's choosing, from the Experimental page. */
@@ -2554,6 +2551,21 @@
   });
 
   /**
+   * Keeps the settings page on the repository the tab strip is showing.
+   *
+   * Two of its four panes are about one repository, and they were read once, when the page was
+   * opened. Clicking a tab with settings up therefore left the previous repository's ssh key
+   * and signing configuration on screen underneath the new tab, with nothing on the page
+   * saying which of the two it was describing.
+   */
+  $effect(() => {
+    if (!showPrefs || loadedPath === '') return;
+    const path = loadedPath;
+    void signing.load(path);
+    void ssh.load(path);
+  });
+
+  /**
    * Moves the selection to whatever HEAD now points at.
    *
    * Checking a branch out and leaving the view where it was is the commonest way to end up
@@ -3215,12 +3227,16 @@
     reach the page that exists to point Coral at a different git — nor the log that would have
     said why.
   -->
+  <!-- Preferences is handed the path its panes were loaded with rather than the one the
+       window has finished opening: the two differ while a tab switch is in flight, and the
+       page has to name what it is actually showing. -->
   {#if showPrefs}
     <div class="screen">
     <Preferences
       {signing}
       {ssh}
       {experimental}
+      repository={loadedPath === '' ? null : loadedPath}
       hasRepository={info !== null}
       onPickGit={() => void chooseGitProgram()}
       onClose={() => (showPrefs = false)}

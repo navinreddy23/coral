@@ -7,10 +7,26 @@
   import type { SigningState } from '../state/signing.svelte';
   import type { SshState } from '../state/ssh.svelte';
 
-  const { signing, ssh, experimental, hasRepository, onClose, onCopied, onPickGit }: {
+  const {
+    signing,
+    ssh,
+    experimental,
+    repository,
+    hasRepository,
+    onClose,
+    onCopied,
+    onPickGit,
+  }: {
     signing: SigningState;
     ssh: SshState;
     experimental: ExperimentalState;
+    /**
+     * The repository the two per-repository panes are describing.
+     *
+     * Named on the page rather than left to be inferred from the tab strip behind it: with two
+     * repositories open, an ssh key on screen says nothing about whose it is.
+     */
+    repository: string | null;
     /**
      * Whether a repository is open.
      *
@@ -39,7 +55,20 @@
   ].filter((pane) => hasRepository || !pane.needsRepository));
 
   // svelte-ignore state_referenced_locally
-  let active = $state(hasRepository ? 'ssh' : 'experimental');
+  let chosen = $state(hasRepository ? 'ssh' : 'experimental');
+
+  /**
+   * The pane on screen, which is the chosen one only while it still exists.
+   *
+   * Closing the last repository takes two panes off the list. A choice left pointing at one of
+   * them rendered an empty page beside a nav with nothing selected.
+   */
+  const active = $derived(
+    panes.some((pane) => pane.id === chosen) ? chosen : (panes[0]?.id ?? 'about'),
+  );
+
+  /** The last segment, which is what people call a repository. */
+  const repoName = $derived(repository?.split('/').filter(Boolean).pop() ?? '');
 
   function key(event: KeyboardEvent) {
     if (event.key === 'Escape') {
@@ -55,8 +84,11 @@
   <nav>
     <button class="back" onclick={onClose}>← Close preferences</button>
     <p class="heading">Preferences</p>
+    {#if repoName !== ''}
+      <p class="repo" title={repository}>{repoName}</p>
+    {/if}
     {#each panes as pane (pane.id)}
-      <button class="pane" class:on={active === pane.id} onclick={() => (active = pane.id)}>
+      <button class="pane" class:on={active === pane.id} onclick={() => (chosen = pane.id)}>
         <span class="glyph" aria-hidden="true">{pane.glyph}</span>{pane.label}
       </button>
     {/each}
@@ -92,6 +124,13 @@
     margin: var(--space-4) var(--space-2) var(--space-2);
     font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
     color: var(--fg-2);
+  }
+  /* Under the heading, so the two panes that are about one repository say which one before
+     anything on them is read. */
+  .repo {
+    margin: 0 var(--space-2) var(--space-2);
+    font-size: 12px; font-weight: 600; color: var(--fg-1);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .pane {
     display: flex; align-items: center; gap: var(--space-2);
