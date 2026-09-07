@@ -68,17 +68,66 @@ impl Cloned {
     }
 }
 
-/// Clones a repository and returns where it landed.
+/// Removes a half-made clone when the work is dropped.
+///
+/// A cancelled clone is killed where it stands, so nothing after the await runs and the
+/// partial repository would be left behind for the user to find and wonder about.
+///
+/// It arms only when the destination did not exist beforehand. A clone into a directory that
+/// is already there fails without creating anything, and deleting it would take work that was
+/// never ours to take.
+struct RemoveOnDrop {
+    at: PathBuf,
+    armed: bool,
+}
+
+impl RemoveOnDrop {
+    fn new(at: &Path) -> Self {
+        Self {
+            at: at.to_path_buf(),
+            armed: !at.exists(),
+        }
+    }
+
+    fn keep(mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for RemoveOnDrop {
+    fn drop(&mut self) {
+        if self.armed && self.at.exists() {
+            let _ = std::fs::remove_dir_all(&self.at);
+        }
+    }
+}
+
+/// Clones a repository and returns where it landed, reporting progress as git reports it.
+///
+/// Streamed rather than buffered, so a clone of anything large is not a silent wait. git
+/// writes progress to stderr with carriage returns as separators, which is what
+/// [`crate::remote::parse_progress`] reads.
+///
+/// Cancelling is dropping the future: the runner kills the child on drop, and the guard above
+/// takes the partial repository with it.
 ///
 /// # Errors
 /// [`CoralError::AlreadyARepository`] if the destination already holds one, and git's own
 /// failure otherwise — a URL that does not answer, credentials that were refused.
-pub async fn clone(runner: &GitRunner, what: &Cloned) -> Result<PathBuf, CoralError> {
+pub async fn clone<F>(
+    runner: &GitRunner,
+    what: &Cloned,
+    mut on_progress: F,
+) -> Result<PathBuf, CoralError>
+where
+    F: FnMut(crate::remote::Progress),
+{
     let into = what.destination();
     if into.join(".git").exists() {
         return Err(CoralError::AlreadyARepository(into));
     }
     std::fs::create_dir_all(&what.parent)?;
+    let partial = RemoveOnDrop::new(&into);
 
     // Network class, so nothing times out: a clone is bounded by the size of the repository and
     // by the user cancelling, not by a clock.
@@ -93,11 +142,19 @@ pub async fn clone(runner: &GitRunner, what: &Cloned) -> Result<PathBuf, CoralEr
     if let Some(key) = chosen_key(what) {
         cmd = cmd.env("GIT_SSH_COMMAND", crate::ssh::command_for(key));
     }
-    runner.output(cmd).await?;
+    runner
+        .stream_err(cmd, |line| {
+            if let Some(p) = crate::remote::parse_progress(line) {
+                on_progress(p);
+            }
+            Ok(crate::process::Sink::Continue)
+        })
+        .await?;
 
     if let Some(key) = chosen_key(what) {
         pin_key(runner, &into, key).await?;
     }
+    partial.keep();
     Ok(into)
 }
 

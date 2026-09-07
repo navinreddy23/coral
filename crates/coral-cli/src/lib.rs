@@ -31,6 +31,33 @@ pub struct Cli {
 pub enum Command {
     /// Validate a repository and report git version, HEAD, operation state and commit-graph.
     Open,
+    /// Create an empty repository.
+    Init {
+        /// Where it goes. Created if it is not there.
+        path: PathBuf,
+        /// The name of the first branch. Left to git's own default when absent.
+        #[arg(long, value_name = "NAME")]
+        branch: Option<String>,
+        /// Set Large File Storage up in it.
+        #[arg(long)]
+        lfs: bool,
+    },
+    /// Clone a repository.
+    Clone {
+        url: String,
+        /// The directory to clone *into*; the repository appears under it. Defaults to `--repo`.
+        #[arg(long, value_name = "DIR")]
+        into: Option<PathBuf>,
+        /// What to call the directory. Uses the name in the URL, as git does, when absent.
+        #[arg(long, value_name = "NAME")]
+        name: Option<String>,
+        /// The private ssh key to authenticate with, recorded in the repository afterwards.
+        #[arg(long, value_name = "PATH")]
+        ssh_key: Option<String>,
+        /// Do not draw progress on stderr.
+        #[arg(long)]
+        quiet: bool,
+    },
     /// Report the working tree state.
     Status,
     /// Record a commit from the staged changes.
@@ -474,6 +501,23 @@ pub async fn run(argv: Vec<OsString>) -> output::Rendered {
 async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered {
     match command {
         Command::Open => output::render(&commands::open::run(repo).await),
+        // Neither of these operates on an existing repository, so `--repo` is only where a
+        // relative destination is resolved from.
+        Command::Init { path, branch, lfs } => {
+            output::render(&commands::create::init(&repo.join(path), branch, lfs).await)
+        }
+        Command::Clone {
+            url,
+            into,
+            name,
+            ssh_key,
+            quiet,
+        } => {
+            let into = into.map_or_else(|| repo.to_path_buf(), |dir| repo.join(dir));
+            let name = name.filter(|n| !n.trim().is_empty());
+            let key = ssh_key.filter(|k| !k.trim().is_empty());
+            output::render(&commands::create::clone(url, &into, name, key, quiet).await)
+        }
         Command::Status => output::render(&commands::status::run(repo).await),
         Command::Diff { staged, paths } => {
             output::render(&commands::diff::run(repo, staged, &paths).await)
