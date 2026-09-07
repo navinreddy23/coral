@@ -69,6 +69,31 @@
   --lane-5: #7245ef;
   --lane-6: #b94000;
   --lane-7: #16737f;
+
+  /*
+   * The sixteen colours a terminal program addresses by name.
+   *
+   * Their own scale, not the window's: a prompt or a `ls` picks these expecting the eight
+   * classic hues and the eight bright ones, and lending it the interface's lane colours left
+   * half the palette undefined. Chosen for contrast on `--bg-0`, which is white here.
+   */
+  --term-black: #21242b;
+  --term-red: #b3261e;
+  --term-green: #1a7f37;
+  --term-yellow: #8d6005;
+  --term-blue: #096cb3;
+  --term-magenta: #bf2681;
+  --term-cyan: #16737f;
+  --term-white: #6b7280;
+  --term-bright-black: #4b5563;
+  --term-bright-red: #d64541;
+  --term-bright-green: #2ea043;
+  --term-bright-yellow: #b57d0a;
+  --term-bright-blue: #2b8ede;
+  --term-bright-magenta: #d946a5;
+  --term-bright-cyan: #1f97a6;
+  --term-bright-white: #111418;
+
   --lane-8: #686d1c;
 
   /*
@@ -167,6 +192,25 @@
   --lane-5: #a288f6;
   --lane-6: #ff9560;
   --lane-7: #35cbdd;
+
+  /* The same sixteen, for a dark ground. See the light block for what they are. */
+  --term-black: #3b4048;
+  --term-red: #e06c68;
+  --term-green: #56c26e;
+  --term-yellow: #f2b73c;
+  --term-blue: #4aaef7;
+  --term-magenta: #e878ba;
+  --term-cyan: #35cbdd;
+  --term-white: #bcc4cf;
+  --term-bright-black: #6b7480;
+  --term-bright-red: #ff8f8b;
+  --term-bright-green: #7ede92;
+  --term-bright-yellow: #ffd166;
+  --term-bright-blue: #7cc7ff;
+  --term-bright-magenta: #ff9ed2;
+  --term-bright-cyan: #6fe3f2;
+  --term-bright-white: #ffffff;
+
   --lane-8: #c6cf45;
 
   --lane-1-soft: #21394d;
