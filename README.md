@@ -108,21 +108,36 @@ CLI cannot disagree about what an operation did.
 
 ## Getting started
 
+Rust 1.88 or newer, git 2.40 or newer, and **Node 24** — the interface is Vite and Svelte, so
+`just build` runs `npm ci` and the build needs npm on the PATH. Nothing cargo installs brings
+it; take it from your platform.
+
 ```
+# Ubuntu and Debian. Node from NodeSource, because the distribution's own has been older than 24.
 sudo apt install libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+sudo apt install nodejs
+
+# macOS. WebKit is part of the system, so only the compiler and Node.
+xcode-select --install
+brew install node
+
+# Then, on either:
 cargo install just cargo-about cargo-deny
 cargo install tauri-cli --version "^2" --locked
+node --version && npm --version   # 24 or newer, and npm alongside it
 
 just check     # fmt, clippy, tests, svelte-check, ui build
 just dev       # run the app
+just build     # the shippable bundles
 just cli open  # run the CLI against the current directory
 ```
 
 `just kernel-clone` fetches the Linux kernel into `~/.cache/coral-bench/linux` for the
 benchmarks; `just kernel-test` runs the scenarios against it.
 
-Those four lines are Linux. `docs/build/os.md` has the whole of it for Linux, macOS and
-Windows, including the bundles and what to do when a build fails.
+`docs/build/os.md` has the whole of it for Linux, macOS and Windows, including the bundles,
+cross-compiling, and what to do when a build fails.
 
 See `CHANGELOG.md` for what changed, `CLAUDE.md` for the working rules,
 `docs/ARCHITECTURE.md` for the design, and `docs/DECISIONS.md` for why things are the way they

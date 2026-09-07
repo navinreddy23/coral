@@ -23,10 +23,26 @@ cargo install tauri-cli --version "^2" --locked
 `cargo-about` and `cargo-deny` are only for `just licenses` and `just deny`; the build does not
 need them.
 
+**Node does not come from cargo.** It is the one requirement in the table above that the two
+lines here do not install, and the build needs it: `just build` runs `npm ci` and then has Vite
+compile the interface that gets embedded in the binary. Install it per platform below, and
+check both halves are on the PATH before building:
+
+```
+node --version    # 24 or newer
+npm --version
+```
+
+Without it the build compiles all of Rust first and then stops with exit code 127 — `npm ci`
+runs in the background beside cargo, so its "command not found" scrolls past under the compiler
+output. `just build` checks for it up front and says so by name.
+
 The Tauri CLI comes from cargo rather than from npm so there is one CLI to keep in step with
 the `tauri` crate instead of two that can drift.
 
 ## Linux
+
+Ubuntu and Debian, including 26.04:
 
 ```
 sudo apt install libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev
@@ -35,6 +51,20 @@ sudo apt install libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev l
 On a distribution without apt, the same four by their own names: the WebKitGTK 4.1
 development package, libxdo, the Ayatana appindicator, and librsvg. `build-essential`,
 `pkg-config`, `libssl-dev`, `curl`, `wget` and `file` are assumed present.
+
+Then Node. Ubuntu's own `nodejs` package has been older than 24 on every release so far, so
+take it from NodeSource:
+
+```
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+sudo apt install nodejs
+```
+
+`sudo apt install nodejs npm` instead is fine wherever the distribution's own package is
+already 24 or newer — `apt policy nodejs` says which it would install. nvm works too, with one
+catch: nvm is set up by an interactive shell profile, so a `just` invoked from somewhere that
+has not read that profile — an IDE's run configuration, a launcher, cron — will not find the
+npm that works in your terminal.
 
 ```
 just check     # the gate: fmt, clippy, every test, svelte-check, the interface build
@@ -62,7 +92,12 @@ there is nothing to install for the webview.
 ```
 xcode-select --install
 rustup target add aarch64-apple-darwin x86_64-apple-darwin
+brew install node
 ```
+
+Homebrew's `node` is current, so it satisfies the 24 the interface is built with. Without
+Homebrew, the installer from nodejs.org does the same job; `nvm install 24` also works, with
+the profile caveat in the Linux section above.
 
 ```
 just check
@@ -78,12 +113,18 @@ downloaded bundle until it is cleared in System Settings, which is expected for 
 
 ## Windows
 
-Two things beyond the common list:
+Two things beyond the common list, plus Node:
 
 - **The MSVC build tools.** The Visual Studio Build Tools with the C++ workload, which is what
   `rustup` selects by default on Windows.
 - **WebView2.** Present on Windows 11 and on every supported Windows 10, so nothing is bundled
   and nothing needs installing on a current system.
+
+Node, as everywhere:
+
+```
+winget install OpenJS.NodeJS.LTS
+```
 
 The recipes are bash, which on Windows means the Git Bash that ships with git. Run `just` from
 that rather than from PowerShell or `cmd`.

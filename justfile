@@ -140,6 +140,24 @@ clean-artefacts dir="target":
 build *ARGS:
     #!/usr/bin/env bash
     set -euo pipefail
+    # Both tools below fail with a bare 127 and nothing else: `npm ci` runs in the background,
+    # so its "command not found" scrolls past under the cargo output and only reappears as an
+    # exit code from `wait`, and an absent cargo subcommand exits 127 too. "Recipe `build`
+    # failed with exit code 127" after two minutes of compiling is not an answer.
+    missing=()
+    if ! command -v npm >/dev/null 2>&1; then
+        missing+=("npm, from Node 24. The interface is built with Vite.")
+        missing+=("     Installed through nvm? A recipe does not see it: nvm is set up by an interactive shell profile.")
+    fi
+    if ! cargo tauri --version >/dev/null 2>&1; then
+        missing+=("cargo-tauri. Install it with: cargo install tauri-cli --version '^2' --locked")
+    fi
+    if [ "${#missing[@]}" -gt 0 ]; then
+        echo "just build needs a tool this machine does not have:" >&2
+        printf '  %s\n' "${missing[@]}" >&2
+        echo "docs/build/os.md lists everything a build needs, for all three platforms." >&2
+        exit 1
+    fi
     just clean-artefacts
     # The two halves need nothing from each other, and both are slow from cold: `npm ci`
     # fetches the whole dependency tree while cargo compiles the CLI.
