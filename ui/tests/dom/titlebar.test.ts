@@ -167,6 +167,27 @@ describe('the title bar Coral draws', () => {
     expect(win.calls).toEqual(['startDragging']);
   });
 
+  it('never starts a window drag from a panel\'s backdrop', async () => {
+    // The tab drawer and the icon picker put their dismiss backdrop inside the strip, because
+    // that is where the component that owns them is mounted. A backdrop is not a control, so
+    // the strip used to treat a press on it as a press on itself and hand the pointer to the
+    // window manager — which never delivers the click, so the panel stayed open however far
+    // outside it you pressed. Asserted as "no drag" rather than "it closed": a mocked window
+    // swallows nothing, so the click lands in this test either way and only the drag shows
+    // the fault.
+    const { container } = await shell();
+    await fireEvent.click(container.querySelector('.tail .find') as HTMLElement);
+    const scrim = container.querySelector('.strip .scrim') as HTMLElement;
+    expect(scrim, 'the drawer is open on its backdrop').not.toBeNull();
+
+    win.calls = [];
+    await fireEvent.mouseDown(scrim, { button: 0 });
+    expect(win.calls, 'a backdrop is not the strip').toEqual([]);
+
+    await fireEvent.click(scrim);
+    expect(container.querySelector('.finder'), 'and the drawer closed').toBeNull();
+  });
+
   it('leaves a double click alone, rather than maximising on it', async () => {
     const { container } = await shell();
     const strip = container.querySelector('.strip') as HTMLElement;

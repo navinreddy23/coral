@@ -642,8 +642,11 @@
   function stripDrag(event: MouseEvent) {
     if (event.button !== 0) return;
     const target = event.target as HTMLElement | null;
-    // Tabs are dragged with the pointer too, and every control has its own job.
-    if (target?.closest('button, a, input, textarea, select, .tab')) return;
+    // Tabs are dragged with the pointer too, and every control has its own job. A panel's
+    // dismiss backdrop is the subtle one: the tab drawer mounts its own inside this strip, and
+    // taking the pointer to the window manager meant the click that closes it was never
+    // delivered, so pressing outside the drawer did nothing at all.
+    if (target?.closest('button, a, input, textarea, select, .tab, .scrim')) return;
     event.preventDefault();
     void startDragging();
   }
