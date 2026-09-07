@@ -185,7 +185,9 @@ stop it. `coral-app/src/transfer.rs` reports each one to the window and holds th
 stopping is dropping the work, since nothing in git's protocol offers a polite way out and
 there is nothing to poll while a connection hangs. The runner spawns with `kill_on_drop`, so
 letting the future go kills git wherever it reached, and a clone takes its half-made directory
-with it. The first report is sent before git has said anything, because a host that never
+with it. The child alone is not enough: `git fetch --all` runs a fetch per remote, so a git
+spawned into its own process group and killed as a group is what actually reaches the one still
+waiting on the host that never answered. The first report is sent before git has said anything, because a host that never
 answers produces no progress at all and a way out that waited for the first record would never
 appear.
 

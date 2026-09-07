@@ -429,3 +429,14 @@ deleting it would take work that was never Coral's.
 The first report is sent before git has written a word. A host that never answers produces no
 progress, so a bar and a Stop that waited for the first record would never appear at all —
 which is the one case the feature exists for.
+
+Killing the child is not enough, and this was found by watching the process table rather than
+by reasoning. `git fetch --all` runs a fetch per remote; stopping a wedged one killed the parent
+and left its child still holding a socket to the host that was never going to answer. git is
+therefore started in a process group of its own and the group is what gets signalled.
+
+The signal goes through `kill` rather than the syscall, since the engine denies unsafe code and
+one signal on a path taken only when somebody stopped something is not worth a dependency. The
+form matters: `kill -KILL -<pid>` is read by procps as a second signal, does nothing, and exits
+zero, so the guard looked like it worked for as long as nobody checked. It is `kill -s KILL --
+-<pid>`, and the way that was caught was watching a cancelled fetch leave its child behind.

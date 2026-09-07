@@ -268,6 +268,43 @@ pub struct GitOutput {
     pub stderr: Vec<u8>,
 }
 
+/// Kills a git process group if the work it belongs to is abandoned.
+///
+/// `kill_on_drop` reaches the child and nothing below it, which is not enough for the one case
+/// that matters: `git fetch --all` runs a fetch per remote, so killing the parent of a wedged
+/// fetch left its child still connected to a host that was never going to answer. Cancelling
+/// has to reach the whole group.
+///
+/// Disarmed once git has been waited on, so it fires only when a future was dropped before its
+/// command finished — which is what cancelling is.
+struct GroupGuard {
+    pid: Option<u32>,
+}
+
+impl GroupGuard {
+    const fn disarm(&mut self) {
+        self.pid = None;
+    }
+}
+
+#[cfg(unix)]
+impl Drop for GroupGuard {
+    fn drop(&mut self) {
+        let Some(pid) = self.pid else { return };
+        // `kill` rather than the syscall: the engine denies unsafe code, and one signal on a
+        // path taken only when somebody stopped something is not worth a dependency to send.
+        // The negative pid names the group, which is where git's own children are.
+        // `-s KILL --` and not `-KILL`: procps reads the second form's negative pid as another
+        // signal, does nothing, and exits zero, so the whole guard silently failed while
+        // looking like it worked. The separator is what makes the group id an argument.
+        let _ = std::process::Command::new("kill")
+            .args(["-s", "KILL", "--", &format!("-{pid}")])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
+}
+
 /// Returned by a streaming sink to end the walk early. The runner then kills the child rather
 /// than draining output nobody will read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -532,7 +569,7 @@ impl GitRunner {
         ok: &[i32],
     ) -> Result<GitOutput, CoralError> {
         let argv = cmd.redacted_argv(&self.git.program);
-        let mut child = self.spawn(&cmd, &argv)?;
+        let (mut child, mut group) = self.spawn(&cmd, &argv)?;
 
         // stdin is written on its own task rather than before reading stdout. Writing it all
         // first deadlocks as soon as the child's output fills its pipe: git stops reading our
@@ -550,7 +587,9 @@ impl GitRunner {
                 })
             });
 
-        let out = child.wait_with_output().await?;
+        let out = child.wait_with_output().await;
+        group.disarm();
+        let out = out?;
         if let Some(handle) = writer {
             let _ = handle.await;
         }
@@ -603,7 +642,7 @@ impl GitRunner {
         use tokio::io::AsyncReadExt;
 
         let argv = cmd.redacted_argv(&self.git.program);
-        let mut child = self.spawn(&cmd, &argv)?;
+        let (mut child, mut group) = self.spawn(&cmd, &argv)?;
         let Some(mut out) = child.stdout.take() else {
             return Err(CoralError::Protocol {
                 label: cmd.label,
@@ -659,7 +698,9 @@ impl GitRunner {
             sink(&pending)?;
         }
 
-        let status = child.wait().await?;
+        let status = child.wait().await;
+        group.disarm();
+        let status = status?;
         if status.success() {
             Ok(GitStream {
                 records,
@@ -720,7 +761,7 @@ impl GitRunner {
         use tokio::io::AsyncReadExt;
 
         let argv = cmd.redacted_argv(&self.git.program);
-        let mut child = self.spawn(&cmd, &argv)?;
+        let (mut child, mut group) = self.spawn(&cmd, &argv)?;
         let (Some(mut out), Some(mut err)) = (child.stdout.take(), child.stderr.take()) else {
             return Err(CoralError::Protocol {
                 label: cmd.label,
@@ -760,7 +801,9 @@ impl GitRunner {
             on_stderr(&err_pending)?;
         }
 
-        let status = child.wait().await?;
+        let status = child.wait().await;
+        group.disarm();
+        let status = status?;
         if status.success() {
             return Ok(());
         }
@@ -917,18 +960,28 @@ impl GitRunner {
         })
     }
 
+    /// Starts git in a process group of its own, with the guard that empties it.
+    ///
+    /// The group is what makes cancelling reach git's own children; see [`GroupGuard`]. On a
+    /// platform without process groups the child alone is killed, as it always was.
     fn spawn(
         &self,
         cmd: &GitCommand,
         argv: &[String],
-    ) -> Result<tokio::process::Child, CoralError> {
+    ) -> Result<(tokio::process::Child, GroupGuard), CoralError> {
         let mut c = tokio::process::Command::from(self.std_command(cmd));
         c.kill_on_drop(true);
-        c.spawn().map_err(|source| CoralError::GitSpawn {
+        // Its own leader, so the group id is the child's own pid. tokio offers this directly;
+        // Windows has no equivalent and keeps the child-only kill it always had.
+        #[cfg(unix)]
+        c.process_group(0);
+        let child = c.spawn().map_err(|source| CoralError::GitSpawn {
             label: cmd.label,
             argv: argv.to_vec(),
             source,
-        })
+        })?;
+        let guard = GroupGuard { pid: child.id() };
+        Ok((child, guard))
     }
 
     fn exit_error(
