@@ -134,9 +134,13 @@ describe('the title bar Coral draws', () => {
     expect(strip, 'the strip').not.toBeNull();
     // The tabs live in it rather than on a row of their own, which is the whole point.
     expect(strip?.querySelector('nav.bar'), 'the tabs').not.toBeNull();
-    for (const label of ['Activity logs', 'Settings', 'Switch theme']) {
+    for (const label of ['Settings', 'Switch theme']) {
       expect(named(container, label), label).not.toBeNull();
     }
+    // The log is reached from the corner of the status bar instead, beside the work it
+    // reports on rather than beside the buttons that close the window.
+    expect(named(container, 'Activity logs'), 'not in the strip').toBeNull();
+    expect(container.querySelector('.status .logs'), 'in the status bar').not.toBeNull();
   });
 
   it('minimises, maximises and closes the window', async () => {

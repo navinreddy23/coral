@@ -38,6 +38,7 @@ const base = {
   report: null,
   busy: false,
   onDismiss: () => {},
+  onLogs: () => {},
 };
 
 function bar(over: Record<string, unknown> = {}) {
@@ -96,5 +97,25 @@ describe('the status bar', () => {
     // The report wins over the spinner: what happened beats what is happening.
     const { container } = bar({ busy: true, report: { text: 'pull', tone: 'ok' } });
     expect(container.querySelector('.working')).toBeNull();
+  });
+});
+
+describe('the way in to the activity log', () => {
+  it('is the last thing in the bar, in the bottom right corner', () => {
+    // The corner of the window, which is where somebody looks for what an application has
+    // been doing. It used to be a button in the title bar, three rows away from the work.
+    const { container } = bar();
+    const logs = container.querySelector('.logs');
+    expect(logs, 'the log button').not.toBeNull();
+
+    const bits = [...(container.querySelector('.status')?.children ?? [])];
+    expect(bits[bits.length - 1], 'nothing sits outside it').toBe(logs);
+  });
+
+  it('opens the log', async () => {
+    let opened = 0;
+    const { container } = bar({ onLogs: () => (opened += 1) });
+    await fireEvent.click(container.querySelector('.logs') as HTMLElement);
+    expect(opened).toBe(1);
   });
 });

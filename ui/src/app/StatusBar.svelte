@@ -13,6 +13,7 @@
     report,
     busy,
     onDismiss,
+    onLogs,
   }: {
     branch: string | null;
     /** The ref for the current branch, for its ahead and behind counts. */
@@ -24,6 +25,8 @@
     report: Report | null;
     busy: boolean;
     onDismiss: () => void;
+    /** Opens the activity log, whose way in is the last thing in this bar. */
+    onLogs: () => void;
   } = $props();
 
   /** Exact counts stop being useful past a point; the reference caps them at 99+. */
@@ -71,6 +74,15 @@
     <span class="count">{commits.toLocaleString()} commits</span>
   {/if}
   <span class="muted">git {gitVersion}</span>
+
+  <!--
+    Last, in the corner of the window, which is where an application's log belongs and where
+    the eye goes when something has just happened. It was a button in the title bar, which is
+    where the window's own controls are and three rows away from anything it reports on.
+  -->
+  <button class="logs" onclick={onLogs} title="Activity logs: what Coral has been doing">
+    <span class="glyph" aria-hidden="true">☰</span>Logs
+  </button>
 </footer>
 
 <style>
@@ -102,6 +114,15 @@
   .report.warn { background: var(--warn-soft); color: var(--warn); }
   .report.error { background: var(--danger-soft); color: var(--danger); }
   .report.ok { background: var(--ok-soft); color: var(--ok); }
+
+  .logs {
+    display: inline-flex; align-items: center; gap: 4px;
+    font: inherit; font-size: 11px; cursor: pointer;
+    padding: 1px var(--space-2); margin-right: calc(-1 * var(--space-2));
+    border: 0; border-radius: var(--radius-1);
+    background: transparent; color: var(--fg-2);
+  }
+  .logs:hover { background: var(--bg-3); color: var(--fg-0); }
 
   /* A hairline of accent along the top edge while something is running: visible from the
      corner of the eye, and it moves nothing. */

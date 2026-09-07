@@ -3128,13 +3128,9 @@
       </span>
     {/if}
 
+    <!-- The activity log is not here: its way in is the corner of the status bar, beside the
+         work it reports on rather than beside the window's own buttons. -->
     <div class="tools sit">
-      <button
-        class="chrome"
-        onclick={() => openActivity()}
-        title="Activity logs: what Coral has been doing"
-        aria-label="Activity logs"
-      ><ChromeMark kind="logs" /></button>
       <button
         class="chrome"
         onclick={() => openPreferences()}
@@ -3711,6 +3707,7 @@
       changed={worktree.status?.entries.length ?? 0}
       gitVersion={info.gitVersion}
       host={hosting.view}
+      onLogs={() => openActivity()}
       report={actions.report}
       busy={actions.busy || worktree.busy || merge.busy}
       onDismiss={() => actions.clear()}
