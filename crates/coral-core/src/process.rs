@@ -89,6 +89,7 @@ impl GitClass {
 
 /// Builder for one git invocation. Every git command in the engine is constructed here; no
 /// module assembles an argv by hand.
+///
 pub struct GitCommand {
     label: &'static str,
     class: GitClass,
@@ -739,7 +740,7 @@ impl GitRunner {
                 label: cmd.label,
                 code,
                 argv,
-                stderr: tail.trim().to_owned(),
+                stderr: scrubbed(&tail),
             },
             None => CoralError::GitSignal {
                 label: cmd.label,
@@ -877,7 +878,7 @@ impl GitRunner {
                 label: cmd.label,
                 code,
                 argv,
-                stderr: stderr.trim().to_owned(),
+                stderr: scrubbed(&stderr),
             },
             None => CoralError::GitSignal {
                 label: cmd.label,
@@ -906,9 +907,11 @@ impl GitRunner {
         argv: Vec<String>,
         out: &std::process::Output,
     ) -> CoralError {
-        let mut stderr = why_it_failed(&String::from_utf8_lossy(&out.stderr));
+        let mut stderr = scrubbed(&why_it_failed(&String::from_utf8_lossy(&out.stderr)));
         if stderr.is_empty() {
-            stderr = why_it_failed_on_stdout(&String::from_utf8_lossy(&out.stdout));
+            stderr = scrubbed(&why_it_failed_on_stdout(&String::from_utf8_lossy(
+                &out.stdout,
+            )));
         }
         match out.status.code() {
             Some(code) => CoralError::GitExit {
@@ -960,7 +963,7 @@ async fn read_stderr(child: &mut tokio::process::Child) -> String {
     if let Some(mut e) = child.stderr.take() {
         let _ = e.read_to_string(&mut s).await;
     }
-    s.trim().to_owned()
+    scrubbed(&s)
 }
 
 #[cfg(unix)]
@@ -1186,6 +1189,19 @@ mod tests {
     }
 
     #[test]
+    fn a_password_in_a_url_never_reaches_a_message() {
+        // git 2.43 strips this itself; the supported floor is 2.40 and older ones did not, so
+        // the message a toast and the activity log show is scrubbed on the way in.
+        let said = scrubbed(
+            "fatal: unable to access 'https://alice:ghp_secret@example.com/team/thing.git/'\n\
+             hint: check your credentials",
+        );
+        assert!(!said.contains("ghp_secret"), "{said}");
+        assert!(said.contains("example.com/team/thing.git"), "{said}");
+        assert!(said.contains("hint: check your credentials"), "{said}");
+    }
+
+    #[test]
     fn redacted_argv_hides_secret_args_and_keeps_base_flags() {
         let cmd = GitCommand::read("test", "/repo")
             .arg("ls-remote")
@@ -1263,6 +1279,21 @@ fn why_it_failed_on_stdout(stdout: &str) -> String {
         .filter(|line| !line.trim().is_empty() && !is_progress(line))
         .collect();
     kept[kept.len().saturating_sub(LINES)..].join("\n")
+}
+
+/// Every message on its way into an error, with any password in a URL taken out.
+///
+/// git 2.43 strips the userinfo from URLs in its own messages, but the supported floor is 2.40
+/// and older ones did not, so a push to `https://user:token@host/repo` could put the token in
+/// a toast and in the activity log. The argv has always been redacted; this is the other half.
+fn scrubbed(stderr: &str) -> String {
+    stderr
+        .lines()
+        .map(redact_url_userinfo)
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_owned()
 }
 
 /// A line that says what went wrong rather than what to do about it.
