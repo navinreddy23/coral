@@ -1,8 +1,35 @@
+use std::path::Path;
 use std::process::Command;
 
 fn main() {
     tauri_build::build();
+    watch_frontend(Path::new("../../ui/dist"));
     stamp_commit();
+}
+
+/// Declares the built interface as an input, so rebuilding it rebuilds the binary.
+///
+/// `generate_context!` reads `ui/dist` while the crate compiles, and nothing tells cargo that.
+/// Neither `tauri_build` nor the default package scan covers a directory two levels up, so
+/// `npm run build` followed by `cargo build --release` was a no-op that finished in a quarter of
+/// a second and left the previous interface embedded — a binary that is a release build of a
+/// commit it was never built from. It cost an afternoon: a fix was verified in the window,
+/// `just check` rebuilt the interface, and the binary run afterwards was still the broken one.
+///
+/// Every file, not just the directory. A directory's own timestamp moves when a name is added or
+/// removed, and `index.html` keeps its name across every build.
+fn watch_frontend(dist: &Path) {
+    println!("cargo:rerun-if-changed={}", dist.display());
+    let Ok(entries) = std::fs::read_dir(dist) else {
+        return;
+    };
+    for path in entries.flatten().map(|e| e.path()) {
+        if path.is_dir() {
+            watch_frontend(&path);
+        } else {
+            println!("cargo:rerun-if-changed={}", path.display());
+        }
+    }
 }
 
 /// Records the commit this binary was built from, for the About pane to show.
