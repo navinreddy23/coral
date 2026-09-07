@@ -111,6 +111,16 @@ bindings-current:
 dev:
     cd crates/coral-app && cargo tauri dev
 
+# The desktop binary, without the bundling. Use this to look at a change in the real window.
+#
+# Not `cargo build --release`. That builds an application whose interface is still the dev
+# server: no page is embedded, the window asks localhost:5173 for one, and with the server
+# running it answers — so the binary looks fine while showing source that is not in it. What a
+# packaged build does differently is exactly what breaks: the page is served over the custom
+# protocol, under the policy in `tauri.conf.json`, which the dev server does not apply.
+app:
+    cd crates/coral-app && cargo tauri build --no-bundle
+
 # Throws away everything this project builds, and keeps everything it downloads.
 #
 # Every build runs this first. A bundle is the one artefact nobody can look inside to check
