@@ -25,12 +25,29 @@ fn fixture() -> TestRepo {
 
 #[test]
 fn the_command_pins_ssh_to_one_key_and_only_that_key() {
-    // `IdentitiesOnly` is the whole point. Without it ssh offers every key the agent holds
-    // before the one it was told to use, and a server that accepts one of those authenticates
-    // as the wrong account — which is the failure a per-repository key exists to prevent.
+    // Two flags, and neither is enough alone.
+    //
+    // `IdentitiesOnly` keeps the agent from offering everything it holds. `-F none` keeps the
+    // user's own config from adding a key beside the chosen one: `-i` and a host block's
+    // `IdentityFile` accumulate rather than the first winning, and the agent then reorders
+    // them. Measured against a real host, the command without `-F none` authenticated as the
+    // account belonging to the config's key, silently, every time.
     let command = command_for("/home/dev/.ssh/id_work");
     assert!(command.contains("IdentitiesOnly=yes"), "{command}");
+    assert!(command.contains("-F none"), "{command}");
     assert!(command.contains("id_work"), "{command}");
+}
+
+#[test]
+fn a_pinned_key_is_still_read_back_out_of_the_command_that_pins_it() {
+    // The pane shows which key a repository uses by parsing it back out. A flag added in front
+    // of `-i` must not be mistaken for the key.
+    let command = command_for("/home/dev/.ssh/id_work");
+    assert_eq!(
+        key_in_command(&command).as_deref(),
+        Some("/home/dev/.ssh/id_work"),
+        "{command}"
+    );
 }
 
 #[test]

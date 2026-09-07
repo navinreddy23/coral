@@ -185,11 +185,20 @@ raised as an error.
 
 **There is no embedded SSH implementation**: `ssh`, `ssh-agent` and `~/.ssh/config` do the
 work. Choosing *which* key is configuration, and is layered per repository exactly as signing
-is — an app-level default in the user's own git config, overridden per repository. Pinning a
-key writes `core.sshCommand` with `IdentitiesOnly=yes`, which is not optional: without it ssh
-offers every key the agent holds before the one it was asked for, and a server that accepts one
-of those authenticates as the wrong account. Using the agent means writing *nothing*, since an
-empty `core.sshCommand` still shadows whatever the user set by hand.
+is — an app-level default in the user's own git config, overridden per repository. Using the
+agent means writing *nothing*, since an empty `core.sshCommand` still shadows whatever the user
+set by hand.
+
+Pinning a key writes `core.sshCommand` with **both** `IdentitiesOnly=yes` and `-F none`, and
+neither is optional. The first stops the agent offering everything it holds. The second stops
+the user's own config adding a key beside the chosen one: `-i` and a host block's `IdentityFile`
+accumulate into one list rather than the first winning, and the agent then reorders that list
+into the order it happens to hold the keys. Measured against a real host, a pin without `-F
+none` offered the config's key first and authenticated as the wrong account, silently, every
+time — which is the failure pinning exists to prevent. The price is that a pinned repository
+reads no `~/.ssh/config` at all, so no `ProxyJump`, no per-host `Port` and no `HostName` alias;
+that is why nothing is written unless a key was actually chosen, and why both screens that
+offer the choice say so.
 
 Coral is its own **git credential helper**, so tokens never appear in a remote URL, a config
 file, or an argument list. Any process on the machine can run the coral binary, so the helper

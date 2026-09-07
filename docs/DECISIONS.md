@@ -354,3 +354,37 @@ that, so the drawer stayed open however far outside it you pressed.
 `stripDrag` now steps over `.scrim` as it already steps over every control. The regression test
 asserts that no drag is started rather than that the panel closed: under vitest the window is a
 mock that swallows nothing, so the click lands either way and only the drag shows the fault.
+
+## A pinned ssh key also has to turn off the user's ssh config
+
+`IdentitiesOnly=yes` was documented here and in the engine as the thing that makes a pinned key
+the key. It is not, and the gap is silent.
+
+`-i` on the command line and an `IdentityFile` inside a matching `Host` block do not compete:
+they accumulate into one identity list. `IdentitiesOnly=yes` restricts ssh to that list, which
+already contains both. Worse, the order the list is offered in is not the order it was built
+in — ssh puts the identities the agent holds first, in the agent's own order — so which key
+wins is decided by whatever `ssh-add` ran first.
+
+Measured against a real host, with a `Host` block naming a second key for it:
+
+```
+ssh -i <chosen> -o IdentitiesOnly=yes -T git@<host>     the config's key, wrong account
+ssh -F none -i <chosen> -o IdentitiesOnly=yes -T ...    the chosen key
+```
+
+The failure is the worst shape available: authentication succeeds, so there is no key error,
+and the host answers about the account that did authenticate. Cloning a repository the other
+account cannot see reports that the project does not exist or you have no permission, which
+reads as a wrong URL or a missing grant rather than as the wrong identity.
+
+So a pin writes `-F none` as well. The price is real and is stated on both screens that offer
+the choice: a pinned repository reads no `~/.ssh/config`, so `ProxyJump`, a per-host `Port` and
+a `HostName` alias do not apply to it. That is why nothing is written at all unless a key was
+actually chosen — the agent remains the default, and the default still honours the file
+completely. `none` rather than `/dev/null` because Windows has no such device; OpenSSH has
+accepted it since 8.4.
+
+Somebody who has already built host aliases for this — one `Host` per account, each with its
+own key — should keep using them and leave Coral on the agent. Their alias in the URL does the
+same job with the config intact, and it travels with the remote rather than with one client.

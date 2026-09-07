@@ -140,7 +140,9 @@
   </label>
   <p class="hint">
     The agent offers whichever keys it holds. Turn this off to pin one key, which is what makes
-    a repository push as the right account when the agent holds more than one.
+    a repository push as the right account when the agent holds more than one. A pinned key is
+    the only key: git is told to ignore <code>~/.ssh/config</code> here, since a key named there
+    for the same host would otherwise be offered first and authenticate as the other account.
   </p>
 
   <label>

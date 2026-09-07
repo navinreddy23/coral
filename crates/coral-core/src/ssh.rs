@@ -75,12 +75,24 @@ pub struct SshKey {
 
 /// Builds the `core.sshCommand` that pins git to one key.
 ///
-/// `IdentitiesOnly=yes` is not optional. Without it ssh offers every key the agent holds
-/// before the one it was asked for, and a server that accepts one of those authenticates as
-/// the wrong account — which is the exact failure a per-repository key exists to avoid.
+/// Both flags are load-bearing, and neither is enough on its own.
+///
+/// `IdentitiesOnly=yes` stops ssh offering every key the agent holds before the one it was
+/// asked for. `-F none` stops the user's own `~/.ssh/config` adding a second key beside it:
+/// `-i` and a host block's `IdentityFile` accumulate into one list rather than the first
+/// winning, and the agent then reorders that list into whatever order it happens to hold the
+/// keys in. Measured against a real host: with a `Host gitlab.com` block naming another key,
+/// `ssh -i chosen -o IdentitiesOnly=yes` offered the config's key first and authenticated as
+/// the wrong account, silently and every time. That is the exact failure pinning a key exists
+/// to prevent, so a pin that cannot override the file has not pinned anything.
+///
+/// The cost is that a pinned repository does not read `~/.ssh/config` at all — no `ProxyJump`,
+/// no per-host `Port`, no `HostName` alias — which is why nothing is written unless a key was
+/// actually chosen, and why the interface says so where the choice is made. `none` rather than
+/// `/dev/null` because there is no such device on Windows; OpenSSH has understood it since 8.4.
 #[must_use]
 pub fn command_for(private_key: &str) -> String {
-    format!("ssh -i '{private_key}' -o IdentitiesOnly=yes")
+    format!("ssh -F none -i '{private_key}' -o IdentitiesOnly=yes")
 }
 
 /// Reads the key back out of a `core.sshCommand`, or `None` when it names none.

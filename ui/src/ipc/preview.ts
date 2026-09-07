@@ -297,7 +297,7 @@ const FIXTURES: Record<string, unknown> = {
       useAgent: false,
       privateKey: '/home/dev/.ssh/id_ed25519',
       publicKey: '/home/dev/.ssh/id_ed25519.pub',
-      command: "ssh -i '/home/dev/.ssh/id_ed25519' -o IdentitiesOnly=yes",
+      command: "ssh -F none -i '/home/dev/.ssh/id_ed25519' -o IdentitiesOnly=yes",
       credentialHelper: '',
     },
     global: {

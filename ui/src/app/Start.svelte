@@ -180,8 +180,10 @@
             </select>
           </label>
           <p class="note">
-            A key with a passphrase has to be in your ssh agent already. Coral cannot ask for
-            one.
+            The chosen key is the only one offered: <code>~/.ssh/config</code> is ignored for
+            this repository, since a key named there for the same host would otherwise win. A
+            key with a passphrase still has to be in your ssh agent already, because Coral
+            cannot ask for one.
           </p>
         {/if}
         {#if cloneParent && clonedAs}
