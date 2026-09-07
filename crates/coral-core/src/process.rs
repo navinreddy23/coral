@@ -90,6 +90,9 @@ impl GitClass {
 /// Builder for one git invocation. Every git command in the engine is constructed here; no
 /// module assembles an argv by hand.
 ///
+/// Cloneable so a write can be run again when the index lock was held for a moment; see
+/// [`GitRunner::output`].
+#[derive(Clone)]
 pub struct GitCommand {
     label: &'static str,
     class: GitClass,
@@ -510,6 +513,9 @@ impl GitRunner {
     /// [`CoralError::GitSpawn`] if the child cannot start, [`CoralError::GitExit`] on a
     /// non-zero exit, [`CoralError::GitSignal`] if it was killed.
     pub async fn output(&self, cmd: GitCommand) -> Result<GitOutput, CoralError> {
+        if cmd.class == GitClass::Write {
+            return self.output_retrying(cmd, &[]).await;
+        }
         self.output_allowing(cmd, &[]).await
     }
 
@@ -555,6 +561,29 @@ impl GitRunner {
             });
         }
         Err(Self::exit_error(cmd.label, argv, &out))
+    }
+
+    /// Runs a write, waiting out an index lock another git is holding for a moment.
+    ///
+    /// `git status` refreshes the index stat cache and takes `index.lock` to do it — that is
+    /// why it is its own class and does not pass `--no-optional-locks`. So a status running
+    /// beside a commit, which is what the file watcher does every time something changes on
+    /// disk, made the commit fail with "Unable to create '.git/index.lock': File exists" and
+    /// left the user reading a lock-file error for something they did nothing wrong in.
+    ///
+    /// Retrying is safe precisely here: git could not take the lock, so it did nothing at all
+    /// before failing. Anything else is reported as it happened, first time.
+    async fn output_retrying(&self, cmd: GitCommand, ok: &[i32]) -> Result<GitOutput, CoralError> {
+        const TRIES: u32 = 5;
+        for attempt in 1..TRIES {
+            match self.output_allowing(cmd.clone(), ok).await {
+                Err(e) if held_index_lock(&e) => {
+                    tokio::time::sleep(Duration::from_millis(u64::from(attempt) * 40)).await;
+                }
+                other => return other,
+            }
+        }
+        self.output_allowing(cmd, ok).await
     }
 
     /// Streams stdout to `sink` one record at a time, splitting on `delim`. Never holds more
@@ -1189,6 +1218,26 @@ mod tests {
     }
 
     #[test]
+    fn only_a_held_index_lock_is_worth_waiting_out() {
+        let lock = CoralError::GitExit {
+            label: "commit",
+            code: 128,
+            argv: vec![],
+            stderr: "fatal: Unable to create '/r/.git/index.lock': File exists.".to_owned(),
+        };
+        assert!(held_index_lock(&lock));
+
+        // 128 is what git returns for most fatal errors; retrying those would hide them.
+        let other = CoralError::GitExit {
+            label: "commit",
+            code: 128,
+            argv: vec![],
+            stderr: "fatal: not a git repository".to_owned(),
+        };
+        assert!(!held_index_lock(&other));
+    }
+
+    #[test]
     fn a_password_in_a_url_never_reaches_a_message() {
         // git 2.43 strips this itself; the supported floor is 2.40 and older ones did not, so
         // the message a toast and the activity log show is scrubbed on the way in.
@@ -1279,6 +1328,17 @@ fn why_it_failed_on_stdout(stdout: &str) -> String {
         .filter(|line| !line.trim().is_empty() && !is_progress(line))
         .collect();
     kept[kept.len().saturating_sub(LINES)..].join("\n")
+}
+
+/// Whether git failed because another git held the index lock for a moment.
+///
+/// Matched on git's own wording rather than on the exit code alone: 128 is what git returns
+/// for most fatal errors, and only this one is worth waiting out.
+fn held_index_lock(e: &CoralError) -> bool {
+    let CoralError::GitExit { stderr, .. } = e else {
+        return false;
+    };
+    stderr.contains("index.lock") && stderr.contains("File exists")
 }
 
 /// Every message on its way into an error, with any password in a URL taken out.

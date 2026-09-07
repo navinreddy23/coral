@@ -2567,7 +2567,12 @@
    * that can move HEAD, so it is the one that also moves the selection.
    */
   async function repoChanged(change: RepoChanged) {
-    if (!info || actions.busy) return;
+    // Every kind of busy, not only an action. Reloading reads the status, which refreshes the
+    // index and takes its lock, and staging a hunk or continuing a merge is a write holding
+    // that same lock: the two collided and the user's write failed with a lock-file error for
+    // something a background refresh did. The engine waits such a lock out now; this keeps the
+    // window from starting the fight in the first place.
+    if (!info || actions.busy || worktree.busy || merge.busy) return;
     const path = info.path;
     const wasHead = headMark;
 
