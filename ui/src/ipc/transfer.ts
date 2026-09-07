@@ -32,11 +32,6 @@ export function cancelTransfer(key: string): Promise<boolean> {
   return invoke<boolean>('cancel_transfer', { key });
 }
 
-/** What is running right now, so a reloaded window finds its way back to a transfer. */
-export function runningTransfers(): Promise<string[]> {
-  return invoke<string[]>('running_transfers');
-}
-
 /**
  * Subscribes to transfer reports.
  *

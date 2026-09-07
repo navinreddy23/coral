@@ -442,12 +442,16 @@ impl RepoLocation {
     ///
     /// # Errors
     /// Propagates git failures; a stopped merge or rebase is reported as an outcome.
-    pub async fn pull(
+    pub async fn pull<F>(
         &self,
         runner: &GitRunner,
         remote: Option<&str>,
         mode: PullMode,
-    ) -> Result<crate::ops::OpOutcome, CoralError> {
+        on_progress: F,
+    ) -> Result<crate::ops::OpOutcome, CoralError>
+    where
+        F: FnMut(&Progress),
+    {
         let mut cmd = GitCommand::network("pull", self.display_path()).args([
             "pull",
             "--progress",
@@ -475,6 +479,6 @@ impl RepoLocation {
             }
         }
 
-        self.run_stoppable(runner, cmd).await
+        self.run_stoppable_watching(runner, cmd, on_progress).await
     }
 }

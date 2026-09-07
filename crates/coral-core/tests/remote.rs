@@ -306,7 +306,7 @@ async fn a_rejected_push_is_settled_by_rebasing_and_pushing_again() {
 
     // Pulling with a rebase replays our commit onto theirs, and the same line stops it.
     let stopped = loc
-        .pull(&runner, Some("origin"), PullMode::Rebase)
+        .pull(&runner, Some("origin"), PullMode::Rebase, |_| {})
         .await
         .unwrap();
     assert!(!stopped.completed, "it stopped on the conflict");
@@ -490,7 +490,7 @@ async fn pull_fast_forwards_and_refuses_to_diverge() {
     other.git(&["push", "--quiet", "origin", "main"]);
 
     let outcome = loc
-        .pull(&runner, Some("origin"), PullMode::FfOnly)
+        .pull(&runner, Some("origin"), PullMode::FfOnly, |_| {})
         .await
         .unwrap();
     assert!(outcome.completed);
@@ -507,13 +507,13 @@ async fn pull_fast_forwards_and_refuses_to_diverge() {
     other.git(&["push", "--quiet", "origin", "main"]);
 
     assert!(
-        loc.pull(&runner, Some("origin"), PullMode::FfOnly)
+        loc.pull(&runner, Some("origin"), PullMode::FfOnly, |_| {})
             .await
             .is_err()
     );
     // Rebasing does integrate them.
     let rebased = loc
-        .pull(&runner, Some("origin"), PullMode::Rebase)
+        .pull(&runner, Some("origin"), PullMode::Rebase, |_| {})
         .await
         .unwrap();
     assert!(rebased.completed);
@@ -660,7 +660,7 @@ async fn a_pull_from_a_remote_that_is_not_the_upstream_still_integrates() {
 
     // The branch still tracks origin, which has not moved.
     let out = loc
-        .pull(&runner, Some("mirror"), PullMode::FfOnly)
+        .pull(&runner, Some("mirror"), PullMode::FfOnly, |_| {})
         .await
         .expect("a pull from a named remote is not an error");
     assert!(out.completed, "it should have fast-forwarded");
@@ -688,7 +688,7 @@ async fn a_pull_into_an_unborn_branch_names_it_too() {
     let (runner, loc) = open(&empty).await;
 
     let out = loc
-        .pull(&runner, Some("origin"), PullMode::FfOnly)
+        .pull(&runner, Some("origin"), PullMode::FfOnly, |_| {})
         .await
         .expect("a pull that seeds a repository is not an error");
     assert!(out.completed, "it should have taken the remote's history");

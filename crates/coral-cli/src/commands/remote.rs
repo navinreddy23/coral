@@ -183,5 +183,13 @@ pub async fn pull(
     mode: Mode,
 ) -> Result<coral_core::ops::OpOutcome, CoralError> {
     let (runner, loc) = open(path).await?;
-    loc.pull(&runner, remote.as_deref(), mode.into()).await
+    // On stderr with carriage returns, as the clone does it: stdout carries the envelope, and
+    // a pull of anything large is a wait worth showing.
+    loc.pull(&runner, remote.as_deref(), mode.into(), |p| {
+        eprint!(
+            "\r{} {}% ({}/{})\x1b[K",
+            p.phase, p.percent, p.current, p.total
+        );
+    })
+    .await
 }

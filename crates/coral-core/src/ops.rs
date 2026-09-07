@@ -474,6 +474,42 @@ impl RepoLocation {
     }
 
     /// Runs a command that may legitimately stop for conflicts.
+    /// The same, reporting git's progress as it goes.
+    ///
+    /// Separate from [`Self::run_stoppable`] because streaming has to hold stdout itself: the
+    /// buffered form gets it back at the end, and an operation that reads it for the message
+    /// still needs one.
+    pub(crate) async fn run_stoppable_watching<F>(
+        &self,
+        runner: &GitRunner,
+        cmd: GitCommand,
+        mut on_progress: F,
+    ) -> Result<OpOutcome, CoralError>
+    where
+        F: FnMut(&crate::remote::Progress),
+    {
+        let mut said: Vec<String> = Vec::new();
+        let streamed = runner
+            .stream_both(
+                cmd,
+                |line| {
+                    said.push(String::from_utf8_lossy(line).into_owned());
+                    Ok(crate::process::Sink::Continue)
+                },
+                |line| {
+                    if let Some(p) = crate::remote::parse_progress(line) {
+                        on_progress(&p);
+                    }
+                    Ok(crate::process::Sink::Continue)
+                },
+            )
+            .await;
+        match streamed {
+            Ok(()) => self.op_outcome(runner, as_shown(&said.join("\n"))).await,
+            Err(e) => self.stopped_or_failed(runner, e).await,
+        }
+    }
+
     pub(crate) async fn run_stoppable(
         &self,
         runner: &GitRunner,
@@ -484,18 +520,24 @@ impl RepoLocation {
                 let msg = as_shown(&String::from_utf8_lossy(&out.stdout));
                 self.op_outcome(runner, msg).await
             }
-            Err(e) => {
-                // Conflicts and a real failure both exit non-zero. Only the repository's own
-                // state tells them apart.
-                let outcome = self
-                    .op_outcome(runner, as_shown(e.stderr().unwrap_or_default()))
-                    .await?;
-                if outcome.completed {
-                    Err(e)
-                } else {
-                    Ok(outcome)
-                }
-            }
+            Err(e) => self.stopped_or_failed(runner, e).await,
+        }
+    }
+
+    /// Conflicts and a real failure both exit non-zero. Only the repository's own state tells
+    /// them apart, which is why the exit code is never read for this.
+    async fn stopped_or_failed(
+        &self,
+        runner: &GitRunner,
+        e: CoralError,
+    ) -> Result<OpOutcome, CoralError> {
+        let outcome = self
+            .op_outcome(runner, as_shown(e.stderr().unwrap_or_default()))
+            .await?;
+        if outcome.completed {
+            Err(e)
+        } else {
+            Ok(outcome)
         }
     }
 }

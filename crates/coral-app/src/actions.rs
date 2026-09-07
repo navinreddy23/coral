@@ -385,10 +385,31 @@ pub async fn repo_action(
     // Borrowed by the key and the label as well as by the work, so the block takes references
     // rather than the strings themselves.
     let (at, named) = (path.as_str(), label.as_str());
-    crate::transfer::watched(&app, at, named, |report| async move {
-        logged(at, action, named, &|p| report.progress(p)).await
+
+    // Opened out here and closed out here, rather than inside the watched work. Cancelling
+    // drops that work where it stands, so an entry owned by it would be left saying the
+    // operation started and never saying what became of it — in the log somebody opens to
+    // find out exactly that.
+    let entry = crate::activity::started(at, named);
+    let outcome = crate::transfer::watched(&app, at, named, |report| async move {
+        act(at, action, named, &|p| report.progress(p)).await
     })
-    .await
+    .await;
+
+    match outcome {
+        Ok(done) => {
+            if done.conflicted {
+                entry.stopped();
+            } else {
+                entry.finished();
+            }
+            Ok(done)
+        }
+        Err(e) => {
+            entry.failed(&e.message);
+            Err(e)
+        }
+    }
 }
 
 /// Runs one action, with nothing reported and nothing to stop it.
@@ -515,7 +536,9 @@ async fn run_remote(
             Ok(Done::quiet())
         }
         Action::Pull { remote, mode } => {
-            let out = loc.pull(runner, remote.as_deref(), mode.into()).await?;
+            let out = loc
+                .pull(runner, remote.as_deref(), mode.into(), |p| report(p))
+                .await?;
             Ok(Done::from(&out))
         }
         Action::Push {

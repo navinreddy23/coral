@@ -161,7 +161,6 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         watcher::watch_repo,
         watcher::unwatch_repo,
         transfer::cancel_transfer,
-        transfer::running_transfers,
         actions::rebase_todo,
         actions::rebase_start,
         conflicts::repo_operation,
