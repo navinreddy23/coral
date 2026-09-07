@@ -52,6 +52,9 @@ pub struct Cloned {
     pub parent: PathBuf,
     /// What to call the directory. `None` uses the name in the URL, as git does.
     pub name: Option<String>,
+    /// The private ssh key to authenticate with. `None` leaves it to the agent and
+    /// `~/.ssh/config`, which is what git does on its own.
+    pub ssh_key: Option<String>,
 }
 
 impl Cloned {
@@ -79,12 +82,47 @@ pub async fn clone(runner: &GitRunner, what: &Cloned) -> Result<PathBuf, CoralEr
 
     // Network class, so nothing times out: a clone is bounded by the size of the repository and
     // by the user cancelling, not by a clock.
-    let cmd = GitCommand::network("clone", &what.parent)
+    let mut cmd = GitCommand::network("clone", &what.parent)
         .args(["clone", "--progress"])
         .arg(&what.url)
         .arg(&into);
+    // The environment rather than `-c core.sshCommand=`, because a `-c` is not inherited by
+    // the repository git creates: it would authenticate this one fetch and leave the clone
+    // with nothing. The key is written into the new repository below, which is what makes
+    // every later fetch and push use it too.
+    if let Some(key) = chosen_key(what) {
+        cmd = cmd.env("GIT_SSH_COMMAND", crate::ssh::command_for(key));
+    }
     runner.output(cmd).await?;
+
+    if let Some(key) = chosen_key(what) {
+        pin_key(runner, &into, key).await?;
+    }
     Ok(into)
+}
+
+/// The key to authenticate with, ignoring a field somebody left blank.
+fn chosen_key(what: &Cloned) -> Option<&str> {
+    what.ssh_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|k| !k.is_empty())
+}
+
+/// Records the key in the repository that was just made.
+///
+/// Failing here would leave a perfectly good clone reported as a failure, so it is logged and
+/// the clone stands: the repository is there, and the key can be set from its settings.
+async fn pin_key(runner: &GitRunner, into: &Path, key: &str) -> Result<(), CoralError> {
+    let loc = crate::repo::RepoLocation::discover(runner, into).await?;
+    let overrides = crate::ssh::SshOverrides {
+        private_key: Some(key.to_owned()),
+        ..crate::ssh::SshOverrides::default()
+    };
+    if let Err(e) = loc.set_ssh_local(runner, &overrides).await {
+        tracing::warn!(error = %e, key, "cloned, but could not record the ssh key");
+    }
+    Ok(())
 }
 
 /// Whether `git lfs` is installed on this machine.

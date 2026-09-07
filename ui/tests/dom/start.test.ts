@@ -12,6 +12,21 @@ import { StartState } from '../../src/state/start.svelte';
 
 afterEach(cleanup);
 
+const KEYS = [
+  {
+    path: '/home/someone/.ssh/id_ed25519',
+    publicPath: '/home/someone/.ssh/id_ed25519.pub',
+    comment: 'someone@home',
+    kind: 'ssh-ed25519',
+  },
+  {
+    path: '/home/someone/.ssh/id_work',
+    publicPath: '/home/someone/.ssh/id_work.pub',
+    comment: 'someone@work',
+    kind: 'ssh-ed25519',
+  },
+];
+
 const RECENTS = [
   { path: '/home/someone/Work/alpha', name: 'alpha', opened: 1_756_000_000 },
   { path: '/home/someone/Play/beta', name: 'beta', opened: 1_755_000_000 },
@@ -45,6 +60,8 @@ async function page(over: Record<string, unknown> = {}, directory = '/home/someo
       onOpen: (path: string) => opened.push(path),
       onPickDirectory: async () => directory,
       onClose: null,
+      sshKeys: KEYS,
+      defaultSshKey: '',
     },
   });
   await start.load();
@@ -213,6 +230,7 @@ describe('the start page', () => {
       url: 'git@gitlab.com:open-source-23/coral.git',
       parent: '/home/someone/Work',
       name: null,
+      sshKey: null,
     });
   });
 
@@ -245,5 +263,68 @@ describe('the start page', () => {
     expect(invoke).toHaveBeenCalledWith('forget_recent', {
       path: '/home/someone/Work/alpha',
     });
+  });
+});
+
+describe('choosing which ssh key clones', () => {
+  it('offers the keys only where one would be used', async () => {
+    // An https clone authenticates through the credential helper and ignores ssh entirely. A
+    // control that does nothing is worse than one that is not there.
+    const { view } = await page();
+    await fireEvent.click(view.getByText('Clone'));
+    const url = view.getByPlaceholderText('https://host/team/thing.git');
+
+    await fireEvent.input(url, { target: { value: 'https://host/team/thing.git' } });
+    expect(view.container.querySelector('.sshkey'), 'not for https').toBeNull();
+
+    await fireEvent.input(url, { target: { value: 'git@gitlab.com:team/thing.git' } });
+    await waitFor(() => {
+      if (!view.container.querySelector('.sshkey')) throw new Error('no key row yet');
+    });
+
+    await fireEvent.input(url, { target: { value: 'ssh://git@host:2222/team/thing.git' } });
+    expect(view.container.querySelector('.sshkey'), 'and for an ssh URL').not.toBeNull();
+  });
+
+  it('sends the chosen key, and the agent when none is chosen', async () => {
+    const { view, opened } = await page();
+    await fireEvent.click(view.getByText('Clone'));
+    await fireEvent.input(view.getByPlaceholderText('https://host/team/thing.git'), {
+      target: { value: 'git@host:team/thing.git' },
+    });
+    await fireEvent.click(view.getByText('Choose…'));
+    await waitFor(() => {
+      if (!view.container.querySelector('.sshkey')) throw new Error('no key row yet');
+    });
+
+    const picker = view.container.querySelector('.sshkey select') as HTMLSelectElement;
+    picker.value = '/home/someone/.ssh/id_work';
+    await fireEvent.change(picker);
+    await fireEvent.click(view.getByText('Clone', { selector: '.primary' }));
+    await waitFor(() => {
+      if (opened.length === 0) throw new Error('not yet');
+    });
+
+    expect(invoke).toHaveBeenCalledWith('repo_clone', {
+      url: 'git@host:team/thing.git',
+      parent: '/home/someone/Work',
+      name: null,
+      sshKey: '/home/someone/.ssh/id_work',
+    });
+  });
+
+  it('says that a passphrase cannot be asked for', async () => {
+    // The engine pins GIT_TERMINAL_PROMPT=0 and SSH_ASKPASS_REQUIRE=never, so a key with a
+    // passphrase and no agent fails rather than prompting. Silently is the worst way to learn
+    // that.
+    const { view } = await page();
+    await fireEvent.click(view.getByText('Clone'));
+    await fireEvent.input(view.getByPlaceholderText('https://host/team/thing.git'), {
+      target: { value: 'git@host:team/thing.git' },
+    });
+    await waitFor(() => {
+      if (!view.container.querySelector('.sshkey')) throw new Error('no key row yet');
+    });
+    expect(view.container.querySelector('.form')?.textContent).toContain('passphrase');
   });
 });

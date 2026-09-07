@@ -34,8 +34,18 @@ export function repoInit(path: string, branch: string, lfs: boolean): Promise<st
 }
 
 /** Clones into `parent`, under `name` or under the name in the URL. */
-export function repoClone(url: string, parent: string, name: string): Promise<string> {
-  return invoke<string>('repo_clone', { url, parent, name: name.trim() || null });
+export function repoClone(
+  url: string,
+  parent: string,
+  name: string,
+  sshKey: string,
+): Promise<string> {
+  return invoke<string>('repo_clone', {
+    url,
+    parent,
+    name: name.trim() || null,
+    sshKey: sshKey.trim() || null,
+  });
 }
 
 /** Whether `git lfs` is on this machine, so the tick box is only offered when it can work. */

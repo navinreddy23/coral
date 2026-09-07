@@ -49,6 +49,20 @@ export class SshState {
     this.error = null;
     try {
       this.scopes = await sshRead(path);
+    } catch (e) {
+      this.error = messageOf(e);
+    }
+    await this.loadKeys();
+  }
+
+  /**
+   * The keys on this machine, which do not belong to any repository.
+   *
+   * Separate from [`load`](#load) because the clone form needs them before there is a
+   * repository to read settings from.
+   */
+  async loadKeys(): Promise<void> {
+    try {
       this.keys = await sshKeys();
     } catch (e) {
       this.error = messageOf(e);

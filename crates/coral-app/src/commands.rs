@@ -134,13 +134,20 @@ pub async fn repo_clone(
     url: String,
     parent: String,
     name: Option<String>,
+    ssh_key: Option<String>,
 ) -> Result<String, IpcError> {
     let settings = profiles.read().current().settings.clone();
     let runner = coral_core::process::GitRunner::discover().await?;
+    // The form's own choice wins over the profile's, since it was made about this clone; the
+    // profile is the default the form was filled in with.
+    let key = ssh_key
+        .filter(|k| !k.trim().is_empty())
+        .or_else(|| settings.ssh.private_key.clone());
     let what = coral_core::create::Cloned {
         url,
         parent: std::path::PathBuf::from(&parent),
         name: name.filter(|n| !n.trim().is_empty()),
+        ssh_key: key,
     };
     let logged = crate::activity::started(&parent, &format!("Clone {}", what.url));
     match coral_core::create::clone(&runner, &what).await {

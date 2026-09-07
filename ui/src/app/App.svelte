@@ -2805,7 +2805,12 @@
    * is left when nothing is open.
    */
   $effect(() => {
-    if (showStart || tabs.session.tabs.length === 0) void startPage.load();
+    if (showStart || tabs.session.tabs.length === 0) {
+      void startPage.load();
+      // The clone form offers a key, and the keys are on this machine rather than in any
+      // repository, so there may be none open to have read them already.
+      void ssh.loadKeys();
+    }
   });
 
   /** Opens a repository from the start page, and puts the page away. */
@@ -3379,6 +3384,8 @@
   {#if showStart || tabs.session.tabs.length === 0}
     <Start
       start={startPage}
+      sshKeys={ssh.keys}
+      defaultSshKey={profiles.current.settings.ssh.privateKey ?? ''}
       onOpen={(path) => void openFromStart(path)}
       onPickDirectory={pickDirectory}
       onConfirm={confirmThat}

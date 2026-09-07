@@ -69,8 +69,14 @@ export class StartState {
     return this.#run(() => repoInit(path, branch, lfs));
   }
 
-  async clone(url: string, parent: string, name: string): Promise<string | null> {
-    return this.#run(() => repoClone(url, parent, name));
+  /** `sshKey` is a private key path, or the empty string to leave it to the agent. */
+  async clone(
+    url: string,
+    parent: string,
+    name: string,
+    sshKey: string,
+  ): Promise<string | null> {
+    return this.#run(() => repoClone(url, parent, name, sshKey));
   }
 
   async #run(action: () => Promise<string>): Promise<string | null> {

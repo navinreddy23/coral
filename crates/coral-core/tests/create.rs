@@ -91,6 +91,7 @@ async fn clones_into_the_directory_git_would_have_chosen() {
         url: url.clone(),
         parent: dir.path().to_path_buf(),
         name: None,
+        ssh_key: None,
     };
     // The caller is told where it will land before it lands, so it can say so.
     assert_eq!(what.destination(), dir.path().join(name_from_url(&url)));
@@ -112,6 +113,7 @@ async fn clones_under_the_name_it_was_given() {
             url: format!("{}/.git", source.path().display()),
             parent: dir.path().to_path_buf(),
             name: Some("called-this".to_owned()),
+            ssh_key: None,
         },
     )
     .await
@@ -140,6 +142,7 @@ async fn refuses_to_clone_over_a_repository_that_is_already_there() {
                     .to_string_lossy()
                     .into_owned(),
             ),
+            ssh_key: None,
         },
     )
     .await;
@@ -150,4 +153,65 @@ async fn refuses_to_clone_over_a_repository_that_is_already_there() {
     ));
     // And the repository that was there is untouched.
     assert!(existing.path().join("b.txt").exists());
+}
+
+#[tokio::test]
+async fn a_clone_given_a_key_keeps_using_it_afterwards() {
+    // The key has to outlive the clone. Passing it only through the environment would
+    // authenticate the fetch of the clone itself and then leave the repository with nothing,
+    // so the next pull would fall back to whichever key the agent offers first.
+    let source = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let dir = tempfile::tempdir().unwrap();
+    let runner = runner().await;
+
+    let made = clone(
+        &runner,
+        &Cloned {
+            url: format!("{}/.git", source.path().display()),
+            parent: dir.path().to_path_buf(),
+            name: Some("with-key".to_owned()),
+            ssh_key: Some("/home/someone/.ssh/id_work".to_owned()),
+        },
+    )
+    .await
+    .unwrap();
+
+    let loc = RepoLocation::discover(&runner, &made).await.unwrap();
+    let scopes = loc
+        .ssh_scopes(&runner, coral_core::config::AppConfig::default())
+        .await
+        .unwrap();
+    assert_eq!(
+        scopes.local.private_key.as_deref(),
+        Some("/home/someone/.ssh/id_work")
+    );
+    // And by the one builder, so `IdentitiesOnly=yes` cannot be lost to a second spelling.
+    assert_eq!(
+        scopes.effective.command,
+        coral_core::ssh::command_for("/home/someone/.ssh/id_work")
+    );
+}
+
+#[tokio::test]
+async fn a_clone_given_no_key_writes_no_command() {
+    // An empty `core.sshCommand` still shadows whatever the user configured by hand, so the
+    // absence has to be a real absence.
+    let source = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let dir = tempfile::tempdir().unwrap();
+    let runner = runner().await;
+
+    let made = clone(
+        &runner,
+        &Cloned {
+            url: format!("{}/.git", source.path().display()),
+            parent: dir.path().to_path_buf(),
+            name: Some("no-key".to_owned()),
+            ssh_key: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let written = std::fs::read_to_string(made.join(".git/config")).unwrap();
+    assert!(!written.contains("sshCommand"), "{written}");
 }

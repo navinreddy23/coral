@@ -1,9 +1,22 @@
 <script lang="ts">
   import type { StartState } from '../state/start.svelte';
+  import type { SshKey } from '../ipc/types';
   import { elidePath } from './path';
 
-  const { start, onOpen, onPickDirectory, onClose, onConfirm }: {
+  const {
+    start,
+    sshKeys,
+    defaultSshKey,
+    onOpen,
+    onPickDirectory,
+    onClose,
+    onConfirm,
+  }: {
     start: StartState;
+    /** Every key pair on this machine, for the clone form to offer. */
+    sshKeys: SshKey[];
+    /** The current profile's key, which is what the form starts on. */
+    defaultSshKey: string;
     /** Asks before something that cannot be undone. Returns whether to go ahead. */
     onConfirm: (title: string, detail: string) => Promise<boolean>;
     /** Opens a repository at a path, in a tab. */
@@ -27,6 +40,21 @@
   let cloneUrl = $state('');
   let cloneParent = $state('');
   let cloneName = $state('');
+  // svelte-ignore state_referenced_locally
+  let cloneKey = $state(defaultSshKey);
+
+  /**
+   * Whether this URL will be reached over ssh.
+   *
+   * An https clone authenticates through the credential helper and never consults a key, so
+   * offering one there is a control that does nothing. git's own two spellings are a scheme
+   * and the scp-like `user@host:path`, and nothing else is ssh.
+   */
+  const overSsh = $derived.by(() => {
+    const url = cloneUrl.trim();
+    if (/^(?:https?|file|git):\/\//u.test(url)) return false;
+    return url.startsWith('ssh://') || /^[^/]+@[^/]+:/u.test(url);
+  });
 
   let createParent = $state('');
   let createName = $state('');
@@ -61,7 +89,7 @@
   }
 
   async function doClone() {
-    const made = await start.clone(cloneUrl, cloneParent, cloneName);
+    const made = await start.clone(cloneUrl, cloneParent, cloneName, overSsh ? cloneKey : '');
     if (made !== null) onOpen(made);
   }
 
@@ -133,6 +161,29 @@
           <span class="name">Called</span>
           <input bind:value={cloneName} placeholder={nameFromUrl(cloneUrl) || 'from the URL'} />
         </label>
+        {#if overSsh}
+          <!--
+            Only for a URL that will actually use it. The warning is not decoration: Coral runs
+            git with no terminal and no askpass, deliberately, so a key with a passphrase and
+            no agent holding it fails instead of asking.
+          -->
+          <label class="sshkey">
+            <span class="name">SSH key</span>
+            <!-- An explicit handler rather than `bind:value`, as the ssh pane does it: the
+                 options arrive with the answer and a binding re-selects from state after they
+                 render, which is how a picker ends up showing a choice nobody made. -->
+            <select value={cloneKey} onchange={(e) => (cloneKey = e.currentTarget.value)}>
+              <option value="">Whatever the agent offers</option>
+              {#each sshKeys as key (key.path)}
+                <option value={key.path}>{key.path.split('/').pop()} · {key.comment}</option>
+              {/each}
+            </select>
+          </label>
+          <p class="note">
+            A key with a passphrase has to be in your ssh agent already. Coral cannot ask for
+            one.
+          </p>
+        {/if}
         {#if cloneParent && clonedAs}
           <p class="says">It will be at <span class="mono">{cloneParent}/{clonedAs}</span></p>
         {/if}
@@ -276,6 +327,13 @@
   .primary:disabled { opacity: 0.5; cursor: default; }
   .go { display: flex; justify-content: flex-end; }
   .says { margin: 0; color: var(--fg-2); background: var(--bg-1); }
+  /* Beneath the picker it qualifies, and quieter than the form it sits in. */
+  .note { margin: -2px 0 0; font-size: 11px; color: var(--fg-2); background: var(--bg-1); }
+  .sshkey select {
+    flex: 1 1 auto; min-width: 0; font: inherit; font-size: 12px;
+    padding: 5px var(--space-2); border-radius: var(--radius-1);
+    border: 1px solid var(--border); background: var(--bg-0); color: var(--fg-0);
+  }
   .mono { font-family: var(--font-mono); }
   .error { color: var(--danger); margin: 0 0 var(--space-3); background: var(--bg-0); }
   .none { color: var(--fg-2); margin: 0; background: var(--bg-0); }

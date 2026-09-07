@@ -169,6 +169,17 @@ merged; for a rebase, the `onto` ref and the summary of the commit being replaye
 in the UI, that during a rebase "current" is the branch being rebased onto — this confuses
 everyone.
 
+## Cloning
+
+URL, destination, and the name it lands under. For a URL that will be reached over ssh — a
+scheme or git's scp-like `user@host:path` — the form also offers which key to authenticate
+with, defaulting to the current profile's and to the agent otherwise. It is not offered for
+https, which authenticates through the credential helper and never consults a key. The key is
+passed to the clone and then written into the new repository, so every later fetch uses it.
+
+Coral runs git with no terminal and no askpass, so the form says what that means: a key with a
+passphrase has to be in the agent already, or the clone fails rather than asking.
+
 ## Command palette and shortcuts
 
 `Ctrl/Cmd+P` opens the palette with every action, fuzzy search and recent items. Defaults:
