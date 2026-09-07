@@ -14,6 +14,33 @@ graph in well under a second, walks the whole history in about five, and scrolls
 Those are budgets rather than boasts — `docs/ARCHITECTURE.md` lists them, and the benchmarks
 run against a real clone.
 
+## What it looks like
+
+Every screenshot below is the Linux kernel unless it says otherwise: 1,481,530 commits, 946
+tags, six branches.
+
+![The graph on the Linux kernel](docs/screenshots/01-graph.png)
+
+*The graph. Lanes on a canvas, rows as text beside them, a million commits costing a window's
+worth of DOM. The panel on the right is the commit under the cursor.*
+
+| | |
+|---|---|
+| [![Side by side diff](docs/screenshots/02-diff.png)](docs/screenshots/02-diff.png) | [![Blame](docs/screenshots/03-blame.png)](docs/screenshots/03-blame.png) |
+| **Diffs** read inline or side by side, with word-level highlighting, and step change by change in either layout. | **Blame** attributes every line to the commit that last changed it, with the age beside it. |
+| [![Staging and committing](docs/screenshots/04-staging.png)](docs/screenshots/04-staging.png) | [![The conflict tool](docs/screenshots/05-conflicts.png)](docs/screenshots/05-conflicts.png) |
+| **Staging** by file, by hunk or by line, as a tree or a flat list. This is Coral's own repository, staging this release. | **Conflicts** in three panes built from the index stages, with the sides named after the refs involved rather than "ours" and "theirs". |
+| [![Interactive rebase](docs/screenshots/06-rebase.png)](docs/screenshots/06-rebase.png) | [![The command palette](docs/screenshots/07-palette.png)](docs/screenshots/07-palette.png) |
+| **Interactive rebase** with a picker for reword, squash, fixup, edit, drop and reorder, before anything runs. | **The command palette** on `Ctrl+P`, with every action and every tag in the repository. |
+| [![The dark theme](docs/screenshots/08-dark.png)](docs/screenshots/08-dark.png) | [![The embedded terminal](docs/screenshots/09-terminal.png)](docs/screenshots/09-terminal.png) |
+| **A dark theme**, chosen or followed from the desktop. | **A terminal** in the repository, on ``Ctrl+` ``. |
+
+![A branch soloed on the kernel](docs/screenshots/10-solo.png)
+
+*Solo. The same repository with one branch walked and the other 952 refs left out — the banner
+names it and gives it back. Hiding does the reverse, and either choice is remembered for that
+repository.*
+
 ## What it does
 
 **The graph.** Every ref, with lanes drawn on a canvas and the rows as text beside them, so a
