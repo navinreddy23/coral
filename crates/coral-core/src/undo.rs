@@ -45,6 +45,13 @@ fn moved_since(now: &RefSnapshot, from: &RefSnapshot, target: &RefSnapshot) -> O
         .map(|(name, _, _)| name)
 }
 
+/// Which copy of the tracked files a comparison is about.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Side {
+    Worktree,
+    Index,
+}
+
 /// One reversible operation.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct JournalEntry {
@@ -260,16 +267,33 @@ impl RepoLocation {
         let Some(oid) = target.head_oid.as_deref() else {
             return Ok(false);
         };
+        // The worktree has to hold the target already, or the restore overwrites something
+        // written by hand.
+        if !self.holds(runner, oid, Side::Worktree).await? {
+            return Ok(false);
+        }
+        // And so does the index, with one exception: a mixed reset leaves it holding the tree
+        // of the commit HEAD is on now, which is a commit that still exists, so nothing in
+        // there is the only copy of anything. Anything else staged is, and this is where work
+        // that lives nowhere but the index was being thrown away.
+        if self.holds(runner, oid, Side::Index).await? {
+            return Ok(true);
+        }
+        let Ok(head) = self.rev_parse(runner, "HEAD").await else {
+            return Ok(false);
+        };
+        self.holds(runner, &head, Side::Index).await
+    }
+
+    /// Whether one side of the repository holds exactly what `oid` points at.
+    async fn holds(&self, runner: &GitRunner, oid: &str, side: Side) -> Result<bool, CoralError> {
         // `--name-only` rather than `--quiet`, whose answer is the exit code: a non-zero exit
         // is an error to the runner, and this one is not an error.
-        let out = runner
-            .output(GitCommand::read("diff", self.display_path()).args([
-                "diff",
-                "--name-only",
-                oid,
-                "--",
-            ]))
-            .await?;
+        let mut cmd = GitCommand::read("diff", self.display_path()).arg("diff");
+        if side == Side::Index {
+            cmd = cmd.arg("--cached");
+        }
+        let out = runner.output(cmd.args(["--name-only", oid, "--"])).await?;
         Ok(out.stdout.is_empty())
     }
 }

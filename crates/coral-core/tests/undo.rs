@@ -325,3 +325,67 @@ async fn refuses_when_the_worktree_holds_something_the_undo_would_overwrite() {
         "written by hand\n"
     );
 }
+
+/// Work that exists only in the index, which the worktree comparison cannot see.
+#[tokio::test]
+async fn refuses_when_the_only_copy_of_the_work_is_staged() {
+    let repo = TestRepo::new().write("f.txt", "one\n").commit("base");
+    let repo = repo.write("f.txt", "two\n").commit("second");
+    let (runner, loc) = open(&repo).await;
+
+    let before = loc.snapshot_refs(&runner).await.unwrap();
+    loc.reset(&runner, "HEAD~1", ResetMode::Soft).await.unwrap();
+    let after = loc.snapshot_refs(&runner).await.unwrap();
+    let mut journal = Journal::load(&loc);
+    journal.record(entry("reset to HEAD~1", before, after));
+    journal.save(&loc).unwrap();
+
+    // Author something, stage it, then put the file back to what the undo target holds. The
+    // staged blob is now the only copy of it anywhere.
+    std::fs::write(repo.path().join("f.txt"), "PRECIOUS WORK\n").unwrap();
+    repo.git(["add", "f.txt"]);
+    std::fs::write(repo.path().join("f.txt"), "two\n").unwrap();
+    assert_eq!(repo.git(["show", ":f.txt"]), "PRECIOUS WORK");
+
+    let stepped = loc.undo_step(&runner, true).await;
+    assert_eq!(
+        repo.git(["show", ":f.txt"]),
+        "PRECIOUS WORK",
+        "the staged work survived; step said {stepped:?}"
+    );
+}
+
+/// A mixed reset, whose index holds the tree of the commit HEAD is on now.
+///
+/// That is the one difference from the target the guard allows, because it is a commit that
+/// still exists: nothing in the index is the only copy of anything.
+#[tokio::test]
+async fn undoes_a_mixed_reset_whose_index_holds_a_commit_that_still_exists() {
+    let repo = TestRepo::new().write("f.txt", "one\n").commit("base");
+    let repo = repo.write("f.txt", "two\n").commit("second");
+    let (runner, loc) = open(&repo).await;
+    let at_second = repo.git(["rev-parse", "HEAD"]);
+
+    let before = loc.snapshot_refs(&runner).await.unwrap();
+    loc.reset(&runner, "HEAD~1", ResetMode::Mixed)
+        .await
+        .unwrap();
+    let after = loc.snapshot_refs(&runner).await.unwrap();
+    let mut journal = Journal::load(&loc);
+    journal.record(entry("reset to HEAD~1", before, after));
+    journal.save(&loc).unwrap();
+
+    assert!(!loc.status(&runner).await.unwrap().is_clean());
+    assert_eq!(
+        repo.git(["show", ":f.txt"]),
+        "one",
+        "the index went back with HEAD"
+    );
+
+    loc.undo_step(&runner, true).await.expect("undo applies");
+    assert_eq!(repo.git(["rev-parse", "HEAD"]), at_second);
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("f.txt")).unwrap(),
+        "two\n"
+    );
+}
