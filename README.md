@@ -129,6 +129,7 @@ node --version && npm --version   # 24 or newer, and npm alongside it
 
 just check     # fmt, clippy, tests, svelte-check, ui build
 just dev       # run the app
+just app       # build the app binary alone, the way a bundle is built
 just build     # the shippable bundles
 just cli open  # run the CLI against the current directory
 ```

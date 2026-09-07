@@ -1,20 +1,13 @@
-# Recipes are bash everywhere, which on Windows means Git Bash — already present wherever
-# Coral can be built at all, since it ships with git.
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
-# `HOME` outside a Unix shell is `USERPROFILE`, and neither is guaranteed. `env_var` fails the
-# whole justfile when its variable is missing, so every recipe stopped working on Windows —
-# not merely the build ones.
+# `env_var` fails the whole justfile when its variable is missing, which on Windows broke every
+# recipe rather than only the build ones.
 home := env_var_or_default("HOME", env_var_or_default("USERPROFILE", "."))
 
 # cargo is not on the non-interactive PATH on every machine; see docs/DECISIONS.md. Windows is
-# the exception: rustup puts it there itself, and the separator is `;` rather than `:`, so
-# prepending a Unix path there would corrupt the PATH rather than extend it.
+# the exception: rustup puts it there, and its separator is `;`.
 export PATH := if os_family() == "windows" { env_var("PATH") } else { home + "/.cargo/bin:" + env_var("PATH") }
 export RUST_BACKTRACE := "1"
-
-# How many jobs cargo may run at once. It already defaults to one per core; this exists so a
-# machine doing something else can be told to leave some, and so CI can pin it.
 export CARGO_BUILD_JOBS := env_var_or_default("CORAL_JOBS", num_cpus())
 
 kernel := env_var_or_default("CORAL_KERNEL_REPO", home + "/.cache/coral-bench/linux")
@@ -22,22 +15,12 @@ kernel := env_var_or_default("CORAL_KERNEL_REPO", home + "/.cache/coral-bench/li
 default: check
 
 # The gate. Everything must be green before a commit.
-#
-# Two lanes at once. Every cargo command takes an exclusive lock on the target directory, so
-# those cannot overlap each other — measured: running two of them concurrently only makes the
-# second wait, and says so. Nothing in the npm half touches that lock, and the npm half is the
-# whole of `ui-check`, so that is the lane worth running alongside.
-#
-# The generated bindings are the one thing that crosses between the lanes: `cargo test`
-# regenerates `ui/src/ipc/types.ts`, and `svelte-check` reads it. Running them at once would
-# type-check against whichever copy happened to be on disk, so the Rust lane also asserts the
-# committed copy is the current one — which is what makes checking against it valid.
-#
-# The Rust lane streams, because it is the long one and the one worth watching. The npm lane is
-# held back and printed when it finishes, so the two cannot interleave into nonsense.
 check:
     #!/usr/bin/env bash
     set -uo pipefail
+    # Two lanes: cargo holds an exclusive lock on the target directory, so only the npm half can
+    # run alongside. The bindings cross between them, which is why the Rust lane asserts the
+    # committed copy is current — that is what makes svelte-check's read of it valid.
     ui_log="$(mktemp)"
     trap 'rm -f "$ui_log"' EXIT
 
@@ -57,8 +40,7 @@ check:
     [ "$ui_status" -ne 0 ] && echo "the ui lane failed" >&2
     [ "$rust" -eq 0 ] && [ "$ui_status" -eq 0 ]
 
-# The same checks one after another, for when interleaved output is in the way of reading a
-# failure.
+# The same checks one after another, when interleaved output is in the way of a failure.
 check-serial: fmt-check lint test bindings-current ui-check licenses-drift
 
 fmt:
@@ -70,7 +52,7 @@ fmt-check:
 lint:
     cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-# `cargo test` also regenerates ui/src/ipc/types.ts via ts-rs.
+# Also regenerates ui/src/ipc/types.ts, via ts-rs.
 test:
     cargo test --workspace --all-features
 
@@ -80,80 +62,48 @@ ui-check:
     export PATH="$HOME/.cargo/bin:$PATH"
     cd ui
     npm run check
-    # The tests, which this recipe did not run for far too long: 258 of them sat outside the
-    # gate, and a broken one was committed because nothing here would have said so.
     npm test
     npm run build
-    # A bundle that resolved Svelte's server build instead of its browser one compiles without
-    # complaint and then throws the moment it loads, leaving the window blank. Nothing else in
-    # the gate notices, because the failure is at runtime, so the built output is searched for
-    # the error it would raise.
+    # Both of these fail only at runtime, so the built output is searched for them: Svelte's
+    # server entry opens a blank window, and the preview fixtures once shipped in a release.
     if grep -rql "is not available on the server" dist/assets; then
         echo "ui build resolved Svelte's server entry; the window would open blank" >&2
         exit 1
     fi
-    # The browser fixtures must never reach a release. They are behind a branch the bundler
-    # compiles away, but a static import kept the module anyway and a build once shipped with
-    # invented commit messages in it. The name of a fixture author is the marker.
     if grep -rql "Ada Lovelace" dist/assets; then
         echo "ui build contains the preview fixtures" >&2
         exit 1
     fi
 
-# Fails if the generated bindings drift from the Rust types. Runs the tests first, which is
-# what regenerates them.
 bindings-drift: test bindings-current
 
-# The same assertion without rerunning the tests, for a caller that has just run them.
 bindings-current:
     git diff --exit-code -- ui/src/ipc/types.ts
 
 dev:
     cd crates/coral-app && cargo tauri dev
 
-# The desktop binary, without the bundling. Use this to look at a change in the real window.
-#
-# Not `cargo build --release`. That builds an application whose interface is still the dev
-# server: no page is embedded, the window asks localhost:5173 for one, and with the server
-# running it answers — so the binary looks fine while showing source that is not in it. What a
-# packaged build does differently is exactly what breaks: the page is served over the custom
-# protocol, under the policy in `tauri.conf.json`, which the dev server does not apply.
+# The application binary alone, built the way a bundle is. `cargo build --release` is not this.
 app:
     cd crates/coral-app && cargo tauri build --no-bundle
 
-# Throws away everything this project builds, and keeps everything it downloads.
-#
-# Every build runs this first. A bundle is the one artefact nobody can look inside to check
-# what went into it, and an application that behaves like the build before it — because that is
-# partly what it is — costs far more to work out than the minute this takes. Dependencies are
-# left alone: they are pinned, and rebuilding them proves nothing.
-clean-artefacts dir="target":
+# Throws away what this project builds, keeps what it downloads.
+clean-artefacts:
     #!/usr/bin/env bash
     set -euo pipefail
+    # Every build runs this first: the frontend is embedded at compile time, so a stale ui/dist
+    # is a stale application however fresh the Rust is.
     root='{{ justfile_directory() }}'
-    cargo clean --manifest-path "$root/Cargo.toml" --target-dir "$root/{{ dir }}" \
+    cargo clean --manifest-path "$root/Cargo.toml" \
         -p coral-core -p coral-hosting -p coral-cli -p coral-app 2>/dev/null || true
-    # The frontend is embedded into the binary at compile time, so a stale bundle is a stale
-    # application however fresh the Rust is.
-    rm -rf "$root/ui/dist" "$root/{{ dir }}/release/bundle"
+    rm -rf "$root/ui/dist" "$root/target/release/bundle"
 
-# Builds the shippable application for whichever platform this is.
-#
-# Note that `cargo build --release -p coral-app` does NOT: the frontend is embedded by the
-# Tauri CLI's build step, and a plain cargo release build produces a binary that starts, opens
-# a window, and never loads a page. Verified both ways, with the same freshly built ui/dist in
-# place.
-#
-# The bundle targets come from tauri.conf.json and are filtered by the Tauri CLI to the ones
-# this platform can actually produce, so one recipe covers all three. `build-mac` and
-# `build-windows` exist for the cross-details that recipe cannot express.
+# The shippable bundles for whichever platform this is.
 build *ARGS:
     #!/usr/bin/env bash
     set -euo pipefail
-    # Both tools below fail with a bare 127 and nothing else: `npm ci` runs in the background,
-    # so its "command not found" scrolls past under the cargo output and only reappears as an
-    # exit code from `wait`, and an absent cargo subcommand exits 127 too. "Recipe `build`
-    # failed with exit code 127" after two minutes of compiling is not an answer.
+    # Named up front because both tools exit 127 with nothing else, which after two minutes of
+    # compiling is not an answer, and npm's would be buried under the cargo output.
     missing=()
     if ! command -v npm >/dev/null 2>&1; then
         missing+=("npm, from Node 24. The interface is built with Vite.")
@@ -169,8 +119,6 @@ build *ARGS:
         exit 1
     fi
     just clean-artefacts
-    # The two halves need nothing from each other, and both are slow from cold: `npm ci`
-    # fetches the whole dependency tree while cargo compiles the CLI.
     ( cd ui && npm ci ) &
     npm_pid=$!
     # The CLI ships beside the application, so it has to exist before the bundle is assembled.
@@ -178,72 +126,7 @@ build *ARGS:
     wait $npm_pid
     cd crates/coral-app && cargo tauri build {{ARGS}}
 
-# The Linux bundles, built against an old enough glibc to run somewhere else.
-#
-# An AppImage does not bundle glibc — the format assumes the base system provides it — and
-# glibc is forward-compatible only, so one built here on 24.04 demands GLIBC_2.39 and will not
-# start on 22.04, Debian 12, or anything else current. Nothing about the AppImage says so; it
-# simply fails to load. Building in a container fixes the one thing that decides this.
-#
-# The container's target directory is kept apart from the host's: the two hold objects for
-# different glibcs and sharing one means rebuilding the world on every switch.
-# Set `git=bundled` to ship a git of Coral's own inside the AppImage, for machines whose own
-# git is older than the 2.40 the engine needs. It is an experimental option and the user has to
-# choose it in Preferences before anything uses it; see docs/DECISIONS.md.
-build-linux-portable git="system":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    # Absolute, so the recipe works whatever directory `just` was invoked from.
-    root='{{ justfile_directory() }}'
-    # Cleared here rather than inside the container, so a build that fails to start still
-    # leaves nothing behind that a later one could pick up.
-    just clean-artefacts target/portable
-    docker build -t coral-linux-build "$root/packaging"
-    # As the invoking user, never as root. A container writing into a bind-mounted repository
-    # as root leaves files nothing on the host can delete without sudo — `ui/node_modules`
-    # among them, which stops the host building at all until someone notices why.
-    #
-    # Cargo's own home goes into the target directory rather than the user's, so a build here
-    # cannot disturb the registry the host build is using.
-    docker run --rm \
-        --user "$(id -u):$(id -g)" \
-        -v "$root:/work" \
-        -e HOME=/work/target/portable/home \
-        -e CARGO_HOME=/work/target/portable/cargo \
-        -e CARGO_TARGET_DIR=/work/target/portable \
-        coral-linux-build \
-        bash -euo pipefail -c '
-            mkdir -p "$HOME" "$CARGO_HOME"
-            npm --prefix /work/ui ci
-            cargo build --release --manifest-path /work/Cargo.toml -p coral-cli
-            # The deb bundler ships the CLI from the path named in tauri.conf.json, which is
-            # relative to that file and so does not follow CARGO_TARGET_DIR. The AppImage is
-            # built out of the deb tree, so this is not optional even though only the AppImage
-            # is wanted here.
-            install -D /work/target/portable/release/coral /work/target/release/coral
-
-            # The bundled git is copied out of the image rather than built here, so that
-            # choosing it costs a copy and not another compile of git.
-            config=()
-            if [ "{{ git }}" = bundled ]; then
-                rm -rf /work/target/portable/git
-                cp -a /opt/git-bundle /work/target/portable/git
-                config=(--config /work/packaging/bundled-git.conf.json)
-            fi
-
-            cd /work/crates/coral-app
-            cargo tauri build "${config[@]}"
-        '
-    # Plain `echo`: inside a shebang recipe the whole body is one script, so just's `@`
-    # quiet prefix is not stripped and bash tries to run a command called `@echo`.
-    echo
-    echo 'One AppImage, under target/portable/release/bundle/appimage.'
-    if [ '{{ git }}' = bundled ]; then
-        echo 'It carries a git of its own; turn it on under Preferences, Experimental.'
-    fi
-
-# Reports the oldest glibc a Linux binary will run on. An AppImage that fails to start on
-# another machine is almost always this and says nothing about it itself.
+# The oldest glibc a Linux binary will run on, which nothing else reports.
 glibc-floor binary:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -251,36 +134,23 @@ glibc-floor binary:
     echo "{{binary}} needs glibc >= ${highest}"
     echo "this machine has $(ldd --version | head -1 | grep -oP '[0-9]+\.[0-9]+$')"
 
-# A universal macOS build, which is what a .dmg should carry: an Intel-only bundle runs under
-# Rosetta on Apple silicon and a native-only one will not start on an Intel Mac at all. Both
-# targets have to be installed — `rustup target add aarch64-apple-darwin x86_64-apple-darwin`.
+# Universal, which is what a .dmg should carry. Needs both apple-darwin targets installed.
 build-mac:
     just build --target universal-apple-darwin
 
-# Windows, built on Windows. WebView2 is assumed present: it ships with Windows 11 and with
-# every supported Windows 10, and bundling the bootstrapper would add a download to an
-# installer that does not need one on any current system.
+# WebView2 is assumed present: it ships with Windows 11 and every supported Windows 10.
 build-windows:
     just build
 
-# Windows, cross-compiled from Linux.
-#
-# `cargo-xwin` fetches the MSVC CRT and the Windows SDK and links with lld, so no Windows
-# machine is involved. Only NSIS comes out: the MSI bundler is WiX, which needs Windows.
-#
-# Tauri itself calls this experimental, and the installer cannot be signed from here — signing
-# is a Windows host or a `sign_command` in the bundle configuration. For a release, prefer the
-# workflow's Windows runner; this is for checking that the code still compiles for Windows
-# without waiting on CI, which is worth a great deal on its own: every dependency of
-# `coral-app` but `webkit2gtk` was once declared Linux-only, and nothing else would have said.
+# Windows from Linux, via cargo-xwin. For checking it still compiles, not for a release.
 build-windows-cross:
     #!/usr/bin/env bash
     set -euo pipefail
+    # Only NSIS comes out — the MSI bundler needs Windows — and it cannot be signed from here.
     missing=()
     command -v cargo-xwin  >/dev/null || missing+=("cargo install cargo-xwin --locked")
     command -v lld-link    >/dev/null || missing+=("apt install lld llvm")
-    # Ubuntu ships clang-cl as a driver mode of clang rather than as its own binary, so a
-    # symlink named for it is all that is wanted.
+    # Ubuntu ships clang-cl as a driver mode of clang rather than as its own binary.
     command -v clang-cl    >/dev/null || missing+=("ln -s \"\$(command -v clang)\" ~/.local/bin/clang-cl")
     command -v makensis    >/dev/null || missing+=("apt install nsis")
     rustup target list --installed | grep -qx x86_64-pc-windows-msvc \
@@ -294,9 +164,6 @@ build-windows-cross:
     cd crates/coral-app
     cargo tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis
 
-# Every platform's bundles. macOS cannot be cross-compiled — the SDK is not redistributable —
-# and Linux packaging wants the distribution it targets, so this is one machine each. Windows
-# is the exception: see `build-windows-cross`.
 build-all:
     @echo 'One machine each: run `just build` on Linux, macOS and Windows.'
     @echo 'Windows can also be cross-compiled from Linux: `just build-windows-cross`.'
@@ -315,16 +182,14 @@ kernel-clone:
 kernel-test: kernel-clone
     CORAL_KERNEL_REPO='{{kernel}}' bash tests/kernel/run.sh
 
-# Open the benchmark clone. Exists so IDE run configurations need no shell expansion.
+# Exists so IDE run configurations need no shell expansion.
 open-kernel:
     cargo run --release -p coral-cli -- --repo '{{kernel}}' --json open
 
 licenses:
     cargo about generate about.hbs > THIRD_PARTY_LICENSES.md
 
-# Fails if a dependency was added without regenerating the licence file. Part of the gate
-# because it needs no network and this drifted unnoticed for a whole milestone: `licenses` and
-# `deny` both failed on a dependency's licence and nothing ran either of them.
+# Fails if a dependency was added without regenerating the licence file.
 licenses-drift: licenses
     git diff --exit-code -- THIRD_PARTY_LICENSES.md
 

@@ -183,11 +183,41 @@ M5 must assert a known-size binary round trip at startup and fail loudly.
 ## The release binary comes from `cargo tauri build`, never `cargo build --release`
 
 The frontend is embedded by the Tauri CLI's build step. A plain `cargo build --release -p
-coral-app` compiles without complaint and produces a binary that starts, opens its window, and
-never loads a page — no IPC call is ever made, so there is nothing in the log to explain it.
+coral-app` compiles without complaint and produces a binary that asks `devUrl` for its page.
 
-Verified both ways against the same freshly built `ui/dist`, so it is the command and not a
-stale embed. `just build` is the sanctioned path.
+With no dev server running that window opens and never paints, and no IPC call is ever made, so
+there is nothing in the log to explain it. **With one running it is worse**, and this is the part
+that cost a day: the window fills, works, and shows whatever is in `ui/src` at that moment. It is
+then a release build of source it does not contain, and every check made through it is worthless.
+A fix looks confirmed while the binary a user runs still carries the bug.
+
+It also hides everything a packaged build does differently. The page is served over the custom
+protocol under the policy in `tauri.conf.json`, and the dev server applies none of it — which is
+how a policy that refused every runtime stylesheet was verified as working, three times.
+
+`just build` produces the bundles. `just app` is the same compilation without the bundling, for
+looking at a change in the real window; it is the cheapest thing that is still honest. Neither
+claim above is inferred: both were checked by binary size against the same freshly built
+`ui/dist`, 644 KB apart, which is the bundle.
+
+## `style-src` is exempt from Tauri's policy rewriting
+
+Tauri appends a nonce to every CSP directive it is allowed to modify. A nonce in a directive
+makes `'unsafe-inline'` inert — that is the CSP rule, not a Tauri quirk — so the configured
+`style-src 'self' 'unsafe-inline'` arrived as `style-src 'self' 'unsafe-inline' 'nonce-…'` and
+meant the opposite of what it says. Every stylesheet the page wrote at runtime was refused, with
+`el.sheet` null and the rules never created.
+
+xterm styles the terminal with exactly one such stylesheet, built from the theme and font it is
+handed, so the terminal drew in the page's proportional face with no colour. Nothing else in the
+window was affected: it is all styled from the bundled file, which `'self'` allows. The palette
+was never wrong, and reading it back at runtime proved it — twenty entries, correct values, none
+of them appliable.
+
+`dangerousDisableAssetCspModification` is a list naming `style-src` alone, never `true`. A
+blanket exemption would also drop the `script-src` hash, which is the directive actually holding
+the window shut. `crates/coral-app/tests/csp.rs` asserts both halves, because the failure is
+invisible to every test that does not run a packaged build.
 
 ## Soloing a branch walks that branch and nothing else
 

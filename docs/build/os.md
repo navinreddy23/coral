@@ -69,20 +69,17 @@ npm that works in your terminal.
 ```
 just check     # the gate: fmt, clippy, every test, svelte-check, the interface build
 just dev       # the application, with the interface served by Vite
+just app       # the application binary alone, built the way a bundle is
 just build     # the shippable bundles: .deb and .AppImage
 ```
 
-An AppImage built here demands the glibc of the machine that built it, and glibc is forward
-compatible only, so one built on 24.04 will not start on 22.04 or Debian 12 and says nothing
-about why. For anything that leaves this machine:
+An AppImage demands the glibc of the machine that built it, and glibc is forward compatible
+only, so one built on 24.04 will not start on 22.04 or Debian 12 and says nothing about why.
+Build on the oldest distribution you mean to support, and check what came out:
 
 ```
-just build-linux-portable            # in a container with an older glibc, needs Docker
-just glibc-floor target/portable/release/coral-app
+just glibc-floor target/release/coral-app
 ```
-
-`just build-linux-portable git=bundled` puts a git of Coral's own inside the AppImage, for
-machines whose git predates 2.40. It is off unless the user turns it on in Preferences.
 
 ## macOS
 
@@ -166,9 +163,16 @@ experimental. A release is built on a Windows runner.
 The `coral` CLI is built first and ships beside the application; the Linux `.deb` maps it onto
 `/usr/bin/coral`.
 
-`cargo build --release -p coral-app` is **not** a substitute for `just build`. The interface is
-embedded by the Tauri CLI's build step, so a plain cargo release build produces a binary that
-starts, opens a window, and never loads a page.
+`cargo build --release -p coral-app` is **not** a substitute for either. The interface is
+embedded by the Tauri CLI's build step, so a plain cargo release build asks the dev server for
+its page. With no dev server the window opens and never paints. With one it fills and works
+while showing source that is not in the binary, so anything checked through it proves nothing.
+
+To look at a change in the real window without waiting for bundles:
+
+```
+just app       # target/release/coral-app, built the way a bundle is
+```
 
 ## When something fails
 
@@ -182,6 +186,11 @@ with `pkg-config --modversion webkit2gtk-4.1`.
 
 **The window opens empty.** A cargo-only release build, or a stale `ui/dist`. `just build` runs
 `just clean-artefacts` first for this reason.
+
+**The window works but shows the wrong thing, or a change you can see in `just dev` is missing
+from the binary.** Also a cargo-only release build, with a dev server running. Check the size:
+one built by the Tauri CLI is about 640 KB larger, because it carries the interface. Build it
+with `just app`.
 
 **The AppImage will not start on another machine.** Almost always glibc. `just glibc-floor
 <binary>` says which version the binary demands and which this machine has.

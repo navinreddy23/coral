@@ -301,8 +301,18 @@ started, which fails the whole module graph and looks exactly like the new code 
 Restarting it is the fix. Only a release build embeds `ui/dist`.
 
 `cargo build --release -p coral-app` is *not* a build. The frontend is embedded by the Tauri
-CLI's build step, so a plain cargo release build produces a binary that starts, opens a window,
-and never loads a page. Verified both ways with the same freshly built `ui/dist` in place.
+CLI's build step, so a plain cargo release build asks `devUrl` for its page like a debug one.
+With no dev server it opens a window and never paints; with one it fills and works, showing
+source the binary does not contain, and it applies none of the security policy a packaged window
+is served under. `just app` compiles it properly without bundling, for looking at a change in
+the real window; `just build` produces the bundles. Verified by binary size against the same
+freshly built `ui/dist`: 644 KB apart, which is the bundle.
+
+The policy itself is in `tauri.conf.json`. `style-src` is named in
+`dangerousDisableAssetCspModification` because Tauri's nonce would otherwise make its
+`'unsafe-inline'` inert and refuse every stylesheet the page writes at runtime, which is how
+xterm styles the terminal. `crates/coral-app/tests/csp.rs` holds that shape, and
+`docs/DECISIONS.md` has the reasoning.
 
 macOS is built universal, and only on macOS: the SDK is not redistributable, so there is no
 equivalent of `cargo-xwin` for it. An Intel-only bundle runs under Rosetta on Apple silicon and
