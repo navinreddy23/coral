@@ -182,6 +182,10 @@ kernel-clone:
 kernel-test: kernel-clone
     CORAL_KERNEL_REPO='{{kernel}}' bash tests/kernel/run.sh
 
+# Stands an sshd up on a high port and checks a pinned key reaches the right account.
+ssh-test:
+    bash tests/ssh/run.sh
+
 # Exists so IDE run configurations need no shell expansion.
 open-kernel:
     cargo run --release -p coral-cli -- --repo '{{kernel}}' --json open

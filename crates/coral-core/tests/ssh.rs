@@ -212,3 +212,127 @@ fn the_settings_are_written_where_git_itself_reads_them() {
     assert!(configured.contains("/keys/only-here"), "{configured}");
     assert!(configured.contains("IdentitiesOnly=yes"), "{configured}");
 }
+
+/// What ssh itself resolves the identity list to, without connecting to anything.
+///
+/// `ssh -G` prints the fully resolved configuration for a host — every `Host` block and every
+/// `Include` already applied — and exits. That makes the one thing this module has to get
+/// right testable with no server, no network and no real key: which identities end up in the
+/// list, and how many.
+///
+/// Run through a shell, because that is how git invokes `core.sshCommand`: it hands the string
+/// to a shell and appends the host and the remote command to it.
+#[cfg(unix)]
+fn resolved_identities(command: &str, host: &str) -> Vec<String> {
+    let out = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("{command} -G {host}"))
+        .output()
+        .expect("run ssh -G");
+    assert!(
+        out.status.success(),
+        "ssh -G failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|line| line.strip_prefix("identityfile "))
+        .map(|path| path.trim().to_owned())
+        .collect()
+}
+
+/// A generated key pair, and the path to its private half.
+///
+/// Generated rather than checked in. A private key in a repository is a private key on the
+/// internet, however clearly it is labelled a fixture.
+#[cfg(unix)]
+fn dummy_key(at: &std::path::Path) -> String {
+    let out = std::process::Command::new("ssh-keygen")
+        .args(["-q", "-t", "ed25519", "-N", "", "-C", "coral-fixture", "-f"])
+        .arg(at)
+        .output()
+        .expect("run ssh-keygen");
+    assert!(
+        out.status.success(),
+        "ssh-keygen: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    at.display().to_string()
+}
+
+/// An ssh config pinning one key for one host, which is what anybody with two accounts on the
+/// same host ends up writing.
+///
+/// Passed with `-F` rather than placed in a home directory: ssh takes the path of the user's
+/// own config from the passwd entry and not from `$HOME`, so a test cannot move it. `-F` is
+/// the same file at the same level, which is what makes it a fair stand-in.
+#[cfg(unix)]
+fn a_config_that_pins(dir: &std::path::Path, key: &str, host: &str) -> String {
+    let at = dir.join("config");
+    std::fs::write(
+        &at,
+        format!(
+            "Host {host}\n    HostName {host}\n    User git\n    IdentityFile {key}\n    \
+             IdentitiesOnly yes\n"
+        ),
+    )
+    .unwrap();
+    at.display().to_string()
+}
+
+#[cfg(unix)]
+#[test]
+fn a_pinned_key_is_the_only_key_even_where_the_user_has_pinned_another() {
+    // The bug this exists for. `-i` and a `Host` block's `IdentityFile` do not compete: they
+    // accumulate into one list, and `IdentitiesOnly=yes` only restricts ssh to that list, which
+    // by then holds both. Whichever the agent happens to hold first is offered first, so the
+    // pin authenticates as the other account, silently.
+    let dir = tempfile::tempdir().unwrap();
+    let theirs = dummy_key(&dir.path().join("theirs"));
+    let chosen = dummy_key(&dir.path().join("chosen"));
+    let host = "git.example.test";
+    let theirs_config = a_config_that_pins(dir.path(), &theirs, host);
+
+    let alone = resolved_identities(&format!("ssh -F {theirs_config}"), host);
+    assert_eq!(alone, vec![theirs.clone()], "the config on its own");
+
+    // What Coral used to write. Both survive, which is the whole fault.
+    let hazard = format!("ssh -F {theirs_config} -i '{chosen}' -o IdentitiesOnly=yes");
+    let both = resolved_identities(&hazard, host);
+    assert!(
+        both.contains(&theirs) && both.contains(&chosen),
+        "without -F none the config's key stays in the list: {both:?}"
+    );
+
+    // What Coral writes now, with the user's config in play exactly as it would be.
+    let pinned = command_for(&chosen).replacen("ssh ", &format!("ssh -F {theirs_config} "), 1);
+    assert_eq!(
+        resolved_identities(&pinned, host),
+        vec![chosen],
+        "a pinned key must be the only identity ssh will offer"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn the_agent_default_leaves_the_user_config_entirely_alone() {
+    // The price of pinning is that `~/.ssh/config` is not read at all, so it must be paid only
+    // by somebody who actually pinned one. The default writes no command, and this is what says
+    // their ProxyJump, their port and their aliases still apply.
+    let dir = tempfile::tempdir().unwrap();
+    let theirs = dummy_key(&dir.path().join("theirs"));
+    let host = "git.example.test";
+    let theirs_config = a_config_that_pins(dir.path(), &theirs, host);
+
+    let identities = resolved_identities(&format!("ssh -F {theirs_config}"), host);
+    assert_eq!(identities, vec![theirs]);
+
+    // And the rest of the block is honoured, which is the part a pin gives up.
+    let out = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("ssh -F {theirs_config} -G {host}"))
+        .output()
+        .unwrap();
+    let resolved = String::from_utf8_lossy(&out.stdout);
+    assert!(resolved.contains("user git"), "{resolved}");
+}
