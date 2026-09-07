@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  COLUMN_HEADER_PX,
   DEFAULT_METRICS,
   fittedMetrics,
   firstRowFor,
@@ -9,6 +10,7 @@ import {
   laneColour,
   laneX,
   MAX_SPACER_PX,
+  rowsPerScreen,
   listTop,
   rowY,
   spacerHeight,
@@ -92,11 +94,30 @@ describe('very tall graphs', () => {
     expect(firstRowFor(0, viewport, kernel, m)).toBe(0);
 
     const bottom = firstRowFor(MAX_SPACER_PX - viewport, viewport, kernel, m);
-    const lastTop = kernel - Math.floor(viewport / m.rowHeight);
+    const lastTop = kernel - rowsPerScreen(viewport, m);
     expect(bottom).toBe(lastTop);
 
     const middle = firstRowFor((MAX_SPACER_PX - viewport) / 2, viewport, kernel, m);
     expect(middle).toBeCloseTo(lastTop / 2, -2);
+  });
+
+  /**
+   * The property the assertion above cannot check, because it computes the answer the same way
+   * the code does. Scrolled to the bottom, the last row has to be on screen and clear of the
+   * bottom edge — the sticky column header takes its height off the room the rows have, and
+   * counting the whole scroller as row space left the kernel's very first commit below the
+   * fold with nowhere further to scroll.
+   */
+  it('shows the last row when the scrollbar is at the bottom', () => {
+    for (const viewport of [400, 601, 775, 790, 800, 1013]) {
+      for (const total of [1_481_528, 200_000, 71_500]) {
+        const first = firstRowFor(MAX_SPACER_PX - viewport, viewport, total, m);
+        const shown = rowsPerScreen(viewport, m);
+        expect(first + shown, `${total} rows in ${viewport}px`).toBeGreaterThanOrEqual(total);
+        const usedPx = shown * m.rowHeight + COLUMN_HEADER_PX;
+        expect(usedPx, `${shown} rows fit under the header`).toBeLessThanOrEqual(viewport);
+      }
+    }
   });
 
   it('never reports a row outside the graph', () => {

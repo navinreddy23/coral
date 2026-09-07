@@ -70,6 +70,7 @@
     laneX,
     listTop,
     REFS_COLUMN_PX,
+    rowsPerScreen,
     spacerHeight,
   } from '../graph/layout';
   import {
@@ -2415,7 +2416,7 @@
     const lines = event.deltaMode === 1 ? event.deltaY : event.deltaY / 40;
     const pages = event.deltaMode === 2 ? event.deltaY : 0;
     const rows =
-      pages * Math.max(1, Math.floor(viewport / DEFAULT_METRICS.rowHeight) - 1) + lines * 3;
+      pages * Math.max(1, rowsPerScreen(viewport, DEFAULT_METRICS) - 1) + lines * 3;
     if (rows === 0) return;
 
     const total = graph.totalRows;
@@ -2439,7 +2440,9 @@
     // the scrollable range rather than the row's pixel offset.
     const total = graph.totalRows;
     const height = spacerHeight(total, DEFAULT_METRICS);
-    const lastTop = Math.max(1, total - Math.floor(viewport / DEFAULT_METRICS.rowHeight));
+    // The same count `firstRowFor` uses, or a jump lands somewhere else than the scrollbar
+    // would put it.
+    const lastTop = Math.max(1, total - rowsPerScreen(viewport, DEFAULT_METRICS));
     const fraction = Math.max(0, row - 3) / lastTop;
     scroller.scrollTo({ top: Math.min(height - viewport, fraction * (height - viewport)) });
   }

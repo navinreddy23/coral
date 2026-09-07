@@ -96,6 +96,21 @@ export function spacerHeight(totalRows: number, m: Metrics): number {
   return Math.min(totalRows * m.rowHeight, MAX_SPACER_PX);
 }
 
+/**
+ * Height of the sticky column header, which sits inside the scroller and over the rows.
+ *
+ * It is in the scroller's flow but pinned to the top, so it takes this much off the height
+ * available to rows. Counting the whole scroller as row space made the list one row taller
+ * than it is: at the bottom of the kernel's 1,481,530 the last row — its very first commit —
+ * sat below the fold and could not be scrolled to.
+ */
+export const COLUMN_HEADER_PX = 26;
+
+/** How many whole rows a scroller of `viewportHeight` can show at once. */
+export function rowsPerScreen(viewportHeight: number, m: Metrics): number {
+  return Math.max(1, Math.floor((viewportHeight - COLUMN_HEADER_PX) / m.rowHeight));
+}
+
 /** True when the graph is too tall to scroll one pixel per pixel. */
 export function isCompressed(totalRows: number, m: Metrics): boolean {
   return totalRows * m.rowHeight > MAX_SPACER_PX;
@@ -117,7 +132,7 @@ export function firstRowFor(
   if (!isCompressed(totalRows, m)) return Math.floor(scrollTop / m.rowHeight);
 
   const maxScroll = Math.max(1, MAX_SPACER_PX - viewportHeight);
-  const lastTop = Math.max(0, totalRows - Math.floor(viewportHeight / m.rowHeight));
+  const lastTop = Math.max(0, totalRows - rowsPerScreen(viewportHeight, m));
   const fraction = Math.min(1, Math.max(0, scrollTop / maxScroll));
   return Math.round(fraction * lastTop);
 }
