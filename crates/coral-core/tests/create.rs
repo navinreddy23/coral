@@ -323,3 +323,51 @@ async fn a_clone_into_a_directory_that_is_already_there_does_not_delete_it() {
         "the directory that was already there must survive"
     );
 }
+
+#[tokio::test]
+async fn a_clone_abandoned_part_way_through_leaves_nothing_behind() {
+    // Not the same as dropping the future before it is ever polled: by the time somebody
+    // presses Stop, git has made the directory and filled some of it, and the removal has to
+    // happen after the child is dead rather than racing it.
+    let source = TestRepo::new().write("a.txt", "1\n").commit("base");
+    // Enough that the clone is still going when it is cut. Read from the system's random
+    // source, because anything generated from a pattern packs down to nothing and finishes
+    // before there is anything to abandon.
+    let mut noise = std::fs::File::open("/dev/urandom").expect("a random source");
+    for n in 0..8 {
+        use std::io::Read as _;
+        let mut filler = vec![0_u8; 8 * 1024 * 1024];
+        noise.read_exact(&mut filler).expect("read noise");
+        std::fs::write(source.path().join(format!("bulk{n}.bin")), filler).unwrap();
+    }
+    source.git(["add", "-A"]);
+    source.git(["commit", "-qm", "bulk"]);
+
+    let dir = tempfile::tempdir().unwrap();
+    let runner = runner().await;
+    let into = dir.path().join("abandoned");
+    let what = Cloned {
+        // `file://`, so git packs and transfers rather than hardlinking the object store.
+        url: format!("file://{}/.git", source.path().display()),
+        parent: dir.path().to_path_buf(),
+        name: Some("abandoned".to_owned()),
+        ssh_key: None,
+    };
+
+    let cut = tokio::time::timeout(
+        std::time::Duration::from_millis(400),
+        clone(&runner, &what, |_| {}),
+    )
+    .await;
+    assert!(
+        cut.is_err(),
+        "the clone finished before it could be stopped"
+    );
+
+    // The guard runs as the future is dropped; the child dies first, so nothing is writing.
+    assert!(
+        !into.exists(),
+        "a clone stopped part way through left {} behind",
+        into.display()
+    );
+}
