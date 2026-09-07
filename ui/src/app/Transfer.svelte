@@ -33,8 +33,14 @@
       </span>
     {/if}
 
-    <button class="stop" disabled={transfer.stopping} onclick={() => void transfer.cancel()}>
-      {transfer.stopping ? 'Stopping…' : 'Stop'}
+    {#if transfer.waiting > 0}
+      <!-- A clone from the start page and a fetch from the toolbar can overlap. Saying how
+           many are behind this one is what stops the other looking like it never started. -->
+      <span class="queued">+{transfer.waiting} more</span>
+    {/if}
+
+    <button class="stop" disabled={transfer.asked} onclick={() => void transfer.cancel()}>
+      {transfer.asked ? 'Stopping…' : 'Stop'}
     </button>
   </div>
 {/if}
@@ -69,6 +75,7 @@
     .track.waiting { animation: none; }
   }
   .count { flex: 0 0 auto; color: var(--fg-2); font-variant-numeric: tabular-nums; }
+  .queued { flex: 0 0 auto; color: var(--fg-2); }
   .stop {
     flex: 0 0 auto; font: inherit; font-size: 11px; cursor: pointer;
     padding: 1px var(--space-2); border-radius: var(--radius-1);

@@ -9,10 +9,21 @@
 import { cancelTransfer, type TransferReport } from '../ipc/transfer';
 
 export class TransferState {
-  /** The transfer in flight, or null when nothing is. */
-  current = $state<TransferReport | null>(null);
-  /** True between asking to stop and the report that says it stopped. */
-  stopping = $state(false);
+  /**
+   * Every transfer in flight, newest last.
+   *
+   * A list rather than one, because a clone is started from the start page and a fetch from
+   * the toolbar, and those two can overlap. Holding only the latest left the other running
+   * with no bar and therefore no way to stop it, which is the one thing this exists to give.
+   */
+  running = $state<TransferReport[]>([]);
+  /** The keys asked to stop, until the report that says they did. */
+  stopping = $state<string[]>([]);
+
+  /** The one on the bar: the most recent, since that is what the user just set going. */
+  readonly current = $derived(this.running.at(-1) ?? null);
+
+  readonly waiting = $derived(this.running.length - 1);
 
   /**
    * True once git has said something countable.
@@ -23,6 +34,11 @@ export class TransferState {
    */
   readonly measured = $derived(this.current !== null && this.current.total > 0);
 
+  /** True between asking this one to stop and the report that says it stopped. */
+  readonly asked = $derived(
+    this.current !== null && this.stopping.includes(this.current.key),
+  );
+
   /** What to put on the bar. */
   readonly caption = $derived.by(() => {
     const t = this.current;
@@ -32,30 +48,34 @@ export class TransferState {
     return `${t.label}: ${t.phase}${where}`;
   });
 
-  /** Takes one report. Terminal states clear the bar rather than leaving a finished one up. */
+  /** Takes one report. A terminal state removes that transfer, whichever one it was. */
   take(report: TransferReport): void {
+    const at = this.running.findIndex((t) => t.key === report.key);
     if (report.state === 'running') {
-      this.current = report;
+      if (at < 0) this.running = [...this.running, report];
+      else this.running = this.running.map((t, i) => (i === at ? report : t));
       return;
     }
-    // Only the transfer we are showing may clear it: a stale report from one that has already
-    // been replaced would take the live bar away.
-    if (this.current === null || this.current.key === report.key) {
-      this.current = null;
-      this.stopping = false;
-    }
+    this.running = this.running.filter((t) => t.key !== report.key);
+    this.stopping = this.stopping.filter((k) => k !== report.key);
   }
 
-  /** Asks the engine to stop what is running. */
+  /** Asks the engine to stop the one on the bar. */
   async cancel(): Promise<void> {
     const t = this.current;
-    if (t === null) return;
-    this.stopping = true;
-    await cancelTransfer(t.key);
+    if (t === null || this.stopping.includes(t.key)) return;
+    this.stopping = [...this.stopping, t.key];
+    try {
+      await cancelTransfer(t.key);
+    } catch {
+      // The button must not be left disabled over a failed ask; the transfer is still there
+      // and still stoppable, so the honest thing is to offer it again.
+      this.stopping = this.stopping.filter((k) => k !== t.key);
+    }
   }
 
   clear(): void {
-    this.current = null;
-    this.stopping = false;
+    this.running = [];
+    this.stopping = [];
   }
 }

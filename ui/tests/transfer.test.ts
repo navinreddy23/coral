@@ -70,13 +70,60 @@ describe('what the window shows while something is talking to a server', () => {
     expect(transfer.current?.key).toBe('/srv/second');
   });
 
+  it('keeps the one underneath, so nothing runs without a way to stop it', () => {
+    // A clone is started from the start page and a fetch from the toolbar, and those two can
+    // overlap. Showing only the newest left the other running invisibly, which means running
+    // with no way to stop it — the one thing the bar exists to give.
+    const transfer = new TransferState();
+    transfer.take(report({ key: '/srv/clone', label: 'Clone' }));
+    transfer.take(report({ key: '/srv/fetch', label: 'Fetch' }));
+
+    expect(transfer.current?.key).toBe('/srv/fetch');
+    expect(transfer.waiting).toBe(1);
+
+    transfer.take(report({ key: '/srv/fetch', state: 'finished' }));
+    expect(transfer.current?.key, 'the clone comes back into view').toBe('/srv/clone');
+    expect(transfer.waiting).toBe(0);
+  });
+
+  it('updates in place rather than stacking every report', () => {
+    const transfer = new TransferState();
+    transfer.take(report({ percent: 10 }));
+    transfer.take(report({ percent: 60 }));
+
+    expect(transfer.running.length).toBe(1);
+    expect(transfer.current?.percent).toBe(60);
+  });
+
+  it('offers the stop again when the ask itself fails', async () => {
+    // A window left with a disabled button and a transfer still running is worse than one
+    // that simply did not manage to stop it.
+    //
+    // `mockImplementationOnce`, because an implementation that outlives the test leaves vitest
+    // holding a rejected promise nobody claimed and it fails the test for a reason that is not
+    // the code's. One call is all this needs anyway.
+    invoke.mockImplementationOnce(async () => {
+      throw new Error('the window has gone');
+    });
+    const transfer = new TransferState();
+    transfer.take(report());
+
+    await transfer.cancel();
+
+    expect(transfer.asked, 'the button is pressable again').toBe(false);
+    expect(transfer.current, 'and the transfer is still there').not.toBeNull();
+    expect(invoke, 'and it did ask').toHaveBeenCalledWith('cancel_transfer', {
+      key: '/srv/thing',
+    });
+  });
+
   it('cancels the one it is showing, and says so while it waits', async () => {
     invoke.mockResolvedValue(true);
     const transfer = new TransferState();
     transfer.take(report());
 
     const asked = transfer.cancel();
-    expect(transfer.stopping, 'the button cannot be pressed twice').toBe(true);
+    expect(transfer.asked, 'the button cannot be pressed twice').toBe(true);
     await asked;
 
     expect(invoke).toHaveBeenCalledWith('cancel_transfer', { key: '/srv/thing' });
@@ -85,7 +132,7 @@ describe('what the window shows while something is talking to a server', () => {
 
     transfer.take(report({ state: 'cancelled' }));
     expect(transfer.current).toBeNull();
-    expect(transfer.stopping).toBe(false);
+    expect(transfer.asked).toBe(false);
   });
 
   it('cancels nothing when nothing is running', async () => {
