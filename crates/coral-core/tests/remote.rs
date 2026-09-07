@@ -698,3 +698,30 @@ async fn a_pull_into_an_unborn_branch_names_it_too() {
     );
     let _ = home;
 }
+
+#[tokio::test]
+async fn a_failed_transfer_says_why_rather_than_reciting_its_progress() {
+    // git writes progress to stderr with carriage returns, so the last few kilobytes of a
+    // failed fetch are almost entirely "Receiving objects: 41% (76/185)". The sentence that
+    // explains the failure is the last thing in there, and reporting the lot buries it past
+    // anywhere it will be read.
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    repo.git(["remote", "add", "nowhere", "/does/not/exist/anywhere.git"]);
+
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+    let failed = loc.fetch(&runner, Some("nowhere"), false, |_| {}).await;
+
+    let message = failed
+        .expect_err("a remote that is not there cannot be fetched")
+        .to_string();
+    assert!(
+        !message.contains('\r'),
+        "a carriage return means the redraws were kept: {message}"
+    );
+    assert!(
+        message.contains("does not appear to be a git repository")
+            || message.contains("Could not read from remote"),
+        "the reason survives: {message}"
+    );
+}

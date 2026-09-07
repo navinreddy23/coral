@@ -308,7 +308,7 @@ impl RepoLocation {
 /// line is kept.
 fn as_shown(text: &str) -> String {
     text.lines()
-        .map(|line| line.rsplit('\r').next().unwrap_or(line))
+        .map(crate::process::last_record)
         .collect::<Vec<_>>()
         .join("\n")
         .trim()

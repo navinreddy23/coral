@@ -1399,9 +1399,20 @@ fn held_index_lock(e: &CoralError) -> bool {
 /// git 2.43 strips the userinfo from URLs in its own messages, but the supported floor is 2.40
 /// and older ones did not, so a push to `https://user:token@host/repo` could put the token in
 /// a toast and in the activity log. The argv has always been redacted; this is the other half.
+/// One line of git's output as a terminal would have shown it.
+///
+/// Progress is redrawn with carriage returns rather than newlines, so what a line actually
+/// says is only what follows the last one. Without this a failed fetch reports itself as
+/// several kilobytes of "Receiving objects: 41% (76/185)" with the sentence that explains the
+/// failure at the far end, past where anything will show it.
+pub(crate) fn last_record(line: &str) -> &str {
+    line.rsplit('\r').next().unwrap_or(line)
+}
+
 fn scrubbed(stderr: &str) -> String {
     stderr
         .lines()
+        .map(last_record)
         .map(redact_url_userinfo)
         .collect::<Vec<_>>()
         .join("\n")
