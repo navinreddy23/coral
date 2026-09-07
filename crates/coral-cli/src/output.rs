@@ -143,6 +143,7 @@ fn exit_code_for(e: &CoralError) -> u8 {
         | CoralError::GitTooOld { .. }
         | CoralError::GitVersionUnparsable { .. }
         | CoralError::NotARepository(_) => exit::USAGE,
+        CoralError::Cancelled { .. } => exit::CANCELLED,
         _ => exit::GIT,
     }
 }

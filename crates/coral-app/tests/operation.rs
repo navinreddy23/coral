@@ -76,8 +76,8 @@ async fn a_label_never_carries_a_full_object_id() {
     let full = repo.git(["rev-parse", "HEAD"]);
     assert_eq!(full.len(), 40);
 
-    app::actions::repo_action(
-        path,
+    app::actions::run_action(
+        &path,
         app::actions::Action::Revert {
             revs: vec![full.clone()],
         },
@@ -99,8 +99,8 @@ async fn a_branch_can_be_renamed_from_the_window() {
     repo.git(["branch", "feature"]);
     let path = repo.path().display().to_string();
 
-    app::actions::repo_action(
-        path,
+    app::actions::run_action(
+        &path,
         app::actions::Action::BranchRename {
             from: "feature".to_owned(),
             to: "feature/renamed".to_owned(),
@@ -133,8 +133,8 @@ async fn a_merge_that_stopped_is_not_logged_as_finished() {
     app::conflicts::operation_step(path.clone(), "abort".to_owned())
         .await
         .expect("the merge aborts");
-    let outcome = app::actions::repo_action(
-        path.clone(),
+    let outcome = app::actions::run_action(
+        &path,
         app::actions::Action::Merge {
             rev: "side".to_owned(),
             mode: coral_core::ops::MergeMode::NoFf,

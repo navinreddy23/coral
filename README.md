@@ -73,7 +73,8 @@ worktree file, so what you see does not depend on your `merge.conflictStyle`. Th
 named after the refs involved, never "ours" and "theirs", because during a rebase those words
 are backwards and the tool says so.
 
-**Remotes and hosting.** Fetch, pull, push, prune, and per-ref rejection reporting. Forcing is
+**Remotes and hosting.** Fetch, pull, push, prune, and per-ref rejection reporting. Each one
+shows what git is doing and can be stopped, which is what makes having no timeout on them safe. Forcing is
 always `--force-with-lease`. Coral is its own git credential helper, so a token never appears in
 a URL, a config file or an argument list. GitHub and GitLab, including Enterprise and
 self-hosted, list their pull and merge requests beside the branches.
@@ -89,13 +90,14 @@ worktrees, patches, a command palette, rebindable shortcuts, and light and dark 
 
 ## Two front ends, one engine
 
-`coral-cli` is not a demo. It exposes the whole engine — fifty-two commands, from `open` and
+`coral-cli` is not a demo. It exposes the whole engine — fifty-four commands, from `open` and
 `status` through `rebase`, `conflict-resolve`, `blame` and `graph` — and answers in a stable
 JSON envelope with documented exit codes:
 
 ```
 coral --repo /path/to/repo graph --json --solo refs/heads/main | jq .result.total
 coral --repo /path/to/repo status --json
+coral clone git@host:team/thing.git --into ~/src --ssh-key ~/.ssh/id_work
 ```
 
 That is what makes the kernel scenarios testable without a GUI, and it is why the window and the

@@ -388,3 +388,44 @@ accepted it since 8.4.
 Somebody who has already built host aliases for this — one `Host` per account, each with its
 own key — should keep using them and leave Coral on the agent. Their alias in the URL does the
 same job with the config intact, and it travels with the remote rather than with one client.
+
+## Undoing a commit keeps the work; undoing anything else does not
+
+Restoring refs is only half of an undo, and the half nobody sees is what happens to the files.
+It ended in a hard reset, which is right for everything that rewrites history: a merge leaves
+files on disk that belong to the merge, and taking the merge away has to take them too.
+
+Committing was not journalled at all, so Undo answered "nothing to undo" straight after the one
+thing everybody does most. Journalling it with the existing machinery would have been worse
+than the gap: the hard reset would have deleted exactly the work the user pressed Undo to get
+back.
+
+So an entry says how the working copy comes back. History rewrites keep the hard sync. A commit
+gets a soft one, which is what `git reset --soft HEAD~1` does and what every client that offers
+this means by it: the branch steps back and the change lands in the index, where it was a
+moment earlier. The dirty-worktree guard is skipped for that case alone, because a soft reset
+overwrites nothing and refusing would refuse the one undo that is always safe. Redo puts the
+operation back and therefore always syncs, or the change would be counted twice.
+
+The field defaults to the old behaviour, so a journal written before this loads and behaves
+exactly as it did.
+
+## A network operation is stopped by dropping it, not by asking it to stop
+
+git's protocol has no polite way out, and there is nothing to poll while a connection hangs —
+which is the case worth being able to stop. Both rule out a cooperative flag.
+
+The runner already spawns children with `kill_on_drop`, so letting the future go kills git
+wherever it reached. `transfer::watched` therefore races the work against a oneshot and drops
+it if the switch is thrown. That also chooses the shape: a `select!` over a borrowed future
+rather than a spawned task, so the operation can borrow its runner and its repository as it
+always did, and nothing needs to be `'static` to be cancellable.
+
+A clone leaves a partial directory when it is killed, and the code that would clean it up never
+runs. A guard removes it on drop instead, and arms only when the destination did not exist
+beforehand: a clone into a directory that is already there fails without creating anything, and
+deleting it would take work that was never Coral's.
+
+The first report is sent before git has written a word. A host that never answers produces no
+progress, so a bar and a Stop that waited for the first record would never appear at all —
+which is the one case the feature exists for.

@@ -3,7 +3,7 @@
 
 use coral_app_lib::{
     actions, activity, commands, conflicts, experimental, graph, hosting, profile, recent, remotes,
-    scope, signing, ssh, tabs, terminal, version, watcher,
+    scope, signing, ssh, tabs, terminal, transfer, version, watcher,
 };
 
 fn main() {
@@ -102,6 +102,9 @@ fn load_state(app: &tauri::App) {
 /// Its own function because the list is the long part of the builder and grows with every
 /// feature; leaving it inline put `window` over the line count for a reason that says
 /// nothing about the window.
+// A list of names, one per line. Splitting it in two to satisfy a line count would make a
+// command harder to find, which is the only thing this function is read for.
+#[allow(clippy::too_many_lines)]
 fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
         commands::initial_repo,
@@ -157,6 +160,8 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         remotes::commit_url,
         watcher::watch_repo,
         watcher::unwatch_repo,
+        transfer::cancel_transfer,
+        transfer::running_transfers,
         actions::rebase_todo,
         actions::rebase_start,
         conflicts::repo_operation,
@@ -211,6 +216,7 @@ fn window() {
         .manage(graph::GraphCache::default())
         .manage(terminal::Terminals::default())
         .manage(watcher::Watchers::default())
+        .manage(transfer::Transfers::default())
         .setup(|app| {
             load_state(app);
             Ok(())

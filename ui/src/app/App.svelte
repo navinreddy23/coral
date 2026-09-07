@@ -35,6 +35,9 @@
   import Ask, { type Choice } from './Ask.svelte';
   import Preferences from './Preferences.svelte';
   import ProfileChip from './ProfileChip.svelte';
+  import Transfer from './Transfer.svelte';
+  import { TransferState } from '../state/transfer.svelte';
+  import { onTransfer } from '../ipc/transfer';
   import { ProfilesState } from '../state/profiles.svelte';
   import { repoIdentity } from '../ipc/profiles';
   import type { IdentityScopes } from '../ipc/types';
@@ -363,6 +366,7 @@
   const activity = new ActivityState();
   const experimental = new ExperimentalState();
   const profiles = new ProfilesState();
+  const transfer = new TransferState();
   /** Who the open repository commits as, read for the Profiles pane rather than for the graph. */
   let identity = $state<IdentityScopes | null>(null);
   let showActivity = $state(false);
@@ -2789,6 +2793,13 @@
     return () => void stop.then((off) => off());
   });
 
+  // Subscribed for the life of the window rather than per operation: a clone is started on the
+  // start page and a fetch from the toolbar, and both report through the same channel.
+  $effect(() => {
+    const stop = onTransfer((report) => transfer.take(report));
+    return () => void stop.then((off) => off());
+  });
+
   /**
    * The start page, which is what a new tab is.
    *
@@ -3327,6 +3338,10 @@
     />
     {/if}
   {/if}
+
+  <!-- Above the panes rather than over them: a fetch of anything large is a long wait, and a
+       panel that covers what somebody was reading to tell them to wait is worse than one. -->
+  <Transfer {transfer} />
 
   {#if graph.transportWarning}
     <p class="banner">{graph.transportWarning}</p>

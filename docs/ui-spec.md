@@ -53,6 +53,17 @@ Coral's own header row and a separate tab strip took a hundred and twenty betwee
 - A profile chip sits between the wordmark and the tabs, named and on one of the eight lane
   colours. Clicking it lists the profiles and offers the Preferences pane that manages them.
 
+## Transfers
+
+Fetch, push and clone show a strip above the panes, never over them: waiting is long enough
+without the window covering what somebody was reading to say so. It carries the phase, a bar,
+the counts, and a Stop.
+
+The bar is determinate only once git has counted something. Before that it is a moving stripe,
+because a bar at nought per cent claims progress it has no basis for, and that is exactly the
+state a host which never answers stays in. Stop is offered from the first moment for the same
+reason.
+
 ## Toolbar
 
 Undo and Redo, disabled when the journal is empty, with a tooltip naming the operation. Pull

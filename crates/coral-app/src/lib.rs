@@ -18,6 +18,7 @@ pub mod signing;
 pub mod ssh;
 pub mod tabs;
 pub mod terminal;
+pub mod transfer;
 pub mod version;
 pub mod watcher;
 

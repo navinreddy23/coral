@@ -9,6 +9,12 @@ pub struct IpcError {
     pub message: String,
 }
 
+impl std::fmt::Display for IpcError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
 impl From<coral_core::CoralError> for IpcError {
     fn from(e: coral_core::CoralError) -> Self {
         Self {
@@ -130,6 +136,7 @@ pub async fn repo_init(
 /// git's own failure otherwise.
 #[tauri::command]
 pub async fn repo_clone(
+    app: tauri::AppHandle,
     profiles: tauri::State<'_, crate::profile::Profiles>,
     url: String,
     parent: String,
@@ -150,7 +157,13 @@ pub async fn repo_clone(
         ssh_key: key,
     };
     let logged = crate::activity::started(&parent, &format!("Clone {}", what.url));
-    match coral_core::create::clone(&runner, &what, |_| {}).await {
+    // Keyed by where it will land, since there is no repository to name yet and that is the
+    // one string the window already has: it is what the form says the clone will be at.
+    let key = what.destination().display().to_string();
+    let cloning = crate::transfer::watched(&app, &key, "Clone", move |report| async move {
+        coral_core::create::clone(&runner, &what, |p| report.progress(&p)).await
+    });
+    match cloning.await {
         Ok(made) => {
             logged.finished();
             crate::profile::stamp_new_repository(&settings, &made).await;

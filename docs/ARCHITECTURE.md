@@ -178,6 +178,17 @@ rewrites one line rather than emitting many, so splitting on newlines would yiel
 record at the end. Push drains stdout and stderr **concurrently** — a child that fills one pipe
 blocks, and `push --porcelain --progress` produces plenty of both.
 
+Fetch, push and clone are the only things bounded by somebody else's server rather than by
+this machine, and the only ones with no timeout: a clone of a large repository is legitimately
+minutes long and a clock cannot tell that from a hang. What makes that safe is being able to
+stop it. `coral-app/src/transfer.rs` reports each one to the window and holds the switch;
+stopping is dropping the work, since nothing in git's protocol offers a polite way out and
+there is nothing to poll while a connection hangs. The runner spawns with `kill_on_drop`, so
+letting the future go kills git wherever it reached, and a clone takes its half-made directory
+with it. The first report is sent before git has said anything, because a host that never
+answers produces no progress at all and a way out that waited for the first record would never
+appear.
+
 **Forcing is always `--force-with-lease`.** There is no bare `--force` in the engine or the
 CLI. The lease refuses when the remote branch has moved since we last saw it, which is exactly
 when a plain force would destroy someone else's work. A rejected ref is reported per-ref, not

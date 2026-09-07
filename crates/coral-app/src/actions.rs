@@ -350,6 +350,17 @@ impl Action {
     const fn steps_journal(&self) -> bool {
         matches!(self, Self::Undo | Self::Redo)
     }
+
+    /// True for the three bounded by somebody else's server rather than by this machine.
+    ///
+    /// Only these are worth reporting and worth being able to stop: everything else finishes
+    /// before a bar could be drawn, and a cancel button on a checkout would be furniture.
+    const fn reaches_network(&self) -> bool {
+        matches!(
+            self,
+            Self::Fetch { .. } | Self::Pull { .. } | Self::Push { .. }
+        )
+    }
 }
 
 /// Runs one action against a repository.
@@ -360,31 +371,77 @@ impl Action {
 /// # Errors
 /// Propagates git failures, including a merge or rebase that stopped on conflicts.
 #[tauri::command]
-pub async fn repo_action(path: String, action: Action) -> Result<ActionOutcome, IpcError> {
+pub async fn repo_action(
+    app: tauri::AppHandle,
+    path: String,
+    action: Action,
+) -> Result<ActionOutcome, IpcError> {
+    // Only what reaches the network is watched. A checkout finishes before a progress bar
+    // could be drawn, and reporting one would be noise with a cancel button on it.
+    if !action.reaches_network() {
+        return run_action(&path, action).await;
+    }
     let label = action.label();
-    // Logged before anything can fail, so a repository that cannot even be discovered still
+    // Borrowed by the key and the label as well as by the work, so the block takes references
+    // rather than the strings themselves.
+    let (at, named) = (path.as_str(), label.as_str());
+    crate::transfer::watched(&app, at, named, |report| async move {
+        logged(at, action, named, &|p| report.progress(p)).await
+    })
+    .await
+}
+
+/// Runs one action, with nothing reported and nothing to stop it.
+///
+/// The whole of [`repo_action`] bar the window: a Tauri command needs an app handle and an
+/// action does not, so this is the seam the tests drive rather than standing a window up to
+/// check what a revert labels itself.
+///
+/// # Errors
+/// Propagates git failures, including an operation that stopped on conflicts.
+pub async fn run_action(path: &str, action: Action) -> Result<ActionOutcome, IpcError> {
+    let label = action.label();
+    logged(path, action, &label, &|_| {}).await
+}
+
+/// Runs an action and records what happened to it.
+///
+/// Both entry points come through here, so the activity log says the same thing whether the
+/// window or a test asked for the work.
+async fn logged(
+    path: &str,
+    action: Action,
+    label: &str,
+    report: &(dyn Fn(&coral_core::remote::Progress) + Sync),
+) -> Result<ActionOutcome, IpcError> {
+    // Recorded before anything can fail, so a repository that cannot even be discovered still
     // leaves the attempt in the log.
-    let logged = crate::activity::started(&path, &label);
-    match act(&path, action, &label).await {
+    let entry = crate::activity::started(path, label);
+    match act(path, action, label, report).await {
         Ok(outcome) => {
             // `conflicted` is set by a merge or rebase that stopped, and by a push whose refs
             // the remote refused. Both used to be logged as "finished", so the record of a
             // rejected force push read exactly like the record of one that went through.
             if outcome.conflicted {
-                logged.stopped();
+                entry.stopped();
             } else {
-                logged.finished();
+                entry.finished();
             }
             Ok(outcome)
         }
         Err(e) => {
-            logged.failed(&e.message);
+            entry.failed(&e.message);
             Err(e)
         }
     }
 }
 
-async fn act(path: &str, action: Action, label: &str) -> Result<ActionOutcome, IpcError> {
+async fn act(
+    path: &str,
+    action: Action,
+    label: &str,
+    report: &(dyn Fn(&coral_core::remote::Progress) + Sync),
+) -> Result<ActionOutcome, IpcError> {
     let runner = GitRunner::discover().await?;
     let loc = RepoLocation::discover(&runner, std::path::Path::new(path)).await?;
 
@@ -400,7 +457,7 @@ async fn act(path: &str, action: Action, label: &str) -> Result<ActionOutcome, I
     }
 
     let before = loc.snapshot_refs(&runner).await?;
-    let done = run(&loc, &runner, action).await?;
+    let done = run(&loc, &runner, action, report).await?;
     let after = loc.snapshot_refs(&runner).await?;
     loc.journal_change(label, before, after, coral_core::undo::Restore::Worktree)?;
 
@@ -419,10 +476,11 @@ async fn run(
     loc: &RepoLocation,
     runner: &GitRunner,
     action: Action,
+    report: &(dyn Fn(&coral_core::remote::Progress) + Sync),
 ) -> Result<Done, coral_core::CoralError> {
     match action {
         Action::Fetch { .. } | Action::Pull { .. } | Action::Push { .. } => {
-            run_remote(loc, runner, action).await
+            run_remote(loc, runner, action, report).await
         }
         Action::Checkout { .. }
         | Action::BranchCreate { .. }
@@ -446,12 +504,14 @@ async fn run_remote(
     loc: &RepoLocation,
     runner: &GitRunner,
     action: Action,
+    report: &(dyn Fn(&coral_core::remote::Progress) + Sync),
 ) -> Result<Done, coral_core::CoralError> {
     match action {
         Action::Fetch { remote } => {
             // Prune: a fetch that leaves deleted remote branches in the sidebar is a fetch
             // that makes the sidebar wrong, which is the thing it was run to correct.
-            loc.fetch(runner, remote.as_deref(), true, |_| {}).await?;
+            loc.fetch(runner, remote.as_deref(), true, |p| report(&p))
+                .await?;
             Ok(Done::quiet())
         }
         Action::Pull { remote, mode } => {
@@ -474,7 +534,7 @@ async fn run_remote(
                 force_with_lease,
                 delete,
             };
-            let results = loc.push(runner, &opts, |_| {}).await?;
+            let results = loc.push(runner, &opts, |p| report(&p)).await?;
             // git's per-ref answers, which is the only place "Everything up-to-date" and a
             // rejection are told apart.
             let message = results

@@ -59,6 +59,11 @@ pub enum CoralError {
     #[error("cannot {label}: {detail}")]
     Refused { label: &'static str, detail: String },
 
+    /// The user stopped it. Not a failure of the operation, and never reported as one: a
+    /// cancelled fetch has not gone wrong, it has been called off.
+    #[error("{label} was cancelled")]
+    Cancelled { label: &'static str },
+
     #[error("io error")]
     Io(#[from] std::io::Error),
 }
@@ -78,6 +83,7 @@ impl CoralError {
             Self::AlreadyARepository(_) => "already_a_repository",
             Self::Protocol { .. } => "protocol_error",
             Self::Refused { .. } => "refused",
+            Self::Cancelled { .. } => "cancelled",
             Self::Io(_) => "io_error",
         }
     }
