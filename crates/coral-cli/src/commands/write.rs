@@ -118,7 +118,7 @@ where
     let result = f(runner.clone(), loc.clone()).await?;
 
     let after = loc.snapshot_refs(&runner).await?;
-    loc.journal_change(label, before, after)?;
+    loc.journal_change(label, before, after, coral_core::undo::Restore::Worktree)?;
     Ok(result)
 }
 

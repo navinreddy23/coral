@@ -402,7 +402,7 @@ async fn act(path: &str, action: Action, label: &str) -> Result<ActionOutcome, I
     let before = loc.snapshot_refs(&runner).await?;
     let done = run(&loc, &runner, action).await?;
     let after = loc.snapshot_refs(&runner).await?;
-    loc.journal_change(label, before, after)?;
+    loc.journal_change(label, before, after, coral_core::undo::Restore::Worktree)?;
 
     Ok(ActionOutcome {
         what: label.to_owned(),
@@ -646,7 +646,7 @@ pub async fn rebase_start(
     // Named the way the menu names it. The journal keeps this text for the life of the entry,
     // so an undo months later read "undid rebase onto <forty characters>~1".
     let what = format!("rebase onto {}", named(&onto));
-    loc.journal_change(&what, before, after)?;
+    loc.journal_change(&what, before, after, coral_core::undo::Restore::Worktree)?;
 
     Ok(ActionOutcome {
         what,

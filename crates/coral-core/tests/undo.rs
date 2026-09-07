@@ -2,7 +2,7 @@ use coral_core::ops::{CommitOpts, ResetMode};
 use coral_core::process::GitRunner;
 use coral_core::repo::RepoLocation;
 use coral_core::testutil::TestRepo;
-use coral_core::undo::{Journal, JournalEntry, RefSnapshot};
+use coral_core::undo::{Journal, JournalEntry, RefSnapshot, Restore};
 
 async fn open(repo: &TestRepo) -> (GitRunner, RepoLocation) {
     let runner = GitRunner::discover().await.unwrap();
@@ -16,6 +16,7 @@ fn entry(label: &str, before: RefSnapshot, after: RefSnapshot) -> JournalEntry {
         before,
         after,
         at: 0,
+        restore: Restore::Worktree,
     }
 }
 
@@ -80,7 +81,9 @@ async fn undoes_a_commit_by_restoring_refs() {
     let after = loc.snapshot_refs(&runner).await.unwrap();
     assert_eq!(repo.git(["rev-list", "--count", "HEAD"]), "2");
 
-    loc.restore_refs(&runner, &before, &after).await.unwrap();
+    loc.restore_refs(&runner, &before, &after, Restore::Worktree)
+        .await
+        .unwrap();
     assert_eq!(repo.git(["rev-list", "--count", "HEAD"]), "1");
     assert_eq!(repo.git(["rev-parse", "HEAD"]), before.head_oid.unwrap());
 }
@@ -96,7 +99,9 @@ async fn undoes_a_branch_deletion_by_recreating_the_ref() {
     assert!(repo.git(["branch", "--list", "doomed"]).is_empty());
     let after = loc.snapshot_refs(&runner).await.unwrap();
 
-    loc.restore_refs(&runner, &before, &after).await.unwrap();
+    loc.restore_refs(&runner, &before, &after, Restore::Worktree)
+        .await
+        .unwrap();
     assert!(
         repo.git(["branch", "--list", "doomed"]).contains("doomed"),
         "the branch is back"
@@ -114,7 +119,9 @@ async fn undoes_a_hard_reset() {
     assert_eq!(repo.git(["rev-list", "--count", "HEAD"]), "1");
     let after = loc.snapshot_refs(&runner).await.unwrap();
 
-    loc.restore_refs(&runner, &before, &after).await.unwrap();
+    loc.restore_refs(&runner, &before, &after, Restore::Worktree)
+        .await
+        .unwrap();
     assert_eq!(repo.git(["rev-list", "--count", "HEAD"]), "2");
     assert_eq!(
         std::fs::read_to_string(repo.path().join("a.txt")).unwrap(),
@@ -134,7 +141,7 @@ async fn refuses_to_undo_when_the_worktree_is_dirty() {
 
     std::fs::write(repo.path().join("a.txt"), "uncommitted work\n").unwrap();
     let err = loc
-        .restore_refs(&runner, &before, &after)
+        .restore_refs(&runner, &before, &after, Restore::Worktree)
         .await
         .unwrap_err();
 
@@ -388,4 +395,127 @@ async fn undoes_a_mixed_reset_whose_index_holds_a_commit_that_still_exists() {
         std::fs::read_to_string(repo.path().join("f.txt")).unwrap(),
         "two\n"
     );
+}
+
+#[tokio::test]
+async fn undoing_a_commit_gives_the_work_back_rather_than_destroying_it() {
+    // The reason `Restore` exists. Reversing a merge means the files must match the commit
+    // that comes back, and doing that to a commit would delete exactly what the user was
+    // trying to recover. This is the assertion that stands between the two.
+    let repo = TestRepo::new().write("a.txt", "one\n").commit("base");
+    let (runner, loc) = open(&repo).await;
+    let base = repo.git(["rev-parse", "HEAD"]);
+
+    std::fs::write(repo.path().join("a.txt"), "one\ntwo\n").unwrap();
+    std::fs::write(repo.path().join("new.txt"), "brand new\n").unwrap();
+    repo.git(["add", "-A"]);
+
+    let before = loc.snapshot_refs(&runner).await.unwrap();
+    loc.commit(
+        &runner,
+        &CommitOpts {
+            message: "the commit being undone".to_owned(),
+            ..CommitOpts::default()
+        },
+    )
+    .await
+    .unwrap();
+    let after = loc.snapshot_refs(&runner).await.unwrap();
+
+    loc.restore_refs(&runner, &before, &after, Restore::KeepChanges)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        repo.git(["rev-parse", "HEAD"]),
+        base,
+        "the branch stepped back"
+    );
+    // The whole point: the work is still on disk and still staged, exactly as it was a moment
+    // before the commit.
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("a.txt")).unwrap(),
+        "one\ntwo\n"
+    );
+    assert!(
+        repo.path().join("new.txt").exists(),
+        "the new file survived"
+    );
+    let staged = repo.git(["diff", "--cached", "--name-only"]);
+    assert!(staged.contains("a.txt"), "{staged}");
+    assert!(staged.contains("new.txt"), "{staged}");
+}
+
+#[tokio::test]
+async fn undoing_a_commit_is_allowed_over_later_edits() {
+    // A soft reset overwrites nothing, so the guard that protects a hard one would only ever
+    // refuse the case where undoing is always safe.
+    let repo = TestRepo::new().write("a.txt", "one\n").commit("base");
+    let (runner, loc) = open(&repo).await;
+
+    std::fs::write(repo.path().join("a.txt"), "one\ntwo\n").unwrap();
+    repo.git(["add", "-A"]);
+    let before = loc.snapshot_refs(&runner).await.unwrap();
+    loc.commit(
+        &runner,
+        &CommitOpts {
+            message: "committed".to_owned(),
+            ..CommitOpts::default()
+        },
+    )
+    .await
+    .unwrap();
+    let after = loc.snapshot_refs(&runner).await.unwrap();
+
+    // Carrying on working after committing, which is the normal thing to do.
+    std::fs::write(repo.path().join("later.txt"), "written afterwards\n").unwrap();
+
+    loc.restore_refs(&runner, &before, &after, Restore::KeepChanges)
+        .await
+        .unwrap();
+
+    assert!(
+        repo.path().join("later.txt").exists(),
+        "work done after the commit must survive undoing it"
+    );
+}
+
+#[tokio::test]
+async fn undoing_a_merge_still_matches_the_files_to_the_commit() {
+    // The other half of the same decision. Nothing here may be softened by the change above:
+    // a merge leaves files on disk that belong to the merge, and they have to go with it.
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    // Whatever the fixture's first branch is called; `init.defaultBranch` is the user's to set.
+    let trunk = repo.git(["rev-parse", "--abbrev-ref", "HEAD"]);
+    repo.git(["checkout", "-q", "-b", "side"]);
+    std::fs::write(repo.path().join("only-on-side.txt"), "side\n").unwrap();
+    repo.git(["add", "-A"]);
+    repo.git(["commit", "-qm", "a commit only on the side branch"]);
+    repo.git(["checkout", "-q", &trunk]);
+
+    let (runner, loc) = open(&repo).await;
+    let before = loc.snapshot_refs(&runner).await.unwrap();
+    repo.git(["merge", "-q", "--no-ff", "-m", "merge the side", "side"]);
+    let after = loc.snapshot_refs(&runner).await.unwrap();
+    assert!(repo.path().join("only-on-side.txt").exists());
+
+    loc.restore_refs(&runner, &before, &after, Restore::Worktree)
+        .await
+        .unwrap();
+
+    assert!(
+        !repo.path().join("only-on-side.txt").exists(),
+        "a file the merge brought in must go back with it"
+    );
+}
+
+#[test]
+fn a_journal_written_before_this_existed_still_loads() {
+    // Every entry already on disk wants the old behaviour, which is the default, so an upgrade
+    // must not turn an existing undo stack into an error.
+    let old = r#"{"entries":[{"label":"Merge","before":{"refs":{},"headBranch":null,
+        "headOid":null},"after":{"refs":{},"headBranch":null,"headOid":null},"at":0}],
+        "undone":0}"#;
+    let journal: Journal = serde_json::from_str(old).expect("an older journal still parses");
+    assert_eq!(journal.entries[0].restore, Restore::Worktree);
 }

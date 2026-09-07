@@ -52,6 +52,25 @@ enum Side {
     Index,
 }
 
+/// How the working copy comes back when the refs do.
+///
+/// Restoring refs is only half of an undo. The other half is what happens to the files, and
+/// the right answer depends on what is being undone. Reversing a merge or a rebase means the
+/// worktree must match the commit that comes back, because the files on disk belong to the
+/// operation being taken away. Reversing a *commit* means the opposite: the work is the point,
+/// and matching the parent commit would delete it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Restore {
+    /// Make the files match the commit being restored. The default, and what every operation
+    /// that rewrites history needs.
+    #[default]
+    Worktree,
+    /// Move the refs and leave the files alone, so what the operation recorded comes back
+    /// staged and uncommitted. `git reset --soft`, and the only safe way to undo a commit.
+    KeepChanges,
+}
+
 /// One reversible operation.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct JournalEntry {
@@ -61,6 +80,10 @@ pub struct JournalEntry {
     pub after: RefSnapshot,
     /// Seconds since the epoch.
     pub at: i64,
+    /// Absent in a journal written before this existed, which is every entry that wants the
+    /// default anyway.
+    #[serde(default)]
+    pub restore: Restore,
 }
 
 /// A bounded, persisted history of ref-changing operations.
@@ -195,13 +218,19 @@ impl RepoLocation {
         runner: &GitRunner,
         target: &RefSnapshot,
         from: &RefSnapshot,
+        restore: Restore,
     ) -> Result<(), CoralError> {
-        let status = self.status(runner).await?;
-        if !status.is_clean() && !self.already_holds(runner, target).await? {
-            return Err(CoralError::Refused {
-                label: "undo",
-                detail: "the worktree has changes; commit or stash them first".to_owned(),
-            });
+        // Only asked of a restore that will touch the files. Keeping the changes overwrites
+        // nothing, so refusing over a dirty worktree there would refuse the one case where
+        // undoing is always safe.
+        if restore == Restore::Worktree {
+            let status = self.status(runner).await?;
+            if !status.is_clean() && !self.already_holds(runner, target).await? {
+                return Err(CoralError::Refused {
+                    label: "undo",
+                    detail: "the worktree has changes; commit or stash them first".to_owned(),
+                });
+            }
         }
 
         for (name, before, after) in from.diff(target) {
@@ -239,11 +268,18 @@ impl RepoLocation {
         }
 
         // Checking out the branch you are already on is a no-op, so moving its ref underneath
-        // leaves the index and worktree describing the old commit. Syncing them is safe here
-        // precisely because the guard above established that they hold nothing this would
-        // overwrite.
+        // leaves the index and worktree describing the old commit.
+        //
+        // Hard is safe only because the guard above established that the worktree holds
+        // nothing this would overwrite. Soft is what undoes a commit: the branch steps back and
+        // the change it carried lands in the index, which is where the user left it a moment
+        // ago and where they can put it straight back.
         if let (Some(_), Some(oid)) = (&target.head_branch, &target.head_oid) {
-            self.reset(runner, oid, crate::ops::ResetMode::Hard).await?;
+            let mode = match restore {
+                Restore::Worktree => crate::ops::ResetMode::Hard,
+                Restore::KeepChanges => crate::ops::ResetMode::Soft,
+            };
+            self.reset(runner, oid, mode).await?;
         }
         Ok(())
     }
@@ -311,6 +347,7 @@ impl RepoLocation {
         label: &str,
         before: RefSnapshot,
         after: RefSnapshot,
+        restore: Restore,
     ) -> Result<(), CoralError> {
         if before == after {
             return Ok(());
@@ -323,6 +360,7 @@ impl RepoLocation {
             at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0)),
+            restore,
         });
         journal.save(self)
     }
@@ -368,7 +406,14 @@ impl RepoLocation {
                 ),
             });
         }
-        self.restore_refs(runner, target, from).await?;
+        // Redo puts the operation back, so the worktree has to follow the refs again even for
+        // a commit: leaving the change staged as well would double it.
+        let restore = if backwards {
+            entry.restore
+        } else {
+            Restore::Worktree
+        };
+        self.restore_refs(runner, target, from, restore).await?;
 
         if backwards {
             journal.undone += 1;

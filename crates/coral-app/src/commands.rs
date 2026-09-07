@@ -150,7 +150,7 @@ pub async fn repo_clone(
         ssh_key: key,
     };
     let logged = crate::activity::started(&parent, &format!("Clone {}", what.url));
-    match coral_core::create::clone(&runner, &what).await {
+    match coral_core::create::clone(&runner, &what, |_| {}).await {
         Ok(made) => {
             logged.finished();
             crate::profile::stamp_new_repository(&settings, &made).await;
@@ -279,13 +279,25 @@ pub async fn commit_staged(
         ..coral_core::ops::CommitOpts::default()
     };
 
-    let logged = crate::activity::started(&path, if amend { "Amend the commit" } else { "Commit" });
+    let label = if amend { "Amend the commit" } else { "Commit" };
+    let logged = crate::activity::started(&path, label);
+    // Journalled like any other operation that moves a ref, so Undo reaches the commonest one
+    // of all. It comes back staged rather than discarded: the refs go where they were and the
+    // files stay exactly where the user left them a moment ago.
+    let before = loc.snapshot_refs(&runner).await?;
     match loc.commit(&runner, &opts).await {
         Ok(_) => logged.finished(),
         Err(e) => {
             logged.failed(&e.to_string());
             return Err(e.into());
         }
+    }
+    let after = loc.snapshot_refs(&runner).await?;
+    if let Err(e) = loc.journal_change(label, before, after, coral_core::undo::Restore::KeepChanges)
+    {
+        // The commit is made and correct. Losing the ability to undo it is worth reporting and
+        // not worth failing over.
+        tracing::warn!(error = %e, "committed, but could not journal it for undo");
     }
     Ok(loc.status(&runner).await?)
 }

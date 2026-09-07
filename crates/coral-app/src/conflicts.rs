@@ -95,7 +95,7 @@ pub async fn operation_step(
     let before = loc.snapshot_refs(&runner).await?;
     let outcome = loc.op(&runner, action).await?;
     let after = loc.snapshot_refs(&runner).await?;
-    loc.journal_change(&label, before, after)?;
+    loc.journal_change(&label, before, after, coral_core::undo::Restore::Worktree)?;
     Ok(outcome)
 }
 
