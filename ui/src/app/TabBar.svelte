@@ -2,6 +2,7 @@
   import ChromeMark from './ChromeMark.svelte';
   import Menu, { type MenuItem } from './Menu.svelte';
   import TabMark, { TAB_ICONS } from './TabMark.svelte';
+  import { laneColour } from './lane';
   import { TabsState, type GroupColour, type Tab, type TabGroup, type TabIcon } from '../state/tabs.svelte';
 
   const { tabs, onOpen, onCloseNew, newTab, onAsk, onPick }: {
@@ -186,16 +187,6 @@
     };
   }
 
-  /**
-   * A group is a coloured band around a contiguous run of tabs, as Chrome draws them.
-   *
-   * `soft` asks for the tinted form, which is what fills the band; the full strength is for
-   * its name chip and its edge, where the colour has to be unmistakable.
-   */
-  function bandColour(colour: string | undefined, soft = false): string {
-    if (!colour) return 'transparent';
-    return `var(--${colour.replace('lane', 'lane-')}${soft ? '-soft' : ''})`;
-  }
 
   function title(tab: Tab): string {
     return TabsState.title(tab);
@@ -371,8 +362,8 @@
       <div
         class="band"
         class:target={joining === group.id}
-        style:--band={bandColour(group.colour)}
-        style:--band-soft={bandColour(group.colour, true)}
+        style:--band={laneColour(group.colour)}
+        style:--band-soft={laneColour(group.colour, true)}
         role="presentation"
         ondragover={(e) => overBand(e, group.id)}
         ondragleave={() => leaveBand(group.id)}
@@ -410,16 +401,22 @@
       {/if}
     </div>
   {/if}
+  <!--
+    After the last tab, where a browser puts it and where the hand goes looking. It sticks to
+    the trailing edge rather than scrolling away with the tabs, which is what once forced it
+    out of the strip altogether: adjacent when there is room, reachable when there is not.
+  -->
+  <button class="add" onclick={onOpen} title="Open a repository">
+    <span class="ring">+</span>
+  </button>
   {#if tabs.error}<span class="error">{tabs.error}</span>{/if}
 </nav>
 
 <!--
-  Outside the strip that scrolls, because these two are what you reach for when it does. Inside
-  it they sat after the last tab and went with it: past a dozen repositories there was no way
-  to open another and no way to reach the search that exists for exactly that many.
+  Outside the strip that scrolls. The search exists for the case where there are more tabs than
+  can be looked through, so it is the one thing that must never be among them.
 -->
 <div class="tail">
-  <button class="add" onclick={onOpen} title="Open a repository">+</button>
   <button
     class="find"
     class:on={searching}
@@ -460,7 +457,7 @@
               <span class="where">{tab.path}</span>
             </span>
             {#if group}
-              <span class="tag" style:--band={bandColour(group.colour)}>{group.name}</span>
+              <span class="tag" style:--band={laneColour(group.colour)}>{group.name}</span>
             {/if}
           </button>
           <button class="drop" onclick={() => tabs.close(tab.id)} title="Close">×</button>
@@ -631,13 +628,26 @@
     flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-1);
     margin-top: var(--space-2);
   }
+  /*
+   * Sticky, so it stands beside the last tab while they fit and against the trailing edge once
+   * they do not. `right: 0` is what pins it. It is full height and painted in the strip's own
+   * ground because a tab scrolling underneath would otherwise pass across it; the round target
+   * people actually see is the span inside, on the tabs' centre line like everything else up
+   * here.
+   */
   .add {
-    font: inherit; font-size: 16px; line-height: 1; cursor: pointer;
+    position: sticky; right: 0; z-index: 3;
+    flex: 0 0 auto; align-self: stretch;
     display: flex; align-items: center; justify-content: center;
-    width: 26px; height: 26px;
-    padding: 0; background: transparent; border: 0; border-radius: 50%; color: var(--fg-2);
+    width: 30px; padding: var(--space-2) 0 0;
+    cursor: pointer; background: var(--bg-2); border: 0;
   }
-  .add:hover { color: var(--fg-0); background: var(--bg-3); }
+  .ring {
+    display: flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 50%;
+    font: inherit; font-size: 16px; line-height: 1; color: var(--fg-2);
+  }
+  .add:hover .ring { color: var(--fg-0); background: var(--bg-3); }
   .error { align-self: center; color: var(--danger); font-size: 11px; }
 
   /* Pinned to the trailing edge so it stays reachable however far the bar has scrolled — which

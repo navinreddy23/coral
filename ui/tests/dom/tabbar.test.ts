@@ -425,16 +425,40 @@ describe('the start page and the tabs', () => {
 
 describe('a strip with more tabs than fit', () => {
   /**
-   * The new-tab button and the tab search used to sit after the last tab, inside the strip
-   * that scrolls, so they went off the end with it. Past a dozen repositories there was no way
-   * to open another and no way to reach the search that exists for exactly that many.
+   * The new-tab button belongs after the last tab, where a browser puts it and where the hand
+   * goes looking for it. It was moved out to the far end once because, inside the strip that
+   * scrolls, it went off the end with the last tab: past a dozen repositories there was no way
+   * to open another. It is back in the strip and stays reachable by sticking to the trailing
+   * edge instead, which is checked below.
    */
-  it('keeps the new-tab button and the search out of the scrolling strip', () => {
+  it('puts the new-tab button after the last tab', () => {
     const { container } = bar();
     const nav = container.querySelector('nav.bar') as HTMLElement;
-    expect(nav.querySelector('.add'), 'the plus is not in the scroll').toBeNull();
-    expect(nav.querySelector('.find'), 'nor the search').toBeNull();
-    expect(container.querySelector('.tail .add'), 'both are in the tail').not.toBeNull();
-    expect(container.querySelector('.tail .find')).not.toBeNull();
+    const add = nav.querySelector('.add');
+    expect(add, 'the plus is in the strip with the tabs').not.toBeNull();
+
+    const tabs = [...nav.querySelectorAll('.tab')];
+    const last = tabs[tabs.length - 1];
+    expect(
+      last.compareDocumentPosition(add as Node) & Node.DOCUMENT_POSITION_FOLLOWING,
+      'and after the last of them',
+    ).toBeTruthy();
+  });
+
+  it('sticks the new-tab button to the trailing edge so it cannot scroll away', () => {
+    const { container } = bar();
+    const add = container.querySelector('nav.bar .add') as HTMLElement;
+    // The one property that keeps it reachable when the strip overflows. Without it the
+    // button is adjacent to the last tab and unreachable, which is the arrangement this
+    // replaced.
+    expect(getComputedStyle(add).position).toBe('sticky');
+  });
+
+  it('keeps the tab search out of the scrolling strip', () => {
+    // Unlike the plus, the search has no natural place among the tabs: it exists for the case
+    // where there are too many of them to look through, so it is pinned outside them.
+    const { container } = bar();
+    expect(container.querySelector('nav.bar .find'), 'not in the scroll').toBeNull();
+    expect(container.querySelector('.tail .find'), 'in the tail').not.toBeNull();
   });
 });
