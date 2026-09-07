@@ -26,6 +26,39 @@ export const PANE_LIMITS: Record<PaneKey, { min: number; max: number }> = {
   graph: { min: 60, max: 720 },
 };
 
+/**
+ * How much of the commit list the message column is aimed at keeping.
+ *
+ * Not a guarantee: the two columns beside it have floors of their own, and below a certain
+ * pane width those floors win. A target, not a contract.
+ */
+export const MESSAGE_FLOOR_PX = 260;
+
+/**
+ * The refs and graph columns as they should actually be drawn in a pane of `paneWidth`.
+ *
+ * Both are dragged widths that knew nothing about the pane holding them. At the window's own
+ * minimum width with both side panels open they came to more than the pane, so the message
+ * column — the one the list exists for — was given nothing at all, and the commit list showed
+ * no messages, no dates and no object ids. The graph column already capped itself at a share
+ * of the pane for this reason; this is the same rule applied to the pair.
+ *
+ * The stored widths are untouched, so widening the window puts them back as they were.
+ */
+export function fitColumns(
+  widths: PaneWidths,
+  paneWidth: number,
+): { refs: number; graph: number } {
+  const both = widths.refs + widths.graph;
+  const room = paneWidth - MESSAGE_FLOOR_PX;
+  if (paneWidth <= 0 || both <= room) return { refs: widths.refs, graph: widths.graph };
+  const scale = Math.max(0, room) / both;
+  return {
+    refs: Math.max(PANE_LIMITS.refs.min, Math.round(widths.refs * scale)),
+    graph: Math.max(PANE_LIMITS.graph.min, Math.round(widths.graph * scale)),
+  };
+}
+
 const STORAGE_KEY = 'coral.panes';
 
 export function clampPane(key: PaneKey, px: number): number {

@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GRAPH_COLUMN_PX, REFS_COLUMN_PX } from '../src/graph/layout';
-import { clampPane, PANE_LIMITS, PanesState } from '../src/state/panes.svelte';
+import {
+  clampPane,
+  fitColumns,
+  MESSAGE_FLOOR_PX,
+  PANE_LIMITS,
+  PanesState,
+} from '../src/state/panes.svelte';
 
 /** Storage the tests can inspect, so the widths can be checked without a browser. */
 function stubStorage(): Map<string, string> {
@@ -138,5 +144,41 @@ describe('the graph column following the lanes', () => {
     const panes = new PanesState();
     panes.fitGraph(10_000);
     expect(panes.widths.graph).toBe(PANE_LIMITS.graph.max);
+  });
+});
+
+describe('columns in a pane too narrow for them', () => {
+  const widths = { sidebar: 240, details: 340, refs: 240, graph: 170 };
+
+  it('leaves them alone where there is room', () => {
+    expect(fitColumns(widths, 1200)).toEqual({ refs: 240, graph: 170 });
+  });
+
+  /**
+   * The window's own minimum is 900 wide; with both side panels at their shipped widths the
+   * commit list gets 320 of it, and 240 + 170 is more than that. The message column was given
+   * nothing, so the list showed no messages, no dates and no object ids at all.
+   */
+  it('makes room for the message column at the window minimum', () => {
+    const fitted = fitColumns(widths, 320);
+    expect(fitted.refs + fitted.graph).toBeLessThan(320);
+    expect(320 - fitted.refs - fitted.graph).toBeGreaterThan(150);
+  });
+
+  it('never shrinks either column past the width that keeps its handle reachable', () => {
+    const fitted = fitColumns(widths, 100);
+    expect(fitted.refs).toBe(PANE_LIMITS.refs.min);
+    expect(fitted.graph).toBe(PANE_LIMITS.graph.min);
+  });
+
+  it('starts scaling exactly where the floor stops fitting', () => {
+    const both = widths.refs + widths.graph;
+    expect(fitColumns(widths, both + MESSAGE_FLOOR_PX)).toEqual({ refs: 240, graph: 170 });
+    const tighter = fitColumns(widths, both + MESSAGE_FLOOR_PX - 40);
+    expect(tighter.refs + tighter.graph).toBeLessThan(both);
+  });
+
+  it('answers before the pane has been measured', () => {
+    expect(fitColumns(widths, 0)).toEqual({ refs: 240, graph: 170 });
   });
 });

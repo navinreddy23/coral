@@ -12,7 +12,7 @@
   } from '../graph/frame';
   import GraphCanvas from '../graph/GraphCanvas.svelte';
   import Splitter from './Splitter.svelte';
-  import { PANE_LIMITS, PanesState } from '../state/panes.svelte';
+  import { fitColumns, PANE_LIMITS, PanesState } from '../state/panes.svelte';
   import DiffView from './DiffView.svelte';
   import { DiffState } from '../state/diff.svelte';
   import { HostingState } from '../state/hosting.svelte';
@@ -2841,6 +2841,9 @@
     if (tab) await tabs.leaveSubmodule(tab.id);
   }
 
+  /** The two fixed columns as the pane can actually afford to draw them. */
+  const columns = $derived(fitColumns(panes.widths, paneWidth));
+
   /**
    * Whether there is room for the dimmed body preview after the summary.
    *
@@ -2848,9 +2851,7 @@
    * cell of the WIP row, which is a button, and the row loses its text entirely. Three
    * characters of a continuation is noise anyway — below this the summary takes the width.
    */
-  const showBody = $derived(
-    paneWidth - panes.widths.refs - panes.widths.graph > 560,
-  );
+  const showBody = $derived(paneWidth - columns.refs - columns.graph > 560);
 
   /** Rows currently worth putting in the DOM. Never the whole graph. */
   function windowRows(frame: Frame | null): number[] {
@@ -2943,7 +2944,7 @@
    * somewhere in the middle of the lanes.
    */
   const laneMetrics = $derived(
-    fittedMetrics(widestLane(graph.frame, rows), panes.widths.graph),
+    fittedMetrics(widestLane(graph.frame, rows), columns.graph),
   );
 
   /**
@@ -2963,7 +2964,7 @@
     // half of it, which is what ties the colour to the commit rather than leaving it floating
     // beside one. The canvas is drawn over the top, so the node stays a circle.
     const from = laneX(widestLane(graph.frame, [row]), laneMetrics);
-    return Math.max(0, panes.widths.graph - from);
+    return Math.max(0, columns.graph - from);
   }
 
   const laneFit = $derived.by(() => {
@@ -3003,7 +3004,7 @@
    * Derived from the column the user has dragged rather than fixed: widening the column should
    * show more of the name, which is the only reason to widen it.
    */
-  const refChars = $derived(Math.max(10, Math.floor((panes.widths.refs - 62) / 5.9)));
+  const refChars = $derived(Math.max(10, Math.floor((columns.refs - 62) / 5.9)));
 
   /**
    * Which host a tracking branch's remote belongs to.
@@ -3255,8 +3256,8 @@
     >
     <div
       class="body"
-      style:--refs-col="{panes.widths.refs}px"
-      style:--graph-col="{panes.widths.graph}px"
+      style:--refs-col="{columns.refs}px"
+      style:--graph-col="{columns.graph}px"
       style:--sidebar-w="{panes.widths.sidebar}px"
       style:--details-w="{panes.widths.details}px"
     >
@@ -3454,7 +3455,7 @@
             frame={graph.frame}
             firstRow={rows[0] ?? 0}
             height={viewport}
-            width={panes.widths.graph}
+            width={columns.graph}
             theme={theme.current}
             initials={nodeInitials}
             author={nodeAuthor}
