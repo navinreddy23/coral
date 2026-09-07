@@ -6,15 +6,24 @@
 // Tauri requires `State` by value in a command signature; it is a handle, not the data.
 #![allow(clippy::needless_pass_by_value)]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use crate::session::Session;
 
+/// The open session, and the file it came from.
+///
+/// The two are held under one lock because a profile switch changes both at once: it writes
+/// what is open to where it came from and reads what is at the new path, and a window that
+/// observed the halfway point would show one profile's tabs against another's file.
+struct Held {
+    session: Session,
+    path: PathBuf,
+}
+
 /// The open session, and where it is persisted.
 pub struct Tabs {
-    inner: Mutex<Session>,
-    path: PathBuf,
+    inner: Mutex<Held>,
 }
 
 impl Tabs {
@@ -22,9 +31,30 @@ impl Tabs {
     #[must_use]
     pub fn load(path: PathBuf) -> Self {
         Self {
-            inner: Mutex::new(Session::load(&path)),
-            path,
+            inner: Mutex::new(Held {
+                session: Session::load(&path),
+                path,
+            }),
         }
+    }
+
+    /// Puts this session away and takes out the one at `path`.
+    ///
+    /// The outgoing side is written first and unconditionally, so a crash immediately after a
+    /// profile switch loses nothing that was open.
+    pub fn switch_to(&self, path: PathBuf) -> Session {
+        let mut held = self.held();
+        save(&held.session, &held.path);
+        held.session = Session::load(&path);
+        held.path = path;
+        held.session.clone()
+    }
+
+    /// Opens a repository, or focuses the tab that already has it.
+    pub fn opened(&self, path: &str) -> Session {
+        self.update(|s| {
+            s.open(PathBuf::from(path));
+        })
     }
 
     /// Applies a change and writes the result.
@@ -32,22 +62,28 @@ impl Tabs {
     /// A failed write is not worth refusing the change over — the tab is already open — so it
     /// is reported and the session continues in memory.
     fn update(&self, change: impl FnOnce(&mut Session)) -> Session {
-        let mut held = self
-            .inner
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        change(&mut held);
-        if let Err(e) = held.save(&self.path) {
-            tracing::warn!(error = %e, path = %self.path.display(), "could not save the session");
-        }
-        held.clone()
+        let mut held = self.held();
+        change(&mut held.session);
+        save(&held.session, &held.path);
+        held.session.clone()
     }
 
-    fn read(&self) -> Session {
+    /// What is open, without touching the disk.
+    #[must_use]
+    pub fn read(&self) -> Session {
+        self.held().session.clone()
+    }
+
+    fn held(&self) -> std::sync::MutexGuard<'_, Held> {
         self.inner
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
+    }
+}
+
+fn save(session: &Session, path: &Path) {
+    if let Err(e) = session.save(path) {
+        tracing::warn!(error = %e, path = %path.display(), "could not save the session");
     }
 }
 
@@ -68,9 +104,7 @@ pub fn tab_open(
     // user chose one. Reloading after a commit is not choosing, and neither is stepping into a
     // submodule.
     recents.opened(&path);
-    tabs.update(|s| {
-        s.open(PathBuf::from(path));
-    })
+    tabs.opened(&path)
 }
 
 #[tauri::command]

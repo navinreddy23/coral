@@ -2,24 +2,38 @@
   import About from './About.svelte';
   import CommitSigning from './CommitSigning.svelte';
   import Experimental from './Experimental.svelte';
+  import Profiles from './Profiles.svelte';
   import Ssh from './Ssh.svelte';
   import type { ExperimentalState } from '../state/experimental.svelte';
   import type { SigningState } from '../state/signing.svelte';
   import type { SshState } from '../state/ssh.svelte';
+  import type { ProfilesState } from '../state/profiles.svelte';
+  import type { IdentityScopes } from '../ipc/types';
 
   const {
     signing,
     ssh,
     experimental,
+    profiles,
+    identity,
+    pane,
     repository,
     hasRepository,
     onClose,
     onCopied,
     onPickGit,
+    onSwitchProfile,
+    onDeleteProfile,
+    onApplyProfileHere,
   }: {
     signing: SigningState;
     ssh: SshState;
     experimental: ExperimentalState;
+    profiles: ProfilesState;
+    /** A pane to open on, when something asked for one rather than taking the default. */
+    pane: string | null;
+    /** Who the open repository commits as, for the Profiles pane to compare against. */
+    identity: IdentityScopes | null;
     /**
      * The repository the two per-repository panes are describing.
      *
@@ -39,6 +53,10 @@
     /** Says whether the clipboard took something, which a button cannot tell on its own. */
     onCopied: (ok: boolean, what: string) => void;
     onPickGit: () => void;
+    /** Switching closes every tab and opens the other profile's, so the window does it. */
+    onSwitchProfile: (id: string) => void;
+    onDeleteProfile: (id: string) => void;
+    onApplyProfileHere: () => void;
   } = $props();
 
   /**
@@ -48,6 +66,7 @@
    * them, so the rest arrive with the settings they hold.
    */
   const panes = $derived([
+    { id: 'profiles', label: 'Profiles', glyph: '☺', needsRepository: false },
     { id: 'ssh', label: 'SSH', glyph: '⛨', needsRepository: true },
     { id: 'signing', label: 'Commit Signing', glyph: '✎', needsRepository: true },
     { id: 'experimental', label: 'Experimental', glyph: '⚗', needsRepository: false },
@@ -55,7 +74,10 @@
   ].filter((pane) => hasRepository || !pane.needsRepository));
 
   // svelte-ignore state_referenced_locally
-  let chosen = $state(hasRepository ? 'ssh' : 'experimental');
+  let chosen = $state(pane ?? (hasRepository ? 'ssh' : 'experimental'));
+  $effect(() => {
+    if (pane !== null) chosen = pane;
+  });
 
   /**
    * The pane on screen, which is the chosen one only while it still exists.
@@ -94,7 +116,16 @@
     {/each}
   </nav>
 
-  {#if active === 'signing'}
+  {#if active === 'profiles'}
+    <Profiles
+      {profiles}
+      {identity}
+      {repository}
+      onSwitch={onSwitchProfile}
+      onDelete={onDeleteProfile}
+      onApplyHere={onApplyProfileHere}
+    />
+  {:else if active === 'signing'}
     <CommitSigning {signing} />
   {:else if active === 'ssh'}
     <Ssh {ssh} {onCopied} />

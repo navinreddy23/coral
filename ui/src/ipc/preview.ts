@@ -262,6 +262,36 @@ const FIXTURES: Record<string, unknown> = {
   tab_leave_submodule: TABS,
   remote_list: REMOTES,
   remote_edit: REMOTES,
+  profile_list: {
+    profiles: [
+      {
+        id: 'personal',
+        name: 'Personal',
+        colour: 'lane1',
+        settings: {
+          user: { name: 'Ada Lovelace', email: 'ada@example.invalid' },
+          ssh: { privateKey: null, publicKey: null, credentialHelper: null },
+          signing: { format: null, program: null, key: null, signCommits: null, signTags: null },
+        },
+      },
+      {
+        id: 'work',
+        name: 'Work',
+        colour: 'lane3',
+        settings: {
+          user: { name: 'A. Lovelace', email: 'a.lovelace@analytical.invalid' },
+          ssh: { privateKey: '/home/dev/.ssh/id_work', publicKey: null, credentialHelper: null },
+          signing: { format: null, program: null, key: null, signCommits: null, signTags: null },
+        },
+      },
+    ],
+    current: 'personal',
+  },
+  repo_identity: {
+    effective: { name: 'Ada Lovelace', email: 'ada@example.invalid' },
+    global: { name: 'Ada Lovelace', email: 'ada@example.invalid' },
+    local: { name: null, email: null },
+  },
   ssh_read: {
     effective: {
       useAgent: false,

@@ -47,7 +47,11 @@ Coral's own header row and a separate tab strip took a hundred and twenty betwee
 - Right-clicking the strip offers the desktop's title bar back, for a window manager that
   handles an undecorated window badly. The choice persists.
 - Preferences and the activity log fill the window under the strip, never over it: with no
-  desktop title bar, covering it would leave no way to move or close the window.
+  desktop title bar, covering it would leave no way to move or close the window. The log is
+  reached from the corner of the status bar, beside the work it reports on rather than beside
+  the buttons that close the window.
+- A profile chip sits between the wordmark and the tabs, named and on one of the eight lane
+  colours. Clicking it lists the profiles and offers the Preferences pane that manages them.
 
 ## Toolbar
 
@@ -173,6 +177,26 @@ everyone.
 branch, `Cmd+Shift+G` add current tab to a group, `Cmd+1…9` jump to tab, `Ctrl+Tab` next tab.
 All rebindable.
 
+## Profiles
+
+Work repositories and personal ones on one machine, without either showing while the other is
+being worked on. A profile owns the open tabs, the groups, the active tab and the recent list,
+and carries a name, an email address, an ssh key and signing settings.
+
+- Switching puts one workspace away and takes the other out. Everything the window is showing
+  belongs to the outgoing repository and goes with it: the graph, the sidebar, the watcher, the
+  terminal and the settings page.
+- The identity is written into a repository's own config when one is cloned or created under
+  the profile, so git and the command line see exactly what Coral does. A repository that was
+  merely opened is never written to; the Profiles pane says who it commits as and offers one
+  button to apply the profile there.
+- Managed in Preferences: add, rename, recolour from the eight lane colours, remove. The last
+  profile stays, since its tabs would have nowhere to go. Removing one forgets what it had
+  open and touches no repository.
+- Which branches are hidden, which git Coral runs, and every view preference stay outside a
+  profile. The first belongs to the repository, the second to the installation, the third to
+  whoever is at the window.
+
 ## Tabs
 
 Shaped like a browser's: rounded above, flared at the base, and the current one wearing the
@@ -201,6 +225,10 @@ tray around a contiguous run of them, with its name on a chip at the leading edg
   Hovering lists each repo with its branch and counts.
 - Fetch-all-in-group runs one `git fetch --all --prune` per repo, concurrency capped at 3, with
   a single combined progress toast.
+- The new-tab button sits after the last tab and sticks to the trailing edge once the strip
+  overflows, so it is adjacent where there is room and reachable where there is not. The tab
+  search stays outside the scrolling strip: it exists for the case where there are too many
+  tabs to look through, so it must never be among them.
 - Groups, tab order, colour, collapsed state and the active tab persist and restore on launch.
   A group whose repos are gone restores with those tabs marked missing, not dropped. Closing a
   group keeps it in "Recently closed groups".

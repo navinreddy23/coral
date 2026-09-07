@@ -34,6 +34,10 @@
   import StatusBar from './StatusBar.svelte';
   import Ask, { type Choice } from './Ask.svelte';
   import Preferences from './Preferences.svelte';
+  import ProfileChip from './ProfileChip.svelte';
+  import { ProfilesState } from '../state/profiles.svelte';
+  import { repoIdentity } from '../ipc/profiles';
+  import type { IdentityScopes } from '../ipc/types';
   import Menu, { type MenuItem } from './Menu.svelte';
   import HostMark, { hostOf } from './HostMark.svelte';
   import RefMark from './RefMark.svelte';
@@ -105,7 +109,7 @@
   import Staging from './Staging.svelte';
   import Details from './Details.svelte';
   import Sidebar from './Sidebar.svelte';
-  import { TabsState } from '../state/tabs.svelte';
+  import { TabsState, type Session } from '../state/tabs.svelte';
   import { ViewsState } from '../state/views.svelte';
   import { isTextTarget, resolve, tabJump } from '../state/shortcuts';
   import Shortcuts from './Shortcuts.svelte';
@@ -358,6 +362,9 @@
   let showRemotes = $state<{ focus: string | null } | null>(null);
   const activity = new ActivityState();
   const experimental = new ExperimentalState();
+  const profiles = new ProfilesState();
+  /** Who the open repository commits as, read for the Profiles pane rather than for the graph. */
+  let identity = $state<IdentityScopes | null>(null);
   let showActivity = $state(false);
   /** The submodule whose panel is open, and its recorded commit once that has been read. */
   let showSubmodule = $state<Submodule | null>(null);
@@ -365,6 +372,8 @@
   /** The context menu on screen, if any. */
   let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   let showPrefs = $state(false);
+  /** A pane the settings page was asked to open on, rather than its own default. */
+  let prefsPane = $state<string | null>(null);
   const terminal = new TerminalState(views);
   let showPalette = $state(false);
 
@@ -1757,10 +1766,13 @@
     void activity.load();
   }
 
-  function openPreferences() {
+  /** Opens the settings page, on a named pane when something asked for one. */
+  function openPreferences(pane: string | null = null) {
     showPrefs = true;
+    prefsPane = pane;
     void experimental.load();
   }
+
 
   /** Points Coral at a git of the user's choosing, from the Experimental page. */
   async function chooseGitProgram() {
@@ -2538,6 +2550,95 @@
     // graph twice on launch, which on a large repository is two five-second walks.
   }
   void start();
+  void profiles.load();
+
+  /**
+   * The menu on the profile chip: every profile, then the way to manage them.
+   *
+   * Built here rather than inside the chip so it goes through the window's own `Menu`, which
+   * already dismisses on an outside click and already knows to stay inside the window.
+   */
+  function profileMenu(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    menu = {
+      x: box.left,
+      y: box.bottom + 4,
+      items: [
+        ...profiles.all.map((profile): MenuItem => ({
+          kind: 'item',
+          label: profile.name,
+          hint: profile.id === profiles.currentId ? 'current' : undefined,
+          disabled: profile.id === profiles.currentId,
+          run: () => void changeProfile(profile.id),
+        })),
+        { kind: 'separator' },
+        { kind: 'item', label: 'Manage profiles…', run: () => openPreferences('profiles') },
+      ],
+    };
+  }
+
+  /**
+   * Changes profile, and rebuilds the window around the workspace that comes with it.
+   *
+   * Order matters throughout. The outgoing repository is put away before the incoming tabs
+   * arrive, or the graph, the sidebar and the watcher are left pointed at a tab that has just
+   * closed. `loadedPath` is then cleared rather than left: it is what the effect below
+   * compares against, so two profiles whose active repository is the same path would otherwise
+   * switch the tabs and never load anything.
+   */
+  async function changeProfile(id: string) {
+    if (id === profiles.currentId) return;
+    const answer = await profiles.switchTo(id);
+    if (answer === null) {
+      toasts.push('error', profiles.error ?? 'Could not change profile');
+      return;
+    }
+    adoptWorkspace(answer.session);
+  }
+
+  /** Removes a profile, after asking: it closes everything that profile had open. */
+  async function removeProfile(id: string) {
+    const doomed = profiles.all.find((p) => p.id === id);
+    if (!doomed) return;
+    const yes = await confirmThat(
+      `Remove the ${doomed.name} profile?`,
+      'Its open tabs and its recent repositories are forgotten. The repositories themselves ' +
+        'are not touched.',
+    );
+    if (!yes) return;
+    const answer = await profiles.remove(id);
+    if (answer === null) {
+      toasts.push('error', profiles.error ?? 'Could not remove the profile');
+      return;
+    }
+    adoptWorkspace(answer.session);
+  }
+
+  /** Puts the current repository away and takes up whatever the incoming profile had open. */
+  function adoptWorkspace(session: Session) {
+    forgetTheLastRepository();
+    graph.forget();
+    terminal.open = false;
+    info = null;
+    identity = null;
+    loadedPath = '';
+    tabs.session = session;
+    startPage.form = 'none';
+    showStart = session.tabs.length === 0;
+  }
+
+  /** Writes the current profile's identity into the repository on screen. */
+  async function applyProfileHere() {
+    if (loadedPath === '') return;
+    if (await profiles.applyHere(loadedPath)) {
+      identity = await repoIdentity(loadedPath).catch(() => null);
+      toasts.push('ok', `${profiles.current.name} applied to this repository`);
+    } else {
+      toasts.push('error', profiles.error ?? 'Could not apply the profile');
+    }
+  }
 
   // Switching tabs loads that repository; nothing else in the shell needs to know.
   let loadedPath = $state('');
@@ -2563,6 +2664,11 @@
     const path = loadedPath;
     void signing.load(path);
     void ssh.load(path);
+    // Read here rather than when a repository opens: it is only ever shown on this page, and
+    // it is two git invocations nobody waiting for a graph should pay for.
+    void repoIdentity(path)
+      .then((read) => (identity = read))
+      .catch(() => (identity = null));
   });
 
   /**
@@ -3125,6 +3231,11 @@
     <!-- The window has no title bar to carry the name any more, so the strip does. -->
     <h1 class="sit">Coral</h1>
 
+    <!-- Before the tabs, because it is what they belong to: these are this profile's tabs and
+         no other's, and somebody who has forgotten which profile they are in is looking at the
+         wrong repositories with nothing on screen saying so. -->
+    <span class="sit"><ProfileChip profile={profiles.current} onMenu={profileMenu} /></span>
+
     <TabBar
       {tabs}
       newTab={showStart || tabs.session.tabs.length === 0}
@@ -3236,9 +3347,15 @@
       {signing}
       {ssh}
       {experimental}
+      {profiles}
+      {identity}
+      pane={prefsPane}
       repository={loadedPath === '' ? null : loadedPath}
       hasRepository={info !== null}
       onPickGit={() => void chooseGitProgram()}
+      onSwitchProfile={(id) => void changeProfile(id)}
+      onDeleteProfile={(id) => void removeProfile(id)}
+      onApplyProfileHere={() => void applyProfileHere()}
       onClose={() => (showPrefs = false)}
       onCopied={(ok, what) =>
         ok

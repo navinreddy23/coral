@@ -27,61 +27,82 @@ pub struct Recent {
     pub opened: i64,
 }
 
+/// The list, and the file it came from, under one lock so a profile switch cannot be
+/// observed halfway through. [`crate::tabs::Tabs`] holds its session the same way and for the
+/// same reason.
+struct Held {
+    list: Vec<Recent>,
+    path: PathBuf,
+}
+
 /// The list, and where it is persisted.
 pub struct Recents {
-    inner: Mutex<Vec<Recent>>,
-    path: PathBuf,
+    inner: Mutex<Held>,
 }
 
 impl Recents {
     #[must_use]
     pub fn load(path: PathBuf) -> Self {
-        let stored: Vec<Recent> = std::fs::read(&path)
-            .ok()
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-            .unwrap_or_default();
         Self {
-            inner: Mutex::new(stored),
-            path,
+            inner: Mutex::new(Held {
+                list: read(&path),
+                path,
+            }),
         }
     }
 
     #[must_use]
     pub fn read(&self) -> Vec<Recent> {
-        self.held().clone()
+        self.held().list.clone()
+    }
+
+    /// Puts this list away and takes out the one at `path`.
+    pub fn switch_to(&self, path: PathBuf) -> Vec<Recent> {
+        let mut held = self.held();
+        store(&held.path, &held.list);
+        held.list = read(&path);
+        held.path = path;
+        held.list.clone()
     }
 
     /// Records that a repository was opened, moving it to the front.
     pub fn opened(&self, path: &str) {
-        let mut held = self.held();
-        *held = with(&held, path, now());
-        if let Err(e) = save(&self.path, &held) {
-            tracing::warn!(error = %e, path = %self.path.display(), "could not save the recents");
-        }
+        self.change(|list| *list = with(list, path, now()));
     }
 
     /// Empties the list. The repositories themselves are not touched.
     pub fn clear(&self) {
-        let mut held = self.held();
-        held.clear();
-        if let Err(e) = save(&self.path, &held) {
-            tracing::warn!(error = %e, path = %self.path.display(), "could not save the recents");
-        }
+        self.change(Vec::clear);
     }
 
     /// Takes one off the list. The repository itself is not touched.
     pub fn forget(&self, path: &str) {
-        let mut held = self.held();
-        held.retain(|r| r.path != path);
-        if let Err(e) = save(&self.path, &held) {
-            tracing::warn!(error = %e, path = %self.path.display(), "could not save the recents");
-        }
+        self.change(|list| list.retain(|r| r.path != path));
     }
 
-    fn held(&self) -> std::sync::MutexGuard<'_, Vec<Recent>> {
+    fn change(&self, edit: impl FnOnce(&mut Vec<Recent>)) {
+        let mut held = self.held();
+        edit(&mut held.list);
+        store(&held.path, &held.list);
+    }
+
+    fn held(&self) -> std::sync::MutexGuard<'_, Held> {
         self.inner
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+}
+
+fn read(path: &Path) -> Vec<Recent> {
+    std::fs::read(path)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default()
+}
+
+fn store(path: &Path, list: &[Recent]) {
+    if let Err(e) = save(path, list) {
+        tracing::warn!(error = %e, path = %path.display(), "could not save the recents");
     }
 }
 

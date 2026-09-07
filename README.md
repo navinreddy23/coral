@@ -78,9 +78,14 @@ always `--force-with-lease`. Coral is its own git credential helper, so a token 
 a URL, a config file or an argument list. GitHub and GitLab, including Enterprise and
 self-hosted, list their pull and merge requests beside the branches.
 
+**Profiles.** Work repositories and personal ones on one machine. A profile owns its own tabs,
+groups and recent list, and carries a name, an email address and an ssh key that a repository
+cloned under it inherits — written into that repository's own config, so git and your terminal
+see exactly what Coral does. Switching restores the other side as it was left.
+
 **Around the edges.** Repository tabs with Chrome-style groups, an embedded terminal, commit
-signing configured per repository, SSH key selection, worktrees, patches, a command palette,
-rebindable shortcuts, and light and dark themes.
+signing configured per repository, SSH key selection for a clone and for an open repository,
+worktrees, patches, a command palette, rebindable shortcuts, and light and dark themes.
 
 ## Two front ends, one engine
 

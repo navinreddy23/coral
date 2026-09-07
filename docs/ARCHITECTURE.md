@@ -203,6 +203,19 @@ unknown host answers *empty*, never an error: a failing helper aborts the whole 
 app's own config. The engine knows nothing about it: `coral-core` deals in repositories, not in
 how a window chooses to show them.
 
+A profile owns that session and the recent list, and nothing else. `profiles.json` names them
+and says which is current; each keeps its `session.json` and `recent.json` under
+`profiles/<id>/`, so switching points `Tabs` and `Recents` at another file rather than teaching
+either about profiles. Both hold their path under the same lock as their contents, because a
+switch writes the outgoing side and reads the incoming one and a window that saw the halfway
+point would show one profile's tabs against another's file. The id is a slug of the name and
+names a directory, so it is stripped to letters, digits and hyphens rather than trusted.
+
+A profile also carries an identity — name, email, ssh key, signing — which is written into a
+repository's own config when one is cloned or created under it, and into an existing one only
+when asked. Graph scopes, the git binary and the view preferences stay outside: see
+`docs/DECISIONS.md`.
+
 **A submodule is a step into a tab, not a tab of its own.** It belongs to the repository that
 declares it, at the commit that repository records; a second tab loses that relationship and
 leaves two entries in the bar with no way to tell which came from which. The tab carries the

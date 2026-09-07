@@ -9,6 +9,7 @@ pub mod credentials;
 pub mod experimental;
 pub mod graph;
 pub mod hosting;
+pub mod profile;
 pub mod recent;
 pub mod remotes;
 pub mod scope;

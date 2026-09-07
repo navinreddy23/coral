@@ -101,10 +101,12 @@ fn staging_label(paths: &[String], stage: bool) -> String {
 /// failure otherwise.
 #[tauri::command]
 pub async fn repo_init(
+    profiles: tauri::State<'_, crate::profile::Profiles>,
     path: String,
     branch: Option<String>,
     lfs: bool,
 ) -> Result<String, IpcError> {
+    let settings = profiles.read().current().settings.clone();
     let runner = coral_core::process::GitRunner::discover().await?;
     let made = coral_core::create::init(
         &runner,
@@ -115,6 +117,9 @@ pub async fn repo_init(
         },
     )
     .await?;
+    // A repository that has just been made has nothing to overwrite, which is why the profile
+    // is applied here without asking and nowhere else without a button.
+    crate::profile::stamp_new_repository(&settings, &made).await;
     Ok(made.display().to_string())
 }
 
@@ -125,10 +130,12 @@ pub async fn repo_init(
 /// git's own failure otherwise.
 #[tauri::command]
 pub async fn repo_clone(
+    profiles: tauri::State<'_, crate::profile::Profiles>,
     url: String,
     parent: String,
     name: Option<String>,
 ) -> Result<String, IpcError> {
+    let settings = profiles.read().current().settings.clone();
     let runner = coral_core::process::GitRunner::discover().await?;
     let what = coral_core::create::Cloned {
         url,
@@ -139,6 +146,7 @@ pub async fn repo_clone(
     match coral_core::create::clone(&runner, &what).await {
         Ok(made) => {
             logged.finished();
+            crate::profile::stamp_new_repository(&settings, &made).await;
             Ok(made.display().to_string())
         }
         Err(e) => {

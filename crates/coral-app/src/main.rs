@@ -2,8 +2,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use coral_app_lib::{
-    actions, activity, commands, conflicts, experimental, graph, hosting, recent, remotes, scope,
-    signing, ssh, tabs, terminal, version, watcher,
+    actions, activity, commands, conflicts, experimental, graph, hosting, profile, recent, remotes,
+    scope, signing, ssh, tabs, terminal, version, watcher,
 };
 
 fn main() {
@@ -76,8 +76,14 @@ fn load_state(app: &tauri::App) {
         .path()
         .app_config_dir()
         .unwrap_or_else(|_| std::env::temp_dir());
-    app.manage(tabs::Tabs::load(dir.join("session.json")));
-    app.manage(recent::Recents::load(dir.join("recent.json")));
+    // Before the two it decides the location of. The workspace belongs to a profile; the graph
+    // scopes below do not, because a hidden branch is a fact about the repository rather than
+    // about whoever is looking at it.
+    let profiles = profile::Profiles::load(dir.clone());
+    let current = profiles.read().current;
+    app.manage(tabs::Tabs::load(profiles.session_path(&current)));
+    app.manage(recent::Recents::load(profiles.recent_path(&current)));
+    app.manage(profiles);
     app.manage(scope::Scopes::load(dir.join("scope.json")));
 
     // Before anything can run git, since this is what decides which git that is.
@@ -119,6 +125,15 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         graph::graph_rewalk,
         scope::graph_scope,
         scope::set_graph_scope,
+        profile::profile_list,
+        profile::profile_create,
+        profile::profile_rename,
+        profile::profile_recolour,
+        profile::profile_set_settings,
+        profile::profile_switch,
+        profile::profile_delete,
+        profile::profile_apply_here,
+        profile::repo_identity,
         activity::activity_log,
         activity::activity_clear,
         experimental::experimental_git,

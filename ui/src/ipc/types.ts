@@ -147,6 +147,20 @@ export type Hunk = {
  */
 header: string, oldStart: number, oldLines: number, newStart: number, newLines: number, lines: Array<Line>, };
 
+/**
+ * A name and an address, either of which may be unset.
+ *
+ * `None` is not the empty string. git refuses to commit with an empty `user.email` and falls
+ * back to the level above with an absent one, so the two mean opposite things.
+ */
+export type Identity = { name: string | null, email: string | null, };
+
+/**
+ * The identity as it stands for one repository: what git will use, what it inherits, what
+ * the repository sets of its own.
+ */
+export type IdentityScopes = { effective: Identity, global: Identity, local: Identity, };
+
 export type Line = { kind: LineKind, text: string, oldNo: number | null, newNo: number | null, 
 /**
  * The file does not end with a newline, and this is its last line.

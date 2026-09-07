@@ -286,3 +286,71 @@ commit, and leaves a single implementation in production. The one thing it force
 the commit-graph aside while grafting, since the graph records the parents the clone does not
 have; git refuses to write a commit-graph for a shallow clone for exactly that reason, so no
 real repository loses anything by it.
+
+## A profile's identity is written into each repository, not laid over git's own configuration
+
+The alternative was a config layer: give each profile a `gitconfig` of its own and run every
+git child with `GIT_CONFIG_GLOBAL` pointing at it. It applies instantly, everywhere, and writes
+to nothing the user owns, which is a real argument for it.
+
+It was rejected because it makes Coral and the terminal disagree, which is the one thing the
+engine has refused to do everywhere else. `config.rs` already says why the app level lives in
+the user's own git configuration: "putting them there means the command line sees the same
+settings rather than a private store git would ignore." Substituting the global would take the
+user's aliases, their merge tool and everything else they have configured *out* of Coral while
+leaving them in their shell, and a commit made in one would be authored differently from a
+commit made in the other. Debugging that from the outside is close to impossible: `git config
+user.email` in the same directory answers correctly and Coral still commits as someone else.
+
+So the identity goes where git already looks for a per-repository answer, `.git/config`, using
+the same `set_identity_local` a settings screen would. Automatically when the repository is
+cloned or created under the profile, since there is nothing there to overwrite. Never on a
+repository that was merely opened: the Profiles pane says who that repository commits as, says
+when it differs from the profile, and offers one button. A repository is somebody's, and
+changing how it records authorship because they looked at it is not a thing to do without
+being asked.
+
+## What a profile does not own
+
+Three things stay outside, each because an existing rule already places them.
+
+**Which branches are hidden** is a fact about the repository, not about who is looking — the
+entry above about `scope.json` makes the case, and someone opening the same repository in
+another profile is not asking for their spikes back.
+
+**Which git Coral runs** is one process-wide setting: `Experimental::apply` calls
+`use_git`, which sets it for the whole application. A per-profile answer would either need a
+restart on every switch or would silently apply to the profile you had just left.
+
+**Theme, pane widths and view preferences** stay in `localStorage` under the rule at the top of
+`ui/src/state/views.svelte.ts`: they belong to the person at the window. A profile is which set
+of repositories that person is working on, not a different person, and nobody wants their
+window to change shape because they switched from work to personal.
+
+## The new-tab button sticks rather than moving out of the strip
+
+It was moved to the far end of the title strip once, because inside the strip that scrolls it
+went off the end with the last tab and past a dozen repositories there was no way to open
+another. That fixed the reachability and lost the place people look for it, which is
+immediately after the last tab.
+
+`position: sticky; right: 0` gives both: adjacent to the last tab while they fit, pinned to the
+trailing edge once they do not. It is full height and painted in the strip's own ground because
+tabs scroll underneath it. The tab search stays outside the strip, and that is not an
+inconsistency — it exists for the case where there are more tabs than can be looked through, so
+it is the one control that must never be among them.
+
+## A panel's backdrop is not the title bar
+
+Every dismissible panel in the window puts a full-viewport backdrop behind itself and closes on
+a click anywhere on it. The tab drawer's did nothing, and only the tab drawer's.
+
+The reason is where it is mounted. `TabBar` lives inside the title strip, so its backdrop is a
+child of the element carrying `onmousedown={stripDrag}` — the handler that moves the window.
+A backdrop is not a button, a tab or an input, so the handler treated a press on it as a press
+on the bare strip and handed the pointer to the window manager. No click is delivered after
+that, so the drawer stayed open however far outside it you pressed.
+
+`stripDrag` now steps over `.scrim` as it already steps over every control. The regression test
+asserts that no drag is started rather than that the panel closed: under vitest the window is a
+mock that swallows nothing, so the click lands either way and only the drag shows the fault.

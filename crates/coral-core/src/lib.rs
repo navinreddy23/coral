@@ -10,6 +10,7 @@ pub mod engine;
 pub mod error;
 pub mod graph;
 pub mod history;
+pub mod identity;
 pub mod index;
 pub mod ops;
 pub mod patch;

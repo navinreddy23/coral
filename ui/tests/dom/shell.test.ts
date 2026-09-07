@@ -832,6 +832,79 @@ describe('the settings page and the tab strip', () => {
   });
 });
 
+describe('changing profile', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  const BLANK = {
+    user: { name: null, email: null },
+    ssh: { privateKey: null, publicKey: null, credentialHelper: null },
+    signing: { format: null, program: null, key: null, signCommits: null, signTags: null },
+  };
+
+  function registry(current: string) {
+    return {
+      current,
+      profiles: [
+        { id: 'personal', name: 'Personal', colour: 'lane1', settings: BLANK },
+        { id: 'work', name: 'Work', colour: 'lane3', settings: BLANK },
+      ],
+    };
+  }
+
+  it('names the profile in the title strip', async () => {
+    const view = await shell({ profile_list: registry('work') });
+    await waitFor(() => {
+      if (!view.container.querySelector('.strip .chip')?.textContent?.includes('Work')) {
+        throw new Error('the chip does not name it yet');
+      }
+    });
+  });
+
+  it('walks the graph again even when both profiles were left on the same repository', async () => {
+    /**
+     * The trap this test exists for. The window loads a repository when the tab's path differs
+     * from the one already loaded, so two profiles left on the same path would swap every tab
+     * and never load anything: the sidebar, the graph and the watcher would all still belong
+     * to the tab that had just been closed, while the strip showed the other profile's.
+     */
+    const other = { tabs: [{ id: 9, path: REPO, group: null }], groups: [], active: 9 };
+    const table = answers({
+      profile_list: registry('personal'),
+      profile_switch: { registry: registry('work'), session: other, recents: [] },
+    });
+    let walks = 0;
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'open_repo') walks += 1;
+      if (!(cmd in table)) throw new Error(`unstubbed command ${cmd}`);
+      return table[cmd];
+    });
+
+    const view = render(App);
+    await waitFor(() => {
+      if (view.container.querySelectorAll('li.row').length === 0) throw new Error('no rows yet');
+    });
+    const opened = walks;
+
+    await fireEvent.click(view.container.querySelector('.strip .chip') as HTMLElement);
+    const entries = [...view.container.querySelectorAll('.menu button')];
+    const work = entries.find((b) => b.textContent?.includes('Work'));
+    expect(work, 'the menu lists the other profile').not.toBeUndefined();
+    await fireEvent.click(work as HTMLElement);
+
+    await waitFor(() => {
+      if (!view.container.querySelector('.strip .chip')?.textContent?.includes('Work')) {
+        throw new Error('still in the old profile');
+      }
+    });
+    await waitFor(() => {
+      if (walks <= opened) throw new Error('the repository was never opened again');
+    });
+  });
+});
+
 describe('a repository that will not open', () => {
   beforeEach(() => {
     invoke.mockReset();
