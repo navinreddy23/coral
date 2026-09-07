@@ -40,7 +40,7 @@ describe('what the window shows while something is talking to a server', () => {
 
     expect(transfer.current).not.toBeNull();
     expect(transfer.measured, 'nothing countable yet').toBe(false);
-    expect(transfer.caption).toBe('Clone…');
+    expect(transfer.caption).toBe('thing — Clone…');
   });
 
   it('says where the work is happening once git counts', () => {
@@ -48,7 +48,7 @@ describe('what the window shows while something is talking to a server', () => {
     transfer.take(report({ remote: true, phase: 'Compressing objects' }));
 
     expect(transfer.measured).toBe(true);
-    expect(transfer.caption).toBe('Fetch: Compressing objects on the server');
+    expect(transfer.caption).toBe('thing — Fetch: Compressing objects on the server');
   });
 
   it('clears itself when the transfer ends, however it ended', () => {
@@ -133,6 +133,15 @@ describe('what the window shows while something is talking to a server', () => {
     transfer.take(report({ state: 'cancelled' }));
     expect(transfer.current).toBeNull();
     expect(transfer.asked).toBe(false);
+  });
+
+  it('names the repository, since the bar is not per tab', () => {
+    // A clone runs on the start page and a fetch belongs to a tab you have left, so the strip
+    // often shows work that is not what is in front of you.
+    const transfer = new TransferState();
+    transfer.take(report({ key: '/srv/some/other-repo', label: 'Fetch', phase: '' }));
+    expect(transfer.where).toBe('other-repo');
+    expect(transfer.caption).toBe('other-repo — Fetch…');
   });
 
   it('cancels nothing when nothing is running', async () => {

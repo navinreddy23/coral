@@ -39,13 +39,24 @@ export class TransferState {
     this.current !== null && this.stopping.includes(this.current.key),
   );
 
+  /**
+   * Which repository the work is for.
+   *
+   * The bar is one strip for the whole window, so the transfer it shows is often not the tab
+   * in front of you — a clone runs on the start page and a fetch belongs to a tab you have
+   * left. Naming it is what stops "fetch…" being a question.
+   */
+  readonly where = $derived(
+    this.current?.key.split('/').filter(Boolean).pop() ?? '',
+  );
+
   /** What to put on the bar. */
   readonly caption = $derived.by(() => {
     const t = this.current;
     if (t === null) return '';
-    if (t.phase === '') return `${t.label}…`;
-    const where = t.remote ? ' on the server' : '';
-    return `${t.label}: ${t.phase}${where}`;
+    const what = t.phase === '' ? `${t.label}…` : `${t.label}: ${t.phase}`;
+    const server = t.remote ? ' on the server' : '';
+    return this.where === '' ? `${what}${server}` : `${this.where} — ${what}${server}`;
   });
 
   /** Takes one report. A terminal state removes that transfer, whichever one it was. */
