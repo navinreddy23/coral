@@ -167,8 +167,12 @@
    * it is where the fallback to grayscale shows first.
    */
   .label, .value, .sep { background: var(--bg-1); }
+  /* Clipped like the value under it. Only the value was, so in a narrow window the crumb's
+     label overflowed its own box and painted over the next one: "REPOSITORY" and "BRANCH"
+     came out as "REPOSITOR'BRANCH". */
   .label {
     font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-2);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   /* Wide enough for a real branch name. `gitlab-ci-local-support` is 23 characters and came
      out clipped at 14em; the column is a grid fraction, so a name longer than the window can
