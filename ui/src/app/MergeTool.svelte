@@ -218,7 +218,7 @@
             onclick={() => merge.open(file.path)}
           >
             <span class="name">{elidePath(file.path, 40)}</span>
-            {#if !blockwise}<span class="tag">whole file</span>{/if}
+            {#if !blockwise}<span class="oneshot">whole file</span>{/if}
           </button>
           <span class="wholesale">
             {#if has.ours}
@@ -431,7 +431,13 @@
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .file.on { background: var(--accent-soft); color: var(--fg-0); }
-  .tag { font-size: 10px; color: var(--fg-2); }
+  /*
+   * A name of its own, not `.tag` and not `.whole`. Both are taken further down the same
+   * stylesheet — `.tag` by the A and B letters in the pane headers, `.whole` by the panel a
+   * binary conflict shows — and the later rule wins: the badge came out white on the row's own
+   * light fill, fifteen pixels wide, with the words spilling past it.
+   */
+  .oneshot { font-size: 10px; color: var(--fg-2); }
   .wholesale { display: flex; gap: 2px; flex: 0 0 auto; padding-left: var(--space-3); }
   .wholesale button { font-size: 10px; padding: 0 var(--space-2); }
   .done { padding: var(--space-3); font-size: 12px; color: var(--fg-2); }
@@ -460,7 +466,7 @@
   }
   .pane .head .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pane .head button { font-size: 10px; flex: 0 0 auto; }
-  .tag {
+  .pane .tag {
     display: inline-block; width: 15px; text-align: center; border-radius: 3px;
     font-size: 10px; font-weight: 700; color: var(--accent-fg);
   }
