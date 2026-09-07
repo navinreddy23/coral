@@ -118,3 +118,43 @@ async fn a_branch_can_be_renamed_from_the_window() {
     let last = Journal::load(&loc).entries.pop().expect("an entry");
     assert_eq!(last.label, "rename feature to feature/renamed");
 }
+
+/// The activity log is what somebody reads afterwards to find out what happened.
+///
+/// A merge that stopped on conflicts, and a push the remote rejected, both come back as an
+/// outcome rather than an error — and both were logged as "finished", so the record of a
+/// rejected force push read exactly like the record of one that went through.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_merge_that_stopped_is_not_logged_as_finished() {
+    let repo = stopped_merge();
+    let path = repo.path().display().to_string();
+    // `stopped_merge` conflicts through plain git; do it again through the window so the log
+    // has an entry for it.
+    app::conflicts::operation_step(path.clone(), "abort".to_owned())
+        .await
+        .expect("the merge aborts");
+    let outcome = app::actions::repo_action(
+        path.clone(),
+        app::actions::Action::Merge {
+            rev: "side".to_owned(),
+            mode: coral_core::ops::MergeMode::NoFf,
+        },
+    )
+    .await
+    .expect("the merge runs");
+    assert!(outcome.conflicted, "the fixture is built to conflict");
+
+    let said: Vec<String> = app::activity::entries(Some(&path))
+        .into_iter()
+        .map(|e| e.message)
+        .collect();
+    let ended: Vec<&String> = said.iter().filter(|m| m.contains("merge side")).collect();
+    assert!(
+        ended.iter().any(|m| m.contains("did not complete")),
+        "the log says what happened: {said:?}"
+    );
+    assert!(
+        !ended.iter().any(|m| m.contains("finished")),
+        "and does not also say it finished: {said:?}"
+    );
+}

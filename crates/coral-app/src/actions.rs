@@ -367,7 +367,14 @@ pub async fn repo_action(path: String, action: Action) -> Result<ActionOutcome, 
     let logged = crate::activity::started(&path, &label);
     match act(&path, action, &label).await {
         Ok(outcome) => {
-            logged.finished();
+            // `conflicted` is set by a merge or rebase that stopped, and by a push whose refs
+            // the remote refused. Both used to be logged as "finished", so the record of a
+            // rejected force push read exactly like the record of one that went through.
+            if outcome.conflicted {
+                logged.stopped();
+            } else {
+                logged.finished();
+            }
             Ok(outcome)
         }
         Err(e) => {

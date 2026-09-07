@@ -139,6 +139,14 @@ impl Operation {
     pub fn failed(self, why: &str) {
         self.end(Level::Error, &format!("failed. {why}"));
     }
+
+    /// Ran, and did not do what it set out to do: a merge that stopped on conflicts, a push
+    /// the remote rejected. Not a failure — git did what it was asked and reported back — but
+    /// "finished" is not true either, and this log is what somebody reads afterwards to find
+    /// out what happened.
+    pub fn stopped(self) {
+        self.end(Level::Warn, "did not complete.");
+    }
 }
 
 /// Every entry for one repository, oldest first, or every application entry when `repo` is
