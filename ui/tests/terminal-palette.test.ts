@@ -5,10 +5,11 @@ import { describe, expect, it } from 'vitest';
 /**
  * The terminal's own sixteen colours.
  *
- * xterm 6 wants the whole set. Given eight of them — the interface's lane colours, lent to the
- * slots whose names happened to match — it did not fall back to its own defaults for the other
- * eight: the palette collapsed and every colour a shell emitted came out as the foreground.
- * A prompt, `ls --color`, a diff, all of it monochrome on a light ground.
+ * Only the classic eight were handed over, so xterm kept its own defaults for the bright eight
+ * — the Tango palette, drawn for a dark ground. `drawBoldTextInBrightColors` is on by default,
+ * which sends every *bold* colour to those slots, and bold is most of what a prompt, `ls
+ * --color` and git actually emit. On the light theme's white that is #fce94f, #8ae234 and
+ * #eeeeec at between 1.1:1 and 1.6:1, so the colour was there and could not be seen.
  */
 const ANSI = [
   'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
@@ -76,5 +77,25 @@ describe('the terminal palette', () => {
     // The lane colours are chosen to tell branches apart on a graph, not to be somebody's red.
     const asked = [...wanted().values()];
     expect(asked.filter((t) => t.startsWith('--lane-'))).toEqual([]);
+  });
+});
+
+/**
+ * The palette is re-read when the window changes theme, and a DOM attribute cannot be what
+ * says so: Svelte tracks state, not the document, so an effect whose only dependency was
+ * `document.documentElement.dataset.theme` ran at mount and never again. A terminal opened in
+ * the light theme stayed white in a dark window until it was closed and opened again.
+ */
+describe('re-theming', () => {
+  const effect = /\$effect\(\(\) => \{([\s\S]*?)\n  \}\);/.exec(component)?.[1] ?? '';
+
+  it('declares the theme as a prop', () => {
+    expect(/const \{[^}]*\btheme\b[^}]*\}: \{/.test(component)).toBe(true);
+  });
+
+  it('depends on that prop rather than on the document', () => {
+    expect(effect, 'the theme effect is still where this test looks for it').toContain('palette()');
+    expect(effect).toContain('void theme;');
+    expect(effect).not.toContain('documentElement');
   });
 });

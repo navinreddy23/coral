@@ -3687,7 +3687,12 @@
              that was still running. -->
         {#each terminalsFor as repo (repo)}
           <div class="pane" hidden={repo !== info.path}>
-            <Terminal session={terminal} path={repo} onClose={() => (terminal.open = false)} />
+            <Terminal
+              session={terminal}
+              path={repo}
+              theme={theme.current}
+              onClose={() => (terminal.open = false)}
+            />
           </div>
         {/each}
       </div>

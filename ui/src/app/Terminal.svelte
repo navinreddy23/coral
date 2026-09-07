@@ -12,10 +12,12 @@
     terminalWrite,
     type TerminalState,
   } from '../state/terminal.svelte';
+  import type { Theme } from '../state/theme.svelte';
 
-  const { session, path, onClose }: {
+  const { session, path, theme, onClose }: {
     session: TerminalState;
     path: string;
+    theme: Theme;
     onClose: () => void;
   } = $props();
 
@@ -135,9 +137,15 @@
     };
   });
 
-  // Re-themed rather than rebuilt: rebuilding would lose the scrollback and whatever is typed.
+  /**
+   * Re-themed rather than rebuilt: rebuilding would lose the scrollback and whatever is typed.
+   *
+   * The prop is what makes this run again. Reading `data-theme` off the root element instead
+   * looked equivalent and was not — a DOM attribute is not tracked, so the effect fired once at
+   * mount and never after, and a terminal opened in one theme stayed in it while the window
+   * around it changed.
+   */
   $effect(() => {
-    const theme = document.documentElement.dataset['theme'];
     void theme;
     if (term) term.options.theme = palette();
   });
