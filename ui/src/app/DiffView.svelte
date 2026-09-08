@@ -642,7 +642,16 @@
   .mark { position: absolute; left: 2px; right: 2px; border-radius: 1px; }
   .mark.add { background: var(--ok); }
   .mark.remove { background: var(--danger); }
-  .mark.both { background: var(--lane-3); }
+  /*
+   * A run that both removed and added lines is a modification, so it is drawn in the two
+   * colours it is made of rather than in a third. That third was `--lane-3`, a graph lane
+   * colour: mustard here, and lane three everywhere else in the window, which is a palette
+   * saying two things with one colour. Split across the strip rather than down it, so a run
+   * of two pixels still shows both halves.
+   */
+  .mark.both {
+    background: linear-gradient(to right, var(--danger) 0 50%, var(--ok) 50% 100%);
+  }
   /* An outline rather than a fill: the marks under it are the point of the strip. */
   .here {
     position: absolute; left: 0; right: 0; min-height: 8px;
