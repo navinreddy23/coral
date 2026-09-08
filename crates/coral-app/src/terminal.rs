@@ -165,9 +165,9 @@ pub fn spawn_shell(
     // it as a command to run, so on Windows the pane would open on an error and exit.
     if cfg!(not(windows)) {
         command.arg("-i");
-        // Before `-i`, since a login shell reads a different set of files: `.zprofile` and
-        // `.zlogin` for zsh, `.bash_profile` for bash. On macOS that is where `PATH` comes
-        // from; elsewhere the desktop session has already read them.
+        // A login shell reads a different set of files first: `.zprofile` and `.zlogin` for
+        // zsh, `.bash_profile` for bash. On macOS that is where `PATH` comes from; elsewhere
+        // the desktop session has already read them.
         if login.unwrap_or_else(login_by_default) {
             command.arg("-l");
         }

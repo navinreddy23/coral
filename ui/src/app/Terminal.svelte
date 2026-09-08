@@ -105,22 +105,7 @@
     term.open(host);
     fit.fit();
 
-    void (async () => {
-      const opened = await session.start(path, term?.cols ?? 80, term?.rows ?? 24);
-      if (opened === null || !term) return;
-      id = opened.id;
-      shell = opened.shell;
-      stop = await terminalListen(
-        opened.id,
-        (text) => term?.write(text),
-        () => {
-          term?.writeln('\r\n\x1b[2m[the shell exited]\x1b[0m');
-          void session.stop(path);
-        },
-      );
-      term.onData((data) => void terminalWrite(opened.id, data));
-      term.focus();
-    })();
+    void begin();
 
     // The pane is resized by dragging its edge and by the window changing; both land here.
     const observer = new ResizeObserver(() => {
@@ -149,6 +134,47 @@
     void theme;
     if (term) term.options.theme = palette();
   });
+
+  /**
+   * Starts the shell and wires this pane to it.
+   *
+   * Its own function because restarting runs it a second time; `onMount` runs once, and the
+   * pane stays mounted for as long as its tab does.
+   */
+  async function begin() {
+    const opened = await session.start(path, term?.cols ?? 80, term?.rows ?? 24);
+    if (opened === null || !term) return;
+    id = opened.id;
+    shell = opened.shell;
+    stop = await terminalListen(
+      opened.id,
+      (text) => term?.write(text),
+      () => {
+        term?.writeln('\r\n\x1b[2m[the shell exited]\x1b[0m');
+        void session.stop(path);
+      },
+    );
+    term.onData((data) => void terminalWrite(opened.id, data));
+    term.focus();
+  }
+
+  /**
+   * Ends the shell and starts another.
+   *
+   * The way a changed shell or a changed set of startup files is applied. Hiding the pane does
+   * not do it: a shell outlives the pane on purpose, so that moving between tabs does not throw
+   * away a half-typed command, which also means the settings screen cannot promise that closing
+   * the pane picks up a new setting.
+   */
+  async function restart() {
+    stop?.();
+    stop = null;
+    id = null;
+    await session.stop(path);
+    term?.clear();
+    term?.reset();
+    await begin();
+  }
 
   function copy() {
     const selected = term?.getSelection() ?? '';
@@ -199,6 +225,14 @@
         ▕
       </button>
     </div>
+    <button
+      class="again"
+      onclick={() => void restart()}
+      title="Start the shell again, with the settings as they are now"
+      aria-label="Start the shell again"
+    >
+      ↻
+    </button>
     <button class="close" onclick={onClose} aria-label="Hide the terminal">✕</button>
   </header>
 

@@ -67,7 +67,11 @@
     </p>
   {/if}
 
-  <p class="note">A shell already open keeps its settings. Close and reopen the pane to apply.</p>
+  <p class="note">
+    A shell already open keeps the settings it started with, because hiding the pane leaves it
+    running and whatever is half-typed in it alone. The <span class="glyph">↻</span> button in
+    the terminal starts it again with these.
+  </p>
 </section>
 
 <style>
@@ -91,6 +95,11 @@
     border-left: 2px solid var(--border-strong); padding-left: var(--space-3);
   }
   code { font-family: var(--font-mono); }
+  /* The button's own glyph, so the sentence points at something the eye can find. */
+  .glyph {
+    font-size: 12px; padding: 0 3px; border-radius: 3px;
+    background: var(--bg-2); color: var(--fg-1);
+  }
   .field { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2); }
   .name { flex: 0 0 auto; width: 9em; color: var(--fg-2); }
   #shell {
