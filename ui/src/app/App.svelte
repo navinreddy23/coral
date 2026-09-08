@@ -155,6 +155,22 @@
   let decorated = $state(true);
   let maximised = $state(false);
 
+  /**
+   * What the theme switch says it will do.
+   *
+   * It has to mention the desktop while the desktop is deciding, because pressing it takes
+   * the choice away from it and nothing else on the button would say so.
+   */
+  const themeHint = $derived(
+    theme.following
+      ? `Following the desktop, which is ${theme.current}. Press to set ${
+          theme.current === 'light' ? 'dark' : 'light'
+        } instead`
+      : theme.current === 'light'
+        ? 'Switch to the dark theme'
+        : 'Switch to the light theme',
+  );
+
   $effect(() => {
     let off: (() => void) | null = null;
     void (async () => {
@@ -2265,7 +2281,23 @@
       { id: 'pop', label: 'Pop the latest stash', group: 'Stash', run: () => void act({ kind: 'stashApply', index: 0, pop: true }) },
       { id: 'undo', label: 'Undo', group: 'History', run: () => void act({ kind: 'undo' }) },
       { id: 'redo', label: 'Redo', group: 'History', run: () => void act({ kind: 'redo' }) },
-      { id: 'theme', label: 'Toggle dark mode', group: 'View', run: () => theme.toggle() },
+      {
+        id: 'theme',
+        label: theme.current === 'dark' ? 'Switch to the light theme' : 'Switch to the dark theme',
+        group: 'View',
+        run: () => theme.toggle(),
+      },
+      // Offered only when it would change something, so the list stays as short as it can be.
+      ...(theme.following
+        ? []
+        : [
+            {
+              id: 'theme-system',
+              label: 'Let the desktop choose the theme',
+              group: 'View',
+              run: () => theme.set('system'),
+            },
+          ]),
       {
         id: 'terminal',
         label: terminal.open ? 'Hide the terminal' : 'Show the terminal',
@@ -3409,7 +3441,7 @@
         class="chrome swap"
         class:dark={theme.current === 'dark'}
         onclick={() => theme.toggle()}
-        title={theme.current === 'light' ? 'Switch to the dark theme' : 'Switch to the light theme'}
+        title={themeHint}
         aria-label="Switch theme"
       >
         <span class="face moon"><Icon name="moon" /></span>
@@ -3492,6 +3524,7 @@
       {ssh}
       {experimental}
       {profiles}
+      {theme}
       {views}
       {identity}
       pane={prefsPane}

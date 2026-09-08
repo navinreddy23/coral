@@ -2,6 +2,7 @@
   import Icon from './Icon.svelte';
   import type { IconName } from './icon';
   import About from './About.svelte';
+  import Appearance from './Appearance.svelte';
   import CommitSigning from './CommitSigning.svelte';
   import Experimental from './Experimental.svelte';
   import Profiles from './Profiles.svelte';
@@ -11,6 +12,7 @@
   import type { SigningState } from '../state/signing.svelte';
   import type { SshState } from '../state/ssh.svelte';
   import type { ProfilesState } from '../state/profiles.svelte';
+  import type { ThemeState } from '../state/theme.svelte';
   import type { ViewsState } from '../state/views.svelte';
   import type { IdentityScopes } from '../ipc/types';
 
@@ -19,6 +21,7 @@
     ssh,
     experimental,
     profiles,
+    theme,
     views,
     identity,
     pane,
@@ -35,6 +38,7 @@
     ssh: SshState;
     experimental: ExperimentalState;
     profiles: ProfilesState;
+    theme: ThemeState;
     views: ViewsState;
     /** A pane to open on, when something asked for one rather than taking the default. */
     pane: string | null;
@@ -72,6 +76,7 @@
    * them, so the rest arrive with the settings they hold.
    */
   const panes = $derived(([
+    { id: 'appearance', label: 'Appearance', icon: 'sun', needsRepository: false },
     { id: 'profiles', label: 'Profiles', icon: 'blame', needsRepository: false },
     { id: 'ssh', label: 'SSH', icon: 'shield', needsRepository: true },
     { id: 'signing', label: 'Commit Signing', icon: 'edit', needsRepository: true },
@@ -125,7 +130,9 @@
     {/each}
   </nav>
 
-  {#if active === 'profiles'}
+  {#if active === 'appearance'}
+    <Appearance {theme} />
+  {:else if active === 'profiles'}
     <Profiles
       {profiles}
       {identity}

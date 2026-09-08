@@ -70,11 +70,26 @@ repositories. `max_user_watches` is 524288, which is ample for the kernel tree.
 
 ## Interface
 
-**Light is the default theme**, at the owner's request; the design document specified dark.
-The choice is explicit rather than following `prefers-color-scheme`, so a preference is stable
-across machines whose system settings differ. Dark is opt-in via `data-theme="dark"` on the
-root element and is remembered in local storage; a webview with storage disabled still opens.
-Lane colours are darkened for the light palette, since the dark set is illegible on white.
+**The theme follows the desktop**, and keeps following it. This reverses the earlier entry
+here, which said the opposite: light was the default and the choice was deliberately explicit,
+so that a preference would be stable across machines whose system settings differ. The reason
+it changed is that the argument was backwards in practice. Somebody running a dark desktop got
+a light Coral and had to go and fix it on every machine, which is a preference that is stable
+and wrong rather than one that is stable and right; and the boot screen in `ui/index.html`
+already read `prefers-color-scheme`, because there is no way to read local storage before the
+bundle arrives — so the window opened dark for half a second and then turned white.
+
+`system` is the shipped choice, and `light` and `dark` remain as explicit ones. The migration
+is lossless: nothing ever wrote a bare theme into `coral.theme` except somebody pressing the
+switch, so a stored value is an explicit choice and is honoured. The switch in the title bar
+still toggles light and dark, which sets an explicit choice; Preferences, Appearance is where
+the choice is handed back. A `matchMedia` listener means a desktop that goes dark in the
+evening takes Coral with it without a restart.
+
+Dark is still `data-theme="dark"` on the root element, so the bare `:root` block holds the
+whole light palette and only dark is written twice. A webview with storage disabled, or with
+no `matchMedia` at all, still opens. Lane colours are computed separately for the light
+palette, since the dark set is illegible on white.
 
 **Graph rows never become JavaScript objects.** They stay inside one decoded frame as typed
 arrays: 1.4M row objects would cost hundreds of megabytes in the webview before any drawing.
