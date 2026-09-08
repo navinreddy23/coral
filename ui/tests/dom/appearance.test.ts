@@ -111,13 +111,15 @@ describe('the appearance pane', () => {
   });
 
   it('draws each density rather than naming a number of pixels', () => {
-    // Three rules at the height a row would be. Nobody knows what twenty-four pixels looks
-    // like; everybody can see which of three is tighter.
+    // Three rules with the gap between them carrying the difference. Nobody knows what
+    // twenty-four pixels looks like; everybody can see which of three is tighter.
     const { view } = pane();
-    const rules = [...view.container.querySelectorAll('.choice .rows .rule')] as HTMLElement[];
-    expect(rules).toHaveLength(9);
-    const heights = rules.map((r) => Number.parseFloat(r.style.height));
-    expect(heights[0]).toBeLessThan(heights[3] ?? 0);
-    expect(heights[3]).toBeLessThan(heights[6] ?? 0);
+    expect(view.container.querySelectorAll('.choice .rows .rule')).toHaveLength(9);
+    const gaps = [...view.container.querySelectorAll('.choice .rows')].map((r) =>
+      Number.parseFloat((r as HTMLElement).style.gap),
+    );
+    expect(gaps).toHaveLength(3);
+    expect(gaps[0]).toBeLessThan(gaps[1] ?? 0);
+    expect(gaps[1]).toBeLessThan(gaps[2] ?? 0);
   });
 });

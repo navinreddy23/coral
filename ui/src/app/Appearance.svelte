@@ -14,8 +14,8 @@
       icon: 'monitor',
       note: 'Changes with it, while Coral is open.',
     },
-    { id: 'light', label: 'Light', icon: 'sun', note: 'Whatever the desktop is doing.' },
-    { id: 'dark', label: 'Dark', icon: 'moon', note: 'Whatever the desktop is doing.' },
+    { id: 'light', label: 'Light', icon: 'sun', note: 'Always, whatever the desktop does.' },
+    { id: 'dark', label: 'Dark', icon: 'moon', note: 'Always, whatever the desktop does.' },
   ];
 
   const DENSITIES: { id: Density; label: string; note: string }[] = [
@@ -62,9 +62,9 @@
           aria-pressed={views.current.density === choice.id}
           onclick={() => views.set('density', choice.id)}
         >
-          <span class="rows" aria-hidden="true">
+          <span class="rows" aria-hidden="true" style:gap="{ROW_HEIGHTS[choice.id] / 8}px">
             {#each [0, 1, 2] as line (line)}
-              <span class="rule" style:height="{ROW_HEIGHTS[choice.id] / 4}px"></span>
+              <span class="rule"></span>
             {/each}
           </span>
           <span class="label">{choice.label}</span>
@@ -111,10 +111,10 @@
   /* Three rules at the height a row would be, which says what the choice does without anybody
      having to know what twenty-four pixels looks like. */
   .rows {
-    display: flex; flex-direction: column; justify-content: center; gap: 3px;
+    display: flex; flex-direction: column; justify-content: center;
     height: 22px; width: 22px;
   }
-  .rule { display: block; width: 100%; border-radius: 1px; background: var(--fg-2); }
+  .rule { display: block; width: 100%; height: 3px; border-radius: 1px; background: var(--fg-2); }
   .choice.on .rule { background: var(--accent); }
   .label { font-size: var(--text-md); font-weight: 600; color: var(--fg-0); }
   .note { font-size: var(--text-sm); color: var(--fg-2); line-height: var(--leading-body); }

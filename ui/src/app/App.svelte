@@ -4324,17 +4324,18 @@
     width: 100%; box-sizing: border-box;
   }
   /*
-   * The working copy's own row, in the brand colour.
+   * The working copy's own row: a bar in the brand colour, on the panel's own ground.
    *
-   * It was amber, and so is a row the search has matched — two different meanings wearing one
-   * colour, on the one screen where they appear together. Amber keeps the meaning it has
-   * everywhere else in the window, which is "look at this", and the row that is *you, now*
-   * takes the colour that is only ever Coral's own.
+   * It was a wash of amber, and so is a row the search has matched — two different meanings in
+   * one colour, on the one screen where they appear together. A wash of coral was no better in
+   * the dark theme, where the two tints are both dark browns. So they are told apart by shape
+   * instead: the search tints a row, and this one is ruled.
    *
-   * The cells paint their own opaque background for antialiasing, so the tint has to be named
-   * on them too or the band stops halfway across the row.
+   * The cells paint their own opaque background for antialiasing, so the ground has to be
+   * named on them too or the row stops halfway across.
    */
-  .wip .cell.refs, .wip .cell.message { background: var(--brand-soft); }
+  .wip .cell.refs, .wip .cell.message { background: var(--bg-1); }
+  .wip .cell.message { box-shadow: inset 2px 0 0 var(--brand); }
   .wip .summary { color: var(--fg-0); font-weight: 600; }
   .wip .wip-node { border-color: var(--brand); }
 
