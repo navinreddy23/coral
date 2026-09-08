@@ -1,5 +1,59 @@
 # Changelog
 
+## 1.0.1
+
+Two lives on one machine, a repository taken without all of it, and a menu that offers what
+can actually happen. As with 1.0.0, nearly all of it came from driving the window rather than
+from reading the code.
+
+### The window
+
+- **Profiles.** Work and personal on one machine: each keeps its own tabs, groups and recent
+  repositories, and its own identity for repositories cloned under it. Switching points the
+  workspace at another directory rather than teaching the tabs about profiles.
+- **A work account and a personal one on the same host.** Hosting tokens were filed under the
+  host's origin alone, so github.com held exactly one. They now carry the profile, and a
+  profile that has never signed in falls back to the one the command line writes. The status
+  bar's host chip opens the sign-in, which the window had no way to reach at all.
+- **Watch a fetch, a push or a clone, and stop it.** Progress reaches the window, cancelling
+  reaches the git it started, and a cancelled operation is recorded as cancelled rather than
+  as a failure.
+- **Choose the shell the terminal opens**, and whether it reads the login files. A shell
+  already running keeps what it started with, so the pane has a button that starts it again.
+- **Take a repository without all of it.** The clone form and `coral clone` offer recent
+  history only, which is a depth, and history now with file contents on demand, which is a
+  blobless filter. They are different economies and are one choice rather than two switches.
+
+### Correctness
+
+- **Undo reaches a commit**, which is the commonest thing anyone wants back. It behaves as a
+  soft reset: the branch moves, the work returns to the index.
+- **A pinned ssh key lost to one named in the user's own config.** `-i` and a `Host` block's
+  `IdentityFile` accumulate and the agent reorders them, so the wrong account authenticated.
+  Only `-F none` makes the choice authoritative.
+- **A stash that will not apply has stopped, not failed.** git exits 1 for a conflict and for
+  a real failure alike; the repository, not the exit code, tells them apart. The merge tool
+  opens on it, and hides Continue and Abort where git has no operation to continue.
+- **A moved tag could not be published.** `--force-with-lease` is compared against the
+  remote-tracking ref and git keeps none for a tag, so every forced tag push was refused. The
+  lease now names what the remote holds.
+- **A ref the branch has passed offered every way back to it.** Right-clicking a release tag
+  on an up-to-date branch offered a fast-forward git refuses. The menu asks where the ref
+  stands and turns the fast-forward around; a branch is taken along without being checked out,
+  a tag is replaced, and where neither can happen the line says which way round they are.
+- **The graph went stale after a pull**, and blank after a tag was fast-forwarded from far
+  down the history. Both were the reload deciding whether to keep the rows on screen.
+
+### Saying what happened
+
+- A rejected push said it stopped on conflicts, in a status line that phrased outcomes itself
+  rather than asking the module that owns the wording. Both now say the same thing.
+- The rejection dialog explained a tag as though it were a branch, and offered to pull, which
+  does nothing about a name the remote already has.
+- A modified run in the diff overview strip was drawn in a graph lane colour. It is now the
+  two colours the diff itself uses.
+- `coral clone` and `coral init`, so the command line can do everything the window can.
+
 ## 1.0.0
 
 Coral draws its own title bar, renames a branch, deletes a tag on its remote, and takes back a
