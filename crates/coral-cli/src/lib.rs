@@ -54,6 +54,12 @@ pub enum Command {
         /// The private ssh key to authenticate with, recorded in the repository afterwards.
         #[arg(long, value_name = "PATH")]
         ssh_key: Option<String>,
+        /// Fetch only this many commits of history, and only the branch being cloned.
+        #[arg(long, value_name = "N")]
+        depth: Option<u32>,
+        /// Leave file contents on the server until something reads one. History stays whole.
+        #[arg(long)]
+        blobless: bool,
         /// Do not draw progress on stderr.
         #[arg(long)]
         quiet: bool,
@@ -511,12 +517,16 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
             into,
             name,
             ssh_key,
+            depth,
+            blobless,
             quiet,
         } => {
             let into = into.map_or_else(|| repo.to_path_buf(), |dir| repo.join(dir));
             let name = name.filter(|n| !n.trim().is_empty());
             let key = ssh_key.filter(|k| !k.trim().is_empty());
-            output::render(&commands::create::clone(url, &into, name, key, quiet).await)
+            output::render(
+                &commands::create::clone(url, &into, name, key, depth, blobless, quiet).await,
+            )
         }
         Command::Status => output::render(&commands::status::run(repo).await),
         Command::Diff { staged, paths } => {

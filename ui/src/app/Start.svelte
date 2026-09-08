@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { StartState } from '../state/start.svelte';
   import type { SshKey } from '../ipc/types';
+  import type { CloneHistory } from '../ipc/start';
   import { elidePath } from './path';
 
   const {
@@ -42,6 +43,8 @@
   let cloneName = $state('');
   // svelte-ignore state_referenced_locally
   let cloneKey = $state(defaultSshKey);
+  let cloneHistory = $state<CloneHistory>('full');
+  let cloneDepth = $state(1);
 
   /**
    * Whether this URL will be reached over ssh.
@@ -89,7 +92,14 @@
   }
 
   async function doClone() {
-    const made = await start.clone(cloneUrl, cloneParent, cloneName, overSsh ? cloneKey : '');
+    const made = await start.clone({
+      url: cloneUrl,
+      parent: cloneParent,
+      name: cloneName,
+      sshKey: overSsh ? cloneKey : '',
+      history: cloneHistory,
+      depth: cloneDepth,
+    });
     if (made !== null) onOpen(made);
   }
 
@@ -184,6 +194,44 @@
             this repository, since a key named there for the same host would otherwise win. A
             key with a passphrase still has to be in your ssh agent already, because Coral
             cannot ask for one.
+          </p>
+        {/if}
+        <!--
+          Two different economies, which is why they are one choice rather than two tick
+          boxes: a shallow clone cuts the history off and a partial one keeps all of it and
+          leaves the file contents behind. Nobody wants to reason about both at once.
+        -->
+        <label class="history">
+          <span class="name">Take</span>
+          <select
+            value={cloneHistory}
+            onchange={(e) => (cloneHistory = e.currentTarget.value as CloneHistory)}
+          >
+            <option value="full">Everything</option>
+            <option value="shallow">Recent history only</option>
+            <option value="blobless">History now, file contents on demand</option>
+          </select>
+          {#if cloneHistory === 'shallow'}
+            <input
+              class="depth"
+              type="number"
+              min="1"
+              value={cloneDepth}
+              aria-label="How many commits"
+              onchange={(e) => (cloneDepth = Number(e.currentTarget.value) || 1)}
+            />
+            <span class="units">commits</span>
+          {/if}
+        </label>
+        {#if cloneHistory === 'shallow'}
+          <p class="note">
+            One branch, cut off at that many commits. Coral draws it and git can deepen it
+            later with <span class="mono">git fetch --deepen</span>.
+          </p>
+        {:else if cloneHistory === 'blobless'}
+          <p class="note">
+            Every commit, no file contents until something reads one. The graph is complete and
+            opening an old file needs the network. The host has to support it.
           </p>
         {/if}
         {#if cloneParent && clonedAs}
@@ -331,6 +379,17 @@
   .says { margin: 0; color: var(--fg-2); background: var(--bg-1); }
   /* Beneath the picker it qualifies, and quieter than the form it sits in. */
   .note { margin: -2px 0 0; font-size: 11px; color: var(--fg-2); background: var(--bg-1); }
+  .history select {
+    flex: 0 1 auto; min-width: 0; font: inherit; font-size: 12px;
+    padding: 5px var(--space-2); border-radius: var(--radius-1);
+    border: 1px solid var(--border); background: var(--bg-0); color: var(--fg-0);
+  }
+  .depth {
+    flex: 0 0 auto; width: 5em; font: inherit; font-size: 12px;
+    padding: 5px var(--space-2); border-radius: var(--radius-1);
+    border: 1px solid var(--border); background: var(--bg-0); color: var(--fg-0);
+  }
+  .units { flex: 0 0 auto; color: var(--fg-2); }
   .sshkey select {
     flex: 1 1 auto; min-width: 0; font: inherit; font-size: 12px;
     padding: 5px var(--space-2); border-radius: var(--radius-1);

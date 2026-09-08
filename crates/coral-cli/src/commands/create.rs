@@ -53,6 +53,8 @@ pub async fn clone(
     into: &Path,
     name: Option<String>,
     ssh_key: Option<String>,
+    depth: Option<u32>,
+    blobless: bool,
     quiet: bool,
 ) -> Result<Made, CoralError> {
     let runner = GitRunner::discover().await?;
@@ -61,6 +63,8 @@ pub async fn clone(
         parent: into.to_path_buf(),
         name,
         ssh_key,
+        depth,
+        blobless,
     };
     // Written to stderr, since stdout carries the envelope and a progress line is not part of
     // it. Carriage returns, so a terminal rewrites one line rather than scrolling.

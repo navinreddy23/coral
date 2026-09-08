@@ -137,6 +137,27 @@ pub async fn repo_init(
     Ok(made.display().to_string())
 }
 
+/// Everything a clone is asked for.
+///
+/// One argument rather than six, because a command signature that long stops saying which
+/// value is which — and the window has to build the same shape either way.
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloneRequest {
+    pub url: String,
+    /// The directory the clone is made *in*; the repository appears under it.
+    pub parent: String,
+    /// What to call it. `None` uses the name in the URL, as git does.
+    pub name: Option<String>,
+    /// The private key to authenticate with, or `None` to leave it to the agent.
+    pub ssh_key: Option<String>,
+    /// How many commits of history to take. `None` is all of them.
+    pub depth: Option<u32>,
+    /// Leave file contents on the server until something reads one.
+    #[serde(default)]
+    pub blobless: bool,
+}
+
 /// Clones a repository and answers with where it landed.
 ///
 /// # Errors
@@ -146,11 +167,16 @@ pub async fn repo_init(
 pub async fn repo_clone(
     app: tauri::AppHandle,
     profiles: tauri::State<'_, crate::profile::Profiles>,
-    url: String,
-    parent: String,
-    name: Option<String>,
-    ssh_key: Option<String>,
+    request: CloneRequest,
 ) -> Result<String, IpcError> {
+    let CloneRequest {
+        url,
+        parent,
+        name,
+        ssh_key,
+        depth,
+        blobless,
+    } = request;
     let settings = profiles.read().current().settings.clone();
     let runner = coral_core::process::GitRunner::discover().await?;
     // The form's own choice wins over the profile's, since it was made about this clone; the
@@ -163,6 +189,8 @@ pub async fn repo_clone(
         parent: std::path::PathBuf::from(&parent),
         name: name.filter(|n| !n.trim().is_empty()),
         ssh_key: key,
+        depth: depth.filter(|d| *d > 0),
+        blobless,
     };
     let logged = crate::activity::started(&parent, &format!("Clone {}", what.url));
     // Keyed by where it will land, since there is no repository to name yet and that is the

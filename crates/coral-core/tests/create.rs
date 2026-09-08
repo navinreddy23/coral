@@ -92,6 +92,8 @@ async fn clones_into_the_directory_git_would_have_chosen() {
         parent: dir.path().to_path_buf(),
         name: None,
         ssh_key: None,
+        depth: None,
+        blobless: false,
     };
     // The caller is told where it will land before it lands, so it can say so.
     assert_eq!(what.destination(), dir.path().join(name_from_url(&url)));
@@ -114,6 +116,8 @@ async fn clones_under_the_name_it_was_given() {
             parent: dir.path().to_path_buf(),
             name: Some("called-this".to_owned()),
             ssh_key: None,
+            depth: None,
+            blobless: false,
         },
         |_| {},
     )
@@ -144,6 +148,8 @@ async fn refuses_to_clone_over_a_repository_that_is_already_there() {
                     .into_owned(),
             ),
             ssh_key: None,
+            depth: None,
+            blobless: false,
         },
         |_| {},
     )
@@ -173,6 +179,8 @@ async fn a_clone_given_a_key_keeps_using_it_afterwards() {
             parent: dir.path().to_path_buf(),
             name: Some("with-key".to_owned()),
             ssh_key: Some("/home/someone/.ssh/id_work".to_owned()),
+            depth: None,
+            blobless: false,
         },
         |_| {},
     )
@@ -210,6 +218,8 @@ async fn a_clone_given_no_key_writes_no_command() {
             parent: dir.path().to_path_buf(),
             name: Some("no-key".to_owned()),
             ssh_key: None,
+            depth: None,
+            blobless: false,
         },
         |_| {},
     )
@@ -245,6 +255,8 @@ async fn a_clone_reports_progress_rather_than_going_quiet() {
             parent: dir.path().to_path_buf(),
             name: Some("watched".to_owned()),
             ssh_key: None,
+            depth: None,
+            blobless: false,
         },
         move |p| collect.lock().unwrap().push(p),
     )
@@ -279,6 +291,8 @@ async fn a_cancelled_clone_leaves_nothing_behind() {
         parent: dir.path().to_path_buf(),
         name: Some("abandoned".to_owned()),
         ssh_key: None,
+        depth: None,
+        blobless: false,
     };
     let work = clone(&runner, &what, |_| {});
     // Dropped without ever being polled to completion, which is what an abort does.
@@ -309,6 +323,8 @@ async fn a_clone_into_a_directory_that_is_already_there_does_not_delete_it() {
             parent: dir.path().to_path_buf(),
             name: Some("occupied".to_owned()),
             ssh_key: None,
+            depth: None,
+            blobless: false,
         },
         |_| {},
     )
@@ -352,6 +368,8 @@ async fn a_clone_abandoned_part_way_through_leaves_nothing_behind() {
         parent: dir.path().to_path_buf(),
         name: Some("abandoned".to_owned()),
         ssh_key: None,
+        depth: None,
+        blobless: false,
     };
 
     let cut = tokio::time::timeout(
@@ -370,4 +388,80 @@ async fn a_clone_abandoned_part_way_through_leaves_nothing_behind() {
         "a clone stopped part way through left {} behind",
         into.display()
     );
+}
+
+#[tokio::test]
+async fn a_shallow_clone_takes_the_tip_and_grafts_the_rest() {
+    // The point of offering this: somebody who wants to read the current tree of something
+    // enormous should not wait for its whole history. The engine already grafts a shallow
+    // clone at its boundary, so what arrives is a repository Coral can draw.
+    let source = TestRepo::new().write("a.txt", "1\n").commit("one");
+    let source = source.write("a.txt", "2\n").commit("two");
+    let source = source.write("a.txt", "3\n").commit("three");
+    let dir = tempfile::tempdir().unwrap();
+    let runner = runner().await;
+
+    let made = clone(
+        &runner,
+        &Cloned {
+            // `file://`, since a plain path clone ignores the depth and hardlinks the lot.
+            url: format!("file://{}/.git", source.path().display()),
+            parent: dir.path().to_path_buf(),
+            name: Some("shallow".to_owned()),
+            ssh_key: None,
+            depth: Some(1),
+            blobless: false,
+        },
+        |_| {},
+    )
+    .await
+    .unwrap();
+
+    assert!(made.join(".git/shallow").exists(), "it is a shallow clone");
+    let count = std::process::Command::new("git")
+        .args(["-C", made.to_str().unwrap(), "rev-list", "--count", "HEAD"])
+        .output()
+        .unwrap();
+    let count = String::from_utf8_lossy(&count.stdout).trim().to_owned();
+    assert_eq!(count, "1", "one commit, not three");
+    assert_eq!(std::fs::read_to_string(made.join("a.txt")).unwrap(), "3\n");
+}
+
+#[tokio::test]
+async fn a_blobless_clone_keeps_the_whole_history() {
+    // The difference from a shallow one, and the reason both are offered: this takes every
+    // commit and leaves the file contents on the server, so the graph is complete and only
+    // reading an old file needs the network.
+    let source = TestRepo::new().write("a.txt", "1\n").commit("one");
+    let source = source.write("a.txt", "2\n").commit("two");
+    let dir = tempfile::tempdir().unwrap();
+    let runner = runner().await;
+
+    let made = clone(
+        &runner,
+        &Cloned {
+            url: format!("file://{}/.git", source.path().display()),
+            parent: dir.path().to_path_buf(),
+            name: Some("partial".to_owned()),
+            ssh_key: None,
+            depth: None,
+            blobless: true,
+        },
+        |_| {},
+    )
+    .await
+    .unwrap();
+
+    assert!(
+        !made.join(".git/shallow").exists(),
+        "history is not cut off"
+    );
+    let count = std::process::Command::new("git")
+        .args(["-C", made.to_str().unwrap(), "rev-list", "--count", "HEAD"])
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8_lossy(&count.stdout).trim(), "2");
+    // The promise that makes it partial rather than merely smaller.
+    let config = std::fs::read_to_string(made.join(".git/config")).unwrap();
+    assert!(config.contains("partialclonefilter"), "{config}");
 }

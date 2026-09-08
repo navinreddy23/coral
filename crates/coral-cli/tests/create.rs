@@ -119,3 +119,57 @@ async fn a_clone_that_cannot_reach_its_source_fails_and_leaves_nothing() {
         "a failed clone left a directory behind"
     );
 }
+
+#[tokio::test]
+async fn clone_can_take_only_the_recent_history() {
+    // The reason this is offered at all: somebody who wants to read the current tree of
+    // something enormous should not wait for its whole history first.
+    let source = TestRepo::new().write("a.txt", "1\n").commit("one");
+    let source = source.write("a.txt", "2\n").commit("two");
+    let dir = tempfile::tempdir().unwrap();
+
+    let out = coral_cli::run(argv(&[
+        "--json",
+        "clone",
+        // `file://`, since a plain path clone hardlinks the object store and ignores a depth.
+        &format!("file://{}/.git", source.path().display()),
+        "--into",
+        dir.path().to_str().unwrap(),
+        "--name",
+        "shallow",
+        "--depth",
+        "1",
+        "--quiet",
+    ]))
+    .await;
+
+    assert_eq!(out.json["ok"], true, "{}", out.json);
+    assert!(dir.path().join("shallow/.git/shallow").exists());
+}
+
+#[tokio::test]
+async fn clone_can_leave_the_file_contents_on_the_server() {
+    let source = TestRepo::new().write("a.txt", "1\n").commit("one");
+    let dir = tempfile::tempdir().unwrap();
+
+    let out = coral_cli::run(argv(&[
+        "--json",
+        "clone",
+        &format!("file://{}/.git", source.path().display()),
+        "--into",
+        dir.path().to_str().unwrap(),
+        "--name",
+        "partial",
+        "--blobless",
+        "--quiet",
+    ]))
+    .await;
+
+    assert_eq!(out.json["ok"], true, "{}", out.json);
+    let config = std::fs::read_to_string(dir.path().join("partial/.git/config")).unwrap();
+    assert!(config.contains("partialclonefilter"), "{config}");
+    assert!(
+        !dir.path().join("partial/.git/shallow").exists(),
+        "history is whole; only the blobs are absent"
+    );
+}

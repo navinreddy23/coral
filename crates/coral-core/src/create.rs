@@ -55,6 +55,19 @@ pub struct Cloned {
     /// The private ssh key to authenticate with. `None` leaves it to the agent and
     /// `~/.ssh/config`, which is what git does on its own.
     pub ssh_key: Option<String>,
+    /// How many commits of history to fetch. `None` is all of it.
+    ///
+    /// A shallow clone is a real repository with its history cut off at a boundary, and the
+    /// graph walker grafts it there — see `docs/ARCHITECTURE.md`. It is not a lesser clone;
+    /// it is the difference between waiting five minutes for the kernel and waiting five
+    /// seconds when all somebody wants is to read the current tree.
+    pub depth: Option<u32>,
+    /// Fetch file contents on demand rather than up front.
+    ///
+    /// `--filter=blob:none` takes every commit and every tree and leaves the blobs on the
+    /// server until something asks for one. History stays complete, which is what separates
+    /// it from a shallow clone, and the price is that reading an old file needs the network.
+    pub blobless: bool,
 }
 
 impl Cloned {
@@ -131,10 +144,18 @@ where
 
     // Network class, so nothing times out: a clone is bounded by the size of the repository and
     // by the user cancelling, not by a clock.
-    let mut cmd = GitCommand::network("clone", &what.parent)
-        .args(["clone", "--progress"])
-        .arg(&what.url)
-        .arg(&into);
+    let mut cmd = GitCommand::network("clone", &what.parent).args(["clone", "--progress"]);
+    if let Some(depth) = what.depth.filter(|d| *d > 0) {
+        cmd = cmd.arg(format!("--depth={depth}"));
+        // git makes a depth-limited clone single-branch on its own, and says so only in the
+        // manual. Saying it here means the repository that arrives is the one the caller
+        // asked for rather than the one git inferred.
+        cmd = cmd.arg("--single-branch");
+    }
+    if what.blobless {
+        cmd = cmd.arg("--filter=blob:none");
+    }
+    cmd = cmd.arg(&what.url).arg(&into);
     // The environment rather than `-c core.sshCommand=`, because a `-c` is not inherited by
     // the repository git creates: it would authenticate this one fetch and leave the clone
     // with nothing. The key is written into the new repository below, which is what makes

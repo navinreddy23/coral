@@ -5,6 +5,7 @@ import {
   recentRepos,
   repoClone,
   repoInit,
+  type CloneWanted,
   type Recent,
 } from '../ipc/start';
 import { messageOf } from '../ipc/error';
@@ -69,14 +70,8 @@ export class StartState {
     return this.#run(() => repoInit(path, branch, lfs));
   }
 
-  /** `sshKey` is a private key path, or the empty string to leave it to the agent. */
-  async clone(
-    url: string,
-    parent: string,
-    name: string,
-    sshKey: string,
-  ): Promise<string | null> {
-    return this.#run(() => repoClone(url, parent, name, sshKey));
+  async clone(wanted: CloneWanted): Promise<string | null> {
+    return this.#run(() => repoClone(wanted));
   }
 
   async #run(action: () => Promise<string>): Promise<string | null> {

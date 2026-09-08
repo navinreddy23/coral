@@ -33,18 +33,34 @@ export function repoInit(path: string, branch: string, lfs: boolean): Promise<st
   return invoke<string>('repo_init', { path, branch: branch.trim() || null, lfs });
 }
 
+/** How much of a repository to take. */
+export type CloneHistory = 'full' | 'shallow' | 'blobless';
+
+/** Everything a clone is asked for. */
+export interface CloneWanted {
+  url: string;
+  /** The directory the clone is made in; the repository appears under it. */
+  parent: string;
+  /** Empty uses the name in the URL, as git does. */
+  name: string;
+  /** A private key path, or empty to leave it to the agent. */
+  sshKey: string;
+  history: CloneHistory;
+  /** How many commits to take. Only read when `history` is shallow. */
+  depth: number;
+}
+
 /** Clones into `parent`, under `name` or under the name in the URL. */
-export function repoClone(
-  url: string,
-  parent: string,
-  name: string,
-  sshKey: string,
-): Promise<string> {
+export function repoClone(wanted: CloneWanted): Promise<string> {
   return invoke<string>('repo_clone', {
-    url,
-    parent,
-    name: name.trim() || null,
-    sshKey: sshKey.trim() || null,
+    request: {
+      url: wanted.url,
+      parent: wanted.parent,
+      name: wanted.name.trim() || null,
+      sshKey: wanted.sshKey.trim() || null,
+      depth: wanted.history === 'shallow' ? Math.max(1, Math.round(wanted.depth)) : null,
+      blobless: wanted.history === 'blobless',
+    },
   });
 }
 

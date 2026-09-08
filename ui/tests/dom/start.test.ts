@@ -227,10 +227,14 @@ describe('the start page', () => {
       if (opened.length === 0) throw new Error('not yet');
     });
     expect(invoke).toHaveBeenCalledWith('repo_clone', {
-      url: 'git@gitlab.com:open-source-23/coral.git',
-      parent: '/home/someone/Work',
-      name: null,
-      sshKey: null,
+      request: {
+        url: 'git@gitlab.com:open-source-23/coral.git',
+        parent: '/home/someone/Work',
+        name: null,
+        sshKey: null,
+        depth: null,
+        blobless: false,
+      },
     });
   });
 
@@ -306,10 +310,14 @@ describe('choosing which ssh key clones', () => {
     });
 
     expect(invoke).toHaveBeenCalledWith('repo_clone', {
-      url: 'git@host:team/thing.git',
-      parent: '/home/someone/Work',
-      name: null,
-      sshKey: '/home/someone/.ssh/id_work',
+      request: {
+        url: 'git@host:team/thing.git',
+        parent: '/home/someone/Work',
+        name: null,
+        sshKey: '/home/someone/.ssh/id_work',
+        depth: null,
+        blobless: false,
+      },
     });
   });
 
@@ -326,5 +334,86 @@ describe('choosing which ssh key clones', () => {
       if (!view.container.querySelector('.sshkey')) throw new Error('no key row yet');
     });
     expect(view.container.querySelector('.form')?.textContent).toContain('passphrase');
+  });
+});
+
+describe('how much of a repository to take', () => {
+  it('takes everything unless asked otherwise', async () => {
+    const { view, opened } = await page();
+    await fireEvent.click(view.getByText('Clone'));
+    await fireEvent.input(view.getByPlaceholderText('https://host/team/thing.git'), {
+      target: { value: 'https://host/team/thing.git' },
+    });
+    await fireEvent.click(view.getByText('Choose…'));
+    await waitFor(() => {
+      if (!view.container.textContent?.includes('/home/someone/Work/thing')) {
+        throw new Error('the destination is not settled');
+      }
+    });
+    await fireEvent.click(view.getByText('Clone', { selector: '.primary' }));
+    await waitFor(() => {
+      if (opened.length === 0) throw new Error('not yet');
+    });
+
+    const sent = invoke.mock.calls.filter((c) => c[0] === 'repo_clone').at(-1)?.[1];
+    expect(sent).toMatchObject({ request: { depth: null, blobless: false } });
+  });
+
+  it('sends a depth for a shallow clone, and only then', async () => {
+    // The two are different economies: shallow cuts the history off, partial keeps all of it
+    // and leaves the file contents behind. Sending both would ask for something nobody chose.
+    const { view, opened } = await page();
+    await fireEvent.click(view.getByText('Clone'));
+    await fireEvent.input(view.getByPlaceholderText('https://host/team/thing.git'), {
+      target: { value: 'https://host/team/thing.git' },
+    });
+    await fireEvent.click(view.getByText('Choose…'));
+    await waitFor(() => {
+      if (!view.container.textContent?.includes('/home/someone/Work/thing')) {
+        throw new Error('the destination is not settled');
+      }
+    });
+
+    const take = view.container.querySelector('.history select') as HTMLSelectElement;
+    take.value = 'shallow';
+    await fireEvent.change(take);
+    const depth = view.container.querySelector('.depth') as HTMLInputElement;
+    depth.value = '50';
+    await fireEvent.change(depth);
+
+    await fireEvent.click(view.getByText('Clone', { selector: '.primary' }));
+    await waitFor(() => {
+      if (opened.length === 0) throw new Error('not yet');
+    });
+    expect(invoke.mock.calls.filter((c) => c[0] === 'repo_clone').at(-1)?.[1]).toMatchObject({
+      request: { depth: 50, blobless: false },
+    });
+  });
+
+  it('asks for a filter rather than a depth for a partial clone', async () => {
+    const { view, opened } = await page();
+    await fireEvent.click(view.getByText('Clone'));
+    await fireEvent.input(view.getByPlaceholderText('https://host/team/thing.git'), {
+      target: { value: 'https://host/team/thing.git' },
+    });
+    await fireEvent.click(view.getByText('Choose…'));
+    await waitFor(() => {
+      if (!view.container.textContent?.includes('/home/someone/Work/thing')) {
+        throw new Error('the destination is not settled');
+      }
+    });
+
+    const take = view.container.querySelector('.history select') as HTMLSelectElement;
+    take.value = 'blobless';
+    await fireEvent.change(take);
+    expect(view.container.querySelector('.depth'), 'no depth to give').toBeNull();
+
+    await fireEvent.click(view.getByText('Clone', { selector: '.primary' }));
+    await waitFor(() => {
+      if (opened.length === 0) throw new Error('not yet');
+    });
+    expect(invoke.mock.calls.filter((c) => c[0] === 'repo_clone').at(-1)?.[1]).toMatchObject({
+      request: { depth: null, blobless: true },
+    });
   });
 });

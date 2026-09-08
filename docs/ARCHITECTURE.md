@@ -82,6 +82,11 @@ each repository's choice in `scope.json` and folds it into the graph cache's fre
 which otherwise hashes only the refs — hiding a branch moves no ref, so the cache would have
 served the walk of everything and the eye would have appeared to do nothing.
 
+Coral can make one: the clone form and `coral clone` offer `--depth` and `--filter=blob:none`.
+The two are not the same economy. A depth cuts the history off and is grafted as below; a
+filter keeps every commit and leaves the blobs on the server, so the graph is whole and only
+reading an old file needs the network.
+
 **A shallow clone is grafted at its boundary.** `.git/shallow` names the commits whose parents
 were never fetched; git reads it and treats them as roots, and gix's traversal does not, so the
 walk asked the object database for a parent that is not there and failed. Those commits are

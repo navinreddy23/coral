@@ -191,6 +191,12 @@ passed to the clone and then written into the new repository, so every later fet
 Coral runs git with no terminal and no askpass, so the form says what that means: a key with a
 passphrase has to be in the agent already, or the clone fails rather than asking.
 
+How much to take is one choice rather than two switches, because the two economies are
+different and nobody wants to reason about both at once. Everything is the default. Recent
+history only is `--depth` on a single branch, which the graph walker grafts at its boundary.
+History now, file contents on demand is `--filter=blob:none`: every commit and every tree
+arrive, the graph is complete, and reading an old file needs the network.
+
 ## Terminal
 
 The shell is whatever `$SHELL` names, started interactively so the prompt, aliases and
