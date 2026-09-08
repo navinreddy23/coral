@@ -1367,11 +1367,20 @@
   }
 
   async function deleteBranch(name: string) {
+    // Coral deletes with `-D`, so git's own refusal never arrives and this question is the
+    // only thing between a misclick and an orphaned commit. It said the same alarming
+    // sentence either way, which is wrong twice over: a branch this one already contains
+    // loses nothing at all, and a warning that always fires is one nobody reads.
+    const where = await standingOf(name);
+    const contained = where === 'behind' || where === 'same';
     const { choice } = await ask({
       title: `Delete ${name}?`,
-      detail:
-        'The branch goes; the commits on it stay until git collects them, and are hard to find ' +
-        'again without it. Anything only this branch reached is effectively gone.',
+      detail: contained
+        ? `The branch goes. Every commit on it is on ${headName ?? 'this branch'} as well, so ` +
+          'nothing is lost with the name.'
+        : 'The branch goes; the commits on it stay until git collects them, and are hard to ' +
+          `find again without it. ${headName ?? 'This branch'} does not have them, so anything ` +
+          'only this branch reached is effectively gone.',
       asksText: false,
       placeholder: '',
       initial: '',

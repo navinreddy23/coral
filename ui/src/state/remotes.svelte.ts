@@ -12,11 +12,21 @@ export class RemotesState {
   list = $state<Remote[]>([]);
   busy = $state(false);
   error = $state<string | null>(null);
+  /**
+   * Whether the list has been read at all.
+   *
+   * An empty list means two different things before and after that, and the panel has to tell
+   * them apart: it opens on the add form when a repository has no remotes, and opened on it in
+   * repositories that had two, because it decided before the answer arrived.
+   */
+  read = $state(false);
   #path = '';
 
   async load(path: string): Promise<void> {
     this.#path = path;
+    this.read = false;
     await this.#run(() => remoteList(path));
+    this.read = true;
   }
 
   async edit(edit: RemoteEdit): Promise<boolean> {

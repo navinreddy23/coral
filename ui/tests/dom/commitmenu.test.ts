@@ -609,6 +609,42 @@ describe('the branch and tag menu', () => {
     expect(lastAction()).toBeUndefined();
   });
 
+  it('says nothing is lost when deleting a branch this one contains', async () => {
+    // Coral deletes with `-D`, so git never refuses and this question is the only thing
+    // between a misclick and an orphaned commit. Saying the same alarming sentence for a
+    // merged branch is a warning nobody reads by the time it matters.
+    const { container } = await shell(
+      { repo_refs: [on('topic', { kind: 'local_branch' })], rev_ancestry: 'behind' },
+      true,
+    );
+    await refMenu(container, 'topic');
+    await fireEvent.click(itemNamed(container, 'Delete topic…'));
+
+    const dialog = await waitFor(() => {
+      const found = container.querySelector('[role="dialog"]');
+      if (!found) throw new Error('no question yet');
+      return found as HTMLElement;
+    });
+    expect(dialog.textContent).toContain('nothing is lost');
+    expect(dialog.textContent).not.toContain('effectively gone');
+  });
+
+  it('warns when deleting a branch holding commits this one does not', async () => {
+    const { container } = await shell(
+      { repo_refs: [on('topic', { kind: 'local_branch' })], rev_ancestry: 'diverged' },
+      true,
+    );
+    await refMenu(container, 'topic');
+    await fireEvent.click(itemNamed(container, 'Delete topic…'));
+
+    const dialog = await waitFor(() => {
+      const found = container.querySelector('[role="dialog"]');
+      if (!found) throw new Error('no question yet');
+      return found as HTMLElement;
+    });
+    expect(dialog.textContent).toContain('effectively gone');
+  });
+
   it('fast-forwards a branch that has fallen behind, without checking it out', async () => {
     // The same question for a branch, where the answer is a real fast-forward rather than a
     // replacement, and needs no checkout.

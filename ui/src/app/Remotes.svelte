@@ -19,17 +19,23 @@
   let pushUrl = $state('');
 
   /**
-   * Opens on the remote the panel was reached from, or on the add form when there are none.
+   * Opens on the remote the panel was reached from, on the first one otherwise, and on the add
+   * form only when there are none.
    *
-   * Once, not on every change: after the first edit the user is driving, and reasserting the
-   * opening choice would drag them back to it.
+   * Reached from the section header rather than from a remote, it used to open on nothing at
+   * all and show the line meant for a repository with no remotes, beside a list of two.
+   *
+   * Not before the list has been read: it is fetched asynchronously, and an empty list means
+   * something different before the answer arrives. Once after that, not on every change: the
+   * user is driving by then, and reasserting the opening choice would drag them back to it.
    */
   let opened = $state(false);
   $effect(() => {
-    if (opened) return;
+    if (opened || !remotes.read) return;
     opened = true;
     if (focus !== null) startEdit(focus);
-    else if (remotes.list.length === 0) adding = true;
+    else if (remotes.list[0]) startEdit(remotes.list[0].name);
+    else adding = true;
   });
 
   /** Loads a remote's current values into the form. */
@@ -161,8 +167,10 @@
             This remote pushes somewhere else. Coral does not change a separate push URL.
           </p>
         {/if}
-      {:else}
+      {:else if remotes.list.length === 0}
         <p class="hint">No remotes are configured. Add one to fetch and push.</p>
+      {:else}
+        <p class="hint">Pick a remote to change, or add another.</p>
       {/if}
 
       {#if remotes.error}<p class="error">{remotes.error}</p>{/if}
