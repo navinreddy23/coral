@@ -717,6 +717,13 @@
     await Promise.all([refs.load(path), worktree.load(path), merge.load(path)]);
     const after = refSignature();
     if (before !== after) {
+      // `forget` first, as the scope rewalk does and for the same reason: a ref moved, so the
+      // rows on screen are a different set of commits rather than a stale copy of this one.
+      // Kept, the graph took the reloading path, which skips the fast first paint and repaints
+      // only when the exact walk is done. A pull that brought four months of the kernel
+      // therefore left the old tip on screen, saying nothing, for the fifty seconds that took
+      // — and the only way anyone found to see the new commits was to close the tab.
+      graph.forget();
       await graph.open(path);
       // Again, after the walk. The row a ref carries belongs to the walk it was read from,
       // and an action that moves a ref usually changes the shape of the walk as well — a
@@ -863,8 +870,20 @@
    * refuses for the same reason.
    */
   function combineItems(rev: string, head: string, where: Ancestry): MenuItem[] {
-    if (where === 'same' || where === 'behind') return [];
+    if (where === 'same') return [];
     const busy = actions.busy || worktree.busy;
+    const editing: MenuItem = {
+      kind: 'item',
+      label: `Rebase ${head} onto ${rev}, interactively`,
+      disabled: busy,
+      run: () => info && void rebase.load(info.path, rev),
+    };
+    // The one thing that still means something behind: `rebase -i` onto an ancestor lists the
+    // commits made since it, which is how anybody edits everything since the last release.
+    // Plain rebase there answers "up to date" and merge answers "already up to date", so those
+    // two go; this one is the reason to right-click a release tag at all.
+    if (where === 'behind') return [editing];
+
     const items: MenuItem[] = [];
     if (where === 'ahead') {
       items.push({
@@ -887,12 +906,7 @@
       disabled: busy,
       run: () => void act({ kind: 'rebase', onto: rev }),
     });
-    items.push({
-      kind: 'item',
-      label: `Rebase ${head} onto ${rev}, interactively`,
-      disabled: busy,
-      run: () => info && void rebase.load(info.path, rev),
-    });
+    items.push(editing);
     return items;
   }
 
@@ -923,7 +937,11 @@
       return [
         {
           kind: 'item',
-          label: `Move the tag ${ref.short} to ${head}…`,
+          // Named for the direction rather than for the plumbing. git moves a tag by replacing
+          // it, and the hint says so, but "fast-forward v1.0.0 to master" is what the person
+          // looking at a release tag behind their branch is after.
+          label: `Fast-forward ${ref.short} to ${head}…`,
+          hint: 'replaces the tag',
           danger: true,
           disabled: busy,
           run: () => void moveTag(ref.short, head),
@@ -936,7 +954,7 @@
   /** Moves a tag, after saying what that costs anyone who already has it. */
   async function moveTag(name: string, to: string) {
     const yes = await confirmThat(
-      `Move the tag ${name} to ${to}?`,
+      `Fast-forward the tag ${name} to ${to}?`,
       `${name} stops pointing at the commit it was made for. Anyone who has already fetched ` +
         'it keeps the old one until they delete theirs, and the remote keeps it until this ' +
         'tag is force pushed.',
@@ -2814,7 +2832,11 @@
     // anything new — a stash above all, whose commit no branch reaches — with no row and a row
     // is what makes it clickable. Switching tabs appeared to fix it because that path has
     // always been in this order.
-    if (change.refs || change.graph) await graph.open(path);
+    if (change.refs || change.graph) {
+      // As above: a ref that moved outside the window means the rows mean something else.
+      graph.forget();
+      await graph.open(path);
+    }
     await refs.load(path);
     await stashes.load(path);
     // Only when it actually moved: following HEAD on every commit would drag the view away

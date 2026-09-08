@@ -530,7 +530,7 @@ describe('the branch and tag menu', () => {
     expect(labels.some((l) => l.startsWith('Push v1.2.0'))).toBe(false);
   });
 
-  it('offers to move a tag the branch has passed, and never to go back to it', async () => {
+  it('fast-forwards a tag the branch has passed, and never goes back to it', async () => {
     // The reported bug. On a master that is up to date, right-clicking a release tag read
     // "Fast-forward master to v1.0.0", which git refuses: master is the one in front. The
     // direction that means anything here is the other one.
@@ -547,10 +547,26 @@ describe('the branch and tag menu', () => {
     expect(labels).not.toContain('Fast-forward master to v1.0.0');
     expect(labels).not.toContain('Merge v1.0.0 into master');
     expect(labels).not.toContain('Rebase master onto v1.0.0');
-    expect(labels).toContain('Move the tag v1.0.0 to master…');
+    expect(labels).toContain('Fast-forward v1.0.0 to master…');
   });
 
-  it('asks before moving a tag, and moves it when told to', async () => {
+  it('still offers to edit the commits made since a tag', async () => {
+    // `rebase -i` onto an ancestor lists everything committed since it, which is how anybody
+    // edits the history since their last release. Hiding it with the three that do nothing
+    // took away the reason to right-click a release tag at all.
+    const { container } = await shell(
+      {
+        repo_refs: [on('v1.0.0', { kind: 'tag', annotated: false })],
+        rev_ancestry: 'behind',
+      },
+      true,
+    );
+    await expand(container, 'Tags');
+    const labels = await refMenu(container, 'v1.0.0');
+    expect(labels).toContain('Rebase master onto v1.0.0, interactively');
+  });
+
+  it('asks before fast-forwarding a tag, and moves it when told to', async () => {
     // A tag that has been fetched anywhere else does not come back, so this is not a click
     // away from being done.
     const { container } = await shell(
@@ -562,7 +578,7 @@ describe('the branch and tag menu', () => {
     );
     await expand(container, 'Tags');
     await refMenu(container, 'v1.0.0');
-    await fireEvent.click(itemNamed(container, 'Move the tag v1.0.0 to master…'));
+    await fireEvent.click(itemNamed(container, 'Fast-forward v1.0.0 to master…'));
 
     await confirm(container, true);
     await waitFor(() => {
@@ -580,7 +596,7 @@ describe('the branch and tag menu', () => {
     );
     await expand(container, 'Tags');
     await refMenu(container, 'v1.0.0');
-    await fireEvent.click(itemNamed(container, 'Move the tag v1.0.0 to master…'));
+    await fireEvent.click(itemNamed(container, 'Fast-forward v1.0.0 to master…'));
 
     await confirm(container, false);
     expect(lastAction()).toBeUndefined();
@@ -793,14 +809,17 @@ describe('merging and rebasing from the graph', () => {
     expect(labels.some((l) => l.startsWith('Rebase master onto'))).toBe(false);
   });
 
-  it('offers none of it on a commit the branch has already passed', async () => {
+  it('offers only the interactive rebase on a commit the branch has passed', async () => {
     // The reported bug, on a commit row: master is in front, so there is nothing to bring in
-    // and no fast-forward backwards to it.
+    // and no fast-forward backwards to it. Editing the commits since it is the exception, and
+    // is the whole reason to right-click an old commit.
     const { container } = await shell({ rev_ancestry: 'behind' });
     const labels = await openMenu(container);
+    const short = oidOf(frame, 0).slice(0, 8);
     expect(labels.some((l) => l.startsWith('Fast-forward'))).toBe(false);
     expect(labels.some((l) => l.startsWith('Merge '))).toBe(false);
-    expect(labels.some((l) => l.startsWith('Rebase master onto'))).toBe(false);
+    expect(labels).not.toContain(`Rebase master onto ${short}`);
+    expect(labels).toContain(`Rebase master onto ${short}, interactively`);
   });
 
   it('drops the fast-forward when the two have diverged, and keeps the rest', async () => {

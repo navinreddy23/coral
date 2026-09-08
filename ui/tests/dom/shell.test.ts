@@ -984,6 +984,37 @@ describe('what an action leaves behind', () => {
     });
   });
 
+  /**
+   * After a fetch that moved a ref, the rows on screen are a different set of commits, not a
+   * stale copy of this one — so the graph takes the arriving path, which paints the fast
+   * commit-time frame first.
+   *
+   * Kept, it took the reloading path: no first paint, and the exact walk repaints only when it
+   * is done. Pulling four months of the kernel therefore left the old tip on screen saying
+   * nothing for the fifty seconds that took, and closing the tab was the only way anyone found
+   * to see the new commits.
+   */
+  it('paints the fast frame first when a fetch moved something', async () => {
+    const { container } = await shell({ ...fetched, repo_refs: spikeOn(1) });
+    wire({ ...fetched, repo_refs: spikeOn(2) });
+    invoke.mockClear();
+
+    await fireEvent.click(
+      [...container.querySelectorAll('button.action')].find((b) =>
+        b.textContent?.includes('Fetch'),
+      ) as HTMLButtonElement,
+    );
+
+    await waitFor(() => {
+      const frames = invoke.mock.calls
+        .filter(([cmd]) => cmd === 'graph_frame')
+        .map(([, args]) => (args as { firstPaint?: boolean }).firstPaint);
+      if (frames.length === 0) throw new Error('no frame asked for yet');
+      expect(frames, 'the fast frame, then the exact one').toContain(true);
+      expect(frames).toContain(false);
+    });
+  });
+
   /** A ref that has not moved must not cost a walk of the whole repository. */
   it('does not rewalk when nothing moved', async () => {
     const { container } = await shell({ ...fetched, repo_refs: spikeOn(1) });
