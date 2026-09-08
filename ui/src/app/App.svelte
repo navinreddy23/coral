@@ -71,6 +71,7 @@
   import { checkoutOf, divergence, remoteOf, withoutRemote } from './refname';
   import { orderRefs, pillChars } from './pill';
   import { checkoutItems, combineItems, type RevisionActions } from './revision';
+  import { count, discardWords } from './discard';
   import { bandWidth, columnWidth, laneToken } from '../graph/column';
   import { shortAge } from './age';
   import { initialsOf } from '../graph/initials';
@@ -1708,59 +1709,19 @@
     const untracked = entries.filter((e) => e.worktree === 'untracked').map((e) => e.path);
     const tracked = entries.filter((e) => e.worktree !== 'untracked').map((e) => e.path);
 
-    // Nothing here is primary, so Enter dismisses rather than discarding.
-    const choices: Choice[] = [];
-    if (tracked.length > 0) {
-      choices.push({
-        id: 'tracked',
-        label: untracked.length > 0
-          ? `Discard ${count(tracked.length, 'change')}, keep the new files`
-          : `Discard ${count(tracked.length, 'change')}`,
-      });
-    }
-    if (untracked.length > 0) {
-      choices.push({
-        id: 'all',
-        label: tracked.length > 0
-          ? `Discard everything, deleting ${count(untracked.length, 'new file')}`
-          : `Delete ${count(untracked.length, 'new file')}`,
-      });
-    }
-
+    const words = discardWords(tracked.length, untracked.length, headName);
     const { choice } = await ask({
       title: 'Discard changes?',
-      detail: discardDetail(tracked.length, untracked.length, headName),
+      detail: words.detail,
       asksText: false,
       placeholder: '',
       initial: '',
-      choices,
+      choices: words.choices,
     });
     if (choice === null) return;
 
     await worktree.discard(tracked, choice === 'all' ? untracked : []);
     if (!worktree.error) toasts.push('ok', 'Changes discarded.');
-  }
-
-  /** "1 change", "4 changes" — the plural of a count without a helper library. */
-  function count(n: number, noun: string): string {
-    return `${n} ${noun}${n === 1 ? '' : 's'}`;
-  }
-
-  function discardDetail(tracked: number, untracked: number, branch: string | null): string {
-    const where = branch === null ? 'the commit that is checked out' : branch;
-    const parts: string[] = [];
-    if (tracked > 0) {
-      const goes = tracked === 1 ? 'goes' : 'go';
-      parts.push(`${count(tracked, 'file')} ${goes} back to what ${where} last committed.`);
-    }
-    if (untracked > 0) {
-      parts.push(
-        `${count(untracked, 'file')} ${untracked === 1 ? 'is' : 'are'} not tracked by git,` +
-          ' so deleting them removes the only copy there is.',
-      );
-    }
-    parts.push('This cannot be undone.');
-    return parts.join(' ');
   }
 
   /**
