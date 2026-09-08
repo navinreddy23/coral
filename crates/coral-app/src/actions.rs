@@ -660,7 +660,9 @@ async fn run_tree(
             // does not let the branch be switched, which is what it was asked for.
             loc.stash_push(runner, message.as_deref(), true).await?;
         }
-        Action::StashApply { index, pop } => loc.stash_apply(runner, index, pop).await?,
+        Action::StashApply { index, pop } => {
+            return Ok(Done::from(&loc.stash_apply(runner, index, pop).await?));
+        }
         Action::StashDrop { index } => loc.stash_drop(runner, index).await?,
         Action::WorktreeAdd { path, rev, branch } => {
             loc.worktree_add(runner, std::path::Path::new(&path), &rev, branch.as_deref())

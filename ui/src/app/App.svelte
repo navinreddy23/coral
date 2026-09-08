@@ -58,7 +58,7 @@
   import { ExperimentalState } from '../state/experimental.svelte';
   import SubmodulePanel from './Submodule.svelte';
   import { RemotesState } from '../state/remotes.svelte';
-  import { describe, ToastsState } from '../state/toasts.svelte';
+  import { outcomeToast, ToastsState } from '../state/toasts.svelte';
   import { copyText } from './clipboard';
   import { onRepoChanged, unwatchRepo, watchRepo, type RepoChanged } from '../ipc/watch';
   import Terminal from './Terminal.svelte';
@@ -696,7 +696,7 @@
       return false;
     }
 
-    const said = describe(outcome.what, outcome.message, outcome.conflicted);
+    const said = outcomeToast(action.kind, outcome.what, outcome.message, outcome.conflicted);
     toasts.push(said.kind, said.title, said.detail);
 
     // Not for a deletion. A refused delete is refused because the remote will not part with

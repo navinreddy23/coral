@@ -81,24 +81,3 @@ async fn a_named_stash_keeps_the_name_and_the_branch() {
     assert_eq!(stack[0].message, "half a refactor");
     assert!(stack[0].name().starts_with("topic@"));
 }
-
-/// A pop that conflicts explains itself on stdout, and git says nothing at all on stderr.
-///
-/// The window reported "git stash exited with 1:" and then nothing, which tells the user that
-/// something failed and refuses to say what.
-#[tokio::test]
-async fn a_conflicting_pop_carries_gits_own_explanation() {
-    let repo = TestRepo::new().write("f.txt", "one\ntwo\n").commit("base");
-    let repo = repo.write("f.txt", "one\nSTASH\n");
-    repo.git(["stash", "push", "--quiet", "-m", "wip"]);
-    let repo = repo.write("f.txt", "one\nMAIN\n").commit("main");
-    let (runner, loc) = open(&repo).await;
-
-    let failed = loc
-        .stash_apply(&runner, 0, true)
-        .await
-        .expect_err("the pop conflicts");
-    let said = failed.to_string();
-    assert!(said.contains("CONFLICT"), "says what happened: {said}");
-    assert!(said.contains("f.txt"), "names the file: {said}");
-}

@@ -242,24 +242,33 @@ impl RepoLocation {
 
     /// Applies a stash entry, optionally dropping it.
     ///
+    /// A stash that lands on conflicts has not failed, any more than a merge that does: the
+    /// worktree holds both sides and git keeps the entry. Reported as an outcome for the same
+    /// reason, and told apart from a real failure the same way — by asking the repository
+    /// rather than by reading the exit code, which is 1 for both.
+    ///
+    /// `--quiet` is kept: git still prints the conflicting paths, and without it a successful
+    /// pop answers with a whole `git status` nobody asked for.
+    ///
     /// # Errors
-    /// Propagates git failures, including conflicts raised by the application.
+    /// Propagates git failures that left no conflict behind.
     pub async fn stash_apply(
         &self,
         runner: &GitRunner,
         index: usize,
         pop: bool,
-    ) -> Result<(), CoralError> {
+    ) -> Result<OpOutcome, CoralError> {
         let verb = if pop { "pop" } else { "apply" };
-        runner
-            .output(GitCommand::write("stash", self.display_path()).args([
+        self.run_stoppable(
+            runner,
+            GitCommand::write("stash", self.display_path()).args([
                 "stash",
                 verb,
                 "--quiet",
                 &format!("stash@{{{index}}}"),
-            ]))
-            .await
-            .map(|_| ())
+            ]),
+        )
+        .await
     }
 
     /// Drops a stash entry.

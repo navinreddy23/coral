@@ -90,3 +90,22 @@ export function describe(
   }
   return { kind: 'ok', title: `${what} complete`, detail: text };
 }
+
+/**
+ * What to say about an action that has finished.
+ *
+ * Undo and redo answer with a whole sentence — "undid commit" — where every other action
+ * answers with a noun this completes. Put through the same wording they read "undid commit
+ * complete".
+ */
+export function outcomeToast(
+  action: string,
+  what: string,
+  message: string,
+  conflicted: boolean,
+): { kind: ToastKind; title: string; detail: string } {
+  if (action === 'undo' || action === 'redo') {
+    return { kind: 'ok', title: what, detail: '' };
+  }
+  return describe(what, message, conflicted);
+}

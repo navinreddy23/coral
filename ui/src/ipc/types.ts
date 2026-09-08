@@ -213,6 +213,16 @@ stoppedAt: string | null,
  */
 interactive: boolean, 
 /**
+ * Whether git has an operation it can be told to continue, abort or skip.
+ *
+ * False for a conflicted index with no marker file: `merge --no-commit`, `cherry-pick
+ * --no-commit`, and a stash that would not apply all leave one. The state is reported as
+ * a merge because that is what git's own status calls it, but there is nothing to
+ * continue — the files are resolved, staged and committed like any other change, and
+ * `git merge --continue` answers that no merge is in progress.
+ */
+resumable: boolean, 
+/**
  * True when this is `git am` rather than a rebase.
  *
  * The two leave the same files behind and are settled the same way, so the state is

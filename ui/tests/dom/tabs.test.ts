@@ -137,6 +137,7 @@ function wire() {
           headName: null,
           stoppedAt: null,
           interactive: false,
+          resumable: true,
         };
       case 'hosting_status':
         return { host: null, detail: 'no remotes', token: 'none' };

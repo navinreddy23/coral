@@ -237,6 +237,10 @@ async fn a_merge_labels_the_sides_by_branch_name() {
     let op = loc.operation(&runner).await.unwrap();
 
     assert_eq!(op.state, OpState::Merge);
+    assert!(
+        op.resumable,
+        "git can be told to continue or abort this one"
+    );
     assert_eq!(op.labels.ours, "main");
     assert_eq!(op.labels.theirs, "side");
     assert!(!op.labels.swapped);
@@ -456,6 +460,9 @@ fn an_unmerged_index_is_an_operation_even_with_no_marker_file() {
             OpState::Merge,
             "the window would show no merge tool"
         );
+        // Called a merge, but there is nothing to continue: `git merge --continue` answers
+        // that no merge is in progress, so the window must not offer the button.
+        assert!(!op.resumable);
         assert_eq!(loc.conflicts(&runner).await.unwrap().len(), 1);
     });
 }

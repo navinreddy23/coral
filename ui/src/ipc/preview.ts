@@ -381,6 +381,7 @@ const FIXTURES: Record<string, unknown> = {
     headName: null,
     stoppedAt: null,
     interactive: false,
+    resumable: true,
   },
   repo_conflicts: [],
   hosting_status: {

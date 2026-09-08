@@ -24,6 +24,7 @@ function operation(swapped = false): Operation {
     headName: null,
     stoppedAt: null,
     interactive: false,
+    resumable: true,
   };
 }
 
@@ -47,6 +48,24 @@ describe('the merge tool', () => {
     const cont = buttons.find((b) => b.textContent?.trim() === 'Continue');
     expect(cont).toBeDefined();
     expect((cont as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('offers neither continue nor abort when git has no operation to continue', () => {
+    // A stash that would not apply, or a merge asked not to commit: the index is conflicted
+    // and there is no marker file. Both buttons answered "no merge, rebase, cherry-pick or
+    // revert is in progress", which is true and no help at all.
+    const merge = state([conflicted()]);
+    if (merge.operation) merge.operation = { ...merge.operation, resumable: false };
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+
+    const labels = [...container.querySelectorAll('header button')].map((b) =>
+      b.textContent?.trim(),
+    );
+    expect(labels).not.toContain('Continue');
+    expect(labels).not.toContain('Abort');
+    expect(container.querySelector('header')?.textContent).toContain('conflicts to resolve');
+    expect(container.querySelector('header')?.textContent).not.toContain('in progress');
+    expect(container.querySelector('header')?.textContent).toContain('then commit as usual');
   });
 
   it('lets the operation finish once nothing is left', () => {
@@ -102,6 +121,7 @@ describe('the merge tool', () => {
       headName: null,
       stoppedAt: null,
       interactive: false,
+      resumable: true,
     };
     const { container } = render(MergeTool, { props: { merge, onDone: noop } });
 

@@ -206,6 +206,7 @@ describe('picking sides region by region', () => {
       headName: null,
       stoppedAt: null,
       interactive: false,
+      resumable: true,
     });
     vi.spyOn(commands, 'repoConflicts').mockResolvedValue([]);
 
@@ -238,6 +239,7 @@ describe('arriving at a stopped operation', () => {
       headName: null,
       stoppedAt: null,
       interactive: false,
+      resumable: true,
     });
     vi.spyOn(commands, 'repoConflicts').mockResolvedValue(files as never);
     vi.spyOn(commands, 'conflictBlocks').mockImplementation(async (_p, file) => ({
@@ -316,6 +318,7 @@ describe('stepping an operation on', () => {
       headName: 'topic',
       stoppedAt: null,
       interactive: false,
+      resumable: true,
     });
     vi.spyOn(commands, 'repoConflicts').mockResolvedValue([
       { path: 'dummy.txt', kind: 'both_modified', binary: false, deleteModify: false },

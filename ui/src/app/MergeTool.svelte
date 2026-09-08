@@ -119,6 +119,16 @@
   });
 
   /**
+   * Whether git has an operation to be told to continue or abort.
+   *
+   * A conflicted index with no marker file has none: a stash that would not apply, or a merge
+   * or cherry-pick asked not to commit. Both buttons refused with "no merge, rebase,
+   * cherry-pick or revert is in progress", which is true and no help at all. The files are
+   * resolved and staged here, and committed from the panel like any other change.
+   */
+  const resumable = $derived(merge.operation?.resumable !== false);
+
+  /**
    * Which sides a conflict actually has content on.
    *
    * A file deleted on one side and modified on the other has one version, not two, and
@@ -159,7 +169,7 @@
 <section class="merge">
   <header>
     <span class="what">
-      {verb} in progress
+      {resumable ? `${verb} in progress` : 'conflicts to resolve'}
       {#if merge.operation?.progress}
         <span class="muted">
           — {merge.operation.progress.current} of {merge.operation.progress.total}
@@ -172,24 +182,28 @@
       </span>
     {/if}
     <span class="spacer"></span>
-    <button
-      class="primary"
-      disabled={merge.busy || merge.files.length > 0}
-      onclick={finish}
-      title={merge.files.length > 0 ? 'Resolve every file first' : 'Continue the operation'}
-    >
-      Continue
-    </button>
-    {#if skippable}
+    {#if resumable}
       <button
-        disabled={merge.busy}
-        onclick={skip}
-        title="Drop the commit that will not apply and go on to the next"
+        class="primary"
+        disabled={merge.busy || merge.files.length > 0}
+        onclick={finish}
+        title={merge.files.length > 0 ? 'Resolve every file first' : 'Continue the operation'}
       >
-        Skip commit
+        Continue
       </button>
+      {#if skippable}
+        <button
+          disabled={merge.busy}
+          onclick={skip}
+          title="Drop the commit that will not apply and go on to the next"
+        >
+          Skip commit
+        </button>
+      {/if}
+      <button disabled={merge.busy} onclick={abort}>Abort</button>
+    {:else}
+      <span class="muted">Resolve each file, then commit as usual.</span>
     {/if}
-    <button disabled={merge.busy} onclick={abort}>Abort</button>
   </header>
 
   {#if merge.error}

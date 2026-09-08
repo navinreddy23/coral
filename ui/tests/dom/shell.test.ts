@@ -104,6 +104,7 @@ function answers(over: Record<string, unknown> = {}): Record<string, unknown> {
       headName: null,
       stoppedAt: null,
       interactive: false,
+      resumable: true,
     },
     repo_conflicts: [],
     hosting_status: { host: null, detail: 'no remotes', token: 'none' },
@@ -433,6 +434,7 @@ describe('the shell', () => {
         headName: 'main',
         stoppedAt: null,
         interactive: false,
+        resumable: true,
       },
       repo_conflicts: [{ path: 'shared.txt', kind: 'both_modified' }],
     });
@@ -685,6 +687,7 @@ describe('the shell', () => {
         headName: null,
         stoppedAt: null,
         interactive: false,
+        resumable: true,
       },
       repo_conflicts: [
         { path: 'f.txt', kind: 'both_modified', binary: false, deleteModify: false },

@@ -401,29 +401,32 @@ pub enum StashAction {
 /// Pushes, applies, pops or drops a stash entry.
 ///
 /// # Errors
-/// Propagates git failures, including conflicts raised by applying.
+/// Propagates git failures that left no conflict behind. A stash that lands on conflicts is
+/// reported as a stop, the way a merge is, rather than as a failure.
 pub async fn stash(
     path: &Path,
     action: StashAction,
     index: usize,
     message: Option<String>,
     include_untracked: bool,
-) -> Result<Done, CoralError> {
+) -> Result<OpOutcome, CoralError> {
     let label = format!("stash {action:?}").to_lowercase();
     journaled(path, &label, |r, l| async move {
         match action {
+            // Neither of these can stop half-done, so both answer with the outcome the
+            // repository is in once they have run: a completed one.
             StashAction::Push => {
                 l.stash_push(&r, message.as_deref(), include_untracked)
-                    .await
+                    .await?;
+                l.op_outcome(&r, String::new()).await
+            }
+            StashAction::Drop => {
+                l.stash_drop(&r, index).await?;
+                l.op_outcome(&r, String::new()).await
             }
             StashAction::Apply => l.stash_apply(&r, index, false).await,
             StashAction::Pop => l.stash_apply(&r, index, true).await,
-            StashAction::Drop => l.stash_drop(&r, index).await,
         }
     })
-    .await?;
-    Ok(Done {
-        what: label,
-        oid: None,
-    })
+    .await
 }

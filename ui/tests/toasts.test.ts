@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { describe as phrase, ToastsState } from '../src/state/toasts.svelte';
+import { describe as phrase, outcomeToast, ToastsState } from '../src/state/toasts.svelte';
 
 describe('toasts', () => {
   it('stacks rather than replacing, because a fetch of three remotes has three answers', () => {
@@ -101,5 +101,31 @@ describe('what to call an outcome that did not complete', () => {
   it('still calls a stopped rebase a conflict', () => {
     const said = phrase('rebase onto main', 'error: could not apply 1a2b3c4', true);
     expect(said.title).toBe('rebase onto main stopped on conflicts');
+  });
+
+  it('lets undo and redo say what they did, without completing the sentence', () => {
+    // They answer with the whole thing — "undid commit" — where a fetch answers with "fetch"
+    // and this adds the verb. Put through the same wording it read "undid commit complete".
+    expect(outcomeToast('undo', 'undid commit', '', false)).toEqual({
+      kind: 'ok',
+      title: 'undid commit',
+      detail: '',
+    });
+    expect(outcomeToast('redo', 'redid merge feature', '', false).title).toBe(
+      'redid merge feature',
+    );
+  });
+
+  it('completes the sentence for every other action', () => {
+    expect(outcomeToast('fetch', 'fetch', 'From origin', false)).toEqual({
+      kind: 'ok',
+      title: 'fetch complete',
+      detail: 'From origin',
+    });
+  });
+
+  it('still warns about a conflict, and still notices nothing to do', () => {
+    expect(outcomeToast('merge', 'merge feature', 'CONFLICT (content)', true).kind).toBe('warn');
+    expect(outcomeToast('pull', 'pull', 'Already up to date.', false).kind).toBe('info');
   });
 });

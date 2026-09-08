@@ -187,6 +187,82 @@ async fn stashes_applies_pops_and_drops() {
 }
 
 #[tokio::test]
+async fn a_stash_that_lands_on_conflicts_has_stopped_rather_than_failed() {
+    // git exits 1 either way. Reported as a failure it read "Something went wrong" in red, for
+    // a situation git itself recovers from: both sides are in the file and the entry is kept.
+    //
+    // The message is the other half. git explains a conflicting pop on stdout and says nothing
+    // at all on stderr, so a report that reads only stderr says that something failed and then
+    // refuses to say what.
+    let repo = TestRepo::new()
+        .write(
+            "a.txt", "base
+",
+        )
+        .commit("base");
+    let repo = repo.write(
+        "a.txt", "stashed
+",
+    );
+    let (runner, loc) = open(&repo).await;
+    loc.stash_push(&runner, None, false).await.unwrap();
+    let repo = repo
+        .write(
+            "a.txt",
+            "committed over it
+",
+        )
+        .commit("moved on");
+
+    let outcome = loc
+        .stash_apply(&runner, 0, true)
+        .await
+        .expect("a conflict is an outcome, not an error");
+
+    assert!(!outcome.completed);
+    assert_eq!(outcome.conflicts, ["a.txt"]);
+    assert!(
+        outcome.message.contains("CONFLICT"),
+        "git's own words reach the user: {}",
+        outcome.message
+    );
+    assert!(
+        std::fs::read_to_string(repo.path().join("a.txt"))
+            .unwrap()
+            .contains("<<<<<<<"),
+        "both sides are in the file"
+    );
+    assert!(
+        !repo.git(["stash", "list"]).is_empty(),
+        "a pop that conflicted keeps the entry"
+    );
+}
+
+#[tokio::test]
+async fn a_stash_that_applies_cleanly_is_a_completed_outcome() {
+    let repo = TestRepo::new()
+        .write(
+            "a.txt", "base
+",
+        )
+        .commit("base");
+    let repo = repo.write(
+        "b.txt", "new
+",
+    );
+    let (runner, loc) = open(&repo).await;
+    loc.stash_push(&runner, None, true).await.unwrap();
+
+    let outcome = loc.stash_apply(&runner, 0, true).await.unwrap();
+    assert!(outcome.completed);
+    assert!(outcome.conflicts.is_empty());
+    assert!(
+        repo.git(["stash", "list"]).is_empty(),
+        "a clean pop drops it"
+    );
+}
+
+#[tokio::test]
 async fn stashes_untracked_files_only_when_asked() {
     let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
     let repo = repo.write("untracked.txt", "u\n");

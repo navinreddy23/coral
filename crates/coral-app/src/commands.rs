@@ -332,7 +332,9 @@ pub async fn commit_staged(
         ..coral_core::ops::CommitOpts::default()
     };
 
-    let label = if amend { "Amend the commit" } else { "Commit" };
+    // Lowercase, like every other journal label: undo reads them back as "undid <label>", so
+    // a capitalised noun lands in the middle of a sentence.
+    let label = if amend { "amend the commit" } else { "commit" };
     let logged = crate::activity::started(&path, label);
     // Journalled like any other operation that moves a ref, so Undo reaches the commonest one
     // of all. It comes back staged rather than discarded: the refs go where they were and the
