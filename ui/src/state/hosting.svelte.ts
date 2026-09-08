@@ -25,7 +25,14 @@ export class HostingState {
   #path = '';
 
   /** True once there is a host to talk to and a token to talk with. */
-  available = $derived(this.view?.host != null && this.view.signedIn);
+  available = $derived(this.view?.host != null && this.view.token !== 'none');
+
+  /**
+   * True when the token in use is the shared one rather than this profile's own.
+   *
+   * The window says so, because signing out of it signs every other profile out too.
+   */
+  shared = $derived(this.view?.token === 'shared');
 
   async load(path: string): Promise<void> {
     this.#path = path;
@@ -56,6 +63,7 @@ export class HostingState {
     }
   }
 
+  /** Stores a token for the profile at the window. Never touches the shared one. */
   async signIn(tokenValue: string): Promise<void> {
     this.error = null;
     try {

@@ -196,6 +196,29 @@ fn each_provider_is_given_its_own_auth_header() {
 }
 
 #[test]
+fn two_profiles_on_one_host_keep_separate_accounts() {
+    use coral_hosting::token::Account;
+
+    // Two logins on one origin share a service name, so the account is the only thing that
+    // can tell a work token from a personal one on github.com.
+    assert_ne!(
+        Account::of_profile("work").name(),
+        Account::of_profile("personal").name()
+    );
+
+    // What everybody's token is filed under today. Changing it would sign the whole install
+    // out on upgrade, silently, with the token still in the keyring under the old name.
+    assert_eq!(Account::shared().name(), "api-token");
+    assert_ne!(Account::of_profile("work").name(), Account::shared().name());
+
+    // A profile whose id happens to spell the shared account's name is still its own account.
+    assert_ne!(
+        Account::of_profile("api-token").name(),
+        Account::shared().name()
+    );
+}
+
+#[test]
 fn a_refusal_says_what_to_do_about_it() {
     use coral_hosting::client::describe_failure;
 

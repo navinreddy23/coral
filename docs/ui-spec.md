@@ -197,6 +197,15 @@ history only is `--depth` on a single branch, which the graph walker grafts at i
 History now, file contents on demand is `--filter=blob:none`: every commit and every tree
 arrive, the graph is complete, and reading an old file needs the network.
 
+## Signing in to a host
+
+The host chip at the right of the status bar names GitHub or GitLab and says when there is no
+token. It is a button: it opens the account, where a token is pasted and stored for the profile
+at the window, so a work account and a personal one on the same host are both signed in and
+neither can see the other's token. The dialog says which of the three states it is in, because
+the third one — falling back to the token the command line stored, which every profile shares —
+is the one where signing out affects the other profiles.
+
 ## Terminal
 
 The shell is whatever `$SHELL` names, started interactively so the prompt, aliases and

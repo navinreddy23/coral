@@ -39,6 +39,7 @@ const base = {
   busy: false,
   onDismiss: () => {},
   onLogs: () => {},
+  onHost: () => {},
 };
 
 function bar(over: Record<string, unknown> = {}) {
@@ -85,11 +86,39 @@ describe('the status bar', () => {
     const host = {
       host: { kind: 'gitlab' as const, origin: 'https://gitlab.com', owner: 'o', repo: 'r' },
       detail: null,
-      signedIn: false,
+      token: 'none' as const,
     };
     const { container } = bar({ host });
     expect(container.querySelector('.host')?.textContent).toContain('GitLab');
     expect(container.querySelector('.host')?.textContent).toContain('no token');
+  });
+
+  it('says nothing about a token when the profile is falling back to the shared one', () => {
+    // Signed in is signed in, as far as this bar is concerned. Which account it is comes from
+    // the dialog the chip opens, where there is room to explain it.
+    const host = {
+      host: { kind: 'github' as const, origin: 'https://github.com', owner: 'o', repo: 'r' },
+      detail: null,
+      token: 'shared' as const,
+    };
+    const { container } = bar({ host });
+    expect(container.querySelector('.host')?.textContent).not.toContain('no token');
+  });
+
+  it('opens the account from the host chip', async () => {
+    // It read "no token" and nothing in the window could give it one: signing in was the
+    // command line or nothing.
+    let asked = 0;
+    const host = {
+      host: { kind: 'github' as const, origin: 'https://github.com', owner: 'o', repo: 'r' },
+      detail: null,
+      token: 'none' as const,
+    };
+    const { container } = bar({ host, onHost: () => (asked += 1) });
+    const chip = container.querySelector('.host');
+    if (chip === null) throw new Error('no host chip');
+    await fireEvent.click(chip);
+    expect(asked).toBe(1);
   });
 
   it('marks itself while something is running', () => {

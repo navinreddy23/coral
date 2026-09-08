@@ -14,6 +14,7 @@
     busy,
     onDismiss,
     onLogs,
+    onHost,
   }: {
     branch: string | null;
     /** The ref for the current branch, for its ahead and behind counts. */
@@ -27,6 +28,8 @@
     onDismiss: () => void;
     /** Opens the activity log, whose way in is the last thing in this bar. */
     onLogs: () => void;
+    /** Opens the host's account, which is what the chip saying "no token" is about. */
+    onHost: () => void;
   } = $props();
 
   /** Exact counts stop being useful past a point; the reference caps them at 99+. */
@@ -64,11 +67,19 @@
 
   <span class="spacer"></span>
 
+  <!--
+    A button, not a label. It said "no token" and there was nowhere in the window to give it
+    one; the only way to sign in was the command line.
+  -->
   {#if host?.host}
-    <span class="host" title={`${host.host.owner}/${host.host.repo} at ${host.host.origin}`}>
+    <button
+      class="host"
+      onclick={onHost}
+      title={`${host.host.owner}/${host.host.repo} at ${host.host.origin}`}
+    >
       {host.host.kind === 'gitlab' ? 'GitLab' : 'GitHub'}
-      {#if !host.signedIn}<span class="muted">· no token</span>{/if}
-    </span>
+      {#if host.token === 'none'}<span class="muted">· no token</span>{/if}
+    </button>
   {/if}
   {#if commits > 0}
     <span class="count">{commits.toLocaleString()} commits</span>
@@ -102,7 +113,11 @@
   .ahead { color: var(--ok); }
   .behind { color: var(--warn); }
   .changed { color: var(--fg-1); }
-  .host { color: var(--fg-1); }
+  .host {
+    font: inherit; color: var(--fg-1); cursor: pointer;
+    background: none; border: 0; padding: 1px var(--space-2); border-radius: 999px;
+  }
+  .host:hover { background: var(--bg-2); color: var(--fg-0); }
   .muted { color: var(--fg-2); }
 
   .report {

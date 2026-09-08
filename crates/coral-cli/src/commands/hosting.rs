@@ -4,7 +4,17 @@ use std::path::Path;
 use coral_core::CoralError;
 use coral_core::process::GitRunner;
 use coral_core::repo::RepoLocation;
+use coral_hosting::token::Account;
 use coral_hosting::{Client, Host, PullRequest, token};
+
+/// The CLI has no profile, so it reads and writes the account every profile falls back to.
+///
+/// A token stored here works in the window until that profile signs in with one of its own,
+/// and a token the window stored for a profile is not visible from here. Both are what the
+/// two tools can honestly say: nothing on the command line names which profile is meant.
+fn account() -> Account {
+    Account::shared()
+}
 
 /// What Coral knows about the host behind a repository's remote.
 #[derive(serde::Serialize)]
@@ -41,7 +51,7 @@ pub async fn detect(path: &Path) -> Result<HostView, CoralError> {
 
     match Host::detect(&remote.fetch_url) {
         Ok(host) => {
-            let signed_in = token::load(&host).ok().flatten().is_some();
+            let signed_in = token::load(&host, &account()).ok().flatten().is_some();
             Ok(HostView {
                 host: Some(host),
                 detail: None,
@@ -70,22 +80,25 @@ pub struct PullRequests {
 pub async fn list(path: &Path) -> Result<PullRequests, CoralError> {
     let view = detect(path).await?;
     let host = view.host.ok_or_else(|| CoralError::Refused {
-        label: "hosting",
+        label: "reach the host",
         detail: view.detail.unwrap_or_else(|| "no host".to_owned()),
     })?;
 
-    let secret = token::load(&host)
-        .map_err(|e| refused(&e))?
+    let secret = token::load(&host, &account())
+        .map_err(|e| refused("list pull requests", &e))?
         .ok_or_else(|| CoralError::Refused {
-            label: "hosting",
+            label: "list pull requests",
             detail: format!(
                 "no token stored for {}; run `coral host-login`",
                 host.origin
             ),
         })?;
 
-    let client = Client::new(secret).map_err(|e| refused(&e))?;
-    let pull_requests = client.pull_requests(&host).await.map_err(|e| refused(&e))?;
+    let client = Client::new(secret).map_err(|e| refused("list pull requests", &e))?;
+    let pull_requests = client
+        .pull_requests(&host)
+        .await
+        .map_err(|e| refused("list pull requests", &e))?;
     Ok(PullRequests { pull_requests })
 }
 
@@ -96,12 +109,12 @@ pub async fn list(path: &Path) -> Result<PullRequests, CoralError> {
 pub async fn login(path: &Path, secret: secrecy::SecretString) -> Result<Done, CoralError> {
     let view = detect(path).await?;
     let host = view.host.ok_or_else(|| CoralError::Refused {
-        label: "hosting",
+        label: "sign in",
         detail: view.detail.unwrap_or_else(|| "no host".to_owned()),
     })?;
-    token::store(&host, &secret).map_err(|e| refused(&e))?;
+    token::store(&host, &account(), &secret).map_err(|e| refused("sign in", &e))?;
     Ok(Done {
-        what: format!("stored a token for {}", host.origin),
+        what: format!("stored a token for {}, for every profile", host.origin),
     })
 }
 
@@ -112,12 +125,12 @@ pub async fn login(path: &Path, secret: secrecy::SecretString) -> Result<Done, C
 pub async fn logout(path: &Path) -> Result<Done, CoralError> {
     let view = detect(path).await?;
     let host = view.host.ok_or_else(|| CoralError::Refused {
-        label: "hosting",
+        label: "sign out",
         detail: view.detail.unwrap_or_else(|| "no host".to_owned()),
     })?;
-    token::forget(&host).map_err(|e| refused(&e))?;
+    token::forget(&host, &account()).map_err(|e| refused("sign out", &e))?;
     Ok(Done {
-        what: format!("forgot the token for {}", host.origin),
+        what: format!("forgot the shared token for {}", host.origin),
     })
 }
 
@@ -127,9 +140,11 @@ pub struct Done {
     pub what: String,
 }
 
-fn refused(e: &coral_hosting::HostingError) -> CoralError {
+// The label is a verb: `CoralError::Refused` renders as "cannot {label}: {detail}", and a noun
+// there reads as "cannot hosting".
+fn refused(label: &'static str, e: &coral_hosting::HostingError) -> CoralError {
     CoralError::Refused {
-        label: "hosting",
+        label,
         detail: e.to_string(),
     }
 }

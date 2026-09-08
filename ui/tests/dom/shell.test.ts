@@ -106,7 +106,7 @@ function answers(over: Record<string, unknown> = {}): Record<string, unknown> {
       interactive: false,
     },
     repo_conflicts: [],
-    hosting_status: { host: null, detail: 'no remotes', signedIn: false },
+    hosting_status: { host: null, detail: 'no remotes', token: 'none' },
     hosting_pull_requests: [],
     session_get: { tabs: [{ id: 1, path: REPO, group: null }], active: 1, groups: [] },
     tab_open: { tabs: [{ id: 1, path: REPO, group: null }], active: 1, groups: [] },

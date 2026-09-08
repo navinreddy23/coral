@@ -366,11 +366,18 @@ export interface Host {
   repo: string;
 }
 
+/** Which stored token a host is reached with. */
+export type TokenSource = 'none' | 'profile' | 'shared';
+
 export interface HostView {
   host: Host | null;
   /** Why no host was identified. Not an error: plain git still works without one. */
   detail: string | null;
-  signedIn: boolean;
+  /**
+   * `profile` is this profile's own token, which no other profile can see. `shared` is the
+   * one every profile falls back to, and the only one the command line writes.
+   */
+  token: TokenSource;
 }
 
 export type PrState = 'open' | 'draft' | 'merged' | 'closed';

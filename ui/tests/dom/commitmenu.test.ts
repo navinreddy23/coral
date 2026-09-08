@@ -85,7 +85,7 @@ function answers(): Record<string, unknown> {
       interactive: false,
     },
     repo_conflicts: [],
-    hosting_status: { host: null, detail: 'no remotes', signedIn: false },
+    hosting_status: { host: null, detail: 'no remotes', token: 'none' },
     hosting_pull_requests: [],
     remote_list: [],
     commit_detail: null,

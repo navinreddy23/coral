@@ -11,12 +11,39 @@ pub fn keyring_service(host: &Host) -> String {
     format!("dev.coral.app:{}", host.origin)
 }
 
-/// The account name stored alongside the token.
+/// Which of several logins on one host a token belongs to.
 ///
-/// A constant rather than the user's login: the login is not known until the token has been
-/// used once, and a keyring entry that cannot be found until after a successful request is
-/// not a place to keep the thing needed to make it.
-pub const KEYRING_ACCOUNT: &str = "api-token";
+/// One person can have a work account and a personal one on github.com, and the origin is the
+/// same for both, so the service name cannot tell them apart. The keyring's account field can,
+/// and it was carrying a constant.
+///
+/// Not the user's login name: that is not known until the token has been used once, and an
+/// entry you cannot find until after a successful request is no place to keep the thing the
+/// request needs.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Account(String);
+
+impl Account {
+    /// The account every profile falls back to, and the only one the CLI knows.
+    ///
+    /// Its name is the constant that was stored before profiles existed, so upgrading signs
+    /// nobody out.
+    #[must_use]
+    pub fn shared() -> Self {
+        Self("api-token".to_owned())
+    }
+
+    /// The account belonging to one profile alone.
+    #[must_use]
+    pub fn of_profile(id: &str) -> Self {
+        Self(format!("profile:{id}"))
+    }
+
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.0
+    }
+}
 
 /// How a token is presented to the provider.
 ///
@@ -37,8 +64,8 @@ pub fn auth_header(kind: HostKind, token: &SecretString) -> (&'static str, Strin
 /// # Errors
 /// [`HostingError::Transport`] when the keyring itself is unreachable — a headless session
 /// with no secret service, most often — which is distinct from there being no token.
-pub fn load(host: &Host) -> Result<Option<SecretString>, crate::HostingError> {
-    match entry(host)?.get_password() {
+pub fn load(host: &Host, account: &Account) -> Result<Option<SecretString>, crate::HostingError> {
+    match entry(host, account)?.get_password() {
         Ok(secret) => Ok(Some(SecretString::from(secret))),
         Err(keyring::Error::NoEntry) => Ok(None),
         Err(e) => Err(crate::HostingError::Transport(e.to_string())),
@@ -49,9 +76,13 @@ pub fn load(host: &Host) -> Result<Option<SecretString>, crate::HostingError> {
 ///
 /// # Errors
 /// [`HostingError::Transport`] if the keyring refuses the write.
-pub fn store(host: &Host, token: &SecretString) -> Result<(), crate::HostingError> {
+pub fn store(
+    host: &Host,
+    account: &Account,
+    token: &SecretString,
+) -> Result<(), crate::HostingError> {
     use secrecy::ExposeSecret as _;
-    entry(host)?
+    entry(host, account)?
         .set_password(token.expose_secret())
         .map_err(|e| crate::HostingError::Transport(e.to_string()))
 }
@@ -60,14 +91,14 @@ pub fn store(host: &Host, token: &SecretString) -> Result<(), crate::HostingErro
 ///
 /// # Errors
 /// [`HostingError::Transport`] if the keyring refuses the delete.
-pub fn forget(host: &Host) -> Result<(), crate::HostingError> {
-    match entry(host)?.delete_credential() {
+pub fn forget(host: &Host, account: &Account) -> Result<(), crate::HostingError> {
+    match entry(host, account)?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(e) => Err(crate::HostingError::Transport(e.to_string())),
     }
 }
 
-fn entry(host: &Host) -> Result<keyring::Entry, crate::HostingError> {
-    keyring::Entry::new(&keyring_service(host), KEYRING_ACCOUNT)
+fn entry(host: &Host, account: &Account) -> Result<keyring::Entry, crate::HostingError> {
+    keyring::Entry::new(&keyring_service(host), account.name())
         .map_err(|e| crate::HostingError::Transport(e.to_string()))
 }

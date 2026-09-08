@@ -386,7 +386,7 @@ const FIXTURES: Record<string, unknown> = {
   hosting_status: {
     host: { kind: 'gitlab', origin: 'https://gitlab.com', owner: 'open-source-23', repo: 'coral' },
     detail: null,
-    signedIn: true,
+    token: 'profile',
   },
   hosting_pull_requests: [
     {

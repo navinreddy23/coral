@@ -389,9 +389,11 @@ pub enum Command {
     },
     /// Report the hosting provider behind the repository's remote.
     Host,
-    /// Store an API token for the repository's host, read from stdin.
+    /// Store an API token for the repository's host, read from stdin. Every profile in the
+    /// app can use it, until one signs in with a token of its own.
     HostLogin,
-    /// Forget the stored API token for the repository's host.
+    /// Forget the stored API token for the repository's host. A profile that signed in for
+    /// itself in the app keeps its own.
     HostLogout,
     /// List the repository's pull or merge requests.
     PullRequests,

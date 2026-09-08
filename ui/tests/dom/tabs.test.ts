@@ -139,7 +139,7 @@ function wire() {
           interactive: false,
         };
       case 'hosting_status':
-        return { host: null, detail: 'no remotes', signedIn: false };
+        return { host: null, detail: 'no remotes', token: 'none' };
       case 'repo_submodules':
         return path === A
           ? [

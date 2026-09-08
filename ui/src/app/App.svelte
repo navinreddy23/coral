@@ -32,6 +32,7 @@
   import { RebaseState } from '../state/rebase.svelte';
   import Palette, { type Command } from './Palette.svelte';
   import StatusBar from './StatusBar.svelte';
+  import HostAccount from './HostAccount.svelte';
   import Ask, { type Choice } from './Ask.svelte';
   import Preferences from './Preferences.svelte';
   import ProfileChip from './ProfileChip.svelte';
@@ -370,6 +371,8 @@
   /** Who the open repository commits as, read for the Profiles pane rather than for the graph. */
   let identity = $state<IdentityScopes | null>(null);
   let showActivity = $state(false);
+  /** Whether the host's sign-in dialog is up. */
+  let showHostAccount = $state(false);
   /** The submodule whose panel is open, and its recorded commit once that has been read. */
   let showSubmodule = $state<Submodule | null>(null);
   let submoduleAt = $state<SubmoduleRevision | null>(null);
@@ -1762,6 +1765,17 @@
     });
     if (choice !== 'drop') return;
     await act({ kind: 'stashDrop', index: stash.index });
+  }
+
+  /**
+   * Stores a token and closes on success.
+   *
+   * Left open on a refusal, which is the only place the user can read it: the host does not
+   * check a token when it is stored, so an expired one is not refused until the first request.
+   */
+  async function signInToHost(token: string) {
+    await hosting.signIn(token);
+    if (hosting.error === null) showHostAccount = false;
   }
 
   function openActivity() {
@@ -3864,12 +3878,32 @@
       gitVersion={info.gitVersion}
       host={hosting.view}
       onLogs={() => openActivity()}
+      onHost={() => (showHostAccount = true)}
       report={actions.report}
       busy={actions.busy || worktree.busy || merge.busy}
       onDismiss={() => actions.clear()}
     />
   {/if}
 </main>
+
+<!--
+  Signing in to the host. Reached from the chip in the status bar, which is where the window
+  says there is no token and, until now, was the only place it said anything about one.
+-->
+{#if showHostAccount && hosting.view?.host}
+  <HostAccount
+    view={hosting.view}
+    profile={profiles.current.name}
+    shared={hosting.shared}
+    error={hosting.error}
+    onSignIn={(token) => void signInToHost(token)}
+    onSignOut={() => void hosting.signOut()}
+    onClose={() => {
+      showHostAccount = false;
+      hosting.error = null;
+    }}
+  />
+{/if}
 
 {#if question}
   <Ask

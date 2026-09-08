@@ -381,9 +381,13 @@ one both as `closed` and separates them only by `merged_at`; GitLab numbers by t
 over the years. GitLab also refuses a bearer token and wants its own header, which fails as a
 well-formed 401 pointing at nothing.
 
-Tokens live in the OS keyring keyed by origin, so github.com and a company instance can both be
-signed in at once. Nothing here is on the graph's critical path: the status read is not awaited
-when a repository opens, and a repository with no recognised host shows no section.
+Tokens live in the OS keyring, the service keyed by origin so github.com and a company instance
+can both be signed in at once, and the account keyed by profile so a work login and a personal
+one on the *same* origin can too. A profile that has not signed in for itself falls back to the
+account with no profile, which is the one `coral host-login` writes and the one everybody had
+before profiles existed, so upgrading signs nobody out. Nothing here is on the graph's critical
+path: the status read is not awaited when a repository opens, and a repository with no
+recognised host shows no section.
 
 ## Credentials
 
