@@ -79,7 +79,10 @@
     display: grid; grid-template-columns: max-content 1fr;
     gap: var(--space-2) var(--space-3); margin: 0 0 var(--space-4); align-items: baseline;
   }
-  dt { font-size: var(--text-sm); text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-2); }
+  dt {
+    font-size: var(--text-xs); font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--fg-2);
+  }
   dd { margin: 0; font-size: var(--text-md); color: var(--fg-0); }
   .mono { font-family: var(--font-mono); font-variant-ligatures: none; }
   .muted { color: var(--fg-2); font-size: var(--text-base); }

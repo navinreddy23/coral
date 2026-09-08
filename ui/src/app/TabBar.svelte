@@ -681,7 +681,8 @@
   .heading {
     display: flex; align-items: center; gap: var(--space-2);
     margin: 0 0 var(--space-1) var(--space-1);
-    font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+    font-size: var(--text-xs); font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em;
     color: var(--fg-2);
   }
   .heading .tally {

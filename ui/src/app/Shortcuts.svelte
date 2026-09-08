@@ -50,7 +50,8 @@
   .note { margin: 0 0 var(--space-4); font-size: var(--text-base); color: var(--fg-2); }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); }
   h3 {
-    font-size: var(--text-sm); text-transform: uppercase; letter-spacing: 0.05em;
+    font-size: var(--text-xs); font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em;
     color: var(--fg-2); margin: 0 0 var(--space-2);
   }
   .row {

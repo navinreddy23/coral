@@ -256,7 +256,7 @@
     background: var(--bg-1); border-bottom: 1px solid var(--border);
     font-size: var(--text-sm); color: var(--fg-2);
   }
-  .title { font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; }
+  .title { font-weight: 600; }
   .shell { font-size: var(--text-xs); }
   .spacer { flex: 1; }
   .dock { display: flex; gap: 2px; }

@@ -225,7 +225,8 @@
   .who { flex: 1 1 auto; min-width: 0; color: var(--fg-0); font-weight: 600;
          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .badge {
-    font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent);
+    font-size: var(--text-xs); font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--accent);
   }
 
   /* Eight small squares rather than a menu: the palette is the whole choice, and it is

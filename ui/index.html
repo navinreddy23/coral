@@ -28,25 +28,20 @@
         text-transform: uppercase; color: #4a5566;
       }
 
-      /* A commit node with rings leaving it, which is the shape the loading screen after this
-         one is built from. Two rings out of phase read as a pulse rather than a blink. */
-      #boot i {
-        position: relative; width: 10px; height: 10px; border-radius: 50%;
-        background: #e0533b; flex: 0 0 auto;
-      }
-      #boot i::before, #boot i::after {
-        content: ''; position: absolute; inset: -5px; border-radius: 50%;
-        border: 2px solid #e0533b;
-        animation: boot-ring 1800ms ease-out infinite;
-      }
-      #boot i::after { animation-delay: 900ms; }
+      /* Coral's own mark, drawn rather than a dot: this is the first thing the window shows,
+         and it is the same shape the title bar carries a moment later. */
+      #boot svg { color: #e0533b; flex: 0 0 auto; }
+      #boot svg circle { animation: boot-node 1600ms ease-in-out infinite; }
+      #boot svg circle:nth-of-type(2) { animation-delay: 200ms; }
+      #boot svg circle:nth-of-type(3) { animation-delay: 400ms; }
+      #boot svg circle:nth-of-type(4) { animation-delay: 600ms; }
 
       /* Settling from wide to set, so the word arrives rather than appearing. */
       #boot b { font-weight: 600; animation: boot-word 900ms ease-out both; }
 
-      @keyframes boot-ring {
-        0% { transform: scale(0.55); opacity: 0.7; }
-        100% { transform: scale(1.7); opacity: 0; }
+      @keyframes boot-node {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.25; }
       }
       @keyframes boot-word {
         from { letter-spacing: 0.5em; opacity: 0; }
@@ -56,12 +51,11 @@
       @media (prefers-color-scheme: dark) {
         html, body { background: #0e1116; }
         #boot { color: #9ea8b7; }
-        #boot i, #boot i::before, #boot i::after { background: #ff8f5a; border-color: #ff8f5a; }
-        #boot i::before, #boot i::after { background: none; }
+        #boot svg { color: #ff8f5a; }
       }
 
       @media (prefers-reduced-motion: reduce) {
-        #boot i::before, #boot i::after { animation: none; opacity: 0.35; transform: scale(1.2); }
+        #boot svg circle { animation: none; }
         #boot b { animation: none; letter-spacing: 0.22em; }
       }
     </style>
@@ -69,7 +63,18 @@
   <body>
     <div id="app"></div>
     <!-- Removed by main.ts the moment the application mounts over it. -->
-    <div id="boot"><i></i><b>Coral</b></div>
+    <div id="boot">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+           stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+        <path d="M12 22v-8" /><path d="M12 14V4" />
+        <path d="M12 14c0-3-2.5-3.6-5.5-5.2" /><path d="M12 14c0-3 2.5-3.6 5.5-5.2" />
+        <circle cx="12" cy="22" r="2.3" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="3.6" r="2.3" fill="currentColor" stroke="none" />
+        <circle cx="6" cy="8" r="2.3" fill="currentColor" stroke="none" />
+        <circle cx="18" cy="8" r="2.3" fill="currentColor" stroke="none" />
+      </svg>
+      <b>Coral</b>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

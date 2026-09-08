@@ -171,7 +171,8 @@
   .back:hover { background: var(--bg-2); }
   .heading {
     margin: var(--space-4) var(--space-2) var(--space-2);
-    font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+    font-size: var(--text-xs); font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em;
     color: var(--fg-2);
   }
   /* Under the heading, so the two panes that are about one repository say which one before

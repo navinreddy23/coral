@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
+  import Mark from './Mark.svelte';
   import type { StartState } from '../state/start.svelte';
   import type { SshKey } from '../ipc/types';
   import type { CloneHistory } from '../ipc/start';
@@ -127,29 +128,45 @@
   -->
   <div class="page">
     <header>
+      <!--
+        The one screen that has room to say what this is. Everywhere else the mark is eighteen
+        pixels in the corner of a title bar; here it can be the size of the sentence beside it.
+      -->
+      <Mark size={30} />
       <h2>Repositories</h2>
       {#if onClose}
         <button class="shut" title="Back" onclick={onClose}><Icon name="close" size={15} /></button>
       {/if}
     </header>
 
+    <!--
+      Three cards rather than three buttons. They are the whole purpose of this screen and they
+      were the same size as the search box under them; a line each also answers the question
+      that separates them, which is not obvious from three verbs alone.
+    -->
     <div class="actions">
       <button class="action" onclick={() => void openOne()}>
-        <span class="glyph" aria-hidden="true">🖿</span>Open
+        <span class="glyph"><Icon name="folder" size={20} /></span>
+        <span class="what">Open</span>
+        <span class="why">One already on this machine.</span>
       </button>
       <button
         class="action"
         class:on={start.form === 'clone'}
         onclick={() => (start.form = start.form === 'clone' ? 'none' : 'clone')}
       >
-        <span class="glyph"><Icon name="pull" size={17} /></span>Clone
+        <span class="glyph"><Icon name="pull" size={20} /></span>
+        <span class="what">Clone</span>
+        <span class="why">Copy one down from a host.</span>
       </button>
       <button
         class="action"
         class:on={start.form === 'create'}
         onclick={() => (start.form = start.form === 'create' ? 'none' : 'create')}
       >
-        <span class="glyph"><Icon name="plus" size={17} /></span>Create
+        <span class="glyph"><Icon name="plus" size={20} /></span>
+        <span class="what">Create</span>
+        <span class="why">Start a new one here.</span>
       </button>
     </div>
 
@@ -324,16 +341,18 @@
     padding: var(--space-5) var(--space-5) var(--space-4);
     font-size: var(--text-base);
   }
-  .page { max-width: 64em; margin: 0 auto; }
-  header { display: flex; align-items: center; gap: var(--space-3); }
+  .page { max-width: 52em; margin: 0 auto; }
+  header {
+    display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-5);
+    color: var(--brand);
+  }
   h2 {
-    flex: 1; margin: 0 0 var(--space-4); font-size: var(--text-xl); font-weight: 600; color: var(--fg-0);
+    flex: 1; margin: 0; font-size: var(--text-xl); font-weight: 600; color: var(--fg-0);
     background: var(--bg-0);
   }
   h3 {
-    margin: var(--space-4) 0 var(--space-2); font-size: var(--text-sm); font-weight: 700;
-    text-transform: uppercase; letter-spacing: 0.07em; color: var(--fg-2);
-    background: var(--bg-0);
+    margin: var(--space-5) 0 var(--space-2); font-size: var(--text-base); font-weight: 600;
+    color: var(--fg-2); background: var(--bg-0);
   }
   .shut {
     display: flex; font: inherit; line-height: 1; cursor: pointer; align-self: flex-start;
@@ -341,17 +360,25 @@
   }
   .shut:hover { color: var(--fg-0); }
 
-  .actions { display: flex; gap: var(--space-3); margin-bottom: var(--space-4); }
+  /* Three of equal width rather than three sized by their labels: they are alternatives, and
+     one that is wider than the others reads as the one to press. */
+  .actions {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-3); margin-bottom: var(--space-5);
+  }
   .action {
-    display: flex; align-items: center; gap: var(--space-2);
-    font: inherit; font-size: var(--text-md); cursor: pointer;
-    padding: var(--space-2) var(--space-4);
+    display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1);
+    text-align: left; font: inherit; cursor: pointer;
+    padding: var(--space-3) var(--space-4) var(--space-4);
     background: var(--bg-1); color: var(--fg-0);
-    border: 1px solid var(--border); border-radius: var(--radius-1);
+    border: 1px solid var(--border); border-radius: var(--radius-2);
+    transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
   }
   .action:hover { background: var(--bg-2); border-color: var(--border-strong); }
   .action.on { background: var(--accent-soft); border-color: var(--accent); }
-  .glyph { display: flex; color: var(--accent); }
+  .glyph { display: flex; color: var(--accent); margin-bottom: var(--space-1); }
+  .what { font-size: var(--text-md); font-weight: 600; }
+  .why { font-size: var(--text-sm); color: var(--fg-2); line-height: var(--leading-body); }
 
   .form {
     display: flex; flex-direction: column; gap: var(--space-3);

@@ -156,7 +156,7 @@
   h3 {
     display: flex; align-items: baseline; gap: var(--space-2);
     margin: 0 0 var(--space-2); font-size: var(--text-sm); font-weight: 700;
-    text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-2);
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-2);
   }
   .when { text-transform: none; letter-spacing: 0; font-weight: 400; }
   dl {

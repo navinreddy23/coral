@@ -98,6 +98,7 @@
   import { RefsState } from '../state/refs.svelte';
   import { ScopeState } from '../state/scope.svelte';
   import Icon from './Icon.svelte';
+  import Mark from './Mark.svelte';
   import Border from './Border.svelte';
   import {
     close as shut,
@@ -3388,18 +3389,7 @@
   <header class="strip" onmousedown={stripDrag} oncontextmenu={stripMenu}>
     <!-- The application's own mark, the same one the icon carries: one commit and the two
          branches that leave it. -->
-    <svg class="logo sit" viewBox="0 0 512 512" width="18" height="18" aria-hidden="true">
-      <g fill="none" stroke="currentColor" stroke-width="52" stroke-linecap="round">
-        <path d="M256 392 L256 300" />
-        <path d="M256 300 Q256 212 152 172" />
-        <path d="M256 300 Q256 212 360 172" />
-      </g>
-      <g fill="currentColor">
-        <circle cx="256" cy="396" r="52" />
-        <circle cx="152" cy="164" r="52" />
-        <circle cx="360" cy="164" r="52" />
-      </g>
-    </svg>
+    <span class="logo sit"><Mark size={18} /></span>
     <!-- The window has no title bar to carry the name any more, so the strip does. -->
     <h1 class="sit">Coral</h1>
 
@@ -4098,7 +4088,9 @@
    * take all three away for as long as it was open.
    */
   .screen { position: absolute; inset: var(--strip) 0 0; z-index: 12; display: flex; }
-  .logo { flex: 0 0 auto; color: var(--accent); }
+  /* The one place in the chrome that wears the brand colour rather than the accent: it is
+     the mark, not a control. */
+  .logo { flex: 0 0 auto; display: flex; color: var(--brand); }
   /*
    * The title bar, the tab strip and the window's own buttons, on one line.
    *

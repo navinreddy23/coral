@@ -206,7 +206,8 @@
   }
 
   .label {
-    font-size: var(--text-sm); letter-spacing: 0.04em; text-transform: uppercase; color: var(--fg-2);
+    font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--fg-2);
   }
   .rail li.done .label { color: var(--fg-1); }
   .rail li.now .label { color: var(--fg-0); font-weight: 600; }
