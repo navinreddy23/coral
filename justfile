@@ -192,6 +192,11 @@ kernel-clean:
 ssh-test:
     bash tests/ssh/run.sh
 
+# Photographs every surface of the window in both themes, in a real browser. Needs Chrome,
+# which is why it is not part of `check`.
+window-test *ARGS:
+    bash tests/window/run.sh {{ARGS}}
+
 # Exists so IDE run configurations need no shell expansion.
 open-kernel:
     cargo run --release -p coral-cli -- --repo '{{kernel}}' --json open
