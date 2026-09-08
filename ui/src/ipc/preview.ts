@@ -492,8 +492,8 @@ const DIFF = {
   oldPath: null,
   change: 'modified',
   binary: false,
-  added: 3,
-  removed: 1,
+  added: 4,
+  removed: 2,
   tooLarge: false,
   hunks: [
     {
@@ -510,6 +510,23 @@ const DIFF = {
         { kind: 'add', text: '  for (let lane = 0; lane < 32; lane++) {', oldNo: null, newNo: 99, noNewline: false },
         { kind: 'context', text: '    if ((entering & (1 << lane)) !== 0) open.set(lane, topY);', oldNo: 98, newNo: 100, noNewline: false },
         { kind: 'context', text: '  }', oldNo: 99, newNo: 101, noNewline: false },
+      ],
+    },
+    // A line that was edited rather than rewritten, so the words that changed inside it are
+    // marked. Without one of these in the fixture the marking has no surface to show on and
+    // the browser sweep photographs a feature that is not there.
+    {
+      header: '@@ -140,6 +142,6 @@ function strokeVertical(',
+      oldStart: 140,
+      oldLines: 6,
+      newStart: 142,
+      newLines: 6,
+      lines: [
+        { kind: 'context', text: '  const x = laneX(lane, metrics);', oldNo: 140, newNo: 142, noNewline: false },
+        { kind: 'remove', text: '  ctx.strokeStyle = laneColour(lane, colours);', oldNo: 141, newNo: null, noNewline: false },
+        { kind: 'add', text: '  ctx.strokeStyle = laneColour(lane, fills, opacity);', oldNo: null, newNo: 143, noNewline: false },
+        { kind: 'context', text: '  ctx.beginPath();', oldNo: 142, newNo: 144, noNewline: false },
+        { kind: 'context', text: '  ctx.moveTo(x, fromY);', oldNo: 143, newNo: 145, noNewline: false },
       ],
     },
   ],

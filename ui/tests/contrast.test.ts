@@ -71,8 +71,20 @@ describe.each(THEMES)('the %s palette', (theme) => {
   });
 
   it('leaves code on a diff tint as readable as code anywhere else', () => {
-    for (const tint of ['add-bg', 'remove-bg']) {
+    for (const tint of ['add-bg', 'remove-bg', 'add-word', 'remove-word']) {
       expect(on('fg-0', tint), `fg-0 on ${tint}`).toBeGreaterThanOrEqual(7);
+    }
+  });
+
+  it('makes the changed words on a line visible against the rest of it', () => {
+    // The mark sits on the line's own tint, two colours of the same hue a step apart, and a
+    // luminance ratio says nothing useful about that pair. What matters is that the step is
+    // there to be seen at a glance, on a line where every other word is the one behind it.
+    for (const theme of ['light', 'dark'] as const) {
+      for (const side of ['add', 'remove']) {
+        const step = apart(token(theme, `${side}-word`), token(theme, `${side}-bg`));
+        expect(step, `${theme} ${side} mark against its line`).toBeGreaterThan(0.05);
+      }
     }
   });
 

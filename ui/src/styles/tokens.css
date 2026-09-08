@@ -88,6 +88,16 @@
   --remove-bg: #fdebeb;
 
   /*
+   * And the words inside a replaced line that are the replacement.
+   *
+   * A second step of the same hue rather than a colour of its own: the line's tint already
+   * says which side it is, and this says where to look on it. Kept to a step — a mark that
+   * shouts is worse than no mark, because most changed lines have one on them.
+   */
+  --add-word: #a8e6bb;
+  --remove-word: #f9bcbc;
+
+  /*
    * The eight lane colours. Each is computed to reach 5.5:1 against white, because a lane
    * stroke needs more contrast than body text, not less. Not the dark set darkened: an
    * earlier attempt averaged 4.2:1 where the dark theme averages 7.7:1, and that reads as
@@ -226,6 +236,8 @@
 
   --add-bg: #14291b;
   --remove-bg: #2f1c1c;
+  --add-word: #1f5c34;
+  --remove-word: #6b2f34;
 
   --lane-1: #4aaef7;
   --lane-2: #e878ba;

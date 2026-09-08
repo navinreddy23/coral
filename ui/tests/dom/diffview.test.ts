@@ -237,3 +237,89 @@ describe('reading a change in its surroundings', () => {
     expect(steps.every((b) => b.disabled)).toBe(true);
   });
 });
+
+describe('the words that changed inside a line', () => {
+  /** A replaced line: one word differs, and the rest of it is the same on both sides. */
+  function replaced(): FileDiff {
+    return {
+      ...fileDiff(),
+      hunks: [
+        {
+          header: '@@ -1,3 +1,3 @@',
+          oldStart: 1,
+          oldLines: 3,
+          newStart: 1,
+          newLines: 3,
+          lines: [
+            line('context', 'fn main() {', 1, 1),
+            line('remove', '    let total = count + 1;', 2, null),
+            line('add', '    let total = amount + 1;', null, 2),
+            line('context', '}', 3, 3),
+          ],
+        },
+      ],
+    };
+  }
+
+  function view(mode: 'inline' | 'split') {
+    const diff = new DiffState(new ViewsState());
+    diff.setMode(mode);
+    diff.path = 'kernel/sched/core.c';
+    diff.file = replaced();
+    return render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+  }
+
+  it('marks it in the unified table, and leaves the rest of the line alone', () => {
+    const { container } = view('inline');
+    const marks = [...container.querySelectorAll('tr.remove mark, tr.add mark')];
+    expect(marks.map((m) => m.textContent)).toEqual(['count', 'amount']);
+
+    // The whole line is still there: the marks are inside it, not instead of it.
+    const removed = container.querySelector('tr.remove td.text') as HTMLElement;
+    expect(removed.textContent).toContain('    let total = count + 1;');
+  });
+
+  it('marks it side by side too', () => {
+    const { container } = view('split');
+    const marks = [...container.querySelectorAll('.cell mark')];
+    expect(marks.map((m) => m.textContent)).toEqual(['count', 'amount']);
+  });
+
+  it('takes the mark colour from the line it is on, which a scoped rule could not', () => {
+    // The component that draws the mark is its own, so a rule written against `tr.add mark`
+    // in this panel would never match it. The tint is handed down as a property instead.
+    const { container } = view('inline');
+    expect(container.querySelector('tr.add mark')).not.toBeNull();
+
+    const rules = [...document.styleSheets]
+      .flatMap((sheet) => [...(sheet.cssRules ?? [])])
+      .map((r) => r.cssText);
+    expect(rules.some((text) => /mark[^{]*\{[^}]*var\(--word-mark/u.test(text))).toBe(true);
+    expect(rules.some((text) => /--word-mark:\s*var\(--add-word\)/u.test(text))).toBe(true);
+    expect(rules.some((text) => /--word-mark:\s*var\(--remove-word\)/u.test(text))).toBe(true);
+  });
+
+  it('marks nothing on a line that was rewritten rather than edited', () => {
+    const diff = new DiffState(new ViewsState());
+    diff.setMode('inline');
+    diff.path = 'a.rs';
+    diff.file = {
+      ...fileDiff(),
+      hunks: [
+        {
+          header: '@@',
+          oldStart: 1,
+          oldLines: 1,
+          newStart: 1,
+          newLines: 1,
+          lines: [
+            line('remove', 'let total = count + 1;', 1, null),
+            line('add', 'emit(&mut out, "done")?;', null, 1),
+          ],
+        },
+      ],
+    };
+    const { container } = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+    expect(container.querySelectorAll('mark')).toHaveLength(0);
+  });
+});

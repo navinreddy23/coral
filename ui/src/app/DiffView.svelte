@@ -1,6 +1,8 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
   import { firstChangedRow, marksOf, splitRows, windowAround } from '../diff/split';
+  import { wordMarks } from '../diff/word';
+  import CodeLine from './CodeLine.svelte';
   import { elidePath } from './path';
   import { shortAge } from './age';
   import { initialsOf } from '../graph/initials';
@@ -58,6 +60,14 @@
     const { rows, from } = windowAround(all, LIMIT);
     return { rows, from, total: all.length };
   });
+
+  /**
+   * What changed inside each replaced line, keyed by the line itself.
+   *
+   * Computed once per file rather than per rendered row: both layouts look their lines up in
+   * the same map, and side by side re-renders its rows on every scroll frame.
+   */
+  const words = $derived(wordMarks(diff.file?.hunks ?? []));
 
   /** Height of one row, matching `--diff-row` in the stylesheet below. */
   const ROW = 17;
@@ -464,11 +474,19 @@
                 {#if side !== null && pickable(line.kind)}
                   <td class="text">
                     <button class="pick" onclick={() => togglePick(h, i)} title="Pick this line"
-                      ><span class="sign">{sign[line.kind]}</span>{line.text}</button
+                      ><span class="sign">{sign[line.kind]}</span><CodeLine
+                        text={line.text}
+                        spans={words.get(line) ?? null}
+                      /></button
                     >
                   </td>
                 {:else}
-                  <td class="text"><span class="sign">{sign[line.kind]}</span>{line.text}</td>
+                  <td class="text"
+                    ><span class="sign">{sign[line.kind]}</span><CodeLine
+                      text={line.text}
+                      spans={words.get(line) ?? null}
+                    /></td
+                  >
                 {/if}
               </tr>
             {/each}
@@ -485,10 +503,18 @@
           {#each drawn as row, i (firstDrawn + i)}
             <div class="line">
               <span class="no">{row.left?.oldNo ?? ''}</span>
-              <span class="cell {row.left ? row.left.kind : 'blank'}">{row.left?.text ?? ''}</span>
+              <span class="cell {row.left ? row.left.kind : 'blank'}"
+                ><CodeLine
+                  text={row.left?.text ?? ''}
+                  spans={row.left ? words.get(row.left) ?? null : null}
+                /></span
+              >
               <span class="no">{row.right?.newNo ?? ''}</span>
               <span class="cell {row.right ? row.right.kind : 'blank'}"
-                >{row.right?.text ?? ''}</span
+                ><CodeLine
+                  text={row.right?.text ?? ''}
+                  spans={row.right ? words.get(row.right) ?? null : null}
+                /></span
               >
             </div>
           {/each}
@@ -753,12 +779,12 @@
     white-space: pre; overflow: hidden; padding: 0 var(--space-2);
     color: var(--fg-0); background: var(--bg-0);
   }
-  .cell.add { background: var(--add-bg); box-shadow: inset 2px 0 0 var(--ok); }
-  .cell.remove { background: var(--remove-bg); box-shadow: inset 2px 0 0 var(--danger); }
+  .cell.add { background: var(--add-bg); box-shadow: inset 2px 0 0 var(--ok); --word-mark: var(--add-word); }
+  .cell.remove { background: var(--remove-bg); box-shadow: inset 2px 0 0 var(--danger); --word-mark: var(--remove-word); }
   .cell.blank { background: var(--bg-1); }
   .sign { user-select: none; color: var(--fg-2); }
-  tr.add .text { background: var(--add-bg); box-shadow: inset 2px 0 0 var(--ok); }
-  tr.remove .text { background: var(--remove-bg); box-shadow: inset 2px 0 0 var(--danger); }
+  tr.add .text { background: var(--add-bg); box-shadow: inset 2px 0 0 var(--ok); --word-mark: var(--add-word); }
+  tr.remove .text { background: var(--remove-bg); box-shadow: inset 2px 0 0 var(--danger); --word-mark: var(--remove-word); }
   /*
    * The hunk header is a divider with a location on it, not a line of the file. Ruled above
    * and below so a long diff reads as a sequence of regions rather than one wall.
