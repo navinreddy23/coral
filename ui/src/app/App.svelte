@@ -4137,7 +4137,11 @@
   .sys:hover { background: var(--bg-3); color: var(--fg-0); }
   /* The one button that cannot be undone, which is the one convention has painted red since
      windows had buttons. */
-  .sys.shut:hover { background: var(--danger); color: #fff; }
+  /* The page's own colour, not white: the close button turns the danger red, which is a
+     dark fill in the light theme and a light one in the dark theme, so what reads on it is
+     whatever the page is not. `--accent-fg` would be the wrong token — this is not an
+     accent. */
+  .sys.shut:hover { background: var(--danger); color: var(--bg-0); }
   .chip {
     font-size: var(--text-sm); padding: 1px var(--space-2); border-radius: var(--radius-pill);
     background: var(--bg-2); color: var(--fg-1); flex: 0 0 auto;

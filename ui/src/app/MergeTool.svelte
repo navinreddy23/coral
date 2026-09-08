@@ -426,7 +426,9 @@
     color: var(--fg-1);
   }
   button:disabled { opacity: 0.5; cursor: default; }
-  button.primary:not(:disabled) { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.primary:not(:disabled) {
+    background: var(--accent); color: var(--accent-fg); border-color: var(--accent);
+  }
 
   .body { flex: 1; display: flex; min-height: 0; }
   .files {

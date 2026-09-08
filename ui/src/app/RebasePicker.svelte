@@ -160,7 +160,7 @@
   }
   button:disabled { opacity: 0.5; cursor: default; }
   button.primary:not(:disabled) {
-    background: var(--accent); color: #fff; border-color: var(--accent);
+    background: var(--accent); color: var(--accent-fg); border-color: var(--accent);
   }
   .warn { color: var(--danger); }
   .muted { color: var(--fg-2); }

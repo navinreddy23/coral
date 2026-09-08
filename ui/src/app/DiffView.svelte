@@ -603,7 +603,10 @@
   .who {
     flex: 0 0 auto; width: 24px; height: 24px; border-radius: var(--radius-1);
     display: flex; align-items: center; justify-content: center;
-    background: var(--node-1); color: #ffffff; font-size: 10px; font-weight: 600;
+    /* White, and this is the one place a literal is right: the node colours are
+       deliberately dark in both themes so the letters inside a commit node can be white in
+       both. */
+    background: var(--node-1); color: #ffffff; font-size: var(--text-xs); font-weight: 600;
   }
   .what { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .subject { color: var(--fg-0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

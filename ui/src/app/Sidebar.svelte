@@ -2,6 +2,7 @@
   import { byVersionDescending } from './version';
   import type { PullRequest } from '../ipc/commands';
   import type { Remote, Submodule } from '../ipc/types';
+  import type { IconName } from './icon';
   import type { PlacedRef, RefGroups } from '../state/refs.svelte';
   import type { PlacedStash } from '../ipc/stash';
   import HostMark, { hostOf } from './HostMark.svelte';
@@ -247,12 +248,19 @@
 
   // Section order follows the reference's left panel: Local, Remote, Stashes, then Tags. The
   // remote section is rendered on its own because a remote is a thing with a menu, not a row.
-  const above = $derived([{ key: 'local', title: 'Local', icon: '🖿', refs: shown(groups.local) }]);
+  const above = $derived([
+    { key: 'local', title: 'Local', icon: 'branch' as IconName, refs: shown(groups.local) },
+  ]);
   // Newest first. The cap that keeps the DOM small takes the first two hundred rows, so the
   // order has to be right before it applies or the kernel's list would be capped at its oldest
   // tags and the release anyone wants would be behind a "Show all 944".
   const below = $derived([
-    { key: 'tags', title: 'Tags', icon: '🏷', refs: byVersionDescending(shown(groups.tags), (r) => r.short) },
+    {
+      key: 'tags',
+      title: 'Tags',
+      icon: 'tag' as IconName,
+      refs: byVersionDescending(shown(groups.tags), (r) => r.short),
+    },
   ]);
 
   /** The stack, filtered by the same box as everything else in this panel. */
@@ -295,7 +303,9 @@
       onclick={() => onSelectRef(r)}
       title={refTitle(r, outside, hidden)}
     >
-      {#if r.short === head}<span class="tick"><Icon name="check" size={12} /></span>{/if}
+      <span class="tick">
+        {#if r.short === head}<Icon name="check" size={12} />{/if}
+      </span>
       <span class="text">{elideRef(label, 28)}</span>
       {#if r.ahead > 0 || r.behind > 0}
         <span class="track">{r.ahead}↑ {r.behind}↓</span>
@@ -338,13 +348,25 @@
       <button class="leave" onclick={onShowEverything}>Show all</button>
     </div>
   {/if}
-  <p class="viewing">Viewing <strong>{total}</strong></p>
-  <input
-    class="filter"
-    placeholder="Filter"
-    bind:this={filterField}
-    bind:value={filter}
-  />
+  <p class="viewing" title="Branches, tags and stashes the graph is drawn from">
+    Viewing <strong>{total}</strong> refs
+  </p>
+  <!-- The magnifier is inside the field rather than beside it: a box labelled only by its
+       placeholder loses that label the moment somebody types in it. -->
+  <div class="search">
+    <span class="lens"><Icon name="search" size={13} /></span>
+    <input
+      class="filter"
+      placeholder="Filter branches, tags and stashes"
+      bind:this={filterField}
+      bind:value={filter}
+    />
+    {#if filter !== ''}
+      <button class="clear" title="Clear the filter" onclick={() => (filter = '')}>
+        <Icon name="close" size={12} />
+      </button>
+    {/if}
+  </div>
 
   {#each above as section (section.key)}
     <section>
@@ -352,7 +374,7 @@
         <span class="caret">
           <Icon name={collapsed[section.key] ? 'chevronRight' : 'chevronDown'} size={13} />
         </span>
-        <span class="icon" aria-hidden="true">{section.icon}</span>
+        <span class="icon"><Icon name={section.icon} size={13} /></span>
         {section.title}
         <span class="count">
           {section.refs.length + (section.key === 'local' && detachedHead !== null ? 1 : 0)}
@@ -494,6 +516,8 @@
                   ? `${stash.name}\n${stash.message}\nnot in the loaded graph`
                   : `${stash.name}\n${stash.message}`}
               >
+                <!-- The same gutter every other row keeps, so the four sections line up. -->
+                <span class="tick"></span>
                 <span class="text">{elideRef(stash.name, 24)}</span>
               </button>
               <button
@@ -514,7 +538,7 @@
         <span class="caret">
           <Icon name={collapsed[section.key] ? 'chevronRight' : 'chevronDown'} size={13} />
         </span>
-        <span class="icon" aria-hidden="true">{section.icon}</span>
+        <span class="icon"><Icon name={section.icon} size={13} /></span>
         {section.title}
         <span class="count">{section.refs.length}</span>
       </button>
@@ -541,7 +565,7 @@
         <span class="caret">
           <Icon name={collapsed['prs'] ? 'chevronRight' : 'chevronDown'} size={13} />
         </span>
-        <span class="icon" aria-hidden="true">⇄</span>
+        <span class="icon"><Icon name="request" size={13} /></span>
         {pullRequestLabel}
         <span class="count">{pullRequests.length}</span>
       </button>
@@ -571,7 +595,7 @@
         <span class="caret">
           <Icon name={collapsed['submodules'] ? 'chevronRight' : 'chevronDown'} size={13} />
         </span>
-        <span class="icon" aria-hidden="true">◱</span>
+        <span class="icon"><Icon name="folder" size={13} /></span>
         Submodules
         <span class="count">{matchingSubmodules.length}</span>
       </button>
@@ -619,23 +643,41 @@
     border-right: 1px solid var(--border); background: var(--bg-1);
     padding: var(--space-2);
   }
+  /* A count, not a heading: it says how much of the repository the graph is drawn from, and
+     it used to shout that in 11px uppercase above everything else in the panel. */
   .viewing {
     margin: var(--space-1) var(--space-1) var(--space-2);
-    font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-2);
+    font-size: var(--text-sm); color: var(--fg-2);
   }
-  .viewing strong { color: var(--fg-0); font-weight: 700; font-size: 12px; }
+  .viewing strong {
+    color: var(--fg-1); font-weight: 600; font-variant-numeric: tabular-nums;
+  }
   .icon {
     width: 1.1em; color: var(--fg-2); flex: 0 0 auto;
     display: inline-flex; align-items: center; justify-content: center;
   }
-  .filter {
-    width: 100%; box-sizing: border-box; font: inherit; font-size: 12px;
-    padding: 3px var(--space-2); margin-bottom: var(--space-2);
+  .search {
+    display: flex; align-items: center; gap: var(--space-1);
+    margin-bottom: var(--space-2); padding: 0 var(--space-2);
     border: 1px solid var(--border); border-radius: var(--radius-1);
-    background: var(--bg-0); color: var(--fg-0);
+    background: var(--bg-0);
+    transition: border-color var(--fast) var(--ease);
   }
+  .search:focus-within { border-color: var(--accent); }
+  .lens { display: flex; color: var(--fg-2); flex: 0 0 auto; }
+  .filter {
+    flex: 1; min-width: 0; font: inherit; font-size: var(--text-base);
+    padding: 4px 0; border: 0; background: var(--bg-0); color: var(--fg-0);
+  }
+  .filter:focus { outline: none; }
   .filter::placeholder { color: var(--fg-2); }
-  .filter:focus { border-color: var(--accent); }
+  /* Appears only when there is something to clear, so the field is not carrying a control
+     that would do nothing nine times out of ten. */
+  .clear {
+    flex: 0 0 auto; display: flex; padding: 2px; cursor: pointer;
+    background: var(--bg-0); border: 0; border-radius: var(--radius-1); color: var(--fg-2);
+  }
+  .clear:hover { color: var(--fg-0); background: var(--bg-2); }
 
   section + section { border-top: 1px solid var(--border); }
   /*
@@ -649,35 +691,49 @@
    */
   .head {
     display: flex; align-items: center; gap: var(--space-2);
-    width: 100%; font: inherit; font-size: 10px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.07em; color: var(--fg-2);
-    background: var(--bg-1); border: 0; padding: var(--space-2) var(--space-1); cursor: pointer;
+    width: 100%; font: inherit; font-size: var(--text-base); font-weight: 600;
+    color: var(--fg-2);
+    background: var(--bg-1); border: 0; padding: var(--space-1) var(--space-1); cursor: pointer;
     border-radius: var(--radius-1);
+    transition: color var(--fast) var(--ease), background var(--fast) var(--ease);
   }
-  .head:hover { color: var(--fg-1); }
+  .head:hover { color: var(--fg-0); background: var(--bg-2); }
   /* A remote is a row inside the section, so it is indented and set in the ordinary face: it
      names a thing, where the section above it names a kind. */
   .head.remote {
-    padding-left: var(--space-3); text-transform: none; letter-spacing: 0;
-    font-size: 12px; font-weight: 600; color: var(--fg-1);
+    padding-left: var(--space-3); font-weight: 500; color: var(--fg-1);
   }
   .head.remote:hover { color: var(--fg-0); background: var(--bg-2); }
   /* A pill rather than a bare number: a count is a different kind of thing from the name
      beside it, and at this size only shape says so. */
   .count {
-    margin-left: auto; color: var(--fg-2); font-size: 10px; font-weight: 600;
-    background: var(--bg-2); border-radius: 999px; padding: 0 6px; min-width: 18px;
-    text-align: center; flex: 0 0 auto;
+    margin-left: auto; color: var(--fg-2); font-size: var(--text-xs); font-weight: 600;
+    background: var(--bg-2); border-radius: var(--radius-pill); padding: 1px 6px; min-width: 18px;
+    text-align: center; flex: 0 0 auto; font-variant-numeric: tabular-nums;
   }
-  .caret { width: 1em; color: var(--fg-2); flex: 0 0 auto; }
+  .head:hover .count { background: var(--bg-3); }
+  .caret { display: flex; color: var(--fg-2); flex: 0 0 auto; }
+  .icon { display: flex; color: var(--fg-2); flex: 0 0 auto; }
   ul { list-style: none; margin: 0 0 var(--space-2); padding: 0; }
   ul.nested { margin-left: var(--space-3); }
   .ref {
     display: flex; align-items: center; gap: var(--space-2);
-    flex: 1; min-width: 0; text-align: left; font: inherit; font-size: 12px;
-    padding: 3px var(--space-2) 3px var(--space-4);
+    flex: 1; min-width: 0; text-align: left; font: inherit; font-size: var(--text-base);
+    padding: 3px var(--space-2) 3px var(--space-1);
     background: var(--bg-1); border: 0; border-radius: var(--radius-1); cursor: pointer;
     color: var(--fg-1); overflow: hidden;
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+  }
+  /*
+   * The gutter the tick sits in, present on every row whether it is ticked or not.
+   *
+   * Without it the branch you are on started fourteen pixels further right than the ones you
+   * are not, so a column of names was ragged and the one fact this panel exists to show was
+   * the reason for it.
+   */
+  .tick {
+    flex: 0 0 auto; width: 14px; display: flex; justify-content: center;
+    color: var(--accent);
   }
   .text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
           white-space: nowrap; }
@@ -769,11 +825,14 @@
   }
   .ref.dragging { opacity: 0.5; }
   .pr { gap: var(--space-1); }
-  .num { flex: 0 0 auto; color: var(--fg-2); font-size: 11px; }
+  .num { flex: 0 0 auto; color: var(--fg-2); font-size: var(--text-sm); }
   .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Fourteen wide because that is the gutter every other row keeps for its tick: the circle
+     stands in for it, so a proposal's number begins where a branch's name does. */
   .state {
-    flex: 0 0 auto; width: 13px; height: 13px; line-height: 13px; text-align: center;
-    border-radius: 50%; font-size: 9px; font-weight: 700; color: #fff;
+    flex: 0 0 auto; width: 14px; height: 13px; margin-right: var(--space-1);
+    line-height: 13px; text-align: center;
+    border-radius: 50%; font-size: 9px; font-weight: 700; color: var(--bg-0);
   }
   .state.open { background: var(--ok); }
   .state.draft { background: var(--fg-2); }
