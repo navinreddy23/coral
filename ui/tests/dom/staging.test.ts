@@ -255,3 +255,60 @@ describe('a conflicted file', () => {
     expect(named.filter((n) => n === 'README.md'), 'drawn once').toHaveLength(1);
   });
 });
+
+describe('what a folder row says is under it', () => {
+  /**
+   * A closed directory that only says its name hides exactly the thing the panel exists to
+   * show, so it carries a count per kind. A deletion used to fall into the edits: a folder
+   * holding one modified file, one deleted and one added read "M 2  A 1" over rows marked
+   * M, D and A, and the one change nobody wants to miss had no number of its own.
+   */
+  function tallies(container: HTMLElement): string[] {
+    return [...container.querySelectorAll('.dir .count')].map((c) => c.textContent?.trim() ?? '');
+  }
+
+  it('counts a deletion as a deletion, not as an edit', () => {
+    const worktree = new WorktreeState();
+    worktree.status = {
+      ...status(),
+      entries: [
+        entry('src/edited.txt'),
+        entry('src/gone.txt', { worktree: 'deleted' }),
+        entry('src/new.txt', { worktree: 'untracked' }),
+      ],
+    } as Status;
+    const { container } = render(Staging, {
+      props: {
+        worktree,
+        commit: new CommitState(),
+        branch: 'main',
+        openPath: null,
+        grouping: 'tree',
+        onGrouping: () => {},
+        onDiscard: () => {},
+        onFileMenu: () => {},
+        onOpenFile: vi.fn(),
+      },
+    });
+    expect(tallies(container)).toEqual(['M 1', 'A 1', 'D 1']);
+  });
+
+  it('leaves out the kinds that are not there', () => {
+    const worktree = new WorktreeState();
+    worktree.status = { ...status(), entries: [entry('src/edited.txt')] } as Status;
+    const { container } = render(Staging, {
+      props: {
+        worktree,
+        commit: new CommitState(),
+        branch: 'main',
+        openPath: null,
+        grouping: 'tree',
+        onGrouping: () => {},
+        onDiscard: () => {},
+        onFileMenu: () => {},
+        onOpenFile: vi.fn(),
+      },
+    });
+    expect(tallies(container)).toEqual(['M 1']);
+  });
+});

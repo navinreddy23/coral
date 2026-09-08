@@ -649,6 +649,31 @@ describe('the shell', () => {
     });
   });
 
+  it('turns a pull it cannot fast-forward into the choice it actually is', async () => {
+    // The button pulls fast-forward only, which is the safe reading of "bring me up to date".
+    // When both sides have moved git refuses, and refusing is right — but it said so by
+    // dumping four lines of advice about `git config pull.rebase` into a toast.
+    const { container } = await shell({
+      repo_action: new Error(
+        "git pull exited with 128: hint: Diverging branches can't be fast-forwarded, you need " +
+          'to either:\nhint:\nhint:  git merge --no-ff',
+      ),
+    });
+
+    const pull = container.querySelector('[aria-label="Pull"]') as HTMLButtonElement;
+    await fireEvent.click(pull);
+
+    const dialog = await waitFor(() => {
+      const found = container.querySelector('[role="dialog"]');
+      if (!found) throw new Error('no question yet');
+      return found as HTMLElement;
+    });
+    expect(dialog.textContent, 'and it says which two things they are').toContain('Pull, merging');
+    expect(dialog.textContent).toContain('Pull, rebasing');
+    // Not the raw advice, which is what was there before.
+    expect(dialog.textContent).not.toContain('pull.rebase');
+  });
+
   it('offers to send the tags with a push, since git sends none by itself', async () => {
     const { container } = await shell({
       repo_action: { what: 'push', conflicted: false, message: '' },

@@ -418,3 +418,47 @@ describe('the stash list', () => {
     expect(soloed.container.textContent).not.toContain('Viewing');
   });
 });
+
+describe('the filter and the counts beside each section', () => {
+  /**
+   * Every heading carries a count of what is under it. Two of them used to report the whole
+   * repository while the filter was narrowing the rows: "Stashes 2" stood over "Nothing
+   * stashed.", and the remote heading disagreed with the remote listed under it.
+   */
+  function counts(container: HTMLElement): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const head of container.querySelectorAll('section > .head, section .head-row .head')) {
+      const label = head.textContent?.replace(/\s+/gu, ' ').trim() ?? '';
+      const parts = /^(.*?)\s*(\d+)$/u.exec(label);
+      if (parts?.[1] && parts[2]) out[parts[1]] = parts[2];
+    }
+    return out;
+  }
+
+  it('narrows the remote and stash counts with everything else', async () => {
+    const { container } = mount({
+      groups: {
+        local: [ref('master'), ref('lanes')],
+        remote: [
+          { ...ref('origin/lanes'), name: 'refs/remotes/origin/lanes', kind: { kind: 'remote_branch', remote: 'origin' } },
+          { ...ref('origin/other'), name: 'refs/remotes/origin/other', kind: { kind: 'remote_branch', remote: 'origin' } },
+        ],
+        tags: [],
+        stashes: [],
+      },
+      remotes: [{ name: 'origin', fetchUrl: 'https://example.invalid/x.git', pushUrl: null }],
+      stashes: [stash('stash@{0}', 'a'.repeat(40)), stash('stash@{1}', 'b'.repeat(40))],
+      collapsed: {},
+    });
+
+    expect(counts(container)['Remote'], 'everything, before the filter').toBe('2');
+    expect(counts(container)['Stashes']).toBe('2');
+
+    const field = container.querySelector('input') as HTMLInputElement;
+    field.value = 'lanes';
+    await fireEvent.input(field);
+
+    expect(counts(container)['Remote'], 'one remote branch matches').toBe('1');
+    expect(counts(container)['Stashes'], 'and no stash does').toBe('0');
+  });
+});

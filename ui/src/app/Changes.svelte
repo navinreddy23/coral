@@ -62,15 +62,22 @@
    *
    * Shown on the folder row, as the reference does: a closed directory that only says its name
    * hides exactly the thing the panel exists to show.
+   *
+   * A deletion is counted as a deletion. It used to fall into the edits, so a folder holding
+   * one modified file, one deleted and one added read "M 2  A 1" over rows marked M, D and A —
+   * and the one change nobody wants to miss was the one with no number of its own.
    */
-  function tally(node: TreeNode<StatusEntry>): { edits: number; adds: number } {
+  function tally(node: TreeNode<StatusEntry>): { edits: number; adds: number; gone: number } {
     let edits = 0;
     let adds = 0;
+    let gone = 0;
     for (const entry of filesIn(node)) {
-      if (markOf(entry, staged) === 'A') adds += 1;
+      const mark = markOf(entry, staged);
+      if (mark === 'A') adds += 1;
+      else if (mark === 'D') gone += 1;
       else edits += 1;
     }
-    return { edits, adds };
+    return { edits, adds, gone };
   }
 </script>
 
@@ -91,6 +98,7 @@
             <span class="name">{node.name}</span>
             {#if counts.edits > 0}<span class="count edit">M {counts.edits}</span>{/if}
             {#if counts.adds > 0}<span class="count add">A {counts.adds}</span>{/if}
+            {#if counts.gone > 0}<span class="count gone">D {counts.gone}</span>{/if}
           </button>
           <button
             class="act"
@@ -166,6 +174,8 @@
   .count + .count { margin-left: var(--space-2); }
   .count.edit { color: var(--lane-1); }
   .count.add { color: var(--ok); }
+  /* The same colour the row's own D wears, so the number and the letter under it agree. */
+  .count.gone { color: var(--danger); }
   .act {
     flex: 0 0 auto; font: inherit; font-size: var(--text-md); line-height: 1; width: 1.6em;
     cursor: pointer; visibility: hidden;

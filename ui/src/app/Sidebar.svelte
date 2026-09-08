@@ -458,7 +458,7 @@
         </span>
         <span class="icon"><HostMark kind={sectionHost} /></span>
         Remote
-        <span class="count">{groups.remote.length}</span>
+        <span class="count">{shown(groups.remote).length}</span>
       </button>
       <button
         class="dots"
@@ -525,7 +525,7 @@
         </span>
       <span class="icon"><Icon name="stash" size={12} /></span>
       Stashes
-      <span class="count">{stashes.length}</span>
+      <span class="count">{stashRows.length}</span>
     </button>
     {#if !collapsed['stashes']}
       {#if stashRows.length === 0}

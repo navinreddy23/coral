@@ -798,6 +798,12 @@
     const before = refSignature();
     const outcome = await actions.run(path, action);
     if (!outcome) {
+      // A pull that cannot fast-forward is not a failure, it is a question. Answering it with
+      // git's own four lines of hints, in a toast, was the worst of both.
+      if (action.kind === 'pull' && action.mode === 'ffOnly' && hasDiverged(actions.report?.text)) {
+        await offerToIntegrate(action);
+        return false;
+      }
       // `actions` keeps the message for the status line; the toast is what carries it to
       // someone who is not looking at the bottom of the window.
       if (actions.report) toasts.push('error', 'Something went wrong', actions.report.text);
@@ -854,6 +860,46 @@
    * Read from the porcelain summary rather than from the exit code, which is the same for a
    * rejection and for a server that would not answer. Only a rejection has a next move.
    */
+  /** git's own words for a fast-forward it will not do because both sides have moved. */
+  function hasDiverged(message: string | undefined): boolean {
+    if (message === undefined) return false;
+    return (
+      message.includes('Diverging branches') ||
+      message.includes('Not possible to fast-forward') ||
+      message.includes('not possible to fast-forward')
+    );
+  }
+
+  /**
+   * A pull that cannot fast-forward, put as the choice it actually is.
+   *
+   * The button pulls fast-forward only, which is the safe reading of "bring me up to date": it
+   * writes no merge commit nobody asked for. When both sides have moved git refuses, and
+   * refusing is right — but it says so in four lines of advice about `git config pull.rebase`,
+   * and the two things that can actually be done from here are already on this button's own
+   * caret. This is the same courtesy a refused push has always had.
+   */
+  async function offerToIntegrate(action: Extract<Action, { kind: 'pull' }>) {
+    const branch = headName ?? 'This branch';
+    const { choice } = await ask({
+      title: `${branch} and the remote have both moved`,
+      detail:
+        'A pull that only fast-forwards cannot bring these together, because each has commits ' +
+        'the other does not. Merging keeps both lines of work and writes a commit that joins ' +
+        'them. Rebasing puts the commits made here on top of the remote\'s, which rewrites ' +
+        'them and gives them new object ids.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [
+        { id: 'merge', label: 'Pull, merging' },
+        { id: 'rebase', label: 'Pull, rebasing' },
+      ],
+    });
+    if (choice === 'merge') await act({ ...action, mode: 'merge' });
+    else if (choice === 'rebase') await act({ ...action, mode: 'rebase' });
+  }
+
   function wasRejected(message: string): boolean {
     return /\[rejected\]|non-fast-forward|fetch first|stale info/iu.test(message);
   }
@@ -1815,6 +1861,11 @@
   }
 
   /** How a pull should integrate, offered at the caret beside the Pull button. */
+  /** What the current branch tracks, or null while it tracks nothing. */
+  const upstreamOfHead = $derived(
+    refs.groups.local.find((r) => r.short === headName)?.upstream ?? null,
+  );
+
   /** What a push can send beyond the current branch. Tags are the whole of it. */
   function pushMenu(event: MouseEvent) {
     const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
@@ -1827,7 +1878,9 @@
         {
           kind: 'item',
           label: 'Push this branch',
-          hint: 'sets the upstream',
+          // Only where it would: on a branch that already tracks one, the push sets nothing,
+          // and naming what it will send to is more use than describing an absent side effect.
+          hint: upstreamOfHead === null ? 'sets the upstream' : `to ${upstreamOfHead}`,
           disabled: busy,
           run: () =>
             void act({
