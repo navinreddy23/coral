@@ -27,7 +27,7 @@ worth of DOM. The panel on the right is the commit under the cursor.*
 | | |
 |---|---|
 | [![Side by side diff](docs/screenshots/02-diff.png)](docs/screenshots/02-diff.png) | [![Blame](docs/screenshots/03-blame.png)](docs/screenshots/03-blame.png) |
-| **Diffs** read inline or side by side, with word-level highlighting, and step change by change in either layout. | **Blame** attributes every line to the commit that last changed it, with the age beside it. |
+| **Diffs** read inline or side by side, and step change by change in either layout. | **Blame** attributes every line to the commit that last changed it, with the age beside it. |
 | [![Staging and committing](docs/screenshots/04-staging.png)](docs/screenshots/04-staging.png) | [![The conflict tool](docs/screenshots/05-conflicts.png)](docs/screenshots/05-conflicts.png) |
 | **Staging** by file, by hunk or by line, as a tree or a flat list. | **Conflicts** in three panes built from the index stages, with the sides named after the refs involved rather than "ours" and "theirs". |
 | [![Interactive rebase](docs/screenshots/06-rebase.png)](docs/screenshots/06-rebase.png) | [![The command palette](docs/screenshots/07-palette.png)](docs/screenshots/07-palette.png) |
@@ -55,7 +55,7 @@ carries an eye that takes it out of the graph.
 **Working with changes.** Stage and unstage by file, by hunk or by line; commit, amend, discard.
 The file panel answers four questions about one file: what changed, who wrote each line, what
 has touched it, and the same again with whitespace discounted. Diffs read inline or side by
-side, with word-level highlighting.
+side.
 
 **Patches.** Two commits picked in the graph are written out as a numbered series with one
 button; the same button takes patch files back in, either as commits with their original

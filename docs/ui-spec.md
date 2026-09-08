@@ -1,32 +1,57 @@
-# UI specification
+# Interface
 
-Fidelity target: someone who uses GitKraken daily should be able to sit down and use Coral
-without reading anything. Match layout, density, colours, interactions, and iconography style.
-Do not copy GitKraken's assets, logo, name, icons, or CSS; use Lucide icons, Inter, and
-JetBrains Mono.
+Coral's design, and the reasons for it. This is a description of what the window is, not a
+target to be measured against something else — an earlier version of this file asked for
+parity with another client, and the interface has since been designed on its own terms.
+
+## What it is trying to be
+
+A precision instrument. The window is read for hours at a time on repositories with a million
+commits in them, so the chrome is quiet and the data is loud: near-monochrome surfaces, hairline
+separation, one accent spent only where something is selected or focused, and colour reserved
+for the places it means something.
+
+Three rules follow from that and are enforced by tests rather than by intention.
+
+**One accent, one brand.** Aqua does every functional job — what is selected, what has focus,
+what a primary button is. Coral carries the identity, and appears in exactly four places: the
+mark, the line along the top of the current tab, the working copy's row, and the boot screen.
+They are kept apart by role rather than by hue, because a warm red cannot mean "brand" in one
+place and "this deletes something" in another.
+
+**Nothing is written in pixels.** Colour, type, spacing, shape and motion come from
+`ui/src/styles/tokens.css` and nowhere else. `ui/tests/style.test.ts` fails a component that
+writes a literal colour, a type size, a shadow outside an overlay, or a transition timed by
+hand.
+
+**Every ratio is measured.** `ui/tests/contrast.test.ts` asserts the contrast of every token
+pair the window actually renders, in both themes, against the panel rather than the page —
+most of the dim text in this window is on `bg-1`, where a ratio computed against white
+flatters itself by half a point.
 
 ## Layout
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ ⑂ Coral [kernel][linux][stable]  [+] ⌄                     ☰ ⚙ ☾ │ ─ □ ✕ │
+│ ⌘ Coral ⟨Personal⟩ ⟦coral⟧ ⟦linux⟧ ⟦notes⟧ +      ⌄ ⚙ ☾ │ ─ □ ✕         │
 ├─────────────────────────────────────────────────────────────────────────┤
-│ ↶ ↷ │ Pull ▾   Push   Branch   Stash   Pop                   🔍 filter   │
+│ repo › branch │ ↶ ↷ │ ⟳ ↓▾ ↑▾ │ ⑂ ⤓ ⤒ ▤                              >_ │
 ├──────────────┬──────────────────────────────────────────┬───────────────┤
-│ filter…      │  graph │ message + labels │ avatar │ date │ sha           │
-│ ▾ LOCAL      │  // WIP  3 files  +1 ~2 -0               │ Commit detail │
-│   ✓ main     │  ●──  Merge tag 'v6.x' of …   ⊙  2h  ab12c│  or           │
-│   feature/x  │  │╲                                       │ Staging panel │
-│ ▾ REMOTE     │  │ ●  net: fix …                ⊙  3h  9f1e2│              │
-│ ▾ PULL REQ.  │  ● │  …                                   │               │
-│ ▾ TAGS       │                                           │               │
-│ ▾ STASHES    │                                           │               │
-│ ▾ SUBMODULES │                                           │               │
+│ ⌕ filter…    │  ⟦main⟧ ●  a summary            2h  ab12c │ Commit detail │
+│ ⌄ Local    3 │        │╲                                 │      or       │
+│   ✓ main     │        │ ●  another summary     3h  9f1e2 │ Staging panel │
+│   feature/x  │        ● │                                │               │
+│ › Remote   2 │                                           │               │
+│ ⌄ Stashes  1 │                                           │               │
+│ › Tags   944 │                                           │               │
 └──────────────┴──────────────────────────────────────────┴───────────────┘
 ```
 
-Left and right panels collapse; widths persist per repo. Default dark theme; light theme
-included. Panel splitters are draggable.
+Left and right panels collapse; widths persist per repository. The theme follows the desktop
+unless it is told not to. Panel splitters are draggable, and the two that size the commit
+list's columns are invisible until the pointer is on them — there is no line to draw between
+the branch pills and the nodes they point at without cutting the one thing that ties them
+together.
 
 ## Title bar
 
@@ -66,16 +91,27 @@ reason.
 
 ## Toolbar
 
-Undo and Redo, disabled when the journal is empty, with a tooltip naming the operation. Pull
-with a dropdown: fast-forward if possible (default), fetch all, pull (rebase), pull (merge).
-Push. Branch, creating at the selected commit or HEAD with an inline name input in the graph.
-Stash. Pop. Patch, which writes the commits between two picked ones out as a series or takes a
-patch file in. On the right, a graph filter searching message, author, SHA and file path, with a
-result count and up/down navigation.
+Forty pixels, left-aligned, and icons alone. Undo and Redo, disabled when the journal is empty;
+Fetch, Pull with a caret for how it integrates, Push with a caret for what it sends; Branch,
+Stash, Pop, and Patch, which writes the commits between two picked ones out as a series or
+takes a patch file in. The terminal toggle sits at the far end, because it is the one control
+on the row that acts on the window rather than on the repository.
+
+The words are in the tooltips rather than on the buttons: the name first, then what the action
+does, then its keystroke where it has one — read from the same binding table the shortcut sheet
+is built from, so a shortcut is written down once. Every button also carries an accessible
+name, which is now the only name it has.
+
+The graph filter is not here. It is opened over the list it searches with `Ctrl+F`, with a
+result count and up and down through the matches.
 
 ## Sidebar
 
-Sections collapse and remember state; a filter box at the top filters all of them. Rows have
+Sections are named in sentence case with a drawn icon and a count, collapse, and remember their
+state; a search field at the top filters all of them, with the magnifier inside the box rather
+than beside it — a field labelled only by its placeholder loses that label the moment somebody
+types in it. Every row keeps a gutter for the tick that marks the branch you are on, whether it
+is ticked or not, so four sections share one left edge. Rows have
 hover actions. The current branch is bold with a check mark. Remote rows show a host icon and
 the signed-in avatar when a hosting provider matches, with branches nested beneath. Pull
 requests group by remote showing number, title, author avatar and state, and a local branch's
@@ -121,8 +157,13 @@ the branch and the patch rather than "ours" and "theirs", and is continued or ab
 
 ## Graph
 
-Columns: lanes (canvas), message with inline label pills, author avatar, relative date
-(absolute on hover), short SHA. Row height 28 px, compact 22 px.
+Columns: branch and tag pills, lanes (canvas), then the message with the relative date and
+short object id at its trailing edge. No column headers — they named three columns whose
+contents are a pill, a drawing and a sentence, and cost twenty-six pixels of every screen.
+
+Row height follows the density chosen in Preferences: 24, 28 or 32 pixels, with 28 shipped. The
+same three numbers reach the stylesheet and the canvas metrics, which cannot read each other, so
+`ui/tests/density.test.ts` reads both files and fails when they drift.
 
 - Canvas draws only visible rows plus one screen of overscan. Edges are Bézier curves between
   rows; lanes take a stable colour from the eight-colour palette in `tokens.css`. Commit nodes
@@ -160,7 +201,7 @@ link.
 
 ## Diff view
 
-Inline and side-by-side toggle, word-level highlighting, hunk headers with stage/unstage/discard
+Inline and side-by-side toggle, hunk headers with stage/unstage/discard
 hunk, line selection to stage/unstage/discard lines, whitespace toggle, file history and blame
 tabs, and next/previous change in both layouts. The unified view can be widened from the hunks
 to the whole file; side by side always shows the whole of it. Large and binary files render as a placeholder
@@ -283,7 +324,36 @@ their engines and watchers alive so badges stay current. Graph chunks for tabs n
 minutes are dropped and rebuilt from the Rust row store on the next switch; the row store
 itself is never rebuilt on a tab switch.
 
-## Theme tokens
+## The design system
 
-`ui/src/styles/tokens.css` is the only place colours, spacing and type live. Tune by eye
-against GitKraken's dark theme; never spread hex values through components.
+`ui/src/styles/tokens.css` is the only place colour, spacing, type, shape and motion live.
+
+**Surfaces** are a four-step ladder biased cool: the page a list sits on, the panels either
+side of it, a control at rest, and one under the pointer. Depth is layered surfaces and
+hairlines. A shadow appears only on something that floats free of the page and never scrolls —
+a menu, a dialog, the palette, a toast — because a shadow on a row is a large soft fill
+repainted on every scroll frame, and this window scrolls a million rows.
+
+**Every surface carrying text paints its own opaque background.** WebKit antialiases text on a
+composited layer with subpixel precision only where it knows what is behind it, so
+`background: none` silently drops it to grayscale. See `docs/ARCHITECTURE.md`. The lane canvas
+is the one deliberate exception.
+
+**Type** is Inter for the interface and JetBrains Mono for anything git produced, both bundled
+as latin subsets — 96 KB for three files. Ligatures are off: JetBrains Mono draws `!==` as one
+glyph, and in a diff a reader checking whether a line says `!=` or `!==` should not have to know
+how the face draws them. Six sizes and no more, plus one for lettering inside a disc or a badge,
+which is sized to the shape holding it rather than to the reading scale.
+
+**Icons** are one drawn set on a 24-unit grid, in `ui/src/app/icon.ts`. Stroke weight is not
+stored with them — `Icon.svelte` derives it from the size asked for, so a glyph on an
+eleven-pixel branch pill and one in a twenty-pixel button land on the same optical weight.
+
+**The mark** is one commit, the two branches leaving it, and the trunk carrying on past them:
+a commit graph and a piece of coral, which is a thing that grows by branching. Four nodes, not
+three, because three made a Y and a Y is the branch glyph. `Mark.svelte` is the one drawing;
+the seven bundled application icons are generated from the same shape.
+
+**The theme** follows the desktop and keeps following it, so a desktop that goes dark in the
+evening takes Coral with it. The switch in the title bar sets light or dark outright;
+Preferences, Appearance is where the choice is handed back.
