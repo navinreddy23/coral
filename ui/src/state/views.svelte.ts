@@ -1,3 +1,5 @@
+import type { Density } from '../graph/layout';
+
 /**
  * The choices a user makes about how to look at things, remembered across launches.
  *
@@ -21,7 +23,16 @@ export type FileView = 'diff' | 'blame' | 'history';
 /** Where the terminal sits. */
 export type Dock = 'bottom' | 'right';
 
+export type { Density } from '../graph/layout';
+
 export interface Views {
+  /**
+   * How much air a row is given, in the graph and in every list that follows it.
+   *
+   * Dense by default: this window is read on repositories with a million commits, and four
+   * more of them on screen is worth more than four pixels of air around each.
+   */
+  density: Density;
   /** The commit detail panel's file list. */
   commitFiles: Grouping;
   /** The staging panel's two lists. */
@@ -62,6 +73,7 @@ const KEY = 'coral.views';
 
 function defaults(): Views {
   return {
+    density: 'default',
     commitFiles: 'path',
     changes: 'tree',
     diff: 'inline',
@@ -117,6 +129,10 @@ function read(): Views {
     if (typeof parsed !== 'object' || parsed === null) return out;
     const stored = parsed as Partial<Record<keyof Views, unknown>>;
 
+    if (stored.density === 'compact' || stored.density === 'default'
+        || stored.density === 'comfortable') {
+      out.density = stored.density;
+    }
     if (stored.commitFiles === 'path' || stored.commitFiles === 'tree') {
       out.commitFiles = stored.commitFiles;
     }

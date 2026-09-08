@@ -131,7 +131,7 @@
   </nav>
 
   {#if active === 'appearance'}
-    <Appearance {theme} />
+    <Appearance {theme} {views} />
   {:else if active === 'profiles'}
     <Profiles
       {profiles}

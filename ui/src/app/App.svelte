@@ -73,6 +73,7 @@
   import type { Action } from '../ipc/commands';
   import {
     DEFAULT_METRICS,
+    metricsFor,
     firstRowFor,
     fittedMetrics,
     isCompressed,
@@ -155,6 +156,22 @@
    */
   let decorated = $state(true);
   let maximised = $state(false);
+
+  /**
+   * The drawing metrics for the chosen density, and the attribute that tells CSS the same
+   * thing.
+   *
+   * The rows are laid out by the stylesheet and the lanes beside them are drawn on a canvas,
+   * so the row height has to reach both. It is written onto the root element rather than
+   * passed down, for the same reason `data-theme` is: every list in the window follows it, not
+   * only the graph.
+   */
+  const metrics = $derived(metricsFor(views.current.density));
+  $effect(() => {
+    const root = document.documentElement;
+    if (views.current.density === 'default') root.removeAttribute('data-density');
+    else root.setAttribute('data-density', views.current.density);
+  });
 
   /**
    * What the theme switch says it will do.
@@ -2591,14 +2608,14 @@
     const lines = event.deltaMode === 1 ? event.deltaY : event.deltaY / 40;
     const pages = event.deltaMode === 2 ? event.deltaY : 0;
     const rows =
-      pages * Math.max(1, rowsPerScreen(viewport, DEFAULT_METRICS) - 1) + lines * 3;
+      pages * Math.max(1, rowsPerScreen(viewport, metrics) - 1) + lines * 3;
     if (rows === 0) return;
 
     const total = graph.totalRows;
-    const reach = Math.max(1, maxScroll(total, DEFAULT_METRICS, viewport));
+    const reach = Math.max(1, maxScroll(total, metrics, viewport));
     // Below the cap a row is a whole pixel; above it the scrollable area is compressed, so the
     // same number of rows is a smaller number of pixels.
-    const perRow = total > 0 ? reach / Math.max(1, total - 1) : DEFAULT_METRICS.rowHeight;
+    const perRow = total > 0 ? reach / Math.max(1, total - 1) : metrics.rowHeight;
 
     const next = Math.max(0, Math.min(reach, scroller.scrollTop + rows * perRow));
     if (next !== scroller.scrollTop) {
@@ -2611,19 +2628,19 @@
   function scrollToRow(row: number) {
     if (!graph.frame || !scroller) return;
     const total = graph.totalRows;
-    const reach = maxScroll(total, DEFAULT_METRICS, viewport);
+    const reach = maxScroll(total, metrics, viewport);
     // Three rows of context above the target, where there is history to show above it.
     const above = Math.max(0, row - 3);
 
     // Below the height cap a row is a whole pixel and the offset is exact. The fraction below
     // is for the compressed range only: applied here it overshot by the ratio between the rows
     // on screen and the rows in the graph, which on a small repository is several times over.
-    if (!isCompressed(total, DEFAULT_METRICS)) {
-      scroller.scrollTo({ top: Math.min(reach, above * DEFAULT_METRICS.rowHeight) });
+    if (!isCompressed(total, metrics)) {
+      scroller.scrollTo({ top: Math.min(reach, above * metrics.rowHeight) });
       return;
     }
     // Above it a row is a fraction of a pixel, so the target is a fraction of the range.
-    const lastTop = Math.max(1, total - rowsPerScreen(viewport, DEFAULT_METRICS));
+    const lastTop = Math.max(1, total - rowsPerScreen(viewport, metrics));
     scroller.scrollTo({ top: Math.min(reach, (above / lastTop) * reach) });
   }
 
@@ -3169,8 +3186,8 @@
   /** Rows currently worth putting in the DOM. Never the whole graph. */
   function windowRows(frame: Frame | null): number[] {
     if (!frame) return [];
-    const perScreen = Math.ceil(viewport / DEFAULT_METRICS.rowHeight);
-    const first = firstRowFor(scrollTop, viewport, frame.totalRows, DEFAULT_METRICS);
+    const perScreen = Math.ceil(viewport / metrics.rowHeight);
+    const first = firstRowFor(scrollTop, viewport, frame.totalRows, metrics);
     const last = Math.min(frame.totalRows - 1, first + perScreen + 2);
     const out: number[] = [];
     for (let r = first; r <= last; r++) out.push(r);
@@ -3257,7 +3274,7 @@
    * somewhere in the middle of the lanes.
    */
   const laneMetrics = $derived(
-    fittedMetrics(widestLane(graph.frame, rows), columns.graph),
+    fittedMetrics(widestLane(graph.frame, rows), columns.graph, metrics),
   );
 
   /**
@@ -3282,7 +3299,7 @@
 
   const laneFit = $derived.by(() => {
     if (rows.length === 0) return 0;
-    const want = graphWidthFor(widestLane(graph.frame, rows), DEFAULT_METRICS);
+    const want = graphWidthFor(widestLane(graph.frame, rows), metrics);
     // Never more than a share of the pane. A merge region thirty lanes wide would otherwise
     // take the commit message with it, and a graph beside no message is not worth the trade;
     // past this the lanes are drawn tighter instead.
@@ -3774,7 +3791,7 @@
       {/if}
       <div
         class="spacer"
-        style:height="{spacerHeight(graph.totalRows, DEFAULT_METRICS, viewport)}px"
+        style:height="{spacerHeight(graph.totalRows, metrics, viewport)}px"
       >
         <div class="lanes" style:top="{listTop(scrollTop)}px">
           <GraphCanvas

@@ -18,6 +18,28 @@ export const DEFAULT_METRICS: Metrics = {
   nodeRadius: 10,
 };
 
+/** How much air a row is given. */
+export type Density = 'compact' | 'default' | 'comfortable';
+
+/**
+ * How tall a row is at each density.
+ *
+ * The same three numbers are declared in `ui/src/styles/tokens.css`, because the rows are laid
+ * out by CSS and the lanes beside them are drawn on a canvas, and neither can read the other.
+ * `ui/tests/density.test.ts` reads both files and fails when they drift, which is the only
+ * thing keeping the lanes on the same grid as the text they belong to.
+ */
+export const ROW_HEIGHTS: Record<Density, number> = {
+  compact: 24,
+  default: 28,
+  comfortable: 32,
+};
+
+/** The drawing metrics for a density. */
+export function metricsFor(density: Density): Metrics {
+  return { ...DEFAULT_METRICS, rowHeight: ROW_HEIGHTS[density] };
+}
+
 /**
  * Width of the branch and tag column, which sits left of the lanes.
  *
@@ -47,8 +69,7 @@ const MIN_LANE_WIDTH = 7;
  * have without taking the commit message with it — and drawn at the full pitch anyway every
  * node past the edge is simply not on screen, which reads as a graph with no commits in it.
  */
-export function fittedMetrics(maxLane: number, columnPx: number): Metrics {
-  const base = DEFAULT_METRICS;
+export function fittedMetrics(maxLane: number, columnPx: number, base = DEFAULT_METRICS): Metrics {
   if (maxLane <= 0) return base;
 
   const room = columnPx - base.laneOrigin - base.nodeRadius - 10;

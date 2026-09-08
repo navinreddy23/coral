@@ -2,8 +2,10 @@
   import Icon from './Icon.svelte';
   import type { IconName } from './icon';
   import type { ThemeChoice, ThemeState } from '../state/theme.svelte';
+  import type { Density, ViewsState } from '../state/views.svelte';
+  import { ROW_HEIGHTS } from '../graph/layout';
 
-  const { theme }: { theme: ThemeState } = $props();
+  const { theme, views }: { theme: ThemeState; views: ViewsState } = $props();
 
   const CHOICES: { id: ThemeChoice; label: string; icon: IconName; note: string }[] = [
     {
@@ -14,6 +16,12 @@
     },
     { id: 'light', label: 'Light', icon: 'sun', note: 'Whatever the desktop is doing.' },
     { id: 'dark', label: 'Dark', icon: 'moon', note: 'Whatever the desktop is doing.' },
+  ];
+
+  const DENSITIES: { id: Density; label: string; note: string }[] = [
+    { id: 'compact', label: 'Compact', note: 'The most history on screen.' },
+    { id: 'default', label: 'Default', note: 'What Coral ships with.' },
+    { id: 'comfortable', label: 'Comfortable', note: 'More room around each row.' },
   ];
 </script>
 
@@ -42,6 +50,32 @@
         light or dark outright; this is how to hand the choice back.
       </p>
     {/if}
+  </fieldset>
+
+  <fieldset>
+    <legend>Density</legend>
+    <div class="choices">
+      {#each DENSITIES as choice (choice.id)}
+        <button
+          class="choice"
+          class:on={views.current.density === choice.id}
+          aria-pressed={views.current.density === choice.id}
+          onclick={() => views.set('density', choice.id)}
+        >
+          <span class="rows" aria-hidden="true">
+            {#each [0, 1, 2] as line (line)}
+              <span class="rule" style:height="{ROW_HEIGHTS[choice.id] / 4}px"></span>
+            {/each}
+          </span>
+          <span class="label">{choice.label}</span>
+          <span class="note">{choice.note}</span>
+        </button>
+      {/each}
+    </div>
+    <p class="hint">
+      Every row in the window follows this, not only the commit list: the lanes beside the
+      messages are drawn on a canvas and are laid on the same grid.
+    </p>
   </fieldset>
 </section>
 
@@ -74,6 +108,14 @@
   }
   .face { color: var(--fg-2); }
   .choice.on .face { color: var(--accent); }
+  /* Three rules at the height a row would be, which says what the choice does without anybody
+     having to know what twenty-four pixels looks like. */
+  .rows {
+    display: flex; flex-direction: column; justify-content: center; gap: 3px;
+    height: 22px; width: 22px;
+  }
+  .rule { display: block; width: 100%; border-radius: 1px; background: var(--fg-2); }
+  .choice.on .rule { background: var(--accent); }
   .label { font-size: var(--text-md); font-weight: 600; color: var(--fg-0); }
   .note { font-size: var(--text-sm); color: var(--fg-2); line-height: var(--leading-body); }
   .hint {

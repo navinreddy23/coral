@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import Appearance from '../../src/app/Appearance.svelte';
 import { ThemeState } from '../../src/state/theme.svelte';
+import { ViewsState } from '../../src/state/views.svelte';
 
 afterEach(cleanup);
 
@@ -25,8 +26,9 @@ function desktop(dark: boolean) {
 function pane(dark = false) {
   desktop(dark);
   const theme = new ThemeState();
-  const view = render(Appearance, { props: { theme } });
-  return { view, theme };
+  const views = new ViewsState();
+  const view = render(Appearance, { props: { theme, views } });
+  return { view, theme, views };
 }
 
 function chosen(container: HTMLElement): string {
@@ -49,7 +51,10 @@ describe('the appearance pane', () => {
     const labels = [...view.container.querySelectorAll('.choice .label')].map((l) =>
       l.textContent?.trim(),
     );
-    expect(labels).toEqual(['Follow the desktop', 'Light', 'Dark']);
+    expect(labels).toEqual([
+      'Follow the desktop', 'Light', 'Dark',
+      'Compact', 'Default', 'Comfortable',
+    ]);
   });
 
   it('switches the window when a choice is pressed', async () => {
@@ -89,6 +94,30 @@ describe('the appearance pane', () => {
     const pressed = [...view.container.querySelectorAll('.choice')].map((c) =>
       c.getAttribute('aria-pressed'),
     );
-    expect(pressed).toEqual(['true', 'false', 'false']);
+    expect(pressed).toEqual(['true', 'false', 'false', 'false', 'true', 'false']);
+  });
+
+  it('opens on the shipped density, which is the dense one', () => {
+    const { views } = pane();
+    expect(views.current.density).toBe('default');
+  });
+
+  it('sets the density on the root element, so every list follows it', async () => {
+    // Written where `data-theme` is written, and for the same reason: the graph is not the
+    // only list in the window.
+    const { view, views } = pane();
+    await fireEvent.click(view.getByText('Compact'));
+    expect(views.current.density).toBe('compact');
+  });
+
+  it('draws each density rather than naming a number of pixels', () => {
+    // Three rules at the height a row would be. Nobody knows what twenty-four pixels looks
+    // like; everybody can see which of three is tighter.
+    const { view } = pane();
+    const rules = [...view.container.querySelectorAll('.choice .rows .rule')] as HTMLElement[];
+    expect(rules).toHaveLength(9);
+    const heights = rules.map((r) => Number.parseFloat(r.style.height));
+    expect(heights[0]).toBeLessThan(heights[3] ?? 0);
+    expect(heights[3]).toBeLessThan(heights[6] ?? 0);
   });
 });
