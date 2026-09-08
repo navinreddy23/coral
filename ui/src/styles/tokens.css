@@ -109,18 +109,22 @@
 
   /*
    * The same eight mixed into the page behind them, for anything that has to be *labelled*
-   * with a lane rather than drawn in it — a branch pill, the strip beside a commit. A stroke
-   * colour at full strength behind 10px text leaves the text unreadable; these carry the
-   * same identity at a seventh of the weight and keep `--fg-0` above 15:1 on every one.
+   * with a lane rather than drawn in it — a branch pill, the ribbon beside a run of commits.
+   *
+   * A tenth of the stroke's strength, not a seventh. The ribbon runs the whole width of the
+   * gap between a node and its message, which on the kernel is two hundred pixels, and at the
+   * heavier mix a run of forty commits on one branch was the loudest thing on the screen — in
+   * a window whose whole argument is that the chrome should be quiet. The identity survives
+   * the reduction; the shouting does not. `--fg-0` stays above 16:1 on every one.
    */
-  --lane-1-soft: #ddeaf4;
-  --lane-2-soft: #f6e1ed;
-  --lane-3-soft: #efe9dc;
-  --lane-4-soft: #e1ece3;
-  --lane-5-soft: #ebe5fd;
-  --lane-6-soft: #f5e4db;
-  --lane-7-soft: #deebed;
-  --lane-8-soft: #eaebdf;
+  --lane-1-soft: #e9f2f8;
+  --lane-2-soft: #f9ebf4;
+  --lane-3-soft: #f5f1e9;
+  --lane-4-soft: #ecf3ed;
+  --lane-5-soft: #f2eefe;
+  --lane-6-soft: #f9eee8;
+  --lane-7-soft: #eaf2f3;
+  --lane-8-soft: #f1f2eb;
 
   /*
    * What a commit node is filled with, keyed by its author rather than by its lane.
@@ -232,14 +236,14 @@
   --lane-7: #35cbdd;
   --lane-8: #c6cf45;
 
-  --lane-1-soft: #1a3043;
-  --lane-2-soft: #3a2637;
-  --lane-3-soft: #3c321e;
-  --lane-4-soft: #1e3629;
-  --lane-5-soft: #2c2943;
-  --lane-6-soft: #3e2b25;
-  --lane-7-soft: #16363e;
-  --lane-8-soft: #33371f;
+  --lane-1-soft: #162736;
+  --lane-2-soft: #2d1f2d;
+  --lane-3-soft: #2e281b;
+  --lane-4-soft: #192b23;
+  --lane-5-soft: #232235;
+  --lane-6-soft: #302320;
+  --lane-7-soft: #132b32;
+  --lane-8-soft: #282c1d;
 
   /* The same sixteen, for a dark ground. See the light block for what they are. */
   --term-black: #3b4048;
