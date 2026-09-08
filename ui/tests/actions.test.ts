@@ -12,19 +12,54 @@ describe('running an action', () => {
     invoke.mockReset();
   });
 
+  // The same words as the toast beside it, from the module that owns them. Phrased twice, the
+  // two disagreed: a rejected push read "stopped on conflicts" here and "was rejected" there.
   it('reports what it did', async () => {
-    invoke.mockResolvedValue({ what: 'merge side', conflicted: false });
+    invoke.mockResolvedValue({ what: 'merge side', conflicted: false, message: '' });
     const actions = new ActionsState();
     await actions.run('/repo', { kind: 'merge', rev: 'side' });
-    expect(actions.report).toEqual({ text: 'merge side', tone: 'ok' });
+    expect(actions.report).toEqual({ text: 'merge side complete', tone: 'ok' });
     expect(actions.busy).toBe(false);
   });
 
   it('says so when the operation stopped on conflicts', async () => {
-    invoke.mockResolvedValue({ what: 'merge side', conflicted: true });
+    invoke.mockResolvedValue({ what: 'merge side', conflicted: true, message: '' });
     const actions = new ActionsState();
     await actions.run('/repo', { kind: 'merge', rev: 'side' });
     expect(actions.report).toEqual({ text: 'merge side stopped on conflicts', tone: 'warn' });
+  });
+
+  it('calls a rejected push rejected, not a conflict', async () => {
+    // The line phrased this itself and the toast beside it phrased it another way, so a
+    // rejected push read "push v1.0 stopped on conflicts" here and "was rejected" there.
+    // Nothing conflicted with anything: the remote already had that name.
+    invoke.mockResolvedValue({
+      what: 'push v1.0',
+      conflicted: true,
+      message: 'refs/tags/v1.0 -> refs/tags/v1.0 [rejected] (already exists)',
+    });
+    const actions = new ActionsState();
+    await actions.run('/repo', {
+      kind: 'push',
+      remote: 'origin',
+      setUpstream: false,
+      refspec: 'refs/tags/v1.0',
+      tags: false,
+      forceWithLease: false,
+      delete: false,
+    });
+    expect(actions.report).toEqual({ text: 'push v1.0 was rejected', tone: 'warn' });
+  });
+
+  it('does not call a pull that brought nothing a failure', async () => {
+    invoke.mockResolvedValue({
+      what: 'pull',
+      conflicted: false,
+      message: 'Already up to date.',
+    });
+    const actions = new ActionsState();
+    await actions.run('/repo', { kind: 'pull', remote: null, mode: 'rebase' });
+    expect(actions.report).toEqual({ text: 'pull: already up to date', tone: 'ok' });
   });
 
   it('reports a failure rather than throwing at the caller', async () => {

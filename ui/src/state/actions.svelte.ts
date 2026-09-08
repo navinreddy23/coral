@@ -1,10 +1,17 @@
 import { runAction, type Action, type ActionOutcome } from '../ipc/commands';
 import { messageOf } from '../ipc/error';
+import { outcomeToast, type ToastKind } from './toasts.svelte';
 
 /** What the status line is showing about the last thing that ran. */
 export interface Report {
   text: string;
   tone: 'ok' | 'warn' | 'error';
+}
+
+/** The status line has three tones where a toast has four; nothing happening reads as fine. */
+function toneOf(kind: ToastKind): Report['tone'] {
+  if (kind === 'error') return 'error';
+  return kind === 'warn' ? 'warn' : 'ok';
 }
 
 /**
@@ -29,9 +36,11 @@ export class ActionsState {
     this.report = null;
     try {
       const outcome = await runAction(path, action);
-      this.report = outcome.conflicted
-        ? { text: `${outcome.what} stopped on conflicts`, tone: 'warn' }
-        : { text: outcome.what, tone: 'ok' };
+      // The same wording as the toast, from the module that owns it. Phrased here as well,
+      // the line said "push v1.0 stopped on conflicts" for a rejected push while the toast
+      // beside it said "was rejected", which is what actually happened.
+      const said = outcomeToast(action.kind, outcome.what, outcome.message, outcome.conflicted);
+      this.report = { text: said.title, tone: toneOf(said.kind) };
       return outcome;
     } catch (e) {
       this.report = { text: messageOf(e), tone: 'error' };

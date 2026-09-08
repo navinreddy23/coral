@@ -243,6 +243,96 @@ async fn an_up_to_date_push_is_reported_rather_than_failing() {
     assert_eq!(results[0].flag, PushFlag::UpToDate);
 }
 
+/// Forcing a tag that has moved, which a bare lease can never do.
+///
+/// `--force-with-lease` with no value is compared against the remote-tracking ref, and git
+/// keeps none for a tag. Every forced tag push came back "stale info", so a tag that had been
+/// moved could not be published from the window at all.
+#[tokio::test]
+async fn a_moved_tag_can_be_forced_onto_the_remote() {
+    let (repo, _home, origin) = with_origin();
+    let (runner, loc) = open(&repo).await;
+    repo.git(["tag", "v1.0"]);
+    let (_, sink) = collector();
+    loc.push(
+        &runner,
+        &PushOpts {
+            remote: Some("origin".into()),
+            refspec: Some("refs/tags/v1.0".into()),
+            ..PushOpts::default()
+        },
+        sink,
+    )
+    .await
+    .unwrap();
+
+    let repo = repo.write("f.txt", "more\n").commit("second");
+    repo.git(["tag", "-f", "v1.0"]);
+
+    let (_, sink) = collector();
+    let results = loc
+        .push(
+            &runner,
+            &PushOpts {
+                remote: Some("origin".into()),
+                refspec: Some("refs/tags/v1.0".into()),
+                force_with_lease: true,
+                ..PushOpts::default()
+            },
+            sink,
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        !results[0].flag.is_failure(),
+        "the forced tag was refused: {results:?}"
+    );
+    let there = repo.git([
+        "--git-dir",
+        origin.to_str().unwrap(),
+        "rev-parse",
+        "refs/tags/v1.0",
+    ]);
+    let here = repo.git(["rev-parse", "refs/tags/v1.0"]);
+    assert_eq!(there.trim(), here.trim(), "the remote took the new one");
+}
+
+/// The lease still has to refuse when the tag is not where it was read.
+#[tokio::test]
+async fn a_lease_naming_the_wrong_value_still_refuses_a_tag() {
+    let (repo, _home, _origin) = with_origin();
+    let (runner, loc) = open(&repo).await;
+    repo.git(["tag", "v1.0"]);
+    let (_, sink) = collector();
+    loc.push(
+        &runner,
+        &PushOpts {
+            remote: Some("origin".into()),
+            refspec: Some("refs/tags/v1.0".into()),
+            ..PushOpts::default()
+        },
+        sink,
+    )
+    .await
+    .unwrap();
+
+    let repo = repo.write("f.txt", "mine\n").commit("mine");
+    repo.git(["tag", "-f", "v1.0"]);
+
+    // What the remote holds is not this, so the lease has nothing to stand on and the push
+    // must be refused. Naming an expectation is not the same as forcing blindly.
+    let stale = format!("--force-with-lease=refs/tags/v1.0:{}", "0".repeat(40));
+    let done = repo
+        .command(["push", stale.as_str(), "origin", "refs/tags/v1.0"])
+        .output()
+        .expect("spawn git");
+    assert!(
+        !done.status.success(),
+        "a lease naming the wrong value has to be refused"
+    );
+}
+
 /// A rejected ref is an outcome the user acts on, not a crash.
 #[tokio::test]
 async fn a_non_fast_forward_push_reports_the_rejection() {

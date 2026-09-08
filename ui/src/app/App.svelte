@@ -759,20 +759,31 @@
    * end of the road: the window had no force at all, so the only way past it was a terminal.
    */
   async function offerToForce(action: Extract<Action, { kind: 'push' }>, message: string) {
+    // A tag is not a branch, and neither the explanation nor the way out is the same. Pulling
+    // brings a branch's missing commits in; it does nothing whatever about a tag the remote
+    // already has under that name, so offering it is offering a click that changes nothing.
+    const tag = action.refspec?.startsWith('refs/tags/') === true;
+    const name = action.refspec?.slice('refs/tags/'.length) ?? 'the tag';
     const { choice } = await ask({
       title: 'The remote refused it',
-      detail:
-        `${message.trim()}\n\n` +
-        'The remote has commits this branch does not. Pulling brings them in and keeps them. ' +
-        'Forcing replaces them with what is here, and git allows it only while nobody else has ' +
-        'moved the branch since Coral last fetched it.',
+      detail: tag
+        ? `${message.trim()}\n\n` +
+          `The remote already has a tag called ${name}, pointing somewhere else. Forcing ` +
+          'replaces it, and git allows that only while nobody else has moved it since Coral ' +
+          'read it. Anyone who has already fetched the old one keeps it until they delete it.'
+        : `${message.trim()}\n\n` +
+          'The remote has commits this branch does not. Pulling brings them in and keeps ' +
+          'them. Forcing replaces them with what is here, and git allows it only while ' +
+          'nobody else has moved the branch since Coral last fetched it.',
       asksText: false,
       placeholder: '',
       initial: '',
-      choices: [
-        { id: 'pull', label: 'Pull and rebase', primary: true },
-        { id: 'force', label: 'Force push' },
-      ],
+      choices: tag
+        ? [{ id: 'force', label: `Replace ${name} on the remote` }]
+        : [
+            { id: 'pull', label: 'Pull and rebase', primary: true },
+            { id: 'force', label: 'Force push' },
+          ],
     });
     if (choice === 'pull') {
       await act({ kind: 'pull', remote: action.remote, mode: 'rebase' });

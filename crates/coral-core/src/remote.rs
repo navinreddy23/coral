@@ -324,10 +324,49 @@ impl RepoLocation {
             .await
     }
 
+    /// The `--force-with-lease` argument, with an expectation where git cannot supply one.
+    ///
+    /// Bare, the lease is compared against the remote-tracking ref. A tag has none — nothing
+    /// keeps `refs/remotes/origin/tags/*` — so every forced tag push was refused with "stale
+    /// info", and a tag that had been moved could not be published from the window at all.
+    ///
+    /// For a tag the value the remote holds is read and named, which is what the lease then
+    /// stands on: it still refuses if the tag moves between that read and the push. An empty
+    /// expectation is git's way of saying the ref must not exist, which is the honest lease
+    /// when the remote has no such tag.
+    ///
+    /// # Errors
+    /// Propagates git failures from reading the remote.
+    async fn lease_arg(&self, runner: &GitRunner, opts: &PushOpts) -> Result<String, CoralError> {
+        let (Some(remote), Some(refspec)) = (opts.remote.as_deref(), opts.refspec.as_deref())
+        else {
+            return Ok("--force-with-lease".to_owned());
+        };
+        let Some(tag) = refspec.strip_prefix("refs/tags/") else {
+            return Ok("--force-with-lease".to_owned());
+        };
+        let out = runner
+            .output(
+                GitCommand::network("ls-remote", self.display_path())
+                    .args(["ls-remote", "--tags", remote])
+                    .arg(format!("refs/tags/{tag}")),
+            )
+            .await?;
+        // Two lines for an annotated tag: the tag object, then the commit it peels to under
+        // `^{}`. The ref points at the first, and that is what the lease is about.
+        let held = String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .find(|line| line.ends_with(&format!("refs/tags/{tag}")))
+            .and_then(|line| line.split_whitespace().next())
+            .unwrap_or_default()
+            .to_owned();
+        Ok(format!("--force-with-lease=refs/tags/{tag}:{held}"))
+    }
+
     /// Pushes to a remote.
     ///
     /// Forcing always uses `--force-with-lease`, never a bare `--force`: the lease refuses when
-    /// the remote branch has moved since we last saw it, which is the case where a plain force
+    /// the remote ref has moved since we last saw it, which is the case where a plain force
     /// silently destroys someone else's work.
     ///
     /// # Errors
@@ -351,7 +390,7 @@ impl RepoLocation {
             cmd = cmd.arg("--set-upstream");
         }
         if opts.force_with_lease {
-            cmd = cmd.arg("--force-with-lease");
+            cmd = cmd.arg(self.lease_arg(runner, opts).await?);
         }
         if opts.tags {
             cmd = cmd.arg("--tags");
