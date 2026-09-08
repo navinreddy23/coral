@@ -70,6 +70,7 @@
   import { elideRef } from './path';
   import { checkoutOf, divergence, remoteOf, withoutRemote } from './refname';
   import { orderRefs, pillChars } from './pill';
+  import { checkoutItems, combineItems, type RevisionActions } from './revision';
   import { bandWidth, columnWidth, laneToken } from '../graph/column';
   import { shortAge } from './age';
   import { initialsOf } from '../graph/initials';
@@ -901,50 +902,24 @@
   }
 
   /**
-   * Checking out what is on a row, by name.
+   * What the window does when one of the revision menu's lines is chosen.
    *
-   * A local branch is checked out as itself. A tracking branch is checked out under its own
-   * name without the remote in front, which is git's own rule and makes a local branch that
-   * follows it. A tag has no branch to be on, so git detaches, and the menu says so rather than
-   * leaving the user to discover it.
+   * Built here rather than passed down through each call because it is the same for all of
+   * them: what changes between the row menu and the panel's is which lines are asked for.
    */
-  function checkoutsFor(row: number): MenuItem[] {
-    const here = refs.byRow.get(row) ?? [];
-    const alongside = new Set(
-      here.filter((r) => r.kind.kind === 'local_branch').map((r) => r.short),
-    );
-    const out: MenuItem[] = [];
+  const revisionActions = $derived<RevisionActions>({
+    busy: actions.busy || worktree.busy,
+    goTo: (ref) => void goTo(ref),
+    checkout: (rev) => void act({ kind: 'checkout', rev }),
+    merge: (rev, ffOnly) => void act({ kind: 'merge', rev, mode: ffOnly ? 'ffOnly' : 'auto' }),
+    rebase: (onto) => void act({ kind: 'rebase', onto }),
+    rebaseInteractively: (onto) => info && void rebase.load(info.path, onto),
+    fastForwardBranch: (name, at) => void act({ kind: 'branchFastForward', name, at }),
+    moveTag: (name, to) => void moveTag(name, to),
+  });
 
-    for (const ref of here) {
-      if (ref.kind.kind === 'local_branch') {
-        if (ref.short === headName) continue;
-        out.push({
-          kind: 'item',
-          label: `Checkout ${ref.short}`,
-          run: () => void goTo(ref),
-        });
-      } else if (ref.kind.kind === 'remote_branch') {
-        const name = withoutRemote(ref.short);
-        // Not when the local branch of that name is on this very row and already offered
-        // above: two entries that read the same and do the same is a menu nobody can answer.
-        // A local of that name sitting elsewhere is a different matter — that entry is how
-        // the two get reconciled, and `goTo` asks which way.
-        if (name === '' || name === headName || alongside.has(name)) continue;
-        out.push({
-          kind: 'item',
-          label: `Checkout ${name}`,
-          hint: `tracking ${ref.short}`,
-          run: () => void goTo(ref),
-        });
-      } else if (ref.kind.kind === 'tag') {
-        out.push({
-          kind: 'item',
-          label: `Checkout ${ref.short}`,
-          hint: 'detaches HEAD',
-          run: () => void act({ kind: 'checkout', rev: ref.short }),
-        });
-      }
-    }
+  function checkoutsFor(row: number): MenuItem[] {
+    const out = checkoutItems(refs.byRow.get(row) ?? [], headName, revisionActions);
     return out.length === 0 ? out : [...out, { kind: 'separator' }];
   }
 
@@ -966,108 +941,8 @@
       here.find((r) => r.kind.kind === 'remote_branch') ??
       here.find((r) => r.kind.kind === 'tag');
     const rev = named?.short ?? oid.slice(0, 8);
-    const items = combineItems(named ?? null, rev, headName, where);
+    const items = combineItems(named ?? null, rev, headName, where, revisionActions);
     return items.length === 0 ? [] : [...items, { kind: 'separator' }];
-  }
-
-  /**
-   * The fast-forward line, pointing whichever way git could actually take it.
-   *
-   * One line, always in the same place, because a menu whose items come and go is a menu
-   * nobody can learn. What changes is the direction and whether it can be used. A ref the
-   * branch is behind is fast-forwarded to; a ref the branch has passed is fast-forwarded
-   * *from*, which moves it — a branch by fast-forward with no checkout, a tag by replacement,
-   * which is asked about first because whoever has fetched the old one keeps it. A bare commit
-   * behind, or two that have diverged, can be neither, and the line says why rather than
-   * vanishing: it read "Fast-forward master to v1.0.0" on an up-to-date master, which git
-   * refuses because master is the one in front.
-   */
-  function fastForwardItem(
-    ref: PlacedRef | null,
-    rev: string,
-    head: string,
-    where: Ancestry,
-  ): MenuItem {
-    const busy = actions.busy || worktree.busy;
-    if (where === 'ahead') {
-      return {
-        kind: 'item',
-        label: `Fast-forward ${head} to ${rev}`,
-        hint: 'never a merge commit',
-        disabled: busy,
-        run: () => void act({ kind: 'merge', rev, mode: 'ffOnly' }),
-      };
-    }
-    if (where === 'behind' && ref?.kind.kind === 'local_branch') {
-      return {
-        kind: 'item',
-        label: `Fast-forward ${ref.short} to ${head}`,
-        hint: 'without checking it out',
-        disabled: busy,
-        run: () => void act({ kind: 'branchFastForward', name: ref.short, at: head }),
-      };
-    }
-    if (where === 'behind' && ref?.kind.kind === 'tag') {
-      return {
-        kind: 'item',
-        // Named for the direction rather than for the plumbing: git moves a tag by replacing
-        // it, and the hint says so.
-        label: `Fast-forward ${ref.short} to ${head}…`,
-        hint: 'replaces the tag',
-        danger: true,
-        disabled: busy,
-        run: () => void moveTag(ref.short, head),
-      };
-    }
-    return {
-      kind: 'item',
-      label: `Fast-forward ${head} to ${rev}`,
-      hint: where === 'behind' ? `${head} is already past it` : 'they have diverged',
-      disabled: true,
-      run: () => {},
-    };
-  }
-
-  /**
-   * Bringing a revision into the current branch, and taking it along when the branch is in
-   * front.
-   *
-   * Every line is always here; only the fast-forward changes direction. Merging or rebasing
-   * onto something the branch already contains is a no-op git states plainly, which is a
-   * better answer than an item that is not there — and `rebase -i` onto an ancestor is not a
-   * no-op at all: it lists every commit made since, which is how anybody edits the history
-   * since their last release.
-   */
-  function combineItems(
-    ref: PlacedRef | null,
-    rev: string,
-    head: string,
-    where: Ancestry,
-  ): MenuItem[] {
-    // The row the branch is already on. Everything here would be about itself.
-    if (where === 'same') return [];
-    const busy = actions.busy || worktree.busy;
-    return [
-      fastForwardItem(ref, rev, head, where),
-      {
-        kind: 'item',
-        label: `Merge ${rev} into ${head}`,
-        disabled: busy,
-        run: () => void act({ kind: 'merge', rev, mode: 'auto' }),
-      },
-      {
-        kind: 'item',
-        label: `Rebase ${head} onto ${rev}`,
-        disabled: busy,
-        run: () => void act({ kind: 'rebase', onto: rev }),
-      },
-      {
-        kind: 'item',
-        label: `Rebase ${head} onto ${rev}, interactively`,
-        disabled: busy,
-        run: () => info && void rebase.load(info.path, rev),
-      },
-    ];
   }
 
   /** Moves a tag, after saying what that costs anyone who already has it. */
@@ -1136,7 +1011,7 @@
     }
 
     if (!current && ref.kind.kind !== 'stash' && headName !== null) {
-      const combine = combineItems(ref, ref.short, head, where);
+      const combine = combineItems(ref, ref.short, head, where, revisionActions);
       if (combine.length > 0) items.push({ kind: 'separator' }, ...combine);
     }
 
