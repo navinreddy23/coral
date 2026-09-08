@@ -335,6 +335,32 @@ const FIXTURES: Record<string, unknown> = {
     time: 1_763_060_220,
     inSync: true,
   },
+  /*
+   * Five commands used to have no fixture at all, and the fallback answered `null` for them.
+   * `repo_stashes` was the expensive one: a state assigned that null to its list, the sidebar
+   * threw reading `.length`, and the effect that mounts the panel died with it — so hiding the
+   * panel in a browser was permanent. The real window was never affected, which is exactly
+   * what makes a harness that lies worse than no harness.
+   */
+  recent_repos: [
+    { path: '/home/dev/projects/coral', name: 'coral', opened: 1_788_800_000 },
+    { path: '/home/dev/projects/linux', name: 'linux', opened: 1_788_700_000 },
+  ],
+  lfs_available: false,
+  graph_scope: { solo: null, hidden: [] },
+  set_graph_scope: { solo: null, hidden: [] },
+  graph_rewalk: null,
+  repo_stashes: [
+    {
+      index: 0,
+      oid: 'a'.repeat(40),
+      branch: 'master',
+      message: 'the lane mask, half done',
+      time: 1_788_800_000n,
+      name: 'stash@{0}',
+      row: 12,
+    },
+  ],
   watch_repo: { complete: true, detail: null },
   unwatch_repo: null,
   repo_refs: [
@@ -553,6 +579,17 @@ export function preview(command: string, args: Record<string, unknown>): unknown
     case 'terminal_close':
       return null;
     default:
-      return FIXTURES[command] ?? null;
+      // A command with no fixture is a hole in the harness, and answering `null` is the worst
+      // way to have one: `repo_stashes` came back null, a state assigned it to a list, and the
+      // sidebar then threw reading `.length` — which killed the effect that remounts the panel,
+      // so toggling it away was permanent. In a browser. Only in a browser. A listed `null` is
+      // a real answer, which is why this asks whether the key exists rather than what it holds.
+      // A command with no fixture is a hole in the harness, and answering `null` is the worst
+      // way to have one: the caller assigns that null to a list and the window throws
+      // somewhere else entirely, which is how the last one hid for as long as it did. A listed
+      // `null` is a real answer, which is why this asks whether the key exists rather than
+      // what it holds.
+      if (command in FIXTURES) return FIXTURES[command];
+      throw new Error(`the preview engine has no answer for \`${command}\``);
   }
 }
