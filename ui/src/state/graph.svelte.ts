@@ -36,6 +36,8 @@ export class GraphState {
   #path = '';
   /** Which repository the held frame came from, so a switch can blank it and a reload cannot. */
   #framePath = '';
+  /** Set by {@link forget}: the next walk is a different set of commits, not a reload. */
+  #shapeChanged = false;
   #inFlight = new Set<number>();
   /** Start row of the frame being fetched, so a scroll does not queue the same one twice. */
   #wantedStart = -1;
@@ -113,15 +115,20 @@ export class GraphState {
   }
 
   /**
-   * Drops the record of which repository the held frame is of.
+   * Says the next walk is a different set of commits rather than a reload of this one.
    *
-   * So that the next {@link open} of the same repository takes the arriving path rather than
-   * the reloading one: it paints the fast commit-time screen first instead of keeping the rows
-   * that are on screen. Wanted when the walk itself is about to change shape — a branch soloed
-   * or hidden — where those rows are not a stale version of the answer but a different question.
+   * So that the next {@link open} paints the fast commit-time screen first instead of waiting
+   * for the exact walk. Wanted when the shape is about to change — a branch soloed or hidden,
+   * a ref moved, commits pulled in — where the rows on screen are a different question, not a
+   * stale answer to this one.
+   *
+   * It does not blank the frame. Blanking unmounts the scroller, and the row list is
+   * positioned against a scroll offset the new element does not have: fast-forwarding a tag
+   * while reading row 2,900 of 3,000 drew the rows eighty thousand pixels below the viewport
+   * and left an empty pane behind.
    */
   forget(): void {
-    this.#framePath = '';
+    this.#shapeChanged = true;
   }
 
   async open(path: string): Promise<void> {
@@ -129,10 +136,16 @@ export class GraphState {
     this.error = null;
     // A frame belonging to the repository being left has to go, or the window shows one
     // repository's commits under another's name for as long as the walk takes — and the
-    // loading screen, which asks whether there is a frame, never appears at all. Reopening
-    // the same repository keeps it, so a reload after an action does not blank the graph.
-    const reopening = path === this.#framePath;
-    if (!reopening) this.frame = null;
+    // loading screen, which asks whether there is a frame, never appears at all. Staying on
+    // the same repository keeps it, however much the walk is about to change: the rows are
+    // stale, and stale rows in the place the reader left them beat an empty pane.
+    const sameRepository = path === this.#framePath;
+    if (!sameRepository) this.frame = null;
+    // The fast pass is for rows that are about to mean a different set of commits: arriving at
+    // a repository, or after something moved a ref. A plain reload of the same walk skips it,
+    // where it would only replace the rows with commit-time order and then replace that again.
+    const fast = !sameRepository || this.#shapeChanged;
+    this.#shapeChanged = false;
     this.#path = path;
     this.#wantedStart = 0;
     try {
@@ -154,7 +167,7 @@ export class GraphState {
       // blank one for five seconds. Reopening the one already shown does not need it: the rows
       // are still up, and the pass would only replace them with commit-time order and then
       // replace that again.
-      if (!reopening) {
+      if (fast) {
         const first = await graphFrame(path, 0, true);
         // The repository may have been left while this was being walked. Assigning it anyway
         // is what put one repository's commits under another repository's name, and made the

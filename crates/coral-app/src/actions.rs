@@ -326,7 +326,9 @@ impl Action {
             Self::StashDrop { .. } => "stash drop".to_owned(),
             Self::TagCreate { name, .. } => format!("tag {name}"),
             Self::TagDelete { name } => format!("delete tag {name}"),
-            Self::TagMove { name, at } => format!("move tag {name} to {}", named(at)),
+            Self::TagMove { name, at } => {
+                format!("fast-forward tag {name} to {}", named(at))
+            }
             Self::BranchFastForward { name, at } => {
                 format!("fast-forward {name} to {}", named(at))
             }
