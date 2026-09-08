@@ -73,3 +73,29 @@ describe('remembered view choices', () => {
     expect(new ViewsState().current.details).toBe(true);
   });
 });
+
+describe('which shell the terminal runs', () => {
+  it('leaves both to the machine until somebody chooses', () => {
+    // An empty shell means "whatever this machine would use" and a null login means "whatever
+    // this platform does", which is the only sensible default: macOS gets its PATH from the
+    // login files and cannot skip them, and a Linux desktop has already read them.
+    const views = new ViewsState();
+    expect(views.current.terminalShell).toBe('');
+    expect(views.current.terminalLogin).toBeNull();
+  });
+
+  it('remembers a choice, including turning the login files off', () => {
+    const first = new ViewsState();
+    first.set('terminalShell', '/usr/bin/fish');
+    first.set('terminalLogin', false);
+
+    const second = new ViewsState();
+    expect(second.current.terminalShell).toBe('/usr/bin/fish');
+    expect(second.current.terminalLogin, 'false is a choice, not an absence').toBe(false);
+  });
+
+  it('ignores a stored login setting that is neither a decision nor an absence', () => {
+    localStorage.setItem('coral.views', JSON.stringify({ terminalLogin: 'yes please' }));
+    expect(new ViewsState().current.terminalLogin).toBeNull();
+  });
+});

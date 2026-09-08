@@ -27,7 +27,7 @@ impl Shell {
     /// prompt, start jobs, or simply take seconds, none of which these are about. What is
     /// under test is the pseudo-terminal, which is the same either way.
     fn open(path: &str, cols: u16, rows: u16) -> Self {
-        let spawned = spawn_shell(path, cols, rows, Some("/bin/sh")).unwrap();
+        let spawned = spawn_shell(path, cols, rows, Some("/bin/sh"), Some(false)).unwrap();
         let mut reader = spawned.reader;
         let (send, output) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
@@ -157,7 +157,14 @@ fn resizing_reaches_the_shell() {
     // Without this a full-screen program draws to the size it was told at startup, and the
     // display stays wrong for as long as it runs.
     let dir = tempfile::tempdir().unwrap();
-    let spawned = spawn_shell(dir.path().to_str().unwrap(), 80, 24, Some("/bin/sh")).unwrap();
+    let spawned = spawn_shell(
+        dir.path().to_str().unwrap(),
+        80,
+        24,
+        Some("/bin/sh"),
+        Some(false),
+    )
+    .unwrap();
     spawned
         .master
         .resize(portable_pty::PtySize {
@@ -181,7 +188,14 @@ fn a_shell_does_not_outlive_the_session_that_started_it() {
     // to kill its child on the way out. A window that closes without going through
     // `terminal_close` would leak one per terminal ever opened.
     let dir = tempfile::tempdir().unwrap();
-    let mut spawned = spawn_shell(dir.path().to_str().unwrap(), 80, 24, Some("/bin/sh")).unwrap();
+    let mut spawned = spawn_shell(
+        dir.path().to_str().unwrap(),
+        80,
+        24,
+        Some("/bin/sh"),
+        Some(false),
+    )
+    .unwrap();
     assert!(
         spawned.child.try_wait().unwrap().is_none(),
         "it should be running to begin with"
@@ -203,4 +217,34 @@ fn each_terminal_gets_its_own_event_name() {
     // Two open at once must not have to filter each other's bytes out of one stream.
     assert_ne!(output_event(1), output_event(2));
     assert!(output_event(7).contains('7'));
+}
+
+#[test]
+fn an_empty_shell_choice_means_the_usual_one() {
+    // A settings box somebody cleared says "use the default", not "run a program with no
+    // name". Without this the pane would open on a failure to start "".
+    let dir = tempfile::tempdir().unwrap();
+    let spawned = spawn_shell(
+        dir.path().to_str().unwrap(),
+        80,
+        24,
+        Some("   "),
+        Some(false),
+    )
+    .expect("a blank choice falls back rather than failing");
+    assert_eq!(
+        spawned.shell,
+        coral_app_lib::terminal::terminal_defaults().shell
+    );
+}
+
+#[test]
+fn a_login_shell_is_the_default_only_where_it_has_to_be() {
+    // macOS runs `path_helper` from `/etc/zprofile`, so a shell that skips the login files
+    // there has a PATH missing everything the developer tools and Homebrew put on it. A Linux
+    // desktop has already read them for the session Coral was started from.
+    assert_eq!(
+        coral_app_lib::terminal::login_by_default(),
+        cfg!(target_os = "macos")
+    );
 }

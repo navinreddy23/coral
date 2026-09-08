@@ -95,6 +95,29 @@ fn default_shell() -> String {
     }
 }
 
+/// Whether a shell should be started as a login shell.
+///
+/// macOS says yes and everywhere else says no, which is what every terminal on those platforms
+/// does. It is not a style choice there: `/etc/zprofile` runs `path_helper`, so a shell that
+/// skips the login files on macOS has a `PATH` missing everything Homebrew and the developer
+/// tools put on it, and half of what the user types is not found.
+///
+/// Linux desktops have already run the login files for the session Coral was started from, so
+/// running them again buys nothing and costs the duplicated `PATH` entries they append.
+#[must_use]
+pub const fn login_by_default() -> bool {
+    cfg!(target_os = "macos")
+}
+
+/// What the terminal would use if nobody chose anything, so the settings screen can say so
+/// rather than showing an empty box.
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Defaults {
+    pub shell: String,
+    pub login: bool,
+}
+
 /// Whether a program can be found on the PATH.
 #[cfg(windows)]
 fn which(program: &str) -> bool {
@@ -115,6 +138,7 @@ pub fn spawn_shell(
     cols: u16,
     rows: u16,
     shell: Option<&str>,
+    login: Option<bool>,
 ) -> Result<Spawned, coral_core::CoralError> {
     let size = PtySize {
         rows: rows.max(1),
@@ -126,7 +150,12 @@ pub fn spawn_shell(
         .openpty(size)
         .map_err(|e| protocol(format!("could not open a terminal: {e}")))?;
 
-    let shell = shell.map_or_else(default_shell, str::to_owned);
+    // An empty choice is no choice: a settings box somebody cleared means "use the usual one",
+    // not "run a program with no name".
+    let shell = shell
+        .map(str::trim)
+        .filter(|chosen| !chosen.is_empty())
+        .map_or_else(default_shell, str::to_owned);
     let mut command = CommandBuilder::new(&shell);
     command.cwd(path);
     // An interactive shell, so the user's own prompt, aliases and completions are there.
@@ -136,6 +165,12 @@ pub fn spawn_shell(
     // it as a command to run, so on Windows the pane would open on an error and exit.
     if cfg!(not(windows)) {
         command.arg("-i");
+        // Before `-i`, since a login shell reads a different set of files: `.zprofile` and
+        // `.zlogin` for zsh, `.bash_profile` for bash. On macOS that is where `PATH` comes
+        // from; elsewhere the desktop session has already read them.
+        if login.unwrap_or_else(login_by_default) {
+            command.arg("-l");
+        }
     }
     // Everything git's own output decides from the environment. TERM must name a terminal
     // xterm.js can actually render, and COLORTERM is what makes git use 24-bit colour.
@@ -185,6 +220,8 @@ pub async fn terminal_open(
     path: String,
     cols: u16,
     rows: u16,
+    shell: Option<String>,
+    login: Option<bool>,
 ) -> Result<Opened, IpcError> {
     let Spawned {
         master,
@@ -192,7 +229,7 @@ pub async fn terminal_open(
         mut reader,
         child,
         shell,
-    } = spawn_shell(&path, cols, rows, None)?;
+    } = spawn_shell(&path, cols, rows, shell.as_deref(), login)?;
 
     let id = next_id();
     let event = output_event(id);
@@ -314,4 +351,14 @@ fn gone() -> coral_core::CoralError {
 
 fn poisoned<T>(_: T) -> coral_core::CoralError {
     protocol("the terminal list was left locked by a panic".to_owned())
+}
+
+/// The shell and login setting the terminal would use with nothing chosen.
+#[tauri::command]
+#[must_use]
+pub fn terminal_defaults() -> Defaults {
+    Defaults {
+        shell: default_shell(),
+        login: login_by_default(),
+    }
 }

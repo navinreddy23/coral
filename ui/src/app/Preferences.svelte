@@ -4,10 +4,12 @@
   import Experimental from './Experimental.svelte';
   import Profiles from './Profiles.svelte';
   import Ssh from './Ssh.svelte';
+  import TerminalSettings from './TerminalSettings.svelte';
   import type { ExperimentalState } from '../state/experimental.svelte';
   import type { SigningState } from '../state/signing.svelte';
   import type { SshState } from '../state/ssh.svelte';
   import type { ProfilesState } from '../state/profiles.svelte';
+  import type { ViewsState } from '../state/views.svelte';
   import type { IdentityScopes } from '../ipc/types';
 
   const {
@@ -15,6 +17,7 @@
     ssh,
     experimental,
     profiles,
+    views,
     identity,
     pane,
     repository,
@@ -30,6 +33,7 @@
     ssh: SshState;
     experimental: ExperimentalState;
     profiles: ProfilesState;
+    views: ViewsState;
     /** A pane to open on, when something asked for one rather than taking the default. */
     pane: string | null;
     /** Who the open repository commits as, for the Profiles pane to compare against. */
@@ -69,6 +73,7 @@
     { id: 'profiles', label: 'Profiles', glyph: '☺', needsRepository: false },
     { id: 'ssh', label: 'SSH', glyph: '⛨', needsRepository: true },
     { id: 'signing', label: 'Commit Signing', glyph: '✎', needsRepository: true },
+    { id: 'terminal', label: 'Terminal', glyph: '>', needsRepository: false },
     { id: 'experimental', label: 'Experimental', glyph: '⚗', needsRepository: false },
     { id: 'about', label: 'About', glyph: 'ⓘ', needsRepository: false },
   ].filter((pane) => hasRepository || !pane.needsRepository));
@@ -129,6 +134,8 @@
     <CommitSigning {signing} />
   {:else if active === 'ssh'}
     <Ssh {ssh} {onCopied} />
+  {:else if active === 'terminal'}
+    <TerminalSettings {views} />
   {:else if active === 'experimental'}
     <Experimental {experimental} {onPickGit} />
   {:else if active === 'about'}

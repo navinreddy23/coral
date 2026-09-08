@@ -3368,6 +3368,7 @@
       {ssh}
       {experimental}
       {profiles}
+      {views}
       {identity}
       pane={prefsPane}
       repository={loadedPath === '' ? null : loadedPath}

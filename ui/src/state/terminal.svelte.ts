@@ -81,7 +81,13 @@ export class TerminalState {
     if (running) return running;
     this.error = null;
     try {
-      const opened = await terminalOpen(path, cols, rows);
+      const opened = await terminalOpen(
+        path,
+        cols,
+        rows,
+        this.#views.current.terminalShell,
+        this.#views.current.terminalLogin,
+      );
       this.#shells.set(path, opened);
       return opened;
     } catch (e) {

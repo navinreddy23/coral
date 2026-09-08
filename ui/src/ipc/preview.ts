@@ -313,6 +313,7 @@ const FIXTURES: Record<string, unknown> = {
       credentialHelper: null,
     },
   },
+  terminal_defaults: { shell: '/bin/zsh', login: false },
   ssh_keys: [
     {
       path: '/home/dev/.ssh/id_ed25519',

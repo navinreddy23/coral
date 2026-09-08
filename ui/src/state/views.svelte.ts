@@ -36,6 +36,16 @@ export interface Views {
   toolbar: boolean;
   terminalDock: Dock;
   terminalSize: number;
+  /** The shell the terminal runs. Empty means whatever this machine would use. */
+  terminalShell: string;
+  /**
+   * Whether that shell reads the login files.
+   *
+   * `null` leaves it to the platform, which is the only sensible default: macOS gets its
+   * `PATH` from `/etc/zprofile` and cannot skip them, and a Linux desktop has already read
+   * them for the session Coral was started from.
+   */
+  terminalLogin: boolean | null;
   /**
    * Whether the desktop draws the title bar instead of Coral.
    *
@@ -62,6 +72,8 @@ function defaults(): Views {
     toolbar: true,
     terminalDock: 'bottom',
     terminalSize: 260,
+    terminalShell: '',
+    terminalLogin: null,
     systemTitleBar: false,
     // Remote and tag lists run to hundreds on a real repository, so they start closed; local
     // branches are what people look at.
@@ -119,6 +131,12 @@ function read(): Views {
     if (typeof stored.systemTitleBar === 'boolean') out.systemTitleBar = stored.systemTitleBar;
     if (stored.terminalDock === 'bottom' || stored.terminalDock === 'right') {
       out.terminalDock = stored.terminalDock;
+    }
+    if (typeof stored.terminalShell === 'string') {
+      out.terminalShell = stored.terminalShell;
+    }
+    if (typeof stored.terminalLogin === 'boolean' || stored.terminalLogin === null) {
+      out.terminalLogin = stored.terminalLogin;
     }
     if (typeof stored.terminalSize === 'number' && Number.isFinite(stored.terminalSize)) {
       out.terminalSize = Math.min(900, Math.max(120, Math.round(stored.terminalSize)));

@@ -191,6 +191,14 @@ passed to the clone and then written into the new repository, so every later fet
 Coral runs git with no terminal and no askpass, so the form says what that means: a key with a
 passphrase has to be in the agent already, or the clone fails rather than asking.
 
+## Terminal
+
+The shell is whatever `$SHELL` names, started interactively so the prompt, aliases and
+completions are the ones already configured. Preferences names the shell it would use and
+takes another, and says whether the login files are read. That is on by default only on macOS,
+where `/etc/zprofile` runs `path_helper` and a shell that skips it has half a `PATH`; a Linux
+desktop has already read them for the session Coral was started in.
+
 ## Command palette and shortcuts
 
 `Ctrl/Cmd+P` opens the palette with every action, fuzzy search and recent items. Defaults:

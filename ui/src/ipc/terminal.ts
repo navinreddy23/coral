@@ -14,8 +14,32 @@ export interface Opened {
  * The size is given up front: a shell asks the terminal how wide it is before it draws its
  * first prompt, and one started at the wrong size wraps every line until something resizes it.
  */
-export function terminalOpen(path: string, cols: number, rows: number): Promise<Opened> {
-  return invoke<Opened>('terminal_open', { path, cols, rows });
+export function terminalOpen(
+  path: string,
+  cols: number,
+  rows: number,
+  shell: string,
+  login: boolean | null,
+): Promise<Opened> {
+  // An empty shell and a null login both mean "whatever this machine would use", which the
+  // engine decides rather than the window guessing at the platform.
+  return invoke<Opened>('terminal_open', {
+    path,
+    cols,
+    rows,
+    shell: shell.trim() === '' ? null : shell.trim(),
+    login,
+  });
+}
+
+/** What the terminal would use with nothing chosen, so the settings screen can say so. */
+export interface TerminalDefaults {
+  shell: string;
+  login: boolean;
+}
+
+export function terminalDefaults(): Promise<TerminalDefaults> {
+  return invoke<TerminalDefaults>('terminal_defaults');
 }
 
 /** Sends keystrokes. */
