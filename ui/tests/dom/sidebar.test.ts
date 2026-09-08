@@ -396,4 +396,23 @@ describe('the stash list', () => {
     });
     expect(view.getByText('1 hidden')).toBeTruthy();
   });
+
+  it('stops counting the repository refs while one branch is soloed', () => {
+    // The banner and the count were answering the same question differently: the banner says
+    // the walk is one branch, and the count counts every ref there is. On the kernel that read
+    // "Viewing 946 refs" under a banner saying the graph was drawn from one of them.
+    const open = mount({
+      groups: { local: [ref('master'), ref('spike')], remote: [], tags: [], stashes: [] },
+      scope: { solo: null, hidden: [] },
+    });
+    expect(open.container.textContent).toContain('Viewing');
+    cleanup();
+
+    const soloed = mount({
+      groups: { local: [ref('master'), ref('spike')], remote: [], tags: [], stashes: [] },
+      scope: { solo: 'refs/heads/spike', hidden: [] },
+    });
+    expect(soloed.container.querySelector('.solo-banner')).not.toBeNull();
+    expect(soloed.container.textContent).not.toContain('Viewing');
+  });
 });

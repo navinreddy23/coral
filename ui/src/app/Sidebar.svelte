@@ -348,9 +348,17 @@
       <button class="leave" onclick={onShowEverything}>Show all</button>
     </div>
   {/if}
-  <p class="viewing" title="Branches, tags and stashes the graph is drawn from">
-    Viewing <strong>{total}</strong> refs
-  </p>
+  <!--
+    How much of the repository the graph is drawn from. Not while a branch is soloed: the
+    banner above already says the walk is scoped to one, and this counts every ref in the
+    repository — so the two lines were answering the same question differently, on the one
+    screen where they appear together.
+  -->
+  {#if soloed === null}
+    <p class="viewing" title="Branches, tags and stashes the graph is drawn from">
+      Viewing <strong>{total}</strong> refs
+    </p>
+  {/if}
   <!-- The magnifier is inside the field rather than beside it: a box labelled only by its
        placeholder loses that label the moment somebody types in it. -->
   <div class="search">

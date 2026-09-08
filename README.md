@@ -16,8 +16,9 @@ run against a real clone.
 
 ## What it looks like
 
-Every screenshot below is the Linux kernel unless it says otherwise: 1,481,528 commits, 944
-tags, six branches.
+The graph, the palette, the terminal and the dark theme below are the Linux kernel: 1,481,528
+commits and 944 tags. The rest are a small repository, because a diff, a conflict and a rebase
+are easier to read when the file in them is ten lines rather than ten thousand.
 
 ![The graph on the Linux kernel](docs/screenshots/01-graph.png)
 
@@ -37,9 +38,10 @@ worth of DOM. The panel on the right is the commit under the cursor.*
 
 ![A branch soloed on the kernel](docs/screenshots/10-solo.png)
 
-*Solo. The same repository with one branch walked and every other ref left out, taking the
-walk from 1,481,528 commits to 1,461,722. The banner names the branch and gives it back.
-Hiding does the reverse, and either choice is remembered for that repository.*
+*Solo. One branch walked and every other ref left out, so the graph is that branch's history
+and nothing else. The banner names it and gives it back; every other row stays clickable and
+clicking one widens the view rather than doing nothing. Hiding does the reverse, and either
+choice is remembered for that repository.*
 
 ## What it does
 
