@@ -4110,9 +4110,11 @@
    * there whatever its own height is, which is why this is one rule and not one per item.
    */
   .sit { align-self: center; margin-top: var(--space-2); }
+  /* The wordmark is not a control, so it does not wear the accent. The mark beside it carries
+     the colour; the name is set in the page's own strongest text, which is what a name is. */
   h1 {
-    font-size: var(--text-md); font-weight: 700; margin: 0; color: var(--accent);
-    letter-spacing: 0.01em; flex: 0 0 auto;
+    font-size: var(--text-md); font-weight: 600; margin: 0; color: var(--fg-0);
+    letter-spacing: -0.01em; flex: 0 0 auto; background: var(--bg-1);
   }
   .tools { display: flex; align-items: center; gap: 2px; margin-left: auto; }
   /* The window's own three, set apart from Coral's three: one set acts on what the window is

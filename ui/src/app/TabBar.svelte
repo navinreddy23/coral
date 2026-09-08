@@ -570,12 +570,17 @@
    *
    * It carries the panel's own fill and no bottom edge, so the two read as one surface, and
    * the two ears flare its base outward to meet the strip — which is the shape that makes a
-   * browser's current tab findable without reading a word of it. The accent line along the
-   * top is the second cue, for a strip where every tab is the same shade of white.
+   * browser's current tab findable without reading a word of it. The line along the top is the
+   * second cue, for a strip where every tab is the same shade of white.
+   *
+   * That line is the brand colour and not the accent, which is the one deliberate difference
+   * from every other "this one is selected" in the window. Selection here is not something the
+   * user did to a list; it is which repository the whole window is showing, and it is the one
+   * mark on screen at the same time as the mark in the corner.
    */
   .tab.active {
     background: var(--tab-face); z-index: 2;
-    box-shadow: inset 0 2px 0 var(--accent);
+    box-shadow: inset 0 2px 0 var(--brand);
   }
   .tab.active .pick { color: var(--fg-0); font-weight: 600; }
   .tab.active::before, .tab.active::after {
