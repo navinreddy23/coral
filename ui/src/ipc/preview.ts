@@ -384,6 +384,7 @@ const FIXTURES: Record<string, unknown> = {
     resumable: true,
   },
   repo_conflicts: [],
+  rev_ancestry: 'ahead',
   hosting_status: {
     host: { kind: 'gitlab', origin: 'https://gitlab.com', owner: 'open-source-23', repo: 'coral' },
     detail: null,

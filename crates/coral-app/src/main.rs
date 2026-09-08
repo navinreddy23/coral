@@ -123,6 +123,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         graph::graph_frame,
         graph::row_metadata,
         graph::repo_refs,
+        graph::rev_ancestry,
         graph::repo_stashes,
         graph::graph_row_of,
         graph::graph_rewalk,

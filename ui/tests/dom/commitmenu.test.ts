@@ -96,6 +96,9 @@ function answers(): Record<string, unknown> {
     tab_open: SESSION,
     tab_activate: SESSION,
     repo_action: { what: 'done', conflicted: false, message: '' },
+    // Where the revision the menu is about stands relative to the current branch. `ahead` is
+    // the case that offers everything; the tests about the other three say so.
+    rev_ancestry: 'ahead',
   };
 }
 
@@ -527,6 +530,80 @@ describe('the branch and tag menu', () => {
     expect(labels.some((l) => l.startsWith('Push v1.2.0'))).toBe(false);
   });
 
+  it('offers to move a tag the branch has passed, and never to go back to it', async () => {
+    // The reported bug. On a master that is up to date, right-clicking a release tag read
+    // "Fast-forward master to v1.0.0", which git refuses: master is the one in front. The
+    // direction that means anything here is the other one.
+    const { container } = await shell(
+      {
+        repo_refs: [on('v1.0.0', { kind: 'tag', annotated: false })],
+        rev_ancestry: 'behind',
+      },
+      true,
+    );
+
+    await expand(container, 'Tags');
+    const labels = await refMenu(container, 'v1.0.0');
+    expect(labels).not.toContain('Fast-forward master to v1.0.0');
+    expect(labels).not.toContain('Merge v1.0.0 into master');
+    expect(labels).not.toContain('Rebase master onto v1.0.0');
+    expect(labels).toContain('Move the tag v1.0.0 to master…');
+  });
+
+  it('asks before moving a tag, and moves it when told to', async () => {
+    // A tag that has been fetched anywhere else does not come back, so this is not a click
+    // away from being done.
+    const { container } = await shell(
+      {
+        repo_refs: [on('v1.0.0', { kind: 'tag', annotated: false })],
+        rev_ancestry: 'behind',
+      },
+      true,
+    );
+    await expand(container, 'Tags');
+    await refMenu(container, 'v1.0.0');
+    await fireEvent.click(itemNamed(container, 'Move the tag v1.0.0 to master…'));
+
+    await confirm(container, true);
+    await waitFor(() => {
+      expect(lastAction()).toEqual({ kind: 'tagMove', name: 'v1.0.0', at: 'master' });
+    });
+  });
+
+  it('moves no tag when the question is dismissed', async () => {
+    const { container } = await shell(
+      {
+        repo_refs: [on('v1.0.0', { kind: 'tag', annotated: false })],
+        rev_ancestry: 'behind',
+      },
+      true,
+    );
+    await expand(container, 'Tags');
+    await refMenu(container, 'v1.0.0');
+    await fireEvent.click(itemNamed(container, 'Move the tag v1.0.0 to master…'));
+
+    await confirm(container, false);
+    expect(lastAction()).toBeUndefined();
+  });
+
+  it('fast-forwards a branch that has fallen behind, without checking it out', async () => {
+    // The same question for a branch, where the answer is a real fast-forward rather than a
+    // replacement, and needs no checkout.
+    const { container } = await shell(
+      { repo_refs: [on('behind', { kind: 'local_branch' })], rev_ancestry: 'behind' },
+      true,
+    );
+
+    const labels = await refMenu(container, 'behind');
+    expect(labels).toContain('Fast-forward behind to master');
+    expect(labels).not.toContain('Fast-forward master to behind');
+
+    await fireEvent.click(itemNamed(container, 'Fast-forward behind to master'));
+    await waitFor(() => {
+      expect(lastAction()).toEqual({ kind: 'branchFastForward', name: 'behind', at: 'master' });
+    });
+  });
+
   it('offers what can be done with a branch, not only going to it', async () => {
     const { container } = await shell(
       { repo_refs: [on('topic', { kind: 'local_branch' })] },
@@ -705,13 +782,38 @@ describe('merging and rebasing from the graph', () => {
 
   it('offers none of it on the row the branch is already on', async () => {
     // Merging a branch into itself is a no-op, and rebasing it onto itself is worse than one.
+    // Decided by asking git where the commit stands, not by matching the label on the row: a
+    // second branch sitting on the same commit is the same no-op under another name.
     const { container } = await shell(
-      { repo_refs: [on('master', { kind: 'local_branch' })] },
+      { repo_refs: [on('master', { kind: 'local_branch' })], rev_ancestry: 'same' },
       true,
     );
     const labels = await openMenu(container);
     expect(labels.some((l) => l.startsWith('Merge '))).toBe(false);
     expect(labels.some((l) => l.startsWith('Rebase master onto'))).toBe(false);
+  });
+
+  it('offers none of it on a commit the branch has already passed', async () => {
+    // The reported bug, on a commit row: master is in front, so there is nothing to bring in
+    // and no fast-forward backwards to it.
+    const { container } = await shell({ rev_ancestry: 'behind' });
+    const labels = await openMenu(container);
+    expect(labels.some((l) => l.startsWith('Fast-forward'))).toBe(false);
+    expect(labels.some((l) => l.startsWith('Merge '))).toBe(false);
+    expect(labels.some((l) => l.startsWith('Rebase master onto'))).toBe(false);
+  });
+
+  it('drops the fast-forward when the two have diverged, and keeps the rest', async () => {
+    // git refuses a fast-forward that would lose commits, so offering one is offering a
+    // failure. A merge or a rebase is exactly what this case is for.
+    const { container } = await shell(
+      { repo_refs: [on('topic', { kind: 'local_branch' })], rev_ancestry: 'diverged' },
+      true,
+    );
+    const labels = await openMenu(container);
+    expect(labels.some((l) => l.startsWith('Fast-forward'))).toBe(false);
+    expect(labels).toContain('Merge topic into master');
+    expect(labels).toContain('Rebase master onto topic');
   });
 });
 

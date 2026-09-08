@@ -208,6 +208,51 @@ impl RepoLocation {
         runner.output(cmd).await.map(|_| ())
     }
 
+    /// Moves an existing tag to another commit.
+    ///
+    /// Separate from [`RepoLocation::tag_create`] because it is a different act: creating a
+    /// tag fails if one of that name exists, and this replaces it. Anyone who has already
+    /// fetched the old one keeps it, which is why the window asks first.
+    ///
+    /// # Errors
+    /// Propagates git failures, including an unknown revision.
+    pub async fn tag_move(
+        &self,
+        runner: &GitRunner,
+        name: &str,
+        at: &str,
+    ) -> Result<(), CoralError> {
+        runner
+            .output(GitCommand::write("tag", self.display_path()).args(["tag", "-f", name, at]))
+            .await
+            .map(|_| ())
+    }
+
+    /// Moves a branch that is not checked out up to `at`, refusing anything but a
+    /// fast-forward.
+    ///
+    /// `fetch .` rather than `branch -f`: fetching a ref without a leading `+` is how git is
+    /// asked to move it only if nothing would be lost, and it says so itself when the answer
+    /// is no. `branch -f` would move it either way.
+    ///
+    /// # Errors
+    /// Propagates git failures, including a move that is not a fast-forward.
+    pub async fn branch_fast_forward(
+        &self,
+        runner: &GitRunner,
+        name: &str,
+        at: &str,
+    ) -> Result<(), CoralError> {
+        runner
+            .output(GitCommand::write("fetch", self.display_path()).args([
+                "fetch",
+                ".",
+                &format!("{at}:refs/heads/{name}"),
+            ]))
+            .await
+            .map(|_| ())
+    }
+
     /// Deletes a tag.
     ///
     /// # Errors

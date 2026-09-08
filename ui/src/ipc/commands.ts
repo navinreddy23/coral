@@ -3,6 +3,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import type { GroupColour, Session, TabIcon } from '../state/tabs.svelte';
 import type {
+  Ancestry,
   Blame,
   Blocks,
   ChangedFile,
@@ -87,6 +88,16 @@ async function pickFile(title: string): Promise<string | null> {
 /** Every ref, each already resolved to the graph row it labels. */
 export function repoRefs(path: string): Promise<PlacedRef[]> {
   return invoke<PlacedRef[]>('repo_refs', { path });
+}
+
+/**
+ * Where a revision stands relative to the current branch.
+ *
+ * Asked when a menu opens rather than carried on every ref: it costs an ancestry walk, and
+ * only the menu needs the answer.
+ */
+export function revAncestry(path: string, rev: string): Promise<Ancestry> {
+  return invoke<Ancestry>('rev_ancestry', { path, rev });
 }
 
 /**
@@ -298,6 +309,8 @@ export type Action =
   | { kind: 'stashDrop'; index: number }
   | { kind: 'tagCreate'; name: string; at: string | null; message: string | null }
   | { kind: 'tagDelete'; name: string }
+  | { kind: 'tagMove'; name: string; at: string }
+  | { kind: 'branchFastForward'; name: string; at: string }
   | { kind: 'reset'; rev: string; mode: 'soft' | 'mixed' | 'hard' }
   | { kind: 'rewrite'; rev: string; how: RewriteKind; message: string | null }
   | { kind: 'worktreeAdd'; path: string; rev: string; branch: string | null }

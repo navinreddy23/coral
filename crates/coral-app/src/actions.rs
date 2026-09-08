@@ -97,6 +97,16 @@ pub enum Action {
     TagDelete {
         name: String,
     },
+    /// Move a tag that already exists to another commit.
+    TagMove {
+        name: String,
+        at: String,
+    },
+    /// Move a branch that is not checked out up to `at`, if nothing would be lost.
+    BranchFastForward {
+        name: String,
+        at: String,
+    },
     /// Move the current branch, and optionally the index and worktree, to a commit.
     Reset {
         rev: String,
@@ -316,6 +326,10 @@ impl Action {
             Self::StashDrop { .. } => "stash drop".to_owned(),
             Self::TagCreate { name, .. } => format!("tag {name}"),
             Self::TagDelete { name } => format!("delete tag {name}"),
+            Self::TagMove { name, at } => format!("move tag {name} to {}", named(at)),
+            Self::BranchFastForward { name, at } => {
+                format!("fast-forward {name} to {}", named(at))
+            }
             Self::Reset { rev, .. } => format!("reset to {}", named(rev)),
             Self::Rewrite { rev, how, .. } => match how {
                 RewriteKind::Drop => format!("drop {}", named(rev)),
@@ -519,6 +533,8 @@ async fn run(
         | Action::Rewrite { .. }
         | Action::TagCreate { .. }
         | Action::TagDelete { .. }
+        | Action::TagMove { .. }
+        | Action::BranchFastForward { .. }
         | Action::ApplyPatch { .. } => run_refs(loc, runner, action).await,
         _ => run_tree(loc, runner, action).await,
     }
@@ -643,6 +659,10 @@ async fn run_refs(
                 .await?;
         }
         Action::TagDelete { name } => loc.tag_delete(runner, &name).await?,
+        Action::TagMove { name, at } => loc.tag_move(runner, &name, &at).await?,
+        Action::BranchFastForward { name, at } => {
+            loc.branch_fast_forward(runner, &name, &at).await?;
+        }
         _ => unreachable!("routed by `run`"),
     }
     Ok(Done::quiet())

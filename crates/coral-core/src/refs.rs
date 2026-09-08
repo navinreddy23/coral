@@ -1,4 +1,68 @@
 use crate::error::CoralError;
+use crate::process::{GitCommand, GitRunner};
+use crate::repo::RepoLocation;
+
+/// Where a revision stands relative to `HEAD`, which is what decides the direction of every
+/// operation offered on it.
+///
+/// Answered by ancestry rather than by counting the commits between the two. On Linux, asking
+/// how far apart the tip and a twenty-year-old tag are takes two and a half seconds, and
+/// asking whether one contains the other takes a seventh of one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "types.ts"))]
+#[serde(rename_all = "camelCase")]
+pub enum Ancestry {
+    /// The commit `HEAD` is already on.
+    Same,
+    /// `HEAD` contains it. Nothing of it is missing here, so there is nothing to merge and no
+    /// way to fast-forward to it; what can be done is move *it* up to `HEAD`.
+    Behind,
+    /// It contains `HEAD`, so `HEAD` can fast-forward to it.
+    Ahead,
+    /// Neither contains the other. A merge or a rebase, never a fast-forward.
+    Diverged,
+}
+
+impl RepoLocation {
+    /// Where `rev` stands relative to `HEAD`.
+    ///
+    /// # Errors
+    /// Propagates git failures, including an unknown revision.
+    pub async fn ancestry(&self, runner: &GitRunner, rev: &str) -> Result<Ancestry, CoralError> {
+        let contained = self.is_ancestor(runner, rev, "HEAD").await?;
+        let contains = self.is_ancestor(runner, "HEAD", rev).await?;
+        Ok(match (contained, contains) {
+            (true, true) => Ancestry::Same,
+            (true, false) => Ancestry::Behind,
+            (false, true) => Ancestry::Ahead,
+            (false, false) => Ancestry::Diverged,
+        })
+    }
+
+    /// Whether `older` is reachable from `newer`.
+    ///
+    /// `merge-base --is-ancestor` writes nothing and answers by exiting 0 or 1, so 1 has to be
+    /// allowed through as a result rather than raised as a failure.
+    async fn is_ancestor(
+        &self,
+        runner: &GitRunner,
+        older: &str,
+        newer: &str,
+    ) -> Result<bool, CoralError> {
+        let out = runner
+            .output_allowing(
+                GitCommand::read("merge-base", self.display_path())
+                    .args(["merge-base", "--is-ancestor"])
+                    // `^{commit}` so an annotated tag is compared by the commit it points at
+                    // rather than by the tag object, which is an ancestor of nothing.
+                    .arg(format!("{older}^{{commit}}"))
+                    .arg(format!("{newer}^{{commit}}")),
+                &[1],
+            )
+            .await?;
+        Ok(out.code == 0)
+    }
+}
 
 /// What kind of thing a ref names.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]

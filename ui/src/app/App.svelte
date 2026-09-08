@@ -21,8 +21,10 @@
     openInBrowser,
     patchRangeSize,
     pickPatchFiles,
+    revAncestry,
     type PullRequest,
   } from '../ipc/commands';
+  import type { Ancestry } from '../ipc/types';
   import { ActionsState } from '../state/actions.svelte';
   import { CommitState } from '../state/commit.svelte';
   import MergeTool from './MergeTool.svelte';
@@ -835,47 +837,124 @@
    * when there is one, since that is what the user is looking at; a row with no label is named
    * by its commit, which merges and rebases just as well.
    */
-  function combineFor(row: number, oid: string): MenuItem[] {
+  function combineFor(row: number, oid: string, where: Ancestry): MenuItem[] {
     const here = refs.byRow.get(row) ?? [];
-    // Nothing to do with the row HEAD is already on, and nothing sensible to say about a
-    // detached HEAD, which has no branch to move.
-    if (headName === null || here.some((r) => r.short === headName)) return [];
+    // Nothing sensible to say about a detached HEAD, which has no branch to move.
+    if (headName === null) return [];
 
     const named =
       here.find((r) => r.kind.kind === 'local_branch') ??
       here.find((r) => r.kind.kind === 'remote_branch') ??
       here.find((r) => r.kind.kind === 'tag');
     const rev = named?.short ?? oid.slice(0, 8);
-    const busy = actions.busy || worktree.busy;
+    const items = combineItems(rev, headName, where);
+    return items.length === 0 ? [] : [...items, { kind: 'separator' }];
+  }
 
-    return [
-      {
+  /**
+   * Bringing a revision into the current branch, offered only where it can happen.
+   *
+   * Which of the four appear depends on where the revision stands. A revision the current
+   * branch already contains has nothing to bring in: there is no fast-forward to it, merging
+   * it does nothing, and rebasing onto it replays this branch onto its own ancestor. All four
+   * were offered regardless, so right-clicking a release tag on an up-to-date master read
+   * "Fast-forward master to v1.0.0", which git refuses because master is the one in front. A
+   * diverged revision keeps the merge and the rebases and loses the fast-forward, which git
+   * refuses for the same reason.
+   */
+  function combineItems(rev: string, head: string, where: Ancestry): MenuItem[] {
+    if (where === 'same' || where === 'behind') return [];
+    const busy = actions.busy || worktree.busy;
+    const items: MenuItem[] = [];
+    if (where === 'ahead') {
+      items.push({
         kind: 'item',
-        label: `Fast-forward ${headName} to ${rev}`,
+        label: `Fast-forward ${head} to ${rev}`,
         hint: 'never a merge commit',
         disabled: busy,
         run: () => void act({ kind: 'merge', rev, mode: 'ffOnly' }),
-      },
-      {
-        kind: 'item',
-        label: `Merge ${rev} into ${headName}`,
-        disabled: busy,
-        run: () => void act({ kind: 'merge', rev, mode: 'auto' }),
-      },
-      {
-        kind: 'item',
-        label: `Rebase ${headName} onto ${rev}`,
-        disabled: busy,
-        run: () => void act({ kind: 'rebase', onto: rev }),
-      },
-      {
-        kind: 'item',
-        label: `Rebase ${headName} onto ${rev}, interactively`,
-        disabled: busy,
-        run: () => info && void rebase.load(info.path, rev),
-      },
-      { kind: 'separator' },
-    ];
+      });
+    }
+    items.push({
+      kind: 'item',
+      label: `Merge ${rev} into ${head}`,
+      disabled: busy,
+      run: () => void act({ kind: 'merge', rev, mode: 'auto' }),
+    });
+    items.push({
+      kind: 'item',
+      label: `Rebase ${head} onto ${rev}`,
+      disabled: busy,
+      run: () => void act({ kind: 'rebase', onto: rev }),
+    });
+    items.push({
+      kind: 'item',
+      label: `Rebase ${head} onto ${rev}, interactively`,
+      disabled: busy,
+      run: () => info && void rebase.load(info.path, rev),
+    });
+    return items;
+  }
+
+  /**
+   * Moving a ref the current branch has left behind up to where it is.
+   *
+   * The other half of the same question, and the one the menu was missing: when the branch is
+   * in front, the operation that makes sense is not bringing the ref in but taking it along.
+   * A branch goes by fast-forward and needs no checkout. A tag does not fast-forward — it has
+   * no history of its own to extend — so moving one is a replacement, and is asked about
+   * first, because whoever has already fetched the old one keeps it.
+   */
+  function catchUpItems(ref: PlacedRef, head: string, where: Ancestry): MenuItem[] {
+    if (where !== 'behind') return [];
+    const busy = actions.busy || worktree.busy;
+    if (ref.kind.kind === 'local_branch') {
+      return [
+        {
+          kind: 'item',
+          label: `Fast-forward ${ref.short} to ${head}`,
+          hint: 'without checking it out',
+          disabled: busy,
+          run: () => void act({ kind: 'branchFastForward', name: ref.short, at: head }),
+        },
+      ];
+    }
+    if (ref.kind.kind === 'tag') {
+      return [
+        {
+          kind: 'item',
+          label: `Move the tag ${ref.short} to ${head}…`,
+          danger: true,
+          disabled: busy,
+          run: () => void moveTag(ref.short, head),
+        },
+      ];
+    }
+    return [];
+  }
+
+  /** Moves a tag, after saying what that costs anyone who already has it. */
+  async function moveTag(name: string, to: string) {
+    const yes = await confirmThat(
+      `Move the tag ${name} to ${to}?`,
+      `${name} stops pointing at the commit it was made for. Anyone who has already fetched ` +
+        'it keeps the old one until they delete theirs, and the remote keeps it until this ' +
+        'tag is force pushed.',
+    );
+    if (!yes) return;
+    await act({ kind: 'tagMove', name, at: to });
+  }
+
+  /** Where a revision stands relative to the current branch, for the menu about to open. */
+  async function standingOf(rev: string): Promise<Ancestry> {
+    if (!info) return 'diverged';
+    try {
+      return await revAncestry(info.path, rev);
+    } catch {
+      // Never the full set on a failure: offering an operation git will refuse is the bug
+      // this answers. Diverged is the reading that offers nothing impossible.
+      return 'diverged';
+    }
   }
 
   /**
@@ -885,11 +964,15 @@
    * — plus getting rid of it. A tag is checked out like anything else; git detaches for one,
    * and saying so is better than a menu that quietly does something else.
    */
-  function refMenu(event: MouseEvent, ref: PlacedRef) {
+  async function refMenu(event: MouseEvent, ref: PlacedRef) {
     event.preventDefault();
+    // Read before the await: the event is recycled, and a menu that opens at 0,0 is worse
+    // than one that opens a moment late.
+    const at = { x: event.clientX, y: event.clientY };
     const head = headName ?? 'HEAD';
     const current = ref.short === headName;
     const busy = actions.busy || worktree.busy;
+    const where = ref.kind.kind === 'stash' ? 'diverged' : await standingOf(ref.short);
     const items: MenuItem[] = [];
 
     if (ref.row !== null) {
@@ -915,33 +998,12 @@
       });
     }
 
-    if (!current && ref.kind.kind !== 'stash') {
-      items.push({ kind: 'separator' });
-      items.push({
-        kind: 'item',
-        label: `Fast-forward ${head} to ${ref.short}`,
-        hint: 'never a merge commit',
-        disabled: busy,
-        run: () => void act({ kind: 'merge', rev: ref.short, mode: 'ffOnly' }),
-      });
-      items.push({
-        kind: 'item',
-        label: `Merge ${ref.short} into ${head}`,
-        disabled: busy,
-        run: () => void act({ kind: 'merge', rev: ref.short, mode: 'auto' }),
-      });
-      items.push({
-        kind: 'item',
-        label: `Rebase ${head} onto ${ref.short}`,
-        disabled: busy,
-        run: () => void act({ kind: 'rebase', onto: ref.short }),
-      });
-      items.push({
-        kind: 'item',
-        label: `Rebase ${head} onto ${ref.short}, interactively`,
-        disabled: busy,
-        run: () => info && void rebase.load(info.path, ref.short),
-      });
+    if (!current && ref.kind.kind !== 'stash' && headName !== null) {
+      const combine = [
+        ...combineItems(ref.short, head, where),
+        ...catchUpItems(ref, head, where),
+      ];
+      if (combine.length > 0) items.push({ kind: 'separator' }, ...combine);
     }
 
     // Everything that can be done with the commit the ref is on, as the reference offers it:
@@ -1040,7 +1102,7 @@
     }
 
     if (items.length === 0) return;
-    menu = { x: event.clientX, y: event.clientY, items };
+    menu = { x: at.x, y: at.y, items };
   }
 
   /**
@@ -1333,16 +1395,18 @@
    * by the engine for a commit that is not on this branch or for a range holding a merge, so
    * nothing here has to guess at whether they are safe.
    */
-  function commitMenu(event: MouseEvent, row: number, oid: string) {
+  async function commitMenu(event: MouseEvent, row: number, oid: string) {
     event.preventDefault();
     pick(row);
     const short = oid.slice(0, 8);
     const branch = headName ?? 'HEAD';
     const summary = visibleMeta.get(row)?.summary ?? '';
+    const at = { x: event.clientX, y: event.clientY };
+    const where = await standingOf(oid);
 
     menu = {
-      x: event.clientX,
-      y: event.clientY,
+      x: at.x,
+      y: at.y,
       items: [
         // The refs on this row first, each checked out by its own name. Checking the commit out
         // is a different act with a different result — a detached HEAD — and offering only that
@@ -1356,7 +1420,7 @@
         },
         { kind: 'item', label: 'Create worktree from this commit', run: () => void worktreeAt(oid) },
         { kind: 'separator' },
-        ...combineFor(row, oid),
+        ...combineFor(row, oid, where),
         { kind: 'item', label: 'Create branch here', run: () => void branchAt(oid) },
         {
           kind: 'item',

@@ -315,6 +315,25 @@ pub async fn commit_detail(
     Ok(loc.commit_detail(&runner, &rev).await?)
 }
 
+/// Where a revision stands relative to `HEAD`.
+///
+/// Asked when a menu opens rather than carried on every ref: the answer needs an ancestry walk
+/// per ref, which on Linux costs a fifth of a second for the whole list and would be paid on
+/// every action, for a question only the menu asks.
+///
+/// # Errors
+/// Propagates git failures, including an unknown revision.
+#[tauri::command]
+pub async fn rev_ancestry(
+    path: String,
+    rev: String,
+) -> Result<coral_core::refs::Ancestry, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc.ancestry(&runner, &rev).await?)
+}
+
 /// A ref placed on the row it belongs to.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]

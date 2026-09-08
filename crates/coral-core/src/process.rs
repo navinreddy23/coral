@@ -266,6 +266,10 @@ fn redact_url_userinfo(s: &str) -> String {
 pub struct GitOutput {
     pub stdout: Vec<u8>,
     pub stderr: Vec<u8>,
+    /// How git exited. Always zero unless the caller allowed other codes, and the answer
+    /// itself for the commands that have no other way to give one: `merge-base
+    /// --is-ancestor` writes nothing at all and says yes or no by exiting 0 or 1.
+    pub code: i32,
 }
 
 /// Kills a git process group if the work it belongs to is abandoned.
@@ -597,6 +601,7 @@ impl GitRunner {
             return Ok(GitOutput {
                 stdout: out.stdout,
                 stderr: out.stderr,
+                code: out.status.code().unwrap_or_default(),
             });
         }
         Err(Self::exit_error(cmd.label, argv, &out))
