@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import FileTree from './FileTree.svelte';
   import type { TreeNode } from '../diff/tree';
   import type { FileChange } from '../ipc/types';
@@ -53,7 +54,9 @@
           style:padding-left="{depth * 12 + 4}px"
           onclick={() => (closed[node.path] = !shut(node.path))}
         >
-          <span class="caret">{shut(node.path) ? '›' : '⌄'}</span>{node.name}
+          <span class="caret">
+            <Icon name={shut(node.path) ? 'chevronRight' : 'chevronDown'} size={13} />
+          </span>{node.name}
         </button>
         {#if !shut(node.path)}
           <FileTree

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import type { ActivityState, Channel } from '../state/activity.svelte';
   import type { ActivityEntry } from '../ipc/activity';
 
@@ -40,7 +41,7 @@
 <div class="sheet">
   <header>
     <h2>Activity logs</h2>
-    <button class="shut" title="Close" onclick={onClose}>✕</button>
+    <button class="shut" title="Close" onclick={onClose}><Icon name="close" size={15} /></button>
   </header>
 
   <nav class="tabs">

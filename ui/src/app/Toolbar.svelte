@@ -1,4 +1,7 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
+  import type { IconName } from './icon';
+
   const {
     repo,
     path,
@@ -38,24 +41,24 @@
    * Everything here acts on the repository. Preferences do not, which is why they sit in the
    * window's own chrome beside the theme switch instead.
    */
-  const groups = $derived([
+  const groups: { name: string; label: string; icon: IconName; hint: string }[][] = $derived([
     [
-      { name: 'undo', label: 'Undo', glyph: '↶', hint: 'Undo the last ref change' },
-      { name: 'redo', label: 'Redo', glyph: '↷', hint: 'Redo what was undone' },
+      { name: 'undo', label: 'Undo', icon: 'undo', hint: 'Undo the last ref change' },
+      { name: 'redo', label: 'Redo', icon: 'redo', hint: 'Redo what was undone' },
     ],
     [
-      { name: 'fetch', label: 'Fetch', glyph: '⟳', hint: 'Fetch and prune' },
-      { name: 'pull', label: 'Pull', glyph: '↓', hint: 'Pull, fast-forward only' },
-      { name: 'push', label: 'Push', glyph: '↑', hint: 'Push, setting upstream if needed' },
+      { name: 'fetch', label: 'Fetch', icon: 'fetch', hint: 'Fetch and prune' },
+      { name: 'pull', label: 'Pull', icon: 'pull', hint: 'Pull, fast-forward only' },
+      { name: 'push', label: 'Push', icon: 'push', hint: 'Push, setting upstream if needed' },
     ],
     [
-      { name: 'branch', label: 'Branch', glyph: '⑂', hint: 'Create a branch here' },
-      { name: 'stash', label: 'Stash', glyph: '⤓', hint: 'Stash the working copy' },
-      { name: 'pop', label: 'Pop', glyph: '⤒', hint: 'Apply the latest stash and drop it' },
+      { name: 'branch', label: 'Branch', icon: 'branch', hint: 'Create a branch here' },
+      { name: 'stash', label: 'Stash', icon: 'stashPush', hint: 'Stash the working copy' },
+      { name: 'pop', label: 'Pop', icon: 'stashPop', hint: 'Apply the latest stash and drop it' },
       {
         name: 'patch',
         label: 'Patch',
-        glyph: 'P',
+        icon: 'patch',
         hint: comparing
           ? 'Write the commits between the two picked ones out as patch files'
           : 'Apply a patch file somebody sent',
@@ -65,7 +68,7 @@
       {
         name: 'terminal',
         label: 'Terminal',
-        glyph: '>_',
+        icon: 'terminal',
         hint: terminalOpen ? 'Hide the terminal (Ctrl+`)' : 'Open a terminal here (Ctrl+`)',
       },
     ],
@@ -87,16 +90,18 @@
       <span class="value">{repo}</span>
     </span>
     {#if crumb}
-      <span class="sep" aria-hidden="true">›</span>
+      <span class="sep"><Icon name="chevronRight" size={12} /></span>
       <span class="step sub">
-        <button class="leave" onclick={onLeaveSubmodule} title="Back to {repo}">×</button>
+        <button class="leave" onclick={onLeaveSubmodule} title="Back to {repo}">
+            <Icon name="close" size={12} />
+          </button>
         <span class="col">
           <span class="label">submodule</span>
           <span class="value" title={submodule}>{crumb}</span>
         </span>
       </span>
     {/if}
-    <span class="sep" aria-hidden="true">›</span>
+    <span class="sep"><Icon name="chevronRight" size={12} /></span>
     <span class="step">
       <span class="label">branch</span>
       <span class="value">{branch}</span>
@@ -120,19 +125,19 @@
           onclick={() => onAction(action.name)}
         >
           <span class="name">{action.label}</span>
-          <span class="glyph">{action.glyph}</span>
+          <span class="glyph"><Icon name={action.icon} size={16} /></span>
         </button>
         {#if action.name === 'pull'}
           <!-- How a pull integrates is a real choice, and the reference puts it here rather
                than only in a menu somewhere else. -->
           <button class="caret" disabled={busy} title="Choose how to pull" onclick={onPullMenu}>
-            ▾
+            <Icon name="chevronDown" size={12} />
           </button>
         {/if}
         {#if action.name === 'push'}
           <!-- Tags do not travel with a push; git sends them only when they are asked for. -->
           <button class="caret" disabled={busy} title="Choose what to push" onclick={onPushMenu}>
-            ▾
+            <Icon name="chevronDown" size={12} />
           </button>
         {/if}
       {/each}
@@ -184,12 +189,12 @@
     font-size: 13px; font-weight: 600; line-height: 1.5; color: var(--fg-0);
     max-width: 24em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .sep { color: var(--fg-2); flex: 0 0 auto; }
+  .sep { color: var(--fg-2); flex: 0 0 auto; display: flex; align-items: center; }
   /* The way out of the submodule sits on the crumb itself, which is where the reference puts
      it and the only place it reads as belonging to that step rather than to the toolbar. */
   .leave {
-    flex: 0 0 auto; font: inherit; font-size: 13px; line-height: 1; cursor: pointer;
-    padding: 1px 4px; border-radius: var(--radius-1);
+    flex: 0 0 auto; display: flex; font: inherit; line-height: 1; cursor: pointer;
+    padding: 2px; border-radius: var(--radius-1);
     background: var(--bg-1); border: 0; color: var(--fg-2);
   }
   .leave:hover { background: var(--bg-3); color: var(--danger); }
@@ -222,19 +227,11 @@
   .name {
     font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
   }
-  /*
-   * Stroked, because these are font glyphs and most arrows have no bold cut: asking for a
-   * heavier weight changed nothing, and at 15px the hairlines all but disappeared against the
-   * bar. The stroke is drawn in the glyph's own colour, so it thickens rather than outlines.
-   */
-  .glyph {
-    font-size: 15px; line-height: 1; color: var(--accent);
-    -webkit-text-stroke: 0.7px currentColor;
-  }
+  .glyph { color: var(--accent); display: flex; }
   /* Sits against the button it belongs to rather than in the gap between two. */
   .caret {
-    align-self: flex-end; margin: 0 var(--space-1) 5px -4px;
-    font: inherit; font-size: 10px; line-height: 1; cursor: pointer;
+    align-self: flex-end; margin: 0 var(--space-1) 4px -4px;
+    display: flex; font: inherit; line-height: 1; cursor: pointer;
     padding: 2px; background: var(--bg-1); border: 0; color: var(--fg-2);
   }
   .caret:hover:not(:disabled) { color: var(--fg-0); }

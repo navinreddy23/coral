@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import type { RemotesState } from '../state/remotes.svelte';
 
   const { remotes, focus, onClose, onChanged }: {
@@ -112,7 +113,7 @@
 <div class="sheet">
   <header>
     <h2>Remotes</h2>
-    <button class="shut" onclick={onClose} title="Close">×</button>
+    <button class="shut" onclick={onClose} title="Close"><Icon name="close" size={15} /></button>
   </header>
 
   <div class="split">

@@ -5,7 +5,7 @@
   import type { PlacedRef, RefGroups } from '../state/refs.svelte';
   import type { PlacedStash } from '../ipc/stash';
   import HostMark, { hostOf } from './HostMark.svelte';
-  import EyeMark from './EyeMark.svelte';
+  import Icon from './Icon.svelte';
   import { elideRef } from './path';
 
   const {
@@ -295,7 +295,7 @@
       onclick={() => onSelectRef(r)}
       title={refTitle(r, outside, hidden)}
     >
-      {#if r.short === head}<span class="tick" aria-hidden="true">✓</span>{/if}
+      {#if r.short === head}<span class="tick"><Icon name="check" size={12} /></span>{/if}
       <span class="text">{elideRef(label, 28)}</span>
       {#if r.ahead > 0 || r.behind > 0}
         <span class="track">{r.ahead}↑ {r.behind}↓</span>
@@ -309,12 +309,12 @@
         e.stopPropagation();
         onToggleHidden(r);
       }}
-    ><EyeMark shown={!hidden} /></button>
+    ><Icon name={hidden ? 'eyeOff' : 'eye'} size={12} /></button>
     <button
       class="dots"
       title="What can be done with {r.short}"
       onclick={(e) => onRefMenu(e, r)}
-    >⋮</button>
+    ><Icon name="more" size={13} /></button>
     </div>
   </li>
 {/snippet}
@@ -349,7 +349,9 @@
   {#each above as section (section.key)}
     <section>
       <button class="head" onclick={() => onCollapse(section.key, !collapsed[section.key])}>
-        <span class="caret">{collapsed[section.key] ? '›' : '⌄'}</span>
+        <span class="caret">
+          <Icon name={collapsed[section.key] ? 'chevronRight' : 'chevronDown'} size={13} />
+        </span>
         <span class="icon" aria-hidden="true">{section.icon}</span>
         {section.title}
         <span class="count">
@@ -369,7 +371,7 @@
                     ? `HEAD is detached at ${detachedHead.oid}\nnot in the loaded graph`
                     : `HEAD is detached at ${detachedHead.oid}`}
                 >
-                  <span class="tick" aria-hidden="true">✓</span>
+                  <span class="tick"><Icon name="check" size={12} /></span>
                   <span class="text">HEAD</span>
                   <span class="track mono">{detachedHead.oid.slice(0, 8)}</span>
                 </button>
@@ -402,7 +404,9 @@
         onclick={() => onCollapse('remote', !collapsed['remote'])}
         title="Remotes"
       >
-        <span class="caret">{collapsed['remote'] ? '›' : '⌄'}</span>
+        <span class="caret">
+          <Icon name={collapsed['remote'] ? 'chevronRight' : 'chevronDown'} size={13} />
+        </span>
         <span class="icon"><HostMark kind={sectionHost} /></span>
         Remote
         <span class="count">{groups.remote.length}</span>
@@ -411,7 +415,7 @@
         class="dots"
         title="Add or manage remotes"
         onclick={(e) => onRemoteMenu(e, null)}
-      >⋮</button>
+      ><Icon name="more" size={13} /></button>
     </div>
     {#if !collapsed['remote']}
       {#if byRemote.size === 0}
@@ -427,7 +431,9 @@
             onclick={() => onCollapse(key, !collapsed[key])}
             title={`${name}\n${urlOf(name)}`}
           >
-            <span class="caret">{collapsed[key] ? '›' : '⌄'}</span>
+            <span class="caret">
+          <Icon name={collapsed[key] ? 'chevronRight' : 'chevronDown'} size={13} />
+        </span>
             <span class="icon">
               <HostMark kind={urlOf(name) === '' ? 'other' : hostOf(urlOf(name))} />
             </span>
@@ -438,7 +444,7 @@
             class="dots"
             title="What can be done with {name}"
             onclick={(e) => onRemoteMenu(e, name)}
-          >⋮</button>
+          ><Icon name="more" size={13} /></button>
         </div>
         {#if !collapsed[key]}
           <ul class="nested">
@@ -465,8 +471,10 @@
   -->
   <section>
     <button class="head" onclick={() => onCollapse('stashes', !collapsed['stashes'])}>
-      <span class="caret">{collapsed['stashes'] ? '›' : '⌄'}</span>
-      <span class="icon" aria-hidden="true">⤓</span>
+      <span class="caret">
+          <Icon name={collapsed['stashes'] ? 'chevronRight' : 'chevronDown'} size={13} />
+        </span>
+      <span class="icon"><Icon name="stash" size={12} /></span>
       Stashes
       <span class="count">{stashes.length}</span>
     </button>
@@ -492,7 +500,7 @@
                 class="dots"
                 title="What can be done with {stash.name}"
                 onclick={(e) => onStashMenu(e, stash)}
-              >⋮</button>
+              ><Icon name="more" size={13} /></button>
             </div>
           </li>
         {/each}
@@ -503,7 +511,9 @@
   {#each below as section (section.key)}
     <section>
       <button class="head" onclick={() => onCollapse(section.key, !collapsed[section.key])}>
-        <span class="caret">{collapsed[section.key] ? '›' : '⌄'}</span>
+        <span class="caret">
+          <Icon name={collapsed[section.key] ? 'chevronRight' : 'chevronDown'} size={13} />
+        </span>
         <span class="icon" aria-hidden="true">{section.icon}</span>
         {section.title}
         <span class="count">{section.refs.length}</span>
@@ -528,7 +538,9 @@
   {#if pullRequests.length > 0}
     <section>
       <button class="head" onclick={() => onCollapse('prs', !collapsed['prs'])}>
-        <span class="caret">{collapsed['prs'] ? '›' : '⌄'}</span>
+        <span class="caret">
+          <Icon name={collapsed['prs'] ? 'chevronRight' : 'chevronDown'} size={13} />
+        </span>
         <span class="icon" aria-hidden="true">⇄</span>
         {pullRequestLabel}
         <span class="count">{pullRequests.length}</span>
@@ -556,7 +568,9 @@
   {#if submodules.length > 0}
     <section>
       <button class="head" onclick={() => onCollapse('submodules', !collapsed['submodules'])}>
-        <span class="caret">{collapsed['submodules'] ? '›' : '⌄'}</span>
+        <span class="caret">
+          <Icon name={collapsed['submodules'] ? 'chevronRight' : 'chevronDown'} size={13} />
+        </span>
         <span class="icon" aria-hidden="true">◱</span>
         Submodules
         <span class="count">{matchingSubmodules.length}</span>
@@ -582,14 +596,14 @@
                     ? `${sub.url || sub.name}\nRight-click, or use the dots, for what can be done with it`
                     : `${sub.url || sub.name}\nNo working copy yet`}
                 >
-                  <span class="tick" aria-hidden="true">{sub.initialised ? '✓' : '↓'}</span>
+                  <span class="tick"><Icon name={sub.initialised ? 'check' : 'arrowDown'} size={12} /></span>
                   <span class="text">{sub.path}</span>
                 </span>
                 <button
                   class="dots"
                   title="What can be done with this submodule"
                   onclick={(e) => onSubmoduleMenu(e, sub)}
-                >⋮</button>
+                ><Icon name="more" size={13} /></button>
               </div>
             </li>
           {/each}

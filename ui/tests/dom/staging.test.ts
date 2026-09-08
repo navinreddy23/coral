@@ -106,8 +106,11 @@ describe('the staging panel', () => {
       d.textContent?.replace(/\s+/g, ' ').trim(),
     );
     // `src/app` and `src/state` hold one file each, so the run collapses to `src` holding two.
-    expect(dirs.some((d) => d?.startsWith('⌄ src'))).toBe(true);
-    expect(dirs.some((d) => d?.includes('✎ 1') && d.includes('+ 1'))).toBe(true);
+    // The caret is drawn rather than spelled now, so the row's text begins with the name.
+    expect(dirs.some((d) => d?.startsWith('src'))).toBe(true);
+    expect(container.querySelector('.dir .caret svg')).not.toBeNull();
+    // The same letters the files under it are marked with, rather than a pencil above an `A`.
+    expect(dirs.some((d) => d?.includes('M 1') && d.includes('A 1'))).toBe(true);
   });
 
   it('opens the diff for the half the file was clicked in', async () => {

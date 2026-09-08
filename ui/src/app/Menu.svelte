@@ -7,6 +7,12 @@
         label: string;
         /** Shown dimmed after the label, for a keystroke or a hint. */
         hint?: string;
+        /**
+         * Whether this is the choice currently in force, for a menu that offers a set of
+         * them — a group's colour, a way of pulling. Drawn as a tick in the leading gutter,
+         * which is where every other menu on the desktop puts it.
+         */
+        checked?: boolean;
         disabled?: boolean;
         /** Marks a destructive choice, which is drawn in the danger colour. */
         danger?: boolean;
@@ -20,6 +26,8 @@
 </script>
 
 <script lang="ts">
+  import Icon from './Icon.svelte';
+
   const { x, y, items, onClose }: {
     x: number;
     y: number;
@@ -99,8 +107,9 @@
         onmouseleave={() => (open = open === i ? null : open)}
       >
         <button class="row" aria-haspopup="true" aria-expanded={open === i}>
+          <span class="tick"></span>
           <span class="label">{item.label}</span>
-          <span class="more" aria-hidden="true">›</span>
+          <span class="more"><Icon name="chevronRight" size={13} /></span>
         </button>
         {#if open === i}
           <div class="sub" role="menu">
@@ -112,6 +121,9 @@
                   disabled={child.disabled}
                   onclick={() => choose(child)}
                 >
+                  <span class="tick">
+                    {#if child.checked}<Icon name="check" size={12} />{/if}
+                  </span>
                   <span class="label">{child.label}</span>
                   {#if child.hint}<span class="hint">{child.hint}</span>{/if}
                 </button>
@@ -127,6 +139,7 @@
         disabled={item.disabled}
         onclick={() => choose(item)}
       >
+        <span class="tick">{#if item.checked}<Icon name="check" size={12} />{/if}</span>
         <span class="label">{item.label}</span>
         {#if item.hint}<span class="hint">{item.hint}</span>{/if}
       </button>
@@ -174,7 +187,13 @@
     flex: 0 8 auto; min-width: 0; color: var(--fg-2); font-size: 11px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .more { flex: 0 0 auto; color: var(--fg-2); font-size: 11px; }
+  .more { flex: 0 0 auto; color: var(--fg-2); display: flex; }
+  /* Reserved on every row, ticked or not, so a menu where one item is in force does not
+     indent that row alone. */
+  .tick {
+    flex: 0 0 auto; width: 14px; display: flex; align-items: center;
+    color: var(--accent);
+  }
   .rule { height: 1px; margin: var(--space-1) 0; background: var(--border); }
   /* Opens to the right of its parent row, overlapping it by a pixel so the pointer can cross
      between the two without passing over the page and closing it. */

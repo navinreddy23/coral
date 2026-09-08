@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { openInBrowser, pickProgram } from '../ipc/commands';
   import type { SigningConfig, SigningFormat } from '../ipc/types';
   import { defaultProgram, type SigningState } from '../state/signing.svelte';
@@ -154,7 +155,7 @@
             disabled={signing.loadingKeys}
             onclick={() => void signing.refreshKeys()}
           >
-            ↻
+            <Icon name="restart" size={13} />
           </button>
         </span>
         {#if signing.keys.some((k) => k.id === draft?.key && k.expired)}

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import type { Report } from '../state/actions.svelte';
   import type { HostView } from '../ipc/commands';
   import type { PlacedRef } from '../state/refs.svelte';
@@ -40,7 +41,7 @@
 
 <footer class="status" class:busy>
   <span class="branch" title={branch ?? 'detached HEAD'}>
-    <span class="glyph" aria-hidden="true">⑂</span>{branch ?? 'detached'}
+    <span class="glyph"><Icon name="branch" size={12} /></span>{branch ?? 'detached'}
   </span>
 
   {#if head && (head.ahead > 0 || head.behind > 0)}
@@ -92,7 +93,7 @@
     where the window's own controls are and three rows away from anything it reports on.
   -->
   <button class="logs" onclick={onLogs} title="Activity logs: what Coral has been doing">
-    <span class="glyph" aria-hidden="true">☰</span>Logs
+    <span class="glyph"><Icon name="logs" size={13} /></span>Logs
   </button>
 </footer>
 

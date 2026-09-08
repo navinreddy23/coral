@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import type { ViewsState } from '../state/views.svelte';
   import { terminalDefaults, type TerminalDefaults } from '../ipc/terminal';
 
@@ -69,7 +70,7 @@
 
   <p class="note">
     A shell already open keeps the settings it started with, because hiding the pane leaves it
-    running and whatever is half-typed in it alone. The <span class="glyph">↻</span> button in
+    running and whatever is half-typed in it alone. The <span class="glyph"><Icon name="restart" size={12} /></span> button in
     the terminal starts it again with these.
   </p>
 </section>

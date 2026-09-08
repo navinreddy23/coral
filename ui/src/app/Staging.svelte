@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import Changes, { kindOf, markOf } from './Changes.svelte';
   import { buildTree } from '../diff/tree';
   import type { StatusEntry } from '../ipc/types';
@@ -154,7 +155,7 @@
   -->
   <section>
     <h3>
-      <span class="caret" aria-hidden="true">⌄</span>
+      <span class="caret"><Icon name="chevronDown" size={13} /></span>
       Unstaged files ({worktree.unstaged.length})
       {#if worktree.unstaged.length > 0}
         <button
@@ -210,7 +211,7 @@
 
   <section>
     <h3>
-      <span class="caret" aria-hidden="true">⌄</span>
+      <span class="caret"><Icon name="chevronDown" size={13} /></span>
       Staged files ({worktree.staged.length})
       {#if worktree.staged.length > 0}
         <button

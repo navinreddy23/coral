@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
+  import type { IconName } from './icon';
   import About from './About.svelte';
   import CommitSigning from './CommitSigning.svelte';
   import Experimental from './Experimental.svelte';
@@ -69,14 +71,16 @@
    * The reference lists a dozen; listing ones that do nothing would be worse than not listing
    * them, so the rest arrive with the settings they hold.
    */
-  const panes = $derived([
-    { id: 'profiles', label: 'Profiles', glyph: '☺', needsRepository: false },
-    { id: 'ssh', label: 'SSH', glyph: '⛨', needsRepository: true },
-    { id: 'signing', label: 'Commit Signing', glyph: '✎', needsRepository: true },
-    { id: 'terminal', label: 'Terminal', glyph: '>', needsRepository: false },
-    { id: 'experimental', label: 'Experimental', glyph: '⚗', needsRepository: false },
-    { id: 'about', label: 'About', glyph: 'ⓘ', needsRepository: false },
-  ].filter((pane) => hasRepository || !pane.needsRepository));
+  const panes = $derived(([
+    { id: 'profiles', label: 'Profiles', icon: 'blame', needsRepository: false },
+    { id: 'ssh', label: 'SSH', icon: 'shield', needsRepository: true },
+    { id: 'signing', label: 'Commit Signing', icon: 'edit', needsRepository: true },
+    { id: 'terminal', label: 'Terminal', icon: 'terminal', needsRepository: false },
+    { id: 'experimental', label: 'Experimental', icon: 'beaker', needsRepository: false },
+    { id: 'about', label: 'About', icon: 'info', needsRepository: false },
+  ] satisfies { id: string; label: string; icon: IconName; needsRepository: boolean }[]).filter(
+    (pane) => hasRepository || !pane.needsRepository,
+  ));
 
   // svelte-ignore state_referenced_locally
   let chosen = $state(pane ?? (hasRepository ? 'ssh' : 'experimental'));
@@ -116,7 +120,7 @@
     {/if}
     {#each panes as pane (pane.id)}
       <button class="pane" class:on={active === pane.id} onclick={() => (chosen = pane.id)}>
-        <span class="glyph" aria-hidden="true">{pane.glyph}</span>{pane.label}
+        <span class="glyph"><Icon name={pane.icon} size={14} /></span>{pane.label}
       </button>
     {/each}
   </nav>
@@ -181,6 +185,6 @@
     background: var(--accent-soft); color: var(--fg-0); font-weight: 600;
     box-shadow: inset 2px 0 0 var(--accent-line);
   }
-  .glyph { color: var(--fg-2); width: 1.1em; }
+  .glyph { color: var(--fg-2); display: flex; }
   .pane.on .glyph { color: var(--accent); }
 </style>

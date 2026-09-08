@@ -1,5 +1,5 @@
 <script lang="ts">
-  import ChromeMark from './ChromeMark.svelte';
+  import Icon from './Icon.svelte';
   import Menu, { type MenuItem } from './Menu.svelte';
   import TabMark, { TAB_ICONS } from './TabMark.svelte';
   import { laneColour } from './lane';
@@ -423,7 +423,7 @@
     onclick={(e) => (searching ? (searching = false) : openSearch(e))}
     title="Search open tabs"
     aria-expanded={searching}
-  ><ChromeMark kind="chevron" size={15} /></button>
+  ><Icon name="chevronDown" size={15} /></button>
 </div>
 
 {#if searching}

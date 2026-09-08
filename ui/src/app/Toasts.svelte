@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import type { ToastsState } from '../state/toasts.svelte';
 
   const { toasts }: { toasts: ToastsState } = $props();
@@ -28,7 +29,7 @@
           <p class="title">{toast.title}</p>
           {#if toast.detail}<p class="detail">{toast.detail}</p>{/if}
         </div>
-        <button class="shut" onclick={() => toasts.dismiss(toast.id)} title="Dismiss">×</button>
+        <button class="shut" onclick={() => toasts.dismiss(toast.id)} title="Dismiss"><Icon name="close" size={13} /></button>
       </div>
     {/each}
     {#if toasts.items.length > 1}

@@ -97,7 +97,7 @@
   import { GraphState } from '../state/graph.svelte';
   import { RefsState } from '../state/refs.svelte';
   import { ScopeState } from '../state/scope.svelte';
-  import ChromeMark from './ChromeMark.svelte';
+  import Icon from './Icon.svelte';
   import Border from './Border.svelte';
   import {
     close as shut,
@@ -3399,7 +3399,7 @@
         onclick={() => openPreferences()}
         title="SSH keys, signing and preferences"
         aria-label="Settings"
-      ><ChromeMark kind="settings" /></button>
+      ><Icon name="settings" /></button>
       <!--
         Both faces are drawn and one is turned away, rather than swapped in and out. A theme
         switch that changes under the pointer with no movement reads as a redraw; turning is
@@ -3412,8 +3412,8 @@
         title={theme.current === 'light' ? 'Switch to the dark theme' : 'Switch to the light theme'}
         aria-label="Switch theme"
       >
-        <span class="face moon"><ChromeMark kind="moon" /></span>
-        <span class="face sun"><ChromeMark kind="sun" /></span>
+        <span class="face moon"><Icon name="moon" /></span>
+        <span class="face sun"><Icon name="sun" /></span>
       </button>
 
     </div>
@@ -3428,7 +3428,7 @@
       -->
       <div class="sysbar">
         <button class="sys" onclick={() => void minimise()} title="Minimise" aria-label="Minimise">
-          <ChromeMark kind="minimise" size={14} />
+          <Icon name="minimise" size={14} />
         </button>
         <button
           class="sys"
@@ -3436,10 +3436,10 @@
           title={maximised ? 'Restore' : 'Maximise'}
           aria-label={maximised ? 'Restore' : 'Maximise'}
         >
-          <ChromeMark kind={maximised ? 'restore' : 'maximise'} size={14} />
+          <Icon name={maximised ? 'restore' : 'maximise'} size={14} />
         </button>
         <button class="sys shut" onclick={() => void shut()} title="Close" aria-label="Close">
-          <ChromeMark kind="close" size={14} />
+          <Icon name="close" size={14} />
         </button>
       </div>
     {/if}
@@ -3688,7 +3688,9 @@
             disabled={find.matches.length === 0}
             title="Next match">↓</button
           >
-          <button onclick={() => find.close()} title="Close the search">✕</button>
+          <button onclick={() => find.close()} title="Close the search">
+            <Icon name="close" size={13} />
+          </button>
         </div>
       {/if}
 
@@ -3723,7 +3725,9 @@
           <span class="cell graph-col"><span class="wip-node"></span></span>
           <span class="cell message">
             <span class="summary">WIP on {headName ?? 'HEAD'}</span>
-            {#if wip.edits > 0}<span class="tally edit">✎ {wip.edits}</span>{/if}
+            {#if wip.edits > 0}
+              <span class="tally edit"><Icon name="edit" size={11} />{wip.edits}</span>
+            {/if}
             {#if wip.adds > 0}<span class="tally add">+ {wip.adds}</span>{/if}
           </span>
         </button>
@@ -4462,7 +4466,12 @@
   }
 
   /* The counts on the WIP row, in the same two colours the staging panel uses for them. */
-  .tally { flex: 0 0 auto; font-size: 11px; font-variant-numeric: tabular-nums; }
+  /* The glyph and its count are one thing, so they wrap together or not at all: as two
+     inline boxes the count dropped onto a second line and made the row two high. */
+  .tally {
+    flex: 0 0 auto; display: inline-flex; align-items: center; gap: 3px;
+    font-size: var(--text-sm); font-variant-numeric: tabular-nums;
+  }
   .tally.edit { color: var(--lane-1); }
   .tally.add { color: var(--ok); }
 

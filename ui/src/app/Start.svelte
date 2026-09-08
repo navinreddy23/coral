@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import type { StartState } from '../state/start.svelte';
   import type { SshKey } from '../ipc/types';
   import type { CloneHistory } from '../ipc/start';
@@ -128,7 +129,7 @@
     <header>
       <h2>Repositories</h2>
       {#if onClose}
-        <button class="shut" title="Back" onclick={onClose}>✕</button>
+        <button class="shut" title="Back" onclick={onClose}><Icon name="close" size={15} /></button>
       {/if}
     </header>
 
@@ -141,14 +142,14 @@
         class:on={start.form === 'clone'}
         onclick={() => (start.form = start.form === 'clone' ? 'none' : 'clone')}
       >
-        <span class="glyph" aria-hidden="true">⤓</span>Clone
+        <span class="glyph"><Icon name="pull" size={17} /></span>Clone
       </button>
       <button
         class="action"
         class:on={start.form === 'create'}
         onclick={() => (start.form = start.form === 'create' ? 'none' : 'create')}
       >
-        <span class="glyph" aria-hidden="true">＋</span>Create
+        <span class="glyph"><Icon name="plus" size={17} /></span>Create
       </button>
     </div>
 
@@ -306,7 +307,7 @@
               class="forget"
               title="Take {repo.name} off this list"
               onclick={() => void start.forget(repo.path)}
-            >✕</button>
+            ><Icon name="close" size={12} /></button>
           </li>
         {/each}
       </ul>

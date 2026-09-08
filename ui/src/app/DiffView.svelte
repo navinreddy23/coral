@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { firstChangedRow, marksOf, splitRows, windowAround } from '../diff/split';
   import { elidePath } from './path';
   import { shortAge } from './age';
@@ -351,9 +352,9 @@
         onclick={() => diff.setIgnoreWhitespace(!diff.ignoreWhitespace)}
         title={diff.ignoreWhitespace ? 'Counting whitespace again' : 'Ignore whitespace'}
         aria-pressed={diff.ignoreWhitespace}
-      >¶</button>
+      ><Icon name="pilcrow" size={14} /></button>
     {/if}
-    <button class="close" onclick={onClose} aria-label="Close the diff">✕</button>
+    <button class="close" onclick={onClose} aria-label="Close the diff"><Icon name="close" size={15} /></button>
   </header>
 
   <div class="body">

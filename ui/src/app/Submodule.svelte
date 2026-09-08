@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import type { Submodule, SubmoduleRevision } from '../ipc/types';
 
   const { submodule, revision, busy, error, onClose, onSetUrl, onOpen, onUpdate, onRemove }: {
@@ -43,7 +44,7 @@
   <header>
     <span class="glyph" aria-hidden="true">◱</span>
     <h2>Edit submodule</h2>
-    <button class="shut" onclick={onClose} title="Close">×</button>
+    <button class="shut" onclick={onClose} title="Close"><Icon name="close" size={15} /></button>
   </header>
 
   <div class="body">
@@ -76,7 +77,7 @@
       <p class="state">Reading the current revision…</p>
     {:else if revision.inSync}
       <p class="state ok">
-        ✓ This submodule is at the commit this repository records.
+        <Icon name="check" size={12} /> This submodule is at the commit this repository records.
       </p>
     {:else}
       <p class="state warn">

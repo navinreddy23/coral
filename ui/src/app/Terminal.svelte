@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { onMount } from 'svelte';
   import { FitAddon } from '@xterm/addon-fit';
   import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -231,9 +232,9 @@
       title="Start the shell again, with the settings as they are now"
       aria-label="Start the shell again"
     >
-      ↻
+      <Icon name="restart" size={13} />
     </button>
-    <button class="close" onclick={onClose} aria-label="Hide the terminal">✕</button>
+    <button class="close" onclick={onClose} aria-label="Hide the terminal"><Icon name="close" size={14} /></button>
   </header>
 
   {#if session.error}

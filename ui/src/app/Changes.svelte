@@ -1,16 +1,23 @@
 <script lang="ts" module>
   import type { StatusEntry } from '../ipc/types';
 
-  /** How a working-tree entry reads on a row: one letter and one colour. */
+  /**
+   * How a working-tree entry reads on a row: one letter and one colour.
+   *
+   * git's own letters, which are also the ones the commit panel and the file tree already
+   * use. This list read `+ − ✎ R C T` — two arithmetic signs, a pencil and three letters —
+   * so the same file changed the same way was marked differently depending on which panel
+   * was showing it.
+   */
   export function markOf(entry: StatusEntry, staged: boolean): string {
-    if (entry.conflict) return '!';
+    if (entry.conflict) return 'U';
     const change = staged ? entry.index : entry.worktree;
     switch (change) {
       case 'added':
       case 'untracked':
-        return '+';
+        return 'A';
       case 'deleted':
-        return '−';
+        return 'D';
       case 'renamed':
         return 'R';
       case 'copied':
@@ -18,7 +25,7 @@
       case 'type_changed':
         return 'T';
       default:
-        return '✎';
+        return 'M';
     }
   }
 
@@ -30,6 +37,7 @@
 </script>
 
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import Changes from './Changes.svelte';
   import { filesIn, type TreeNode } from '../diff/tree';
 
@@ -59,7 +67,7 @@
     let edits = 0;
     let adds = 0;
     for (const entry of filesIn(node)) {
-      if (markOf(entry, staged) === '+') adds += 1;
+      if (markOf(entry, staged) === 'A') adds += 1;
       else edits += 1;
     }
     return { edits, adds };
@@ -77,10 +85,12 @@
             style:padding-left="{depth * 12 + 4}px"
             onclick={() => onToggleDir(node.path)}
           >
-            <span class="caret">{closed[node.path] ? '›' : '⌄'}</span>
+            <span class="caret">
+              <Icon name={closed[node.path] ? 'chevronRight' : 'chevronDown'} size={13} />
+            </span>
             <span class="name">{node.name}</span>
-            {#if counts.edits > 0}<span class="count edit">✎ {counts.edits}</span>{/if}
-            {#if counts.adds > 0}<span class="count add">+ {counts.adds}</span>{/if}
+            {#if counts.edits > 0}<span class="count edit">M {counts.edits}</span>{/if}
+            {#if counts.adds > 0}<span class="count add">A {counts.adds}</span>{/if}
           </button>
           <button
             class="act"
