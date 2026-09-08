@@ -1,5 +1,111 @@
 # Changelog
 
+## 1.1.0
+
+The window is redrawn from the tokens up. Colour, type, spacing, shape and motion come from
+one measured set rather than from literals in thirty-two components; every control is a drawn
+shape rather than a typeface glyph; and the theme follows the desktop. As with the releases
+before it, nearly all of it came from driving the window rather than from reading the code —
+including six faults that only the real WebKitGTK window would show.
+
+### The look of it
+
+- **A design system with numbers behind it.** Aqua does every functional job — what is
+  selected, what has focus, what a primary button is — and coral carries the identity: the
+  mark, the active tab's edge, the ring on the commit you are on, and the working copy's
+  marker. They are kept apart by role rather than by hue, because a warm red cannot mean
+  "brand" in one place and "this deletes something" in another. Every pair a reader has to
+  tell apart is asserted in `contrast.test.ts` rather than judged by eye.
+- **An icon set drawn in the graph's own vocabulary.** The controls were typeface glyphs —
+  `↶`, `⤓`, a literal `P` for patch, four emoji in the sidebar — which came out differently on
+  every machine and had no bold cut to ask for. Sixty-two shapes on one grid now, in the
+  vocabulary the canvas already draws a million times over: stroke the structure, fill the
+  subject. Weight is derived from the size asked for, so a glyph on an eleven-pixel pill and
+  one in a twenty-pixel button land on the same optical weight.
+- **A mark that is a commit graph and a piece of coral.** The old one was a Y, which is the
+  branch glyph every client already uses, this one included. Four nodes now, with the trunk
+  carrying on past the two that leave it.
+- **The type ships with the application.** Inter and JetBrains Mono are bundled rather than
+  asked of the machine, and the monospace face has its ligatures off: drawing `!==` as one
+  glyph is taste in an editor and a lie in a diff.
+- **Menus, dialogs and the palette lift off the page.** Fourteen places wrote their own wash
+  of black or their own shadow, at four different strengths, all of them plain black over a
+  page that is nearly black already.
+
+### The graph and the lists
+
+- **The commit you are on is ringed**, in the brand colour, clear of the node's own. The
+  specification has said so since its first draft and it was never drawn.
+- **The commit list loses its column headers.** Three words in uppercase over a list whose
+  columns are a pill, a drawing and a sentence, costing twenty-six pixels of every screen.
+  The handles that size the columns move outside the scroller and run its full height.
+- **The sidebar reads as a list of branches, not a table.** Sentence case at the body size,
+  drawn icons in place of the emoji, and one left edge for every section: the tick that marks
+  the branch you are on used to be added only to that row, so the one name anybody is looking
+  for started fourteen pixels further right than the rest.
+- **The lane ribbons stop shouting.** The tint that labels a run of commits with its branch
+  was a seventh of the lane's stroke strength, which is right for a thirty-pixel pill and
+  wrong for a two-hundred-pixel ribbon beside a message.
+- **Density is a choice** — compact, default or comfortable — and it reaches the lanes as well
+  as the rows, which are laid out by two systems that cannot read each other.
+
+### Reading a change
+
+- **The words that changed inside a replaced line are marked.** A one-word edit and a
+  rewritten line used to look identical. The comparison is over words rather than characters,
+  so a renamed method reads as one changed name instead of confetti; a line where most of the
+  words changed is left alone, because marking nine tenths of it only repeats what the line's
+  colour said.
+- **The commit panel leads with who wrote it**, on the same disc the canvas fills a node with,
+  from the same eight colours by the same hash — so the row that was clicked and the panel
+  that answers wear one mark between them.
+- **The conflict tool, the staging panel and the diff header** are on the one set of shapes.
+  The diff header carried six controls in four outlines and three corner radii across
+  thirty-four pixels.
+
+### Room on a small screen
+
+- **The toolbar is one row of icons**, starting at the breadcrumb rather than floating on the
+  window's centre line, in about half the width it took. The words move into the tooltip:
+  the name, then what the action does, then the keystroke, read from the same table the help
+  overlay is built from.
+- **Both side panels fold away from the toolbar**, and the left one has a third state between
+  showing and gone: a thirty-six pixel rail of its section icons, each opening the panel at
+  its own section. The two panels take three hundred pixels between them, which on a laptop
+  is most of a diff.
+
+### Correctness
+
+- **Coral opened light on a dark desktop** and stayed there. The stored value is a choice now
+  rather than a theme — follow the desktop, always light, or always dark — and a `matchMedia`
+  listener means a desktop that goes dark in the evening takes the window with it.
+- **The lanes drifted off the rows they belong to** at any density but the default. The canvas
+  fitted its metrics from the shipped row height rather than the caller's, so every node sat a
+  little further from its own commit than the last.
+- **The working copy row sat on top of the first commit**, held twenty-two pixels below the
+  top of the list to clear a column header that no longer exists.
+- **The working copy row and a row the search had matched** were nearly the same colour in the
+  dark theme, where both tints are dark browns. They are told apart by shape now: the search
+  tints a row, the working copy is ruled.
+- **Text went soft on eleven surfaces.** WebKit antialiases with subpixel precision only where
+  it knows what is behind the text, so a surface with no background of its own drops to
+  grayscale. `style.test.ts` holds the rule that every one of them paints its own.
+- **Hiding the left panel was permanent in the dev gallery**, because the fixture engine
+  answered `null` for a command it had never heard of and the sidebar threw on it. It throws
+  instead, which is why five missing fixtures were found at all.
+
+### Underneath
+
+- **Every surface of the window is photographed in a real browser.** `just window-test` drives
+  Chrome over the real application on the fixture engine and takes twenty-six pictures in both
+  themes, with no repository, no Rust and no network. It adds nothing to `package.json`: Node
+  has a global `WebSocket`, so speaking the DevTools protocol needs no package.
+- **The tests are type-checked.** A suite of eight hundred was the only TypeScript in the
+  repository that nothing checked.
+- **`App.svelte` is four hundred lines smaller**, across six modules that are each about one
+  thing: what to call a ref, which labels a row shows, what the lane column costs the row it
+  sits in, what a revision offers, what discarding promises, and the window's own top line.
+
 ## 1.0.2
 
 Two lives on one machine, a repository taken without all of it, and a menu that offers what
