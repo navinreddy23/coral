@@ -2,6 +2,7 @@
   import Icon from './Icon.svelte';
   import type { IconName } from './icon';
   import { keysOf } from '../state/shortcuts';
+  import type { PanelState } from '../state/views.svelte';
 
   const {
     repo,
@@ -29,8 +30,9 @@
     /** Whether two commits are picked, which is what decides what the patch button does. */
     comparing: boolean;
     terminalOpen: boolean;
-    /** Whether each side panel is showing, which is what its own button draws. */
-    leftPanel: boolean;
+    /** How much of the left panel is showing, which is what its own button draws. */
+    leftPanel: PanelState;
+    /** The right panel has two states, not three: it holds one thing, so it has no rail. */
     rightPanel: boolean;
     /**
      * Whether the right panel can be shown at all.
@@ -61,6 +63,13 @@
      * hidden is worse than one that says nothing — and it is what a screen reader is told.
      */
     on?: boolean;
+    /**
+     * What pressing it does, where "hide" and "show" are not the whole story.
+     *
+     * The left panel has three states, so its button is a cycle rather than a toggle and the
+     * tooltip is the only thing that can say which way round it goes.
+     */
+    does?: string;
     disabled?: boolean;
   }
 
@@ -111,14 +120,28 @@
    * somebody reaches for first: the two side panels take three hundred pixels between them,
    * which is most of a diff.
    */
+  /**
+   * What the left panel's button draws and does, in each of the panel's three states.
+   *
+   * Open minimises, minimised hides, hidden opens: three presses come back to where they
+   * started, and the glyph says which of the three it is at rather than only whether the panel
+   * is there.
+   */
+  const LEFT: Record<PanelState, { icon: IconName; does: string }> = {
+    open: { icon: 'panelLeft', does: 'Minimise' },
+    rail: { icon: 'panelLeftRail', does: 'Hide' },
+    hidden: { icon: 'panelLeftOff', does: 'Show' },
+  };
+
   const parts = $derived<Action[]>([
     {
       name: 'panel.left',
       label: 'Left panel',
-      icon: leftPanel ? 'panelLeft' : 'panelLeftOff',
+      icon: LEFT[leftPanel].icon,
       hint: 'branches, tags and stashes',
       binding: 'panel.left',
-      on: leftPanel,
+      on: leftPanel !== 'hidden',
+      does: LEFT[leftPanel].does,
     },
     {
       name: 'panel.right',
@@ -150,9 +173,10 @@
    */
   function tip(action: Action): string {
     const keys = action.binding === undefined ? null : keysOf(action.binding);
+    const verb = action.does ?? (action.on === true ? 'Hide' : 'Show');
     const name = action.on === undefined
       ? action.label
-      : `${action.on ? 'Hide' : 'Show'} the ${action.label.toLowerCase()}`;
+      : `${verb} the ${action.label.toLowerCase()}`;
     return `${name} — ${action.hint}${keys === null ? '' : ` (${keys})`}`;
   }
 

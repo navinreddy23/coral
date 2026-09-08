@@ -23,7 +23,7 @@ describe('remembered view choices', () => {
     const views = new ViewsState();
     expect(views.current.diff).toBe('inline');
     expect(views.current.commitFiles).toBe('path');
-    expect(views.current.sidebar).toBe(true);
+    expect(views.current.sidebar).toBe('open');
     // Remote and tag lists run to hundreds on a real repository.
     expect(views.current.collapsed).toEqual({ remote: true, tags: true });
   });
@@ -47,7 +47,7 @@ describe('remembered view choices', () => {
     const views = new ViewsState();
     expect(views.current.diff).toBe('inline');
     expect(views.current.changes, 'a value that is still valid is kept').toBe('tree');
-    expect(views.current.sidebar).toBe(true);
+    expect(views.current.sidebar).toBe('open');
   });
 
   it('clamps a stored terminal size into the range the splitter allows', () => {
@@ -63,13 +63,34 @@ describe('remembered view choices', () => {
     expect(new ViewsState().current.diff).toBe('inline');
   });
 
+  it('reads a left panel that was stored as a boolean, before it had three states', () => {
+    // A release that has been used has `true` or `false` in storage. `false` there means the
+    // panel was deliberately put away, and opening the window with it back is the one thing
+    // this must not do.
+    localStorage.setItem('coral.views', JSON.stringify({ sidebar: false }));
+    expect(new ViewsState().current.sidebar).toBe('hidden');
+
+    localStorage.setItem('coral.views', JSON.stringify({ sidebar: true }));
+    expect(new ViewsState().current.sidebar).toBe('open');
+  });
+
+  it('keeps the minimised left panel minimised across a restart', () => {
+    localStorage.setItem('coral.views', JSON.stringify({ sidebar: 'rail' }));
+    expect(new ViewsState().current.sidebar).toBe('rail');
+  });
+
+  it('opens the panel rather than trusting a state it does not know', () => {
+    localStorage.setItem('coral.views', JSON.stringify({ sidebar: 'folded' }));
+    expect(new ViewsState().current.sidebar).toBe('open');
+  });
+
   it('resets everything, for when something has been left unusable', () => {
     const views = new ViewsState();
-    views.set('sidebar', false);
+    views.set('sidebar', 'hidden');
     views.set('details', false);
     views.reset();
 
-    expect(views.current.sidebar).toBe(true);
+    expect(views.current.sidebar).toBe('open');
     expect(new ViewsState().current.details).toBe(true);
   });
 });

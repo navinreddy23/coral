@@ -23,6 +23,16 @@ export type FileView = 'diff' | 'blame' | 'history';
 /** Where the terminal sits. */
 export type Dock = 'bottom' | 'right';
 
+/**
+ * How much of a side panel is showing.
+ *
+ * `rail` is the sidebar minimised to its section icons: on a laptop the two panels take three
+ * hundred pixels between them, which is most of a diff, and hiding the left one entirely puts
+ * the branch list behind a keystroke. The right panel has no rail — it holds one thing, the
+ * commit under the cursor, so there is nothing there to minimise it to.
+ */
+export type PanelState = 'open' | 'rail' | 'hidden';
+
 export type { Density } from '../graph/layout';
 
 export interface Views {
@@ -41,8 +51,8 @@ export interface Views {
   fileView: FileView;
   /** Whether a change that is only whitespace counts as a change. */
   ignoreWhitespace: boolean;
-  /** Whether the left panel, the detail panel and the toolbar are showing. */
-  sidebar: boolean;
+  /** How much of the left panel is showing, and whether the other two are. */
+  sidebar: PanelState;
   details: boolean;
   toolbar: boolean;
   terminalDock: Dock;
@@ -79,7 +89,7 @@ function defaults(): Views {
     diff: 'inline',
     fileView: 'diff',
     ignoreWhitespace: false,
-    sidebar: true,
+    sidebar: 'open',
     details: true,
     toolbar: true,
     terminalDock: 'bottom',
@@ -141,7 +151,13 @@ function read(): Views {
     // `fileView` is deliberately not restored. Blame and history are things you go and look
     // at, not a way you want every file opened from the next launch onwards.
     if (typeof stored.ignoreWhitespace === 'boolean') out.ignoreWhitespace = stored.ignoreWhitespace;
-    if (typeof stored.sidebar === 'boolean') out.sidebar = stored.sidebar;
+    // Written as a boolean until the rail existed, and a release that has been used has that
+    // in storage: `false` there means the panel was deliberately put away, and losing that is
+    // worse than the panel being a state behind.
+    if (typeof stored.sidebar === 'boolean') out.sidebar = stored.sidebar ? 'open' : 'hidden';
+    if (stored.sidebar === 'open' || stored.sidebar === 'rail' || stored.sidebar === 'hidden') {
+      out.sidebar = stored.sidebar;
+    }
     if (typeof stored.details === 'boolean') out.details = stored.details;
     if (typeof stored.toolbar === 'boolean') out.toolbar = stored.toolbar;
     if (typeof stored.systemTitleBar === 'boolean') out.systemTitleBar = stored.systemTitleBar;

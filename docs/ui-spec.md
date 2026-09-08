@@ -127,6 +127,13 @@ and the branches it offers are the remote's: a branch this machine has never pus
 the host can be asked to merge into. Tags sort by version.
 Stashes show message and age. Submodules are listed only.
 
+The panel has three states rather than two, and one control cycles them: open, minimised to a
+thirty-six pixel rail of its section icons, and gone. The rail is a way back rather than a
+second copy of the panel — each icon opens the panel at its own section, expanded and scrolled
+to — and the count each section holds is in the icon's tooltip, which is what the width costs
+it. The right panel has two states and no rail: it holds one thing, the commit under the
+cursor, so there is nothing there to minimise it to.
+
 Every branch and tag row carries an eye on its right, beside the dots, taking that ref out of
 the walk and putting it back. It stays showing on a hidden row rather than waiting for a hover,
 since otherwise nothing on screen says a branch is missing from the graph. A soloed repository

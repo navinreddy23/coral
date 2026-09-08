@@ -117,8 +117,9 @@
   import Staging from './Staging.svelte';
   import Details from './Details.svelte';
   import Sidebar from './Sidebar.svelte';
+  import Rail from './Rail.svelte';
   import { TabsState, type Session } from '../state/tabs.svelte';
-  import { ViewsState } from '../state/views.svelte';
+  import { ViewsState, type PanelState } from '../state/views.svelte';
   import { isTextTarget, resolve, tabJump } from '../state/shortcuts';
   import Shortcuts from './Shortcuts.svelte';
   import TabBar from './TabBar.svelte';
@@ -264,7 +265,7 @@
       case 'tab.close': if (tabs.active) void tabs.close(tabs.active.id); break;
       case 'tab.next': cycleTab(1); break;
       case 'tab.previous': cycleTab(-1); break;
-      case 'panel.left': views.set('sidebar', !views.current.sidebar); break;
+      case 'panel.left': cycleSidebar(); break;
       case 'panel.detail': views.set('details', !views.current.details); break;
       case 'help': showHelp = !showHelp; break;
       case 'palette': showPalette = !showPalette; break;
@@ -505,6 +506,58 @@
    * checked out is drawn like every other row.
    */
   let detachedRow = $state<number | null>(null);
+
+  /**
+   * The next state of the left panel, in the order the toolbar's tooltip promises.
+   *
+   * Open, minimised to its rail, gone, and round again. One function rather than the same
+   * ternary in the keyboard, the toolbar and the palette: they are the same control reached
+   * three ways, and they drifted apart the last time this was a toggle written out three times.
+   */
+  const SIDEBAR_NEXT: Record<PanelState, string> = {
+    open: 'Minimise the left panel',
+    rail: 'Hide the left panel',
+    hidden: 'Show the left panel',
+  };
+
+  function cycleSidebar(): void {
+    const now = views.current.sidebar;
+    views.set('sidebar', now === 'open' ? 'rail' : now === 'rail' ? 'hidden' : 'open');
+  }
+
+  /**
+   * Opens the panel at one of its sections, which is what a rail icon does.
+   *
+   * The section is expanded on the way in — a rail icon that opened the panel onto a heading
+   * with nothing under it would be a click that appeared not to work — and the counter is what
+   * the panel watches to scroll it into view.
+   */
+  function openSidebarAt(section: string): void {
+    views.set('sidebar', 'open');
+    if (views.current.collapsed[section]) views.setCollapsed(section, false);
+    revealSection = { key: section, tick: revealSection.tick + 1 };
+  }
+
+  /** Which section the panel was last asked to show, and how many times. */
+  let revealSection = $state<{ key: string; tick: number }>({ key: '', tick: 0 });
+
+  /**
+   * How many rows each of the panel's sections holds, for the rail's tooltips.
+   *
+   * A section with nothing in it is left out entirely rather than listed as empty, which is
+   * what the panel itself does: a repository with no submodules has no submodule heading.
+   */
+  const railCounts = $derived.by(() => {
+    const out: Record<string, number> = {
+      local: refs.groups.local.length,
+      remote: remotes.list.length,
+      tags: refs.groups.tags.length,
+    };
+    if (stashes.list.length > 0) out['stashes'] = stashes.list.length;
+    if (hosting.pullRequests.length > 0) out['prs'] = hosting.pullRequests.length;
+    if (refs.submodules.length > 0) out['submodules'] = refs.submodules.length;
+    return out;
+  });
 
   /**
    * The row that is checked out, which the graph rings.
@@ -2332,9 +2385,9 @@
           ]),
       {
         id: 'panel-left',
-        label: views.current.sidebar ? 'Hide the left panel' : 'Show the left panel',
+        label: SIDEBAR_NEXT[views.current.sidebar],
         group: 'View',
-        run: () => views.set('sidebar', !views.current.sidebar),
+        run: () => cycleSidebar(),
       },
       {
         id: 'panel-right',
@@ -2495,7 +2548,7 @@
       case 'terminal': return terminal.toggle();
       // The same two the keyboard reaches, so a panel folded away by one comes back by the
       // other and the choice is remembered either way.
-      case 'panel.left': return views.set('sidebar', !views.current.sidebar);
+      case 'panel.left': return cycleSidebar();
       case 'panel.right': return views.set('details', !views.current.details);
       case 'branch': {
         void (async () => {
@@ -3632,7 +3685,14 @@
       style:--sidebar-w="{panes.widths.sidebar}px"
       style:--details-w="{panes.widths.details}px"
     >
-    {#if views.current.sidebar}
+    {#if views.current.sidebar === 'rail'}
+      <Rail
+        counts={railCounts}
+        host={hosting.view?.host?.kind === 'gitlab' ? 'gitlab' : hosting.view?.host?.kind === 'github' ? 'github' : 'other'}
+        onOpen={openSidebarAt}
+      />
+    {/if}
+    {#if views.current.sidebar === 'open'}
       <Sidebar
         groups={refs.groups}
         head={headName}
@@ -3654,6 +3714,7 @@
         pullRequests={hosting.pullRequests}
         pullRequestLabel={hosting.view?.host?.kind === 'gitlab' ? 'Merge requests' : 'Pull requests'}
         focusFilter={filterTick}
+        reveal={revealSection}
         collapsed={views.current.collapsed}
         onCollapse={(section, closed) => views.setCollapsed(section, closed)}
         onOpenPullRequest={(pr: PullRequest) => void openInBrowser(pr.webUrl)}

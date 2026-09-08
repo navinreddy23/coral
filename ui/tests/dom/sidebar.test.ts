@@ -80,6 +80,7 @@ function mount(over: Record<string, unknown> = {}) {
       onShowEverything: () => {},
       onSelectRef: () => {},
       focusFilter: 0,
+      reveal: { key: '', tick: 0 },
       ...over,
     },
   });

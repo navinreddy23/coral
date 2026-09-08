@@ -260,6 +260,16 @@ export const ICONS = {
       'M9.4 5.6v12.8',
     ],
   },
+  // The panel minimised: a narrow column with the section icons still in it. A thinner version
+  // of `panelLeft`'s filled strip was the obvious drawing and could not be told from it at
+  // seventeen pixels, which is the only size the toolbar draws at.
+  panelLeftRail: {
+    paths: [
+      'M3.5 5.6A1.6 1.6 0 0 1 5.1 4h13.8a1.6 1.6 0 0 1 1.6 1.6v12.8a1.6 1.6 0 0 1-1.6 1.6H5.1a1.6 1.6 0 0 1-1.6-1.6Z',
+      'M8.4 5.6v12.8',
+    ],
+    dots: [[6.75, 8.6, 1.05], [6.75, 12, 1.05], [6.75, 15.4, 1.05]],
+  },
   panelRight: {
     paths: ['M3.5 5.6A1.6 1.6 0 0 1 5.1 4h13.8a1.6 1.6 0 0 1 1.6 1.6v12.8a1.6 1.6 0 0 1-1.6 1.6H5.1a1.6 1.6 0 0 1-1.6-1.6Z'],
     solid: ['M14.6 5.6h4.3v12.8h-4.3Z'],

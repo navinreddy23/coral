@@ -31,6 +31,7 @@
     collapsed,
     onCollapse,
     focusFilter,
+    reveal,
     scope,
     onToggleHidden,
     onLeaveSolo,
@@ -87,6 +88,15 @@
      * to true while already true is not a change for an effect to see.
      */
     focusFilter: number;
+    /**
+     * A section the window wants brought into view, and a counter saying how often.
+     *
+     * The rail asks for this: its icons open the panel at one section, and on a repository
+     * with a long branch list the section asked for is often below the fold. A counter for
+     * the same reason `focusFilter` is one — asking twice for the same section has to work
+     * twice.
+     */
+    reveal: { key: string; tick: number };
     /**
      * Which refs the graph is walked from, by full name.
      *
@@ -162,6 +172,15 @@
     focusedAt = focusFilter;
     filterField?.focus();
     filterField?.select();
+  });
+
+  let panel = $state<HTMLElement | null>(null);
+  let revealedAt = 0;
+  $effect(() => {
+    if (reveal.tick === revealedAt) return;
+    revealedAt = reveal.tick;
+    const at = panel?.querySelector(`section[data-section="${reveal.key}"]`);
+    at?.scrollIntoView?.({ block: 'nearest' });
   });
   /**
    * Sections rendered in full, by key.
@@ -329,7 +348,7 @@
   </li>
 {/snippet}
 
-<aside>
+<aside bind:this={panel}>
   <!--
     Solo is a mode, and a mode the graph does not otherwise announce: the window would simply
     be missing most of its commits, with nothing anywhere saying why or how to get them back.
@@ -377,7 +396,7 @@
   </div>
 
   {#each above as section (section.key)}
-    <section>
+    <section data-section="{section.key}">
       <button class="head" onclick={() => onCollapse(section.key, !collapsed[section.key])}>
         <span class="caret">
           <Icon name={collapsed[section.key] ? 'chevronRight' : 'chevronDown'} size={13} />
@@ -427,7 +446,7 @@
     Remotes carry their own row, because a remote is a thing with a URL that can be edited,
     renamed and removed — not merely a prefix on a branch name.
   -->
-  <section>
+  <section data-section="remote">
     <div class="row head-row" oncontextmenu={(e) => onRemoteMenu(e, null)} role="presentation">
       <button
         class="head"
@@ -499,7 +518,7 @@
     menu: applying one, popping it and dropping it are three different things and only one of
     them can be undone.
   -->
-  <section>
+  <section data-section="stashes">
     <button class="head" onclick={() => onCollapse('stashes', !collapsed['stashes'])}>
       <span class="caret">
           <Icon name={collapsed['stashes'] ? 'chevronRight' : 'chevronDown'} size={13} />
@@ -541,7 +560,7 @@
   </section>
 
   {#each below as section (section.key)}
-    <section>
+    <section data-section="{section.key}">
       <button class="head" onclick={() => onCollapse(section.key, !collapsed[section.key])}>
         <span class="caret">
           <Icon name={collapsed[section.key] ? 'chevronRight' : 'chevronDown'} size={13} />
@@ -568,7 +587,7 @@
   {/each}
 
   {#if pullRequests.length > 0}
-    <section>
+    <section data-section="prs">
       <button class="head" onclick={() => onCollapse('prs', !collapsed['prs'])}>
         <span class="caret">
           <Icon name={collapsed['prs'] ? 'chevronRight' : 'chevronDown'} size={13} />
@@ -598,7 +617,7 @@
   {/if}
 
   {#if submodules.length > 0}
-    <section>
+    <section data-section="submodules">
       <button class="head" onclick={() => onCollapse('submodules', !collapsed['submodules'])}>
         <span class="caret">
           <Icon name={collapsed['submodules'] ? 'chevronRight' : 'chevronDown'} size={13} />

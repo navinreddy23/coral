@@ -114,7 +114,7 @@ export const BINDINGS: Binding[] = [
     context: 'global', match: (e) => e.ctrl && !e.shift && is(e, 'Tab') },
   { id: 'tab.previous', label: 'Previous tab', keys: 'Ctrl Shift Tab', group: 'UI',
     context: 'global', match: (e) => e.ctrl && e.shift && is(e, 'Tab') },
-  { id: 'panel.left', label: 'Toggle left panel', keys: 'Ctrl \\', group: 'UI',
+  { id: 'panel.left', label: 'Left panel: open, minimised, gone', keys: 'Ctrl \\', group: 'UI',
     context: 'global', match: (e) => primary(e) && is(e, '\\') },
   { id: 'panel.detail', label: 'Toggle right panel', keys: 'Ctrl K', group: 'UI',
     context: 'global', match: (e) => primary(e) && !e.shift && is(e, 'k') },

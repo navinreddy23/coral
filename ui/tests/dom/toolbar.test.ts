@@ -17,7 +17,7 @@ function bar(overrides: Record<string, unknown> = {}) {
       busy: false,
       comparing: false,
       terminalOpen: false,
-      leftPanel: true,
+      leftPanel: 'open',
       rightPanel: true,
       rightPanelUsable: true,
       onAction: vi.fn(),
@@ -122,7 +122,7 @@ describe('the toolbar', () => {
     // The glyph carries the state, not a lit button: both panels are showing in the state the
     // window ships in, so lighting them would mean a toolbar that glows for no reason.
     const shown = bar().container;
-    const hidden = bar({ leftPanel: false, rightPanel: false }).container;
+    const hidden = bar({ leftPanel: 'hidden', rightPanel: false }).container;
     const strips = (root: HTMLElement, label: string) =>
       root.querySelector(`[aria-label="${label}"] svg`)?.querySelectorAll('path[fill]').length ?? 0;
 
@@ -132,9 +132,27 @@ describe('the toolbar', () => {
     expect(strips(hidden, 'Right panel')).toBe(0);
   });
 
+  it('draws the left panel minimised as its own thing, not as either of the other two', () => {
+    // Three states behind one button, so the glyph is the only thing saying which one it is at.
+    const drawn = (state: string) => {
+      const svg = bar({ leftPanel: state }).container.querySelector('[aria-label="Left panel"] svg');
+      return svg?.innerHTML ?? '';
+    };
+    const [open, rail, hidden] = [drawn('open'), drawn('rail'), drawn('hidden')];
+    expect(new Set([open, rail, hidden]).size, 'three states, three glyphs').toBe(3);
+
+    const dots = (state: string) =>
+      bar({ leftPanel: state }).container.querySelectorAll('[aria-label="Left panel"] svg circle').length;
+    // Minimised is the panel with its section icons still in it, which is what the rail is. A
+    // thinner version of the open panel's filled strip could not be told from it at 17px.
+    expect(dots('rail'), 'the section icons are in the column').toBeGreaterThan(1);
+    expect(dots('open')).toBe(0);
+    expect(dots('hidden')).toBe(0);
+  });
+
   it('tells a screen reader whether each panel is showing', () => {
     const shown = bar().container;
-    const hidden = bar({ leftPanel: false, rightPanel: false }).container;
+    const hidden = bar({ leftPanel: 'hidden', rightPanel: false }).container;
     const pressed = (root: HTMLElement, label: string) =>
       root.querySelector(`[aria-label="${label}"]`)?.getAttribute('aria-pressed');
 
@@ -150,8 +168,12 @@ describe('the toolbar', () => {
     const title = (root: HTMLElement, label: string) =>
       root.querySelector(`[aria-label="${label}"]`)?.getAttribute('title') ?? '';
 
-    expect(title(bar().container, 'Left panel')).toMatch(/^Hide the left panel/);
-    expect(title(bar({ leftPanel: false }).container, 'Left panel')).toMatch(/^Show the left panel/);
+    // The left panel has three states, so its button is a cycle: open minimises, minimised
+    // hides, hidden opens. Three presses come back to where they started.
+    expect(title(bar().container, 'Left panel')).toMatch(/^Minimise the left panel/);
+    expect(title(bar({ leftPanel: 'rail' }).container, 'Left panel')).toMatch(/^Hide the left panel/);
+    expect(title(bar({ leftPanel: 'hidden' }).container, 'Left panel')).toMatch(/^Show the left panel/);
+    expect(title(bar().container, 'Right panel')).toMatch(/^Hide the right panel/);
     expect(title(bar().container, 'Left panel')).toContain('(Ctrl \\)');
     expect(title(bar().container, 'Right panel')).toContain('(Ctrl K)');
   });

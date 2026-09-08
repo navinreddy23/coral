@@ -448,6 +448,46 @@ describe('the shell', () => {
     expect(container.querySelector('aside.wip-panel')).toBeNull();
   });
 
+  it('cycles the left panel from open, to a rail, to gone, and back', async () => {
+    // The owner asked for hide or minimise. Three states behind one button, so what matters is
+    // that a press always changes something and three of them come back to the start.
+    const { container } = await shell();
+    const press = async () => {
+      const button = container.querySelector('[aria-label="Left panel"]') as HTMLButtonElement;
+      await fireEvent.click(button);
+    };
+    const showing = () => ({
+      panel: container.querySelector('aside .viewing') !== null,
+      rail: container.querySelector('nav.rail') !== null,
+    });
+
+    expect(showing(), 'the window opens with the panel out').toEqual({ panel: true, rail: false });
+    await press();
+    expect(showing(), 'minimised to the rail').toEqual({ panel: false, rail: true });
+    await press();
+    expect(showing(), 'gone').toEqual({ panel: false, rail: false });
+    await press();
+    expect(showing(), 'and back').toEqual({ panel: true, rail: false });
+  });
+
+  it('opens the panel at the section a rail icon stands for', async () => {
+    // A rail icon that opened the panel onto a collapsed heading would be a click that
+    // appeared not to work. Tags ship collapsed, so this is the one that shows it.
+    const { container } = await shell();
+    await fireEvent.click(container.querySelector('[aria-label="Left panel"]') as HTMLButtonElement);
+    await waitFor(() => {
+      if (!container.querySelector('nav.rail')) throw new Error('no rail yet');
+    });
+
+    await fireEvent.click(container.querySelector('nav.rail [aria-label="Tags"]') as HTMLElement);
+    await waitFor(() => {
+      if (!container.querySelector('aside')) throw new Error('the panel is not back');
+    });
+    const tags = container.querySelector('section[data-section="tags"]') as HTMLElement;
+    expect(tags, 'the section is in the panel').not.toBeNull();
+    expect(tags.querySelector('ul'), 'and open, not still collapsed').not.toBeNull();
+  });
+
   it('sticks the working copy row to the top of the list rather than below it', async () => {
     // Sticky moves the element and nothing else, so an offset here leaves the first commit
     // where it was and drops the working copy row on top of it. It was held 22px clear for a

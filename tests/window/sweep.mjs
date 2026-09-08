@@ -64,6 +64,11 @@ const STOPS = [
       await b.press('.head', 3);
     },
   },
+  {
+    name: 'rail',
+    at: APP,
+    go: (b) => b.press('[aria-label="Left panel"]', 0),
+  },
   { name: 'gallery', at: GALLERY, go: async () => {} },
 ];
 
@@ -75,8 +80,11 @@ try {
       // Set through the same storage key the window reads, then reloaded, because the theme is
       // applied once on construction.
       await browser.go(stop.at);
+      // The view choices are remembered, so a stop that folds a panel away would fold it away
+      // for every stop after it. Each starts from the state the window ships in.
       await browser.eval(
-        `localStorage.setItem('coral.theme', ${JSON.stringify(theme)}); true`,
+        `localStorage.setItem('coral.theme', ${JSON.stringify(theme)});` +
+        `localStorage.removeItem('coral.views'); true`,
       );
       await browser.go(stop.at === GALLERY ? `${GALLERY}?theme=${theme}` : stop.at);
 
