@@ -200,7 +200,8 @@
           Skip commit
         </button>
       {/if}
-      <button disabled={merge.busy} onclick={abort}>Abort</button>
+      <!-- The one control here that throws work away, so it says so under the pointer. -->
+      <button class="abort" disabled={merge.busy} onclick={abort}>Abort</button>
     {:else}
       <span class="muted">Resolve each file, then commit as usual.</span>
     {/if}
@@ -419,7 +420,9 @@
     border-bottom: 1px solid var(--border); background: var(--bg-1); font-size: var(--text-base);
   }
   .spacer { flex: 1; }
-  .warn { color: var(--danger); font-size: var(--text-sm); }
+  /* Amber, not red: nothing has gone wrong, and this is the sentence that stops somebody
+     taking the wrong side of a rebase. */
+  .warn { color: var(--warn); font-size: var(--text-sm); font-weight: 600; }
   button {
     font: inherit; font-size: var(--text-sm); cursor: pointer; padding: 2px var(--space-2);
     background: var(--bg-0); border: 1px solid var(--border); border-radius: 3px;
@@ -482,12 +485,20 @@
   }
   .pane .head .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pane .head button { font-size: var(--text-xs); flex: 0 0 auto; }
+  /*
+   * The letter that names a side, filled from the node palette rather than the lane one.
+   *
+   * The lane colours are light in the dark theme, so a white letter on the dark `--lane-3`
+   * would be 1.5:1. The node colours are dark in both themes for exactly this reason — they
+   * are what the initials inside a commit node sit on — so one white letter works in both.
+   * The tint behind the lines below stays the lane colour, which is the light one.
+   */
   .pane .tag {
     display: inline-block; width: 15px; text-align: center; border-radius: 3px;
-    font-size: var(--text-xs); font-weight: 700; color: var(--accent-fg);
+    font-size: var(--text-xs); font-weight: 700; color: #ffffff;
   }
-  .pane.ours .tag { background: var(--lane-7); }
-  .pane.theirs .tag { background: var(--lane-3); }
+  .pane.ours .tag { background: var(--node-7); }
+  .pane.theirs .tag { background: var(--node-3); }
 
   .result { flex: 1; min-height: 0; display: flex; background: var(--bg-0); }
   .output { flex: 2 1 0; display: flex; flex-direction: column; min-height: 0; }
@@ -509,7 +520,13 @@
     max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .muted { color: var(--fg-2); padding: var(--space-3); font-size: var(--text-base); }
-  .error { color: var(--danger); padding: var(--space-2) var(--space-3); font-size: var(--text-base); margin: 0; }
+  .abort:hover:not(:disabled) {
+    background: var(--danger-soft); border-color: var(--danger); color: var(--danger);
+  }
+  .error {
+    color: var(--danger); padding: var(--space-2) var(--space-3);
+    font-size: var(--text-base); margin: 0;
+  }
   .stopped {
     margin: 0; padding: var(--space-2) var(--space-3); font-size: var(--text-sm);
     color: var(--warn); background: var(--warn-soft);

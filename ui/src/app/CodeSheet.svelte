@@ -110,7 +110,7 @@
     flex: 0 0 var(--gutter); box-sizing: border-box;
     padding: 0 var(--space-2) 0 var(--space-3);
     text-align: right; color: var(--fg-2);
-    background: var(--bg-2); border-right: 1px solid var(--border-strong);
+    background: var(--bg-2); border-right: 1px solid var(--border);
     font-variant-numeric: tabular-nums; user-select: none;
   }
   /* The tick sits in the gutter with the number, so the strip reads as one thing. */

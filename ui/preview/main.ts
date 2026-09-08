@@ -21,12 +21,20 @@ import Ask from '../src/app/Ask.svelte';
 import Preferences from '../src/app/Preferences.svelte';
 import TabBar from '../src/app/TabBar.svelte';
 import { TabsState } from '../src/state/tabs.svelte';
+import { ThemeState } from '../src/state/theme.svelte';
+import { ViewsState } from '../src/state/views.svelte';
+import { ExperimentalState } from '../src/state/experimental.svelte';
+import { ProfilesState } from '../src/state/profiles.svelte';
 import { SigningState } from '../src/state/signing.svelte';
+import { SshState } from '../src/state/ssh.svelte';
 import { DiffState } from '../src/state/diff.svelte';
 import { MergeState } from '../src/state/merge.svelte';
 import { RebaseState } from '../src/state/rebase.svelte';
 import { preview } from '../src/ipc/preview';
 import type { CommitDetail, FileDiff } from '../src/ipc/types';
+
+/** The same repository the fixture engine answers about, so the panels agree. */
+const REPO = '/home/dev/projects/coral';
 
 const root = document.getElementById('gallery');
 if (!root) throw new Error('#gallery is missing');
@@ -62,31 +70,49 @@ root.style.cssText = 'padding: 20px; background: var(--bg-1); min-height: 100%;'
 
 // The commit panel, with a real commit and its files.
 const detail = preview('commit_detail', { rev: 'abc' }) as CommitDetail;
+/** What every commit panel here shares, so a new prop is added in one place. */
+const commitPanel = {
+  detail,
+  repo: REPO,
+  compare: null,
+  nothing: false,
+  loading: false,
+  error: null,
+  onClearCompare: () => {},
+  onOpenFile: () => {},
+  onGrouping: () => {},
+  onCopied: () => {},
+};
 mount(Details, {
   target: panel('Commit panel — path grouping', '360px'),
-  props: { detail, loading: false, error: null, openPath: null, onOpenFile: () => {} },
+  props: { ...commitPanel, openPath: null, grouping: 'path' as const },
 });
 mount(Details, {
   target: panel('Commit panel — tree grouping, a file open', '360px'),
-  props: {
-    detail,
-    loading: false,
-    error: null,
-    openPath: 'ui/src/graph/render.ts',
-    onOpenFile: () => {},
-  },
+  props: { ...commitPanel, openPath: 'ui/src/graph/render.ts', grouping: 'tree' as const },
 });
 
-const inline = new DiffState();
+/*
+ * The diff reads its layout out of the remembered view preferences rather than holding its
+ * own, so each of these needs a `ViewsState` — and the two panels need different ones, since
+ * inline and side by side is exactly the preference they differ on.
+ */
+const inlineViews = new ViewsState();
+inlineViews.set('diff', 'inline');
+const inline = new DiffState(inlineViews);
 inline.path = 'ui/src/graph/render.ts';
 inline.file = preview('file_diff', {}) as FileDiff;
-mount(DiffView, { target: panel('Diff — inline', '260px'), props: { diff: inline, onClose: () => {} } });
+mount(DiffView, { target: panel('Diff — inline', '260px'), props: { diff: inline, onClose: () => {}, onPart: () => {} } });
 
-const split = new DiffState();
+const splitViews = new ViewsState();
+splitViews.set('diff', 'split');
+const split = new DiffState(splitViews);
 split.path = 'ui/src/graph/render.ts';
 split.file = preview('file_diff', {}) as FileDiff;
-split.mode = 'split';
-mount(DiffView, { target: panel('Diff — side by side', '260px'), props: { diff: split, onClose: () => {} } });
+mount(DiffView, {
+  target: panel('Diff — side by side', '260px'),
+  props: { diff: split, onClose: () => {}, onPart: () => {} },
+});
 
 const merge = new MergeState();
 merge.operation = {
@@ -96,6 +122,8 @@ merge.operation = {
   headName: 'graph-lanes',
   stoppedAt: null,
   interactive: true,
+  resumable: true,
+  applying: false,
 };
 merge.files = [
   { path: 'ui/src/graph/render.ts', kind: 'both_modified', binary: false, deleteModify: false },
@@ -149,16 +177,26 @@ mount(Palette, {
 const tabs = new TabsState();
 tabs.session = {
   tabs: [
-    { id: 1, path: '/repos/coral', group: 5, missing: false },
-    { id: 2, path: '/repos/linux', group: 5, missing: false },
-    { id: 3, path: '/repos/notes', group: null, missing: false },
-    { id: 4, path: '/repos/zephyr', group: null, missing: false },
+    { id: 1, path: '/repos/coral', submodule: null, group: 5, missing: false },
+    { id: 2, path: '/repos/linux', submodule: null, group: 5, missing: false },
+    { id: 3, path: '/repos/notes', submodule: null, group: null, missing: false },
+    { id: 4, path: '/repos/zephyr', submodule: null, group: null, missing: false },
   ],
   groups: [{ id: 5, name: 'work', colour: 'lane1', collapsed: false }],
   active: 1,
 };
 const barTarget = panel('Tab bar — dragging a loose tab onto a group', '70px');
-mount(TabBar, { target: barTarget, props: { tabs, onOpen: () => {} } });
+mount(TabBar, {
+  target: barTarget,
+  props: {
+    tabs,
+    newTab: false,
+    onOpen: () => {},
+    onCloseNew: () => {},
+    onPick: () => {},
+    onAsk: async () => null,
+  },
+});
 queueMicrotask(() => {
   const chips = [...barTarget.querySelectorAll('.tab')] as HTMLElement[];
   const band = barTarget.querySelector('.band');
@@ -203,7 +241,7 @@ signing.keys = [
   {
     id: '0633C12121B1A10FADE103E39E9BC1B3B7C4AA29',
     label: 'Navin Reddy <navin@work.example>',
-    expires: 1_851_575_560,
+    expires: 1_851_575_560n,
     expired: false,
   },
   {
@@ -215,13 +253,30 @@ signing.keys = [
   {
     id: 'BBBB111122223333444455556666777788889999',
     label: 'Old Laptop <old@personal.example>',
-    expires: 1_600_000_000,
+    expires: 1_600_000_000n,
     expired: true,
   },
 ];
 mount(Preferences, {
   target: panel('Preferences — commit signing, overridden by this repository', '560px'),
-  props: { signing, onClose: () => {} },
+  props: {
+    signing,
+    ssh: new SshState(),
+    experimental: new ExperimentalState(),
+    profiles: new ProfilesState(),
+    theme: new ThemeState(),
+    views: new ViewsState(),
+    identity: null,
+    pane: 'signing',
+    repository: REPO,
+    hasRepository: true,
+    onClose: () => {},
+    onCopied: () => {},
+    onPickGit: () => {},
+    onSwitchProfile: () => {},
+    onDeleteProfile: () => {},
+    onApplyProfileHere: () => {},
+  },
 });
 
 mount(Ask, {

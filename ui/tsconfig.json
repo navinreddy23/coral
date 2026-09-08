@@ -21,7 +21,8 @@
   "include": [
     "src/**/*.ts",
     "src/**/*.svelte",
+    "src/**/*.d.ts",
     "vite.config.ts",
-    "src/**/*.d.ts"
+    "preview/**/*.ts"
   ]
 }
