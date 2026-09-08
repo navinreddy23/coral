@@ -25,6 +25,7 @@ function operation(swapped = false): Operation {
     stoppedAt: null,
     interactive: false,
     resumable: true,
+    applying: false,
   };
 }
 
@@ -122,6 +123,7 @@ describe('the merge tool', () => {
       stoppedAt: null,
       interactive: false,
       resumable: true,
+      applying: false,
     };
     const { container } = render(MergeTool, { props: { merge, onDone: noop } });
 
@@ -214,7 +216,9 @@ describe('picking in the merge tool', () => {
 
   /** The checkboxes of one pane, in file order. */
   function ticks(container: HTMLElement, side: 'ours' | 'theirs'): HTMLInputElement[] {
-    return [...container.querySelectorAll(`.pane.${side} input[type="checkbox"]`)];
+    return [...container.querySelectorAll<HTMLInputElement>(
+      `.pane.${side} input[type="checkbox"]`,
+    )];
   }
 
   function resultText(container: HTMLElement): string {

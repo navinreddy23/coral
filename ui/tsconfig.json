@@ -23,6 +23,7 @@
     "src/**/*.svelte",
     "src/**/*.d.ts",
     "vite.config.ts",
-    "preview/**/*.ts"
+    "preview/**/*.ts",
+    "tests/**/*.ts"
   ]
 }

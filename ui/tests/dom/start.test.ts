@@ -62,6 +62,7 @@ async function page(over: Record<string, unknown> = {}, directory = '/home/someo
       onClose: null,
       sshKeys: KEYS,
       defaultSshKey: '',
+      onConfirm: async () => true,
     },
   });
   await start.load();

@@ -51,7 +51,7 @@ function mounted(mode: 'inline' | 'split') {
   diff.path = 'kernel/sched/core.c';
   diff.file = fileDiff();
   diff.setMode(mode);
-  return render(DiffView, { props: { diff, onClose: () => {} } });
+  return render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
 }
 
 describe('the diff viewer', () => {
@@ -96,7 +96,7 @@ describe('the diff viewer', () => {
       path: 'big.txt',
       hunks: [{ header: '@@', oldStart: 1, oldLines: 4000, newStart: 1, newLines: 4000, lines }],
     };
-    const { container } = render(DiffView, { props: { diff, onClose: () => {} } });
+    const { container } = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
 
     const drawn = container.querySelectorAll('.line').length;
     expect(drawn).toBeGreaterThan(0);
@@ -122,7 +122,7 @@ describe('the diff viewer', () => {
     const diff = new DiffState(new ViewsState());
     diff.path = 'logo.png';
     diff.file = { ...fileDiff(), path: 'logo.png', binary: true, hunks: [], added: null, removed: null };
-    const { container } = render(DiffView, { props: { diff, onClose: () => {} } });
+    const { container } = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
     expect(container.textContent).toContain('Binary file');
     expect(container.querySelector('table')).toBeNull();
   });
@@ -131,7 +131,7 @@ describe('the diff viewer', () => {
     const diff = new DiffState(new ViewsState());
     diff.path = 'gone.c';
     diff.error = 'This commit did not change that file.';
-    const { container } = render(DiffView, { props: { diff, onClose: () => {} } });
+    const { container } = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
     expect(container.querySelector('.error')?.textContent).toContain('did not change');
   });
 });
@@ -154,14 +154,14 @@ describe('a comparison of two commits', () => {
     // one, and the panel used to show a file's history beside the range's diff.
     const diff = compared();
     expect(diff.view).toBe('diff');
-    const { container } = render(DiffView, { props: { diff, onClose: () => {} } });
+    const { container } = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
     expect(container.querySelector('table.lines')).not.toBeNull();
     expect(container.querySelector('table.lines.blame')).toBeNull();
   });
 
   it('offers no blame or history tab for it', () => {
     const { container } = render(DiffView, {
-      props: { diff: compared(), onClose: () => {} },
+      props: { diff: compared(), onClose: () => {}, onPart: () => {} },
     });
     const labels = [...container.querySelectorAll('header button')].map((b) => b.textContent?.trim());
     expect(labels).not.toContain('Blame');
@@ -189,7 +189,7 @@ describe('the side-by-side layout', () => {
     diff.setMode('split');
     diff.path = 'kernel/sched/core.c';
     diff.file = fileDiff();
-    const { container } = render(DiffView, { props: { diff, onClose: () => {} } });
+    const { container } = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
 
     const line = container.querySelector('.line') as HTMLElement;
     const columns = getComputedStyle(line).gridTemplateColumns;
@@ -232,7 +232,7 @@ describe('reading a change in its surroundings', () => {
       ...fileDiff(),
       hunks: [{ header: '@@', oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: [line('context', 'same', 1, 1)] }],
     };
-    const { container } = render(DiffView, { props: { diff, onClose: () => {} } });
+    const { container } = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
     const steps = [...container.querySelectorAll('.steps button')] as HTMLButtonElement[];
     expect(steps.every((b) => b.disabled)).toBe(true);
   });

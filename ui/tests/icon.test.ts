@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { ICONS, strokeFor, type IconName } from '../src/app/icon';
+import { ICONS, strokeFor, type Glyph, type IconName } from '../src/app/icon';
 
 /**
  * The icon set, held to the conventions it is drawn on.
@@ -21,7 +21,7 @@ function coordinates(d: string): number[] {
 describe('the icon set', () => {
   it('draws something for every name it offers', () => {
     for (const name of NAMES) {
-      const glyph = ICONS[name];
+      const glyph: Glyph = ICONS[name];
       const drawn = (glyph.paths?.length ?? 0) + (glyph.solid?.length ?? 0)
         + (glyph.dots?.length ?? 0);
       expect(drawn, `${name} draws nothing`).toBeGreaterThan(0);
@@ -32,7 +32,7 @@ describe('the icon set', () => {
     // Arc flags and a few sweep parameters are bare 0s and 1s, so this catches a coordinate
     // that has run off the grid rather than proving every number is a position.
     for (const name of NAMES) {
-      const glyph = ICONS[name];
+      const glyph: Glyph = ICONS[name];
       for (const d of [...(glyph.paths ?? []), ...(glyph.solid ?? [])]) {
         for (const value of coordinates(d)) {
           expect(value, `${name} has ${value} in "${d.slice(0, 30)}…"`).toBeGreaterThanOrEqual(-24);

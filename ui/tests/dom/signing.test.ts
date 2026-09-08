@@ -21,9 +21,9 @@ const PERSONAL = 'AAAA111122223333444455556666777788889999';
 const OLD = 'BBBB111122223333444455556666777788889999';
 
 const KEYS: SigningKey[] = [
-  { id: WORK, label: 'Navin <navin@work.example>', expires: 4_000_000_000, expired: false },
-  { id: PERSONAL, label: 'Navin <navin@home.example>', expires: null, expired: false },
-  { id: OLD, label: 'Old Laptop <old@home.example>', expires: 1_600_000_000, expired: true },
+  { id: WORK, label: 'Ada Lovelace <ada@work.example>', expires: 4_000_000_000n, expired: false },
+  { id: PERSONAL, label: 'Ada Lovelace <ada@home.example>', expires: null, expired: false },
+  { id: OLD, label: 'Old Laptop <old@home.example>', expires: 1_600_000_000n, expired: true },
 ];
 
 /** The app level sets a personal key and no signing; nothing overridden yet. */

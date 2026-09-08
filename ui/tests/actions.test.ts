@@ -17,7 +17,7 @@ describe('running an action', () => {
   it('reports what it did', async () => {
     invoke.mockResolvedValue({ what: 'merge side', conflicted: false, message: '' });
     const actions = new ActionsState();
-    await actions.run('/repo', { kind: 'merge', rev: 'side' });
+    await actions.run('/repo', { kind: 'merge', rev: 'side', mode: 'auto' });
     expect(actions.report).toEqual({ text: 'merge side complete', tone: 'ok' });
     expect(actions.busy).toBe(false);
   });
@@ -25,7 +25,7 @@ describe('running an action', () => {
   it('says so when the operation stopped on conflicts', async () => {
     invoke.mockResolvedValue({ what: 'merge side', conflicted: true, message: '' });
     const actions = new ActionsState();
-    await actions.run('/repo', { kind: 'merge', rev: 'side' });
+    await actions.run('/repo', { kind: 'merge', rev: 'side', mode: 'auto' });
     expect(actions.report).toEqual({ text: 'merge side stopped on conflicts', tone: 'warn' });
   });
 

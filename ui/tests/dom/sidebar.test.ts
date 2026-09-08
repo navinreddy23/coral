@@ -79,6 +79,7 @@ function mount(over: Record<string, unknown> = {}) {
       onLeaveSolo: () => {},
       onShowEverything: () => {},
       onSelectRef: () => {},
+      focusFilter: 0,
       ...over,
     },
   });

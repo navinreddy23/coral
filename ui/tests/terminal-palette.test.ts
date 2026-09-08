@@ -27,7 +27,7 @@ function wanted(): Map<string, string> {
   const pairs = new Map<string, string>();
   for (const line of (block?.[1] ?? '').split('\n')) {
     const m = /^\s*([A-Za-z]+):\s*'(--[a-z0-9-]+)'/.exec(line);
-    if (m) pairs.set(m[1], m[2]);
+    if (m?.[1] && m[2]) pairs.set(m[1], m[2]);
   }
   return pairs;
 }
@@ -45,7 +45,9 @@ function definedIn(theme: 'light' | 'dark'): Set<string> {
   const from = (at?.index ?? 0) + (at?.[0].length ?? 0);
   const to = tokens.indexOf('\n}', from);
   const block = tokens.slice(from, to);
-  const names = [...block.matchAll(/^\s*(--[a-z0-9-]+):/gm)].map((m) => m[1]);
+  const names = [...block.matchAll(/^\s*(--[a-z0-9-]+):/gm)]
+    .map((m) => m[1])
+    .filter((n): n is string => n !== undefined);
   return theme === 'dark' ? new Set([...definedIn('light'), ...names]) : new Set(names);
 }
 

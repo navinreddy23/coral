@@ -130,7 +130,6 @@ describe('picking sides region by region', () => {
   function opened() {
     const merge = new MergeState();
     merge.blocks = {
-      path: 'f.txt',
       blocks: [
         common('top'),
         conflict(['mine'], ['yours']),
@@ -156,7 +155,6 @@ describe('picking sides region by region', () => {
   it('takes a single line, leaving the rest of that side out', () => {
     const merge = new MergeState();
     merge.blocks = {
-      path: 'f.txt',
       blocks: [conflict(['mine one', 'mine two'], ['yours one', 'yours two'])],
     };
     merge.toggleLine(0, 'theirs', 1);
@@ -207,6 +205,7 @@ describe('picking sides region by region', () => {
       stoppedAt: null,
       interactive: false,
       resumable: true,
+      applying: false,
     });
     vi.spyOn(commands, 'repoConflicts').mockResolvedValue([]);
 
@@ -240,6 +239,7 @@ describe('arriving at a stopped operation', () => {
       stoppedAt: null,
       interactive: false,
       resumable: true,
+      applying: false,
     });
     vi.spyOn(commands, 'repoConflicts').mockResolvedValue(files as never);
     vi.spyOn(commands, 'conflictBlocks').mockImplementation(async (_p, file) => ({
@@ -319,6 +319,7 @@ describe('stepping an operation on', () => {
       stoppedAt: null,
       interactive: false,
       resumable: true,
+      applying: false,
     });
     vi.spyOn(commands, 'repoConflicts').mockResolvedValue([
       { path: 'dummy.txt', kind: 'both_modified', binary: false, deleteModify: false },

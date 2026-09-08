@@ -27,7 +27,19 @@ function detail(files: ChangedFile[] = []): CommitDetail {
   };
 }
 
-const props = { loading: false, error: null, openPath: null, onOpenFile: () => {} };
+const props = {
+  repo: '/repo',
+  compare: null,
+  nothing: false,
+  loading: false,
+  error: null,
+  openPath: null,
+  grouping: 'path' as const,
+  onGrouping: () => {},
+  onOpenFile: () => {},
+  onClearCompare: () => {},
+  onCopied: () => {},
+};
 
 describe('the commit panel', () => {
   it('gives each term exactly one description', () => {

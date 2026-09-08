@@ -46,7 +46,7 @@ describe('remembered view choices', () => {
     );
     const views = new ViewsState();
     expect(views.current.diff).toBe('inline');
-    expect(views.current.changes).toBe('tree', 'a value that is still valid is kept');
+    expect(views.current.changes, 'a value that is still valid is kept').toBe('tree');
     expect(views.current.sidebar).toBe(true);
   });
 

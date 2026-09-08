@@ -13,12 +13,12 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn() }));
 
 import TabBar from '../../src/app/TabBar.svelte';
-import { TabsState } from '../../src/state/tabs.svelte';
+import { TabsState, type Session } from '../../src/state/tabs.svelte';
 
 const GROUP = 7;
 
 /** Two tabs in a group called "work", and one loose. */
-function session() {
+function session(): Session {
   return {
     tabs: [
       { id: 1, path: '/repos/alpha', submodule: null, group: GROUP, missing: false },
@@ -39,7 +39,9 @@ function bar() {
     tabs,
     onAsk,
     onPick,
-    ...render(TabBar, { props: { tabs, onOpen: () => {}, onAsk, onPick } }),
+    ...render(TabBar, {
+      props: { tabs, onOpen: () => {}, onCloseNew: () => {}, newTab: false, onAsk, onPick },
+    }),
   };
 }
 
@@ -395,9 +397,18 @@ describe('a collapsed group', () => {
   it('shows how many tabs it is hiding, on the chip itself', () => {
     const tabs = new TabsState();
     const s = session();
-    s.groups[0].collapsed = true;
+    s.groups = s.groups.map((g) => ({ ...g, collapsed: true }));
     tabs.session = s;
-    const { container } = render(TabBar, { props: { tabs, onOpen: () => {}, onAsk: vi.fn() } });
+    const { container } = render(TabBar, {
+      props: {
+        tabs,
+        onOpen: () => {},
+        onCloseNew: () => {},
+        newTab: false,
+        onAsk: vi.fn(),
+        onPick: () => {},
+      },
+    });
 
     const tally = container.querySelector('.group .tally');
     expect(tally?.textContent?.trim()).toBe('2');
@@ -438,7 +449,7 @@ describe('a strip with more tabs than fit', () => {
     expect(add, 'the plus is in the strip with the tabs').not.toBeNull();
 
     const tabs = [...nav.querySelectorAll('.tab')];
-    const last = tabs[tabs.length - 1];
+    const last = tabs[tabs.length - 1] as Element;
     expect(
       last.compareDocumentPosition(add as Node) & Node.DOCUMENT_POSITION_FOLLOWING,
       'and after the last of them',

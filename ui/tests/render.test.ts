@@ -176,7 +176,9 @@ describe('drawLanes', () => {
     const rows = 200;
     const frame = longRunFrame(rows, 5);
     // Three more long-lived branches running alongside, as a busy repository has.
-    for (let row = 1; row < rows; row++) frame.open[row] |= (1 << 2) | (1 << 6) | (1 << 9);
+    for (let row = 1; row < rows; row++) {
+      frame.open[row] = (frame.open[row] ?? 0) | (1 << 2) | (1 << 6) | (1 << 9);
+    }
 
     const window: Window = { first: 80, last: 100 };
     const { ctx, segments } = recorder();
@@ -195,7 +197,9 @@ describe('drawLanes', () => {
     const frame = longRunFrame(rows, 4);
     // Lane 4 is consumed at row 50: from there down nothing enters it.
     frame.lanes[50] = 4;
-    for (let row = 51; row < rows; row++) frame.open[row] &= ~(1 << 4);
+    for (let row = 51; row < rows; row++) {
+      frame.open[row] = (frame.open[row] ?? 0) & ~(1 << 4);
+    }
 
     const window: Window = { first: 40, last: 60 };
     const { ctx, segments } = recorder();

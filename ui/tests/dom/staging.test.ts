@@ -24,6 +24,7 @@ function entry(path: string, over: Partial<StatusEntry> = {}): StatusEntry {
     conflict: null,
     score: null,
     submodule: false,
+    modeChanged: false,
     ...over,
   };
 }
@@ -65,6 +66,8 @@ async function panel(over: Record<string, unknown> = {}) {
         openPath: null,
         grouping: 'tree',
         onGrouping: () => {},
+        onDiscard: () => {},
+        onFileMenu: () => {},
         onOpenFile,
         ...over,
       },
@@ -190,6 +193,8 @@ describe('the staging panel', () => {
         openPath: null,
         grouping: 'tree',
         onGrouping: () => {},
+        onDiscard: () => {},
+        onFileMenu: () => {},
         onOpenFile: vi.fn(),
       },
     });
@@ -210,6 +215,8 @@ describe('the staging panel', () => {
         openPath: null,
         grouping: 'tree',
         onGrouping: () => {},
+        onDiscard: () => {},
+        onFileMenu: () => {},
         onOpenFile: vi.fn(),
       },
     });

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { TabsState, type Session, type Tab } from '../src/state/tabs.svelte';
 
 function tab(id: number, path: string, group: number | null = null): Tab {
-  return { id, path, group, missing: false };
+  return { id, path, submodule: null, group, missing: false };
 }
 
 function withSession(session: Session): TabsState {

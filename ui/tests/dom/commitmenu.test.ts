@@ -922,13 +922,13 @@ describe('a remote branch with a local of its own name', () => {
   }
 
   it('still offers the remote branch, though a local of that name exists elsewhere', async () => {
-    const { container } = await shell({ repo_refs: diverged }, 'origin/topic');
+    const { container } = await shell({ repo_refs: diverged }, true);
     const labels = await openMenu(container);
     expect(labels).toContain('Checkout topic');
   });
 
   it('asks rather than quietly checking out the local one', async () => {
-    const { container } = await shell({ repo_refs: diverged }, 'origin/topic');
+    const { container } = await shell({ repo_refs: diverged }, true);
     await openMenu(container);
     await fireEvent.click(itemNamed(container, 'Checkout topic'));
 
@@ -942,7 +942,7 @@ describe('a remote branch with a local of its own name', () => {
   });
 
   it('checks out the local branch as it stands, when that is the answer', async () => {
-    const { container } = await shell({ repo_refs: diverged }, 'origin/topic');
+    const { container } = await shell({ repo_refs: diverged }, true);
     await openMenu(container);
     await fireEvent.click(itemNamed(container, 'Checkout topic'));
     await answer(container, 'Checkout topic');
@@ -954,7 +954,7 @@ describe('a remote branch with a local of its own name', () => {
   });
 
   it('resets the local branch onto the remote, when that is the answer', async () => {
-    const { container } = await shell({ repo_refs: diverged }, 'origin/topic');
+    const { container } = await shell({ repo_refs: diverged }, true);
     await openMenu(container);
     await fireEvent.click(itemNamed(container, 'Checkout topic'));
     await answer(container, 'Reset topic to origin/topic');
@@ -978,7 +978,7 @@ describe('a remote branch with a local of its own name', () => {
     // A failing checkout answers with an error, and the branch must be left where it is.
     invoke.mockImplementation(async (cmd: string) => {
       if (cmd === 'repo_action') throw { code: 'git', message: 'local changes would be lost' };
-      const table = { ...answers(), repo_refs: diverged };
+      const table: Record<string, unknown> = { ...answers(), repo_refs: diverged };
       if (!(cmd in table)) throw new Error(`unstubbed command ${cmd}`);
       return table[cmd];
     });

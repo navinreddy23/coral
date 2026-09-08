@@ -132,7 +132,7 @@ describe('what the picker calls the target', () => {
     second.onto = `${long}~1`;
     second.items = [item('aaa', 'one')];
     const { container: box } = render(RebasePicker, {
-      props: { rebase: second, onStart: () => {}, onCancel: () => {} },
+      props: { rebase: second, onDone: () => {} },
     });
     const said = box.querySelector('header')?.textContent ?? '';
     expect(said).toContain('d38081e9~1');

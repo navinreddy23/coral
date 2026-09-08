@@ -16,6 +16,7 @@ import {
   RowFlag,
   widestLane,
   Section,
+  type Frame,
 } from '../src/graph/frame';
 
 /**

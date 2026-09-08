@@ -8,7 +8,7 @@ function file(path: string): ChangedFile {
 }
 
 /** The tree as indented text, which is a far easier diff to read than nested objects. */
-function render(nodes: TreeNode[], depth = 0): string {
+function render(nodes: TreeNode<ChangedFile>[], depth = 0): string {
   return nodes
     .map((n) =>
       n.kind === 'dir'
@@ -47,7 +47,7 @@ describe('buildTree', () => {
 
   it('keeps the full path on a collapsed directory, not the display name', () => {
     const tree = buildTree([file('a/b/c/one.txt')]);
-    const dir = tree[0] as TreeDir;
+    const dir = tree[0] as TreeDir<ChangedFile>;
     expect(dir.name).toBe('a/b/c');
     expect(dir.path).toBe('a/b/c');
   });
