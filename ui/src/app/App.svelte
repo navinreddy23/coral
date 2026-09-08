@@ -68,6 +68,9 @@
   import { SigningState } from '../state/signing.svelte';
   import { SshState } from '../state/ssh.svelte';
   import { elideRef } from './path';
+  import { checkoutOf, divergence, remoteOf, withoutRemote } from './refname';
+  import { orderRefs, pillChars } from './pill';
+  import { bandWidth, columnWidth, laneToken } from '../graph/column';
   import { shortAge } from './age';
   import { initialsOf } from '../graph/initials';
   import type { Action } from '../ipc/commands';
@@ -75,12 +78,9 @@
     DEFAULT_METRICS,
     metricsFor,
     firstRowFor,
-    fittedMetrics,
     isCompressed,
     maxScroll,
     GRAPH_COLUMN_PX,
-    graphWidthFor,
-    laneX,
     listTop,
     REFS_COLUMN_PX,
     rowsPerScreen,
@@ -924,7 +924,7 @@
           run: () => void goTo(ref),
         });
       } else if (ref.kind.kind === 'remote_branch') {
-        const name = trackingName(ref);
+        const name = withoutRemote(ref.short);
         // Not when the local branch of that name is on this very row and already offered
         // above: two entries that read the same and do the same is a menu nobody can answer.
         // A local of that name sitting elsewhere is a different matter — that entry is how
@@ -1396,10 +1396,6 @@
   }
 
   /** The branch name a remote-tracking ref checks out as: `origin/topic` becomes `topic`. */
-  function trackingName(ref: PlacedRef): string {
-    return ref.short.slice(ref.short.indexOf('/') + 1);
-  }
-
   /**
    * Goes to a ref, asking first when a remote branch already has a local branch of its name.
    *
@@ -1409,7 +1405,7 @@
    * GitKraken does: go to the local branch as it stands, or move it onto the remote first.
    */
   async function goTo(ref: PlacedRef) {
-    const name = trackingName(ref);
+    const name = withoutRemote(ref.short);
     if (ref.kind.kind !== 'remote_branch' || name === '') {
       await act({ kind: 'checkout', rev: ref.short });
       return;
@@ -1440,33 +1436,6 @@
   }
 
   /** How the local branch and its remote differ, in the words the reset dialog needs. */
-  function divergence(local: PlacedRef, ref: PlacedRef): string {
-    if (local.upstream === ref.short && local.ahead === 0 && local.behind > 0) {
-      const many = local.behind === 1 ? 'commit' : 'commits';
-      return (
-        `${local.short} is ${local.behind} ${many} behind ${ref.short} and has nothing of its ` +
-        'own. Resetting brings it up to date; uncommitted changes in the working copy are ' +
-        'discarded with it.'
-      );
-    }
-    return (
-      `The local ${local.short} and ${ref.short} are on different commits. Checking out goes to ` +
-      'the local branch as it stands. Resetting moves it onto the remote, and any commit only ' +
-      'the local branch reached is left with no name on it.'
-    );
-  }
-
-  /** How one ref is checked out: what to call the menu item, and what it will do. */
-  function checkoutOf(ref: PlacedRef): [string, string | undefined] {
-    if (ref.kind.kind === 'remote_branch') {
-      return [`Checkout ${trackingName(ref)}`, `tracking ${ref.short}`];
-    }
-    if (ref.kind.kind === 'tag') {
-      return [`Checkout ${ref.short}`, 'detaches HEAD'];
-    }
-    return [`Checkout ${ref.short}`, undefined];
-  }
-
   async function deleteBranch(name: string) {
     // Coral deletes with `-D`, so git's own refusal never arrives and this question is the
     // only thing between a misclick and an orphaned commit. It said the same alarming
@@ -2473,12 +2442,6 @@
     return refs.groups.remote.some((r) => r.short === name);
   }
 
-  /** The branch part of a tracking name, so `origin/main` and `main` can be compared. */
-  function withoutRemote(name: string): string {
-    const at = name.indexOf('/');
-    return at < 0 ? name : name.slice(at + 1);
-  }
-
   /**
    * A branch dropped onto another.
    *
@@ -3356,38 +3319,11 @@
    * the column has room for, and a strip measured against the shipped pitch would then start
    * somewhere in the middle of the lanes.
    */
-  const laneMetrics = $derived(
-    fittedMetrics(widestLane(graph.frame, rows), columns.graph, metrics),
-  );
-
-  /**
-   * The empty pixels on a row between its outermost lane and the commit message.
-   *
-   * The column is as wide as the widest row on screen and never narrows again, so on a linear
-   * stretch of a repository that has merge regions elsewhere this is most of the column: a
-   * corridor of nothing between a commit's node and the text about it. The lane colour fills
-   * it, which is what ties the two together.
-   *
-   * Measured per row rather than for the screen, because the row beside a thirty-lane merge
-   * has no gap at all and painting one would cover the lanes.
-   */
   function laneGap(row: number): number {
-    if (graph.frame === null || localRow(graph.frame, row) === null) return 0;
-    // To the centre of the outermost node, not past its edge: the band runs under the right
-    // half of it, which is what ties the colour to the commit rather than leaving it floating
-    // beside one. The canvas is drawn over the top, so the node stays a circle.
-    const from = laneX(widestLane(graph.frame, [row]), laneMetrics);
-    return Math.max(0, columns.graph - from);
+    return bandWidth(graph.frame, row, columns.graph, metrics, rows);
   }
 
-  const laneFit = $derived.by(() => {
-    if (rows.length === 0) return 0;
-    const want = graphWidthFor(widestLane(graph.frame, rows), metrics);
-    // Never more than a share of the pane. A merge region thirty lanes wide would otherwise
-    // take the commit message with it, and a graph beside no message is not worth the trade;
-    // past this the lanes are drawn tighter instead.
-    return Math.min(want, Math.round(paneWidth * 0.35));
-  });
+  const laneFit = $derived(columnWidth(graph.frame, rows, paneWidth, metrics));
 
   /*
    * Applied untracked, because `fitGraph` reads the width before deciding to widen it: tracked,
@@ -3399,25 +3335,11 @@
     if (px > 0) untrack(() => panes.fitGraph(px));
   });
 
-  /**
-   * The lane a row's commit sits in, as a token number.
-   *
-   * The eight lane colours repeat, so this is the lane modulo eight and matches exactly what
-   * the canvas drew for that row.
-   */
   function laneOf(row: number): number {
-    const local = localRow(graph.frame, row);
-    if (local === null || !graph.frame) return 1;
-    return ((graph.frame.lanes[local] ?? 0) % 8) + 1;
+    return laneToken(graph.frame, row);
   }
 
-  /**
-   * How many characters a ref name has room for.
-   *
-   * Derived from the column the user has dragged rather than fixed: widening the column should
-   * show more of the name, which is the only reason to widen it.
-   */
-  const refChars = $derived(Math.max(10, Math.floor((columns.refs - 62) / 5.9)));
+  const refChars = $derived(pillChars(columns.refs));
 
   /**
    * Which host a tracking branch's remote belongs to.
@@ -3426,38 +3348,9 @@
    * serves it, and a repository can have one on each host.
    */
   function hostFor(short: string): 'github' | 'gitlab' | 'other' {
-    const remote = short.split('/')[0] ?? '';
+    const remote = remoteOf(short);
     const url = remotes.list.find((r) => r.name === remote)?.fetchUrl ?? '';
     return url === '' ? 'other' : hostOf(url);
-  }
-
-  /**
-   * Which of a row's refs are worth the two slots there are.
-   *
-   * The checked-out branch first, then other local branches, then tags, then tracking branches:
-   * a row can carry a dozen labels and the ones cut have to be the ones that say least. A
-   * tracking branch beside the local branch it tracks is the commonest pair, and it is the
-   * tracking one that repeats what is already there.
-   */
-  function orderRefs(labels: PlacedRef[]): PlacedRef[] {
-    const rank = (r: PlacedRef): number => {
-      if (r.short === headName) return 0;
-      switch (r.kind.kind) {
-        case 'local_branch':
-          return 1;
-        case 'tag':
-          return 2;
-        case 'stash':
-          return 3;
-        default:
-          return 4;
-      }
-    };
-    // A hidden ref is not drawn at all. Its commits often stay, because a branch that is
-    // walked still reaches them, and leaving the label on one of them put the name of a branch
-    // the user had just hidden back on the graph — with the struck eye beside it in the panel
-    // saying the opposite.
-    return [...labels].filter((r) => !scope.hides(r.name)).sort((a, b) => rank(a) - rank(b));
   }
 
   /**
@@ -3908,7 +3801,7 @@
               wrong end of a typed array, which would show another commit's date and hash.
             -->
             {@const local = localRow(graph.frame, row)}
-            {@const labels = orderRefs(refs.byRow.get(row) ?? [])}
+            {@const labels = orderRefs(refs.byRow.get(row) ?? [], headName, (n) => scope.hides(n))}
             <li
               class="row"
               class:merge={hasFlag(graph.frame.rowFlags[local ?? -1] ?? 0, RowFlag.Merge)}
