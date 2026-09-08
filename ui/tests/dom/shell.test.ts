@@ -698,7 +698,11 @@ describe('the shell', () => {
     await waitFor(() => {
       if (!container.querySelector('section.merge')) throw new Error('no merge tool');
     });
-    expect((container.querySelector('.graph') as HTMLElement).className).toContain('hidden');
+    // The list and the two handles that size its columns go together, so what is hidden is
+    // the wrapper around both rather than the scroller alone.
+    expect((container.querySelector('.plot') as HTMLElement).className).toContain('hidden');
+    expect(container.querySelector('.plot .graph'), 'still mounted, so it keeps its scroll')
+      .not.toBeNull();
   });
 });
 

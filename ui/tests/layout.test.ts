@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  COLUMN_HEADER_PX,
   DEFAULT_METRICS,
   fittedMetrics,
   firstRowFor,
@@ -66,7 +65,9 @@ describe('graph layout', () => {
   });
 
   it('falls back to a colour rather than undefined when none are configured', () => {
-    expect(laneColour(0, [])).toBe('#3fa9f5');
+    // And to one the window actually uses: the fallback was an orphan hex that appeared in no
+    // token, so a graph drawn without a stylesheet came out a colour from nowhere.
+    expect(laneColour(0, [])).toBe('#096cb3');
   });
 });
 
@@ -105,9 +106,8 @@ describe('very tall graphs', () => {
   /**
    * The property the assertion above cannot check, because it computes the answer the same way
    * the code does. Scrolled to the bottom, the last row has to be on screen and clear of the
-   * bottom edge — the sticky column header takes its height off the room the rows have, and
-   * counting the whole scroller as row space left the kernel's very first commit below the
-   * fold with nowhere further to scroll.
+   * bottom edge. This is where the kernel's very first commit used to sit below the fold with
+   * nowhere further to scroll.
    */
   it('shows the last row when the scrollbar is at the bottom', () => {
     for (const viewport of [400, 601, 775, 790, 800, 1013]) {
@@ -115,8 +115,7 @@ describe('very tall graphs', () => {
         const first = firstRowFor(MAX_SPACER_PX - viewport, viewport, total, m);
         const shown = rowsPerScreen(viewport, m);
         expect(first + shown, `${total} rows in ${viewport}px`).toBeGreaterThanOrEqual(total);
-        const usedPx = shown * m.rowHeight + COLUMN_HEADER_PX;
-        expect(usedPx, `${shown} rows fit under the header`).toBeLessThanOrEqual(viewport);
+        expect(shown * m.rowHeight, `${shown} rows fit`).toBeLessThanOrEqual(viewport);
       }
     }
   });

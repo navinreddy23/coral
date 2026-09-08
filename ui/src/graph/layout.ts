@@ -92,22 +92,12 @@ export function rowY(row: number, first: number, m: Metrics): number {
 export const MAX_SPACER_PX = 2_000_000;
 
 /**
- * Height of the sticky column header, which sits inside the scroller and over the rows.
- *
- * It is in the scroller's flow but pinned to the top, so it takes this much off the height
- * available to rows. Counting the whole scroller as row space made the list one row taller
- * than it is: at the bottom of the kernel's 1,481,530 the last row — its very first commit —
- * sat below the fold and could not be scrolled to.
- */
-export const COLUMN_HEADER_PX = 26;
-
-/**
  * How tall the scrollable area should be for a graph of `totalRows`.
  *
- * The rows are not scrolled through: the list is pinned under the sticky header and redrawn a
- * whole row at a time, so the scroll range has to cover a whole number of rows *plus* whatever
- * the last screenful leaves over. Without that remainder — up to one row short of it — the
- * final rows sat below the fold with nowhere left to scroll, which on a repository of
+ * The rows are not scrolled through: the list is pinned to the top of the scroller and redrawn
+ * a whole row at a time, so the scroll range has to cover a whole number of rows *plus*
+ * whatever the last screenful leaves over. Without that remainder — up to one row short of it
+ * — the final rows sat below the fold with nowhere left to scroll, which on a repository of
  * thirty-six commits meant the last two could not be reached by the wheel at all.
  *
  * `viewportHeight` of zero is the answer before the pane has been measured, and gives the
@@ -116,25 +106,22 @@ export const COLUMN_HEADER_PX = 26;
 export function spacerHeight(totalRows: number, m: Metrics, viewportHeight = 0): number {
   const exact = totalRows * m.rowHeight;
   if (exact > MAX_SPACER_PX) return MAX_SPACER_PX;
-  const usable = Math.max(0, viewportHeight - COLUMN_HEADER_PX);
-  return exact + (usable % m.rowHeight);
+  return exact + (Math.max(0, viewportHeight) % m.rowHeight);
 }
 
 /**
  * The furthest the commit list can be scrolled.
  *
- * The scroller holds the column header as well as the rows, so the range is taller than the
- * spacer by the header. Reading it off the DOM would be the same number; computing it keeps
- * `scrollToRow` and the wheel agreeing with what the list will actually draw.
+ * Reading it off the DOM would be the same number; computing it keeps `scrollToRow` and the
+ * wheel agreeing with what the list will actually draw.
  */
 export function maxScroll(totalRows: number, m: Metrics, viewportHeight: number): number {
-  const content = COLUMN_HEADER_PX + spacerHeight(totalRows, m, viewportHeight);
-  return Math.max(0, content - viewportHeight);
+  return Math.max(0, spacerHeight(totalRows, m, viewportHeight) - viewportHeight);
 }
 
 /** How many whole rows a scroller of `viewportHeight` can show at once. */
 export function rowsPerScreen(viewportHeight: number, m: Metrics): number {
-  return Math.max(1, Math.floor((viewportHeight - COLUMN_HEADER_PX) / m.rowHeight));
+  return Math.max(1, Math.floor(viewportHeight / m.rowHeight));
 }
 
 /** True when the graph is too tall to scroll one pixel per pixel. */
@@ -212,13 +199,23 @@ export function nodeColours(root: HTMLElement): string[] {
   return palette(root, 'node');
 }
 
+/**
+ * What to draw with when the stylesheet cannot be read at all.
+ *
+ * Only reachable in a test that mounts the canvas with no document behind it, or in a webview
+ * that has lost its stylesheet — in which case a visible graph in one colour is a better
+ * answer than an invisible one. `--lane-1` in the light theme, so the fallback is a colour
+ * this window actually uses rather than an orphan hex nothing else names.
+ */
+const NO_STYLESHEET = '#096cb3';
+
 function palette(root: HTMLElement, name: string): string[] {
   const style = getComputedStyle(root);
   const read = (n: number) => style.getPropertyValue(`--${name}-${n}`).trim();
   const colours = [1, 2, 3, 4, 5, 6, 7, 8].map(read).filter((c) => c.length > 0);
-  return colours.length > 0 ? colours : ['#3fa9f5'];
+  return colours.length > 0 ? colours : [NO_STYLESHEET];
 }
 
 export function laneColour(lane: number, colours: string[]): string {
-  return colours[lane % colours.length] ?? '#3fa9f5';
+  return colours[lane % colours.length] ?? NO_STYLESHEET;
 }

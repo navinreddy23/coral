@@ -3677,9 +3677,35 @@
     {:else if diff.path !== null}
       <DiffView {diff} onClose={() => diff.close()} onPart={applyPart} />
     {/if}
+    <div class="plot" class:hidden={diff.path !== null || merge.inProgress}>
+      <!--
+        The column handles, which used to be the right edge of a header cell. Full height and
+        invisible until the pointer is on them: there is no line to draw between the branch
+        pills and the nodes they point at without cutting the one thing that ties them
+        together, and a rule through the lanes would be worse than none.
+      -->
+      <div class="handle refs" style:left="var(--refs-col)">
+        <Splitter
+          label="Resize the branch and tag column"
+          value={panes.widths.refs}
+          min={PANE_LIMITS.refs.min}
+          max={PANE_LIMITS.refs.max}
+          onresize={(px) => panes.resize('refs', px)}
+          onreset={() => panes.reset()}
+        />
+      </div>
+      <div class="handle graph-col" style:left="calc(var(--refs-col) + var(--graph-col))">
+        <Splitter
+          label="Resize the graph column"
+          value={panes.widths.graph}
+          min={PANE_LIMITS.graph.min}
+          max={PANE_LIMITS.graph.max}
+          onresize={(px) => panes.resize('graph', px)}
+          onreset={() => panes.reset()}
+        />
+      </div>
     <div
       class="graph"
-      class:hidden={diff.path !== null || merge.inProgress}
       bind:this={scroller}
       onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}
       onwheel={wheel}
@@ -3727,31 +3753,6 @@
         </div>
       {/if}
 
-      <div class="columns">
-        <span class="col refs">
-          Branch / Tag
-          <Splitter
-            label="Resize the branch and tag column"
-            value={panes.widths.refs}
-            min={PANE_LIMITS.refs.min}
-            max={PANE_LIMITS.refs.max}
-            onresize={(px) => panes.resize('refs', px)}
-            onreset={() => panes.reset()}
-          />
-        </span>
-        <span class="col graph-col">
-          Graph
-          <Splitter
-            label="Resize the graph column"
-            value={panes.widths.graph}
-            min={PANE_LIMITS.graph.min}
-            max={PANE_LIMITS.graph.max}
-            onresize={(px) => panes.resize('graph', px)}
-            onreset={() => panes.reset()}
-          />
-        </span>
-        <span class="col message">Commit message</span>
-      </div>
       {#if worktree.dirty}
         <button class="row wip" class:selected={showWip} onclick={pickWip}>
           <span class="cell refs"></span>
@@ -3925,6 +3926,7 @@
           {/each}
         </ul>
       </div>
+    </div>
     </div>
     <!--
       Not while a merge is stopped. The tool that settles it is the only thing worth looking at
@@ -4113,7 +4115,7 @@
    */
   .sit { align-self: center; margin-top: var(--space-2); }
   h1 {
-    font-size: 13px; font-weight: 700; margin: 0; color: var(--accent);
+    font-size: var(--text-md); font-weight: 700; margin: 0; color: var(--accent);
     letter-spacing: 0.01em; flex: 0 0 auto;
   }
   .tools { display: flex; align-items: center; gap: 2px; margin-left: auto; }
@@ -4137,7 +4139,7 @@
      windows had buttons. */
   .sys.shut:hover { background: var(--danger); color: #fff; }
   .chip {
-    font-size: 11px; padding: 1px var(--space-2); border-radius: 999px;
+    font-size: var(--text-sm); padding: 1px var(--space-2); border-radius: var(--radius-pill);
     background: var(--bg-2); color: var(--fg-1); flex: 0 0 auto;
   }
   .chip.warn { background: var(--warn-soft); color: var(--warn); }
@@ -4169,9 +4171,12 @@
      answering "where is the graph" and that question is about the whole pane. */
   .nothing {
     margin: 0; padding: var(--space-5) var(--space-4);
-    text-align: center; color: var(--fg-2); font-size: 13px;
+    text-align: center; color: var(--fg-2); font-size: var(--text-md);
   }
-  .banner { margin: 0; padding: var(--space-2) var(--space-4); background: var(--bg-2); color: var(--fg-1); font-size: 12px; }
+  .banner {
+    margin: 0; padding: var(--space-2) var(--space-4);
+    background: var(--bg-2); color: var(--fg-1); font-size: var(--text-base);
+  }
   .banner.error { color: var(--danger); }
   .muted { color: var(--fg-2); }
   /*
@@ -4198,10 +4203,8 @@
   .body { display: flex; flex: 1; min-height: 0; position: relative; }
   .graph { flex: 1; overflow-y: auto; position: relative; background: var(--bg-0); }
   /* Hidden rather than unmounted: remounting would refetch the frame and lose the scroll
-     position every time a file is opened and closed. */
-  .graph.hidden { display: none; }
-
-  /* Column headers, matching the row grid below so the two cannot drift apart. */
+     position every time a file is opened and closed. The wrapper is what carries the class
+     now, so the handles go with it. */
   /*
    * The find bar, pinned to the top of the list it searches.
    */
@@ -4212,17 +4215,17 @@
     background: var(--bg-1); border-bottom: 1px solid var(--border);
   }
   .find input {
-    flex: 1; min-width: 0; font: inherit; font-size: 12px;
+    flex: 1; min-width: 0; font: inherit; font-size: var(--text-base);
     background: var(--bg-0); color: var(--fg-0);
     border: 1px solid var(--border); border-radius: var(--radius-1);
     padding: 2px var(--space-2);
   }
   .find .tally {
-    flex: 0 0 auto; color: var(--fg-2); font-size: 11px;
+    flex: 0 0 auto; color: var(--fg-2); font-size: var(--text-sm);
     font-variant-numeric: tabular-nums; min-width: 6em; text-align: right;
   }
   .find button {
-    flex: 0 0 auto; font: inherit; font-size: 12px; cursor: pointer; line-height: 18px;
+    flex: 0 0 auto; font: inherit; font-size: var(--text-base); cursor: pointer; line-height: 18px;
     background: var(--bg-0); border: 1px solid var(--border); border-radius: 3px;
     color: var(--fg-1); padding: 0 6px;
   }
@@ -4234,18 +4237,28 @@
     grid-template-columns: var(--refs-col) var(--graph-col) 1fr;
     align-items: center;
   }
-  .columns {
-    position: sticky; top: 0; z-index: 2;
-    height: 26px; padding: 0 var(--space-3);
-    background: var(--bg-1); border-bottom: 1px solid var(--border);
-    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
-    color: var(--fg-2);
+  /*
+   * The commit list and the two handles that size its columns.
+   *
+   * There was a header over this: three words in 10px uppercase over a list whose columns are
+   * a pill, a drawing and a sentence. It named nothing that was not already obvious and cost
+   * twenty-six pixels of every screen, which is a row of history.
+   *
+   * What it did carry was the handles, so they moved here — outside the scroller, spanning its
+   * whole height, so they stay put while the list moves under them.
+   */
+  .plot { position: relative; flex: 1; min-width: 0; display: flex; }
+  .plot.hidden { display: none; }
+  .handle {
+    position: absolute; top: 0; bottom: 0; z-index: 4;
+    /* Offset by the pane's own leading padding, so the handle lands on the boundary between
+       two columns rather than a step to the left of it. */
+    margin-left: var(--space-3); display: flex;
   }
-  .col { overflow: hidden; position: relative; display: flex; align-items: center; }
-  /* The handle sits on the column's right edge and spans the header's full height. */
-  .col :global(.splitter) {
-    position: absolute; right: 0; top: 0; bottom: 0; margin: 0 -4px 0 0;
-  }
+  /* Invisible until it is wanted. A rule between the branch pills and the nodes they point at
+     would cut the one thing that ties them together, and one through the lanes would be worse
+     than none — so the boundary shows on hover and is otherwise not there. */
+  .handle :global(.splitter) { background-image: none; }
 
   .spacer { position: relative; }
   /* The canvas tracks the scroll position rather than being as tall as the graph: a canvas
@@ -4273,7 +4286,7 @@
     padding: 0 var(--space-3);
     /* A point above the rest of the interface. This list is what the window is for, and it is
        read at a glance down a column rather than word by word. */
-    font-size: 13px; color: var(--fg-1);
+    font-size: var(--text-md); color: var(--fg-1);
     border: 0; background: none; font-family: inherit; text-align: left;
   }
   /*
@@ -4291,11 +4304,20 @@
        this row had a colour of its own to stop halfway across. */
     width: 100%; box-sizing: border-box;
   }
-  /* The cells paint their own opaque background for antialiasing, so the tint has to be named
-     on them too or the band stops halfway across the row. */
-  .wip .cell.refs, .wip .cell.message { background: var(--warn-soft); }
+  /*
+   * The working copy's own row, in the brand colour.
+   *
+   * It was amber, and so is a row the search has matched — two different meanings wearing one
+   * colour, on the one screen where they appear together. Amber keeps the meaning it has
+   * everywhere else in the window, which is "look at this", and the row that is *you, now*
+   * takes the colour that is only ever Coral's own.
+   *
+   * The cells paint their own opaque background for antialiasing, so the tint has to be named
+   * on them too or the band stops halfway across the row.
+   */
+  .wip .cell.refs, .wip .cell.message { background: var(--brand-soft); }
   .wip .summary { color: var(--fg-0); font-weight: 600; }
-  .wip .wip-node { border-color: var(--warn); }
+  .wip .wip-node { border-color: var(--brand); }
 
   /*
    * The lane's colour sits in the gap between the node and the text, not across the message.
@@ -4327,7 +4349,7 @@
        margin has to cancel it. `right: 100%` puts its right edge exactly on the message cell's
        leading edge, which leaves that cell's own inset bar — the one that marks the selected
        row — visible instead of painted over. */
-    position: absolute; right: 100%; top: 1px; bottom: 1px;
+    position: absolute; right: 100%; top: 0; bottom: 0;
     width: var(--lane-gap, 0px);
     background: var(--row-tint, transparent);
   }
@@ -4417,9 +4439,9 @@
    */
   .pill {
     display: inline-flex; align-items: center; gap: 5px;
-    flex: 0 1 auto; min-width: 0; font: inherit; font-size: 11px; line-height: 18px;
+    flex: 0 1 auto; min-width: 0; font: inherit; font-size: var(--text-sm); line-height: 18px;
     padding: 0 7px 0 0; cursor: pointer;
-    border-radius: 9px; border: 1px solid var(--tint-line, var(--border));
+    border-radius: var(--radius-pill); border: 1px solid var(--tint-line, var(--border));
     background: var(--tint, var(--bg-1)); color: var(--fg-0);
     max-width: 100%; overflow: hidden; white-space: nowrap;
   }
@@ -4431,7 +4453,7 @@
   .cap {
     flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
     align-self: stretch; width: 18px; margin-right: 1px;
-    border-radius: 8px 0 0 8px;
+    border-radius: var(--radius-pill) 0 0 var(--radius-pill);
     background: var(--tint-line, var(--fg-2)); color: var(--bg-0);
   }
   .pill-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -4457,7 +4479,7 @@
     display: inline-flex; align-items: center; gap: 3px;
     color: var(--fg-2); background: none; padding: 1px 4px;
     border: 1px dashed var(--border); border-radius: 7px;
-    flex: 0 0 auto; font: inherit; font-size: 10px; line-height: 13px; cursor: pointer;
+    flex: 0 0 auto; font: inherit; font-size: var(--text-xs); line-height: 13px; cursor: pointer;
     position: relative; z-index: 1;
   }
   .more:hover { color: var(--fg-0); border-color: var(--border-strong); }
@@ -4487,14 +4509,15 @@
   /* Pushed to the trailing edge, so the two columns line up down the list whatever the
      summary before them happens to be. */
   .age {
-    flex: 0 0 auto; margin-left: auto; color: var(--fg-2); text-align: right; font-size: 11px;
+    flex: 0 0 auto; margin-left: auto; color: var(--fg-2); text-align: right;
+    font-size: var(--text-sm);
   }
   /*
    * The object id, set apart rather than just dimmed: it is the one field on the row nobody
    * reads as prose, and a tinted plate says so faster than a lighter grey does.
    */
   .sha {
-    flex: 0 0 auto; color: var(--fg-2); font-size: 11px; letter-spacing: -0.01em;
+    flex: 0 0 auto; color: var(--fg-2); font-size: var(--text-sm); letter-spacing: -0.01em;
     background: var(--bg-2); border-radius: var(--radius-1); padding: 0 5px; line-height: 16px;
   }
 
