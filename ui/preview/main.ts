@@ -8,6 +8,7 @@
  */
 import { mount } from 'svelte';
 
+import '../src/styles/fonts.css';
 import '../src/styles/tokens.css';
 import '../src/styles/base.css';
 

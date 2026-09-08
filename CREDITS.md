@@ -28,7 +28,14 @@ paper, it is added here in the same commit with a link and its license.
 
 - **Tauri** — the desktop shell. <https://tauri.app/> — MIT OR Apache-2.0.
 - **Svelte**, **Vite**, **TypeScript** — the interface layer.
-- **Lucide** icons — ISC. **Inter** — OFL. **JetBrains Mono** — OFL.
+- **Inter** by Rasmus Andersson — the interface face, bundled. Only the latin subset of the
+  variable weight axis ships. <https://rsms.me/inter/> — SIL Open Font License 1.1, delivered
+  through `@fontsource-variable/inter`.
+- **JetBrains Mono** by JetBrains — the face every object id, path and diff is set in,
+  bundled. Only the latin subset at 400 and 700 ships.
+  <https://www.jetbrains.com/lp/mono/> — SIL Open Font License 1.1, delivered through
+  `@fontsource/jetbrains-mono`.
+- **xterm.js** — the terminal pane. <https://xtermjs.org/> — MIT.
 
 ## Not shipped, but recognised
 

@@ -1,12 +1,21 @@
 /*
- * The only place colour, spacing and type live. Components reference these, never hex.
+ * The only place colour, spacing, type and motion live. Components reference these, never a
+ * literal.
  *
- * Light is the default. Dark is opt-in with data-theme="dark" on the root element, so the
- * choice is explicit rather than inherited from the system — the theme switch sets it.
+ * Light is written on the bare `:root`, dark under `[data-theme='dark']`, and the root
+ * attribute is set from the desktop's own preference unless somebody has chosen otherwise —
+ * see `ui/src/state/theme.svelte.ts`.
  *
- * Depth is built from layered surfaces and hairline borders, never shadows: GPU compositing is
- * off so that text keeps subpixel antialiasing (see `sharpen_text`), and a shadow is exactly
- * the kind of large soft fill that costs on the software path.
+ * Two rules the whole interface is built on:
+ *
+ * Depth is layered surfaces and hairlines. Shadows appear only on things that float free of
+ * the page and never scroll — a menu, a dialog, the palette, a toast. A shadow on a row is a
+ * large soft fill repainted on every scroll frame, and this window scrolls a million rows.
+ *
+ * Every surface carrying text paints its own opaque background. WebKit antialiases text on a
+ * composited layer with subpixel precision only where it knows what is behind it, and
+ * `background: none` leaves it guessing and drops to grayscale, which reads as soft. See
+ * docs/ARCHITECTURE.md. The lane canvas is the one deliberate exception.
  */
 :root {
   color-scheme: light;
@@ -14,33 +23,55 @@
   /*
    * The surface ladder, lightest to deepest. `bg-0` is the page a list sits on, `bg-1` the
    * panels either side of it, `bg-2` a control at rest, `bg-3` one under the pointer.
+   *
+   * Biased cool rather than neutral grey. A ramp mixed from one hue reads as chosen; a pure
+   * grey reads as the absence of a choice, and next to the aqua accent it goes faintly pink.
    */
   --bg-0: #ffffff;
-  --bg-1: #f7f8fa;
-  --bg-2: #eef0f4;
-  --bg-3: #e2e6ec;
+  --bg-1: #f5f7fa;
+  --bg-2: #eaeef4;
+  --bg-3: #dfe5ee;
 
   /* Two weights: a hairline between rows, and a real edge between panels. */
-  --border: #dfe3ea;
-  --border-strong: #c3cad6;
+  --border: #dfe4ec;
+  --border-strong: #c4ccd9;
 
   /*
-   * Measured against `bg-0`, not chosen by eye. The dimmest of the three started at 4.5:1 —
-   * the floor for large text, and not enough for an 11px date or a body preview, which read as
-   * smudges on a bright panel. These are 19.3:1, 11.8:1 and 7.5:1, so even the dimmest clears
-   * the 7:1 enhanced threshold at the small sizes this interface uses everywhere.
+   * Measured, not chosen by eye, and measured against the panel rather than the page: most
+   * of the dim text in this window is on `bg-1`, which is where a ratio computed against
+   * white flatters itself. On `bg-1` these are 17.8:1, 11.4:1 and 7.0:1, so even the dimmest
+   * clears the 7:1 enhanced threshold at the small sizes used here.
    */
-  --fg-0: #0b0e13;
-  --fg-1: #2f3846;
-  --fg-2: #4a5568;
+  --fg-0: #0c1017;
+  --fg-1: #2c3646;
+  --fg-2: #4a5566;
 
-  --accent: #0d7a6f;
-  --accent-hover: #0a655c;
+  /*
+   * Aqua does every functional job: what is selected, what has focus, what a primary button
+   * is. 5.0:1 on the page and 4.7:1 on a panel, so it is legible as text and not only as a
+   * fill.
+   */
+  --accent: #0a7d72;
+  --accent-hover: #086a61;
   /* Text and glyphs on a filled accent. */
   --accent-fg: #ffffff;
-  /* The selected row, tinted rather than filled so the text on it keeps its contrast. */
-  --accent-soft: #d6ece9;
-  --accent-line: #0d7a6f;
+  /* A selected row, tinted rather than filled so the text on it keeps its contrast. */
+  --accent-soft: #ddedeb;
+  --accent-line: #0a7d72;
+
+  /*
+   * Coral carries the identity and never a state. It appears in five places and nowhere
+   * else: the mark, the active tab's top edge, the ring on the HEAD node, the marker on the
+   * WIP row, and a profile that has not been given a colour.
+   *
+   * Kept apart from `--danger` by role rather than by hue, because they are neighbours on
+   * the wheel and no amount of tuning would make a warm red mean "brand" in one place and
+   * "this deletes something" in another. 3.8:1 on the page: enough for a mark, an edge or a
+   * ring, which is all it is ever asked to be, and short of the 4.5:1 that text needs — so
+   * there is deliberately no foreground token to write on it.
+   */
+  --brand: #e0533b;
+  --brand-soft: #fbe9e6;
 
   --danger: #b3261e;
   --danger-soft: #fbe6e5;
@@ -53,14 +84,22 @@
    * Diff line tints. Pale enough that the code on them keeps its contrast — the colour marks
    * which side a line belongs to, it is not the thing being read.
    */
-  --add-bg: #e3f6e8;
-  --remove-bg: #fceaea;
+  --add-bg: #e6f7ea;
+  --remove-bg: #fdebeb;
+  /* The changed words inside a changed line, which is what the eye should land on first. */
+  --add-word: #b4e7c2;
+  --remove-word: #f8c9c7;
 
   /*
-   * Not the dark set nudged darker. Each is computed to reach 5.5:1 against white, because a
-   * lane stroke needs more contrast than body text, not less. The first attempt averaged
-   * 4.2:1 where the dark theme averages 7.7:1, which reads as blur rather than as low
-   * contrast.
+   * The eight lane colours. Each is computed to reach 5.5:1 against white, because a lane
+   * stroke needs more contrast than body text, not less. Not the dark set darkened: an
+   * earlier attempt averaged 4.2:1 where the dark theme averages 7.7:1, and that reads as
+   * blur rather than as low contrast.
+   *
+   * The names are a contract, not just a convention. `crates/coral-app/src/session.rs`
+   * stores a tab group's colour as the token name so a theme change recolours it, and
+   * `ui/src/app/lane.ts` builds the `var()` from the same string. Values may change; these
+   * eight names may not.
    */
   --lane-1: #096cb3;
   --lane-2: #bf2681;
@@ -69,11 +108,45 @@
   --lane-5: #7245ef;
   --lane-6: #b94000;
   --lane-7: #16737f;
+  --lane-8: #686d1c;
+
+  /*
+   * The same eight mixed into the page behind them, for anything that has to be *labelled*
+   * with a lane rather than drawn in it — a branch pill, the strip beside a commit. A stroke
+   * colour at full strength behind 10px text leaves the text unreadable; these carry the
+   * same identity at a seventh of the weight and keep `--fg-0` above 15:1 on every one.
+   */
+  --lane-1-soft: #ddeaf4;
+  --lane-2-soft: #f6e1ed;
+  --lane-3-soft: #efe9dc;
+  --lane-4-soft: #e1ece3;
+  --lane-5-soft: #ebe5fd;
+  --lane-6-soft: #f5e4db;
+  --lane-7-soft: #deebed;
+  --lane-8-soft: #eaebdf;
+
+  /*
+   * What a commit node is filled with, keyed by its author rather than by its lane.
+   *
+   * Deliberately not redefined for the dark theme, and that is the whole point of them being
+   * their own set: the letters inside a node are white in both themes, and white needs a
+   * colour deep enough to sit on. The dark lane palette is light — white on the dark
+   * `--lane-3` is 1.5:1 — so a node filled from it would have an unreadable label. White on
+   * each of these is 5.5:1.
+   */
+  --node-1: #096cb3;
+  --node-2: #bf2681;
+  --node-3: #8d6005;
+  --node-4: #2b7737;
+  --node-5: #7245ef;
+  --node-6: #b94000;
+  --node-7: #16737f;
+  --node-8: #686d1c;
 
   /*
    * The sixteen colours a terminal program addresses by name.
    *
-   * Their own scale, not the window's: a prompt or a `ls` picks these expecting the eight
+   * Their own scale, not the window's: a prompt or an `ls` picks these expecting the eight
    * classic hues and the eight bright ones, and lending it the interface's lane colours left
    * half the palette undefined. Chosen for contrast on `--bg-0`, which is white here.
    */
@@ -94,96 +167,66 @@
   --term-bright-cyan: #1f97a6;
   --term-bright-white: #111418;
 
-  --lane-8: #686d1c;
-
   /*
-   * What a commit node is filled with, keyed by its author rather than by its lane.
+   * What floats above the page, and what it dims.
    *
-   * Deliberately not redefined for the dark theme, and this is the whole point of them being
-   * their own set: the letters inside a node are white in both themes, and white needs a
-   * colour deep enough to sit on. The dark lane palette is light — white on `--lane-3` there
-   * is 1.5:1 — so a node filled from it would have an unreadable label.
+   * The scrim is a wash of the page's own deepest neutral rather than plain black, so it
+   * still reads as a dimming on a dark theme — black over a near-black page is nearly
+   * invisible, which is what four hand-written `rgb(0 0 0 / 30%)` used to give.
    */
-  --node-1: #096cb3;
-  --node-2: #bf2681;
-  --node-3: #8d6005;
-  --node-4: #2b7737;
-  --node-5: #7245ef;
-  --node-6: #b94000;
-  --node-7: #16737f;
-  --node-8: #686d1c;
-
-  /*
-   * The same eight, mixed into the page behind them, for anything that has to be *labelled*
-   * with a lane rather than drawn in it — a branch pill, a row band. A stroke colour at full
-   * strength behind 10px text leaves the text unreadable; these carry the same identity at a
-   * sixth of the weight.
-   */
-  --lane-1-soft: #d8e7f3;
-  --lane-2-soft: #f5dceb;
-  --lane-3-soft: #ede6d7;
-  --lane-4-soft: #dde9df;
-  --lane-5-soft: #e8e1fc;
-  --lane-6-soft: #f4e0d6;
-  --lane-7-soft: #dae9eb;
-  --lane-8-soft: #e7e8db;
-
-  --row-h: 28px;
-  --row-h-compact: 22px;
-
-  /*
-   * Inter and JetBrains Mono are asked for and are usually absent; what actually renders is
-   * the system UI face. The stacks name a generic last so the monospace request survives, and
-   * `system-ui` before it so the desktop's own choice wins over anything bundled.
-   */
-  --font-ui: Inter, system-ui, -apple-system, 'Segoe UI', 'Noto Sans', sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'DejaVu Sans Mono', monospace;
-
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-
-  /* One step for controls, one for panels that float above the window. */
-  --radius-1: 4px;
-  --radius-2: 8px;
+  --scrim: rgb(12 16 23 / 34%);
+  --elevate-1: 0 2px 8px rgb(12 16 23 / 10%), 0 0 0 1px rgb(12 16 23 / 5%);
+  --elevate-2: 0 12px 32px rgb(12 16 23 / 16%), 0 2px 8px rgb(12 16 23 / 8%);
+  /* The keyboard focus ring, drawn outside the control so it never changes a layout. */
+  --ring: 0 0 0 2px var(--bg-0), 0 0 0 4px var(--accent);
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --bg-0: #15181d;
-  --bg-1: #1b1f26;
-  --bg-2: #22262f;
-  --bg-3: #2b313b;
+  /*
+   * Deeper than the panels by a wider step than the light theme uses. On a dark ground the
+   * eye reads a small difference in lightness as noise rather than as structure, so the
+   * ladder has to be spaced further apart to say the same thing.
+   */
+  --bg-0: #0e1116;
+  --bg-1: #151a21;
+  --bg-2: #1d232c;
+  --bg-3: #272f3a;
 
-  --border: #282e37;
-  --border-strong: #3a424f;
+  --border: #232a35;
+  --border-strong: #39424f;
 
-  /* White, not a light grey. A commit summary is the one thing on the row that is read
-     rather than glanced at, and #e8eaee against this page measures 14.8:1 where white
-     measures 17.8:1 — the difference between text that sits on the dark and text that lifts
-     off it. The two below are raised with it so the ladder keeps its spacing. */
+  /*
+   * White, not a light grey. A commit summary is the one thing on the row that is read
+   * rather than glanced at, and the difference between the two is the difference between
+   * text that sits on the dark and text that lifts off it. The two below are raised with it
+   * so the ladder keeps its spacing, and the dimmest is 7.3:1 on a panel.
+   */
   --fg-0: #ffffff;
-  --fg-1: #bcc4cf;
-  --fg-2: #8b95a2;
+  --fg-1: #bfc7d2;
+  --fg-2: #9ea8b7;
 
-  --accent: #16a094;
-  --accent-hover: #1ab5a7;
-  --accent-fg: #06201d;
-  --accent-soft: #17332f;
-  --accent-line: #22b3a5;
+  --accent: #2ecfc0;
+  --accent-hover: #4bdcce;
+  --accent-fg: #04211d;
+  --accent-soft: #143738;
+  --accent-line: #35d6c6;
 
-  --danger: #e06c68;
-  --danger-soft: #35201f;
-  --ok: #56c26e;
+  --brand: #ff8f5a;
+  --brand-soft: #392822;
+
+  --danger: #ee6b78;
+  --danger-soft: #362128;
+  --ok: #56c46f;
   --ok-soft: #16291a;
-  --warn: #d9a441;
+  --warn: #e0aa4c;
   --warn-soft: #2c2415;
 
-  --add-bg: #172c1d;
-  --remove-bg: #33201f;
+  --add-bg: #14291b;
+  --remove-bg: #2f1c1c;
+  --add-word: #22512f;
+  --remove-word: #5c2b29;
 
   --lane-1: #4aaef7;
   --lane-2: #e878ba;
@@ -192,16 +235,26 @@
   --lane-5: #a288f6;
   --lane-6: #ff9560;
   --lane-7: #35cbdd;
+  --lane-8: #c6cf45;
+
+  --lane-1-soft: #1a3043;
+  --lane-2-soft: #3a2637;
+  --lane-3-soft: #3c321e;
+  --lane-4-soft: #1e3629;
+  --lane-5-soft: #2c2943;
+  --lane-6-soft: #3e2b25;
+  --lane-7-soft: #16363e;
+  --lane-8-soft: #33371f;
 
   /* The same sixteen, for a dark ground. See the light block for what they are. */
   --term-black: #3b4048;
-  --term-red: #e06c68;
-  --term-green: #56c26e;
+  --term-red: #ef7370;
+  --term-green: #56c46f;
   --term-yellow: #f2b73c;
   --term-blue: #4aaef7;
   --term-magenta: #e878ba;
   --term-cyan: #35cbdd;
-  --term-white: #bcc4cf;
+  --term-white: #bfc7d2;
   --term-bright-black: #6b7480;
   --term-bright-red: #ff8f8b;
   --term-bright-green: #7ede92;
@@ -211,14 +264,76 @@
   --term-bright-cyan: #6fe3f2;
   --term-bright-white: #ffffff;
 
-  --lane-8: #c6cf45;
-
-  --lane-1-soft: #21394d;
-  --lane-2-soft: #432d40;
-  --lane-3-soft: #463b24;
-  --lane-4-soft: #253f30;
-  --lane-5-soft: #34314d;
-  --lane-6-soft: #48342c;
-  --lane-7-soft: #1c3f47;
-  --lane-8-soft: #3c4026;
+  /* Heavier than the light theme's, because a shadow has to darken a page that is already
+     dark before it separates anything from it. */
+  --scrim: rgb(0 0 0 / 58%);
+  --elevate-1: 0 2px 8px rgb(0 0 0 / 40%), 0 0 0 1px rgb(255 255 255 / 6%);
+  --elevate-2: 0 12px 32px rgb(0 0 0 / 55%), 0 2px 8px rgb(0 0 0 / 35%);
 }
+
+/*
+ * Type, space, shape and motion. One set, shared by both themes: a theme changes what
+ * something is coloured, never how large it is or how fast it moves.
+ */
+:root {
+  /*
+   * Inter for the interface and JetBrains Mono for anything git produced, both bundled — see
+   * `fonts.css`. They are named ahead of the system stack rather than instead of it, so a
+   * build that somehow ships without them still renders.
+   */
+  --font-ui: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', 'Noto Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'DejaVu Sans Mono', monospace;
+
+  /*
+   * Six sizes and no more. Every one of them is in use, and a scale nobody can hold in their
+   * head is a scale that grows a seventh size the first time something looks slightly wrong.
+   *
+   * `base` is what a commit summary, a branch name and a file path are set in — the text
+   * this window exists to show. `xs` is for a label that is read once and then recognised by
+   * position.
+   */
+  --text-xs: 10px;
+  --text-sm: 11px;
+  --text-base: 12px;
+  --text-md: 13px;
+  --text-lg: 15px;
+  --text-xl: 19px;
+
+  /* Tight for a single line in a row, open for a paragraph somebody reads. */
+  --leading-tight: 1.2;
+  --leading-body: 1.55;
+
+  --space-0: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* One step for controls, one for panels that float above the window, one for a pill. */
+  --radius-1: 6px;
+  --radius-2: 10px;
+  --radius-pill: 999px;
+
+  /*
+   * Short enough that a hover feels immediate and long enough that it is not a flicker.
+   * Everything using these is turned off under `prefers-reduced-motion` in `base.css`.
+   */
+  --fast: 120ms;
+  --slow: 200ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /*
+   * How tall a commit row is, and with it every other row in the window. The density
+   * attribute is set beside `data-theme` on the root element.
+   *
+   * The canvas reads this value rather than keeping its own copy: the lanes are drawn to the
+   * same grid the rows are laid out on, and two numbers that must agree should not be two
+   * numbers.
+   */
+  --row-h: 28px;
+}
+
+:root[data-density='compact'] { --row-h: 24px; }
+:root[data-density='comfortable'] { --row-h: 32px; }

@@ -19,24 +19,24 @@
       Coral not getting a light one.
     -->
     <style>
-      html, body { margin: 0; height: 100%; background: #f7f8fa; }
+      html, body { margin: 0; height: 100%; background: #f5f7fa; }
 
       #boot {
         position: fixed; inset: 0; display: flex; gap: 14px;
         align-items: center; justify-content: center;
-        font: 600 13px/1 Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
-        text-transform: uppercase; color: #4a5568;
+        font: 600 13px/1 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+        text-transform: uppercase; color: #4a5566;
       }
 
       /* A commit node with rings leaving it, which is the shape the loading screen after this
          one is built from. Two rings out of phase read as a pulse rather than a blink. */
       #boot i {
         position: relative; width: 10px; height: 10px; border-radius: 50%;
-        background: #0d7a6f; flex: 0 0 auto;
+        background: #e0533b; flex: 0 0 auto;
       }
       #boot i::before, #boot i::after {
         content: ''; position: absolute; inset: -5px; border-radius: 50%;
-        border: 2px solid #0d7a6f;
+        border: 2px solid #e0533b;
         animation: boot-ring 1800ms ease-out infinite;
       }
       #boot i::after { animation-delay: 900ms; }
@@ -54,9 +54,9 @@
       }
 
       @media (prefers-color-scheme: dark) {
-        html, body { background: #15181d; }
-        #boot { color: #8b95a2; }
-        #boot i, #boot i::before, #boot i::after { background: #16a094; border-color: #16a094; }
+        html, body { background: #0e1116; }
+        #boot { color: #9ea8b7; }
+        #boot i, #boot i::before, #boot i::after { background: #ff8f5a; border-color: #ff8f5a; }
         #boot i::before, #boot i::after { background: none; }
       }
 

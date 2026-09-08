@@ -6,12 +6,18 @@ html, body {
   background: var(--bg-0);
   color: var(--fg-0);
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: var(--text-md);
   /*
    * Never `-webkit-font-smoothing: antialiased`. The desktop asks for subpixel antialiasing
    * and Coral goes to some trouble to keep it; forcing grayscale here would undo that.
    */
   text-rendering: optimizeLegibility;
+  /*
+   * Inter ships a slashed zero and a straight-tailed l as options rather than as defaults.
+   * Both matter here: this window is full of object ids where 0 and O sit beside each other,
+   * and of branch names where l and 1 do.
+   */
+  font-feature-settings: 'ss01' 1, 'cv05' 1;
 }
 
 #app { height: 100%; }
@@ -27,12 +33,17 @@ code, .mono { font-family: var(--font-mono); }
 /*
  * A visible ring for keyboard users and nothing for the pointer. Every control in the window
  * is a plain element, so without this a tab-through leaves no trace of where it is.
+ *
+ * Drawn as a shadow rather than an outline so it follows a rounded corner, and with the
+ * page's own colour in the inner ring so it reads on a control that already has a border.
  */
 :focus { outline: none; }
 :focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-  border-radius: var(--radius-1);
+  outline: none;
+  box-shadow: var(--ring);
+  /* Above whatever it sits beside, or half the ring is painted over by the next control. */
+  position: relative;
+  z-index: 1;
 }
 
 ::selection { background: var(--accent-soft); color: var(--fg-0); }
@@ -53,3 +64,19 @@ code, .mono { font-family: var(--font-mono); }
 }
 ::-webkit-scrollbar-thumb:hover { background: var(--fg-2); background-clip: content-box; }
 ::-webkit-scrollbar-corner { background: transparent; }
+
+/*
+ * One switch for every transition and animation in the window.
+ *
+ * Components ask for motion through `--fast` and `--slow`, so setting both to nothing here
+ * turns all of it off at once rather than leaving each component to remember. The `!important`
+ * catches the handful of animations that name their own duration.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root { --fast: 0ms; --slow: 0ms; }
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}

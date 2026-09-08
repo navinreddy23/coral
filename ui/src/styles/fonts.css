@@ -1,0 +1,53 @@
+/*
+ * The two faces the window is drawn in, bundled rather than asked for.
+ *
+ * Coral named Inter and JetBrains Mono for years and shipped neither, so what actually
+ * rendered was whatever the desktop had — Cantarell on one machine, Segoe UI on another,
+ * DejaVu Sans Mono for every diff. Nothing about the spacing could be tuned to a face that
+ * changed underneath it.
+ *
+ * Only the latin subsets are named, and only the weights in use: 96 KB for all three files
+ * against roughly 400 KB for the full packages. Both faces are SIL Open Font License 1.1 and
+ * are credited in CREDITS.md.
+ *
+ * `font-display: block` and not `swap`. This is an application window, not a page being
+ * scrolled into: the fonts are local, they resolve in a frame, and a swap would repaint
+ * every row in the window a moment after it settled.
+ */
+
+/* One variable file covers 100 through 900, so the interface can use a real weight ladder
+   without a download per step. */
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-display: block;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/inter/files/inter-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+
+/* Regular for code, bold for the one place a mono face is emphasised — a file path in a
+   heading. There is no variable cut of this family. */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-display: block;
+  font-weight: 400;
+  src: url('@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-display: block;
+  font-weight: 700;
+  src: url('@fontsource/jetbrains-mono/files/jetbrains-mono-latin-700-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
