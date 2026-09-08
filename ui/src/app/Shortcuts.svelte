@@ -16,7 +16,11 @@
 <div class="scrim" role="presentation" onclick={onClose}>
   <div class="sheet" role="dialog" aria-label="Keyboard shortcuts">
     <h2>Keyboard shortcuts</h2>
-    <p class="note">Dimmed entries are not wired up yet.</p>
+    <!-- Only while there is something dimmed to explain. Every binding is wired now, and a
+         legend for a state nothing is in is a line that makes the reader look for one. -->
+    {#if BINDINGS.some((b) => !live.has(b.id))}
+      <p class="note">Dimmed entries are not wired up yet.</p>
+    {/if}
     <div class="grid">
       {#each groups as group (group)}
         <section>

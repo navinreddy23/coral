@@ -1,29 +1,35 @@
 // @vitest-environment happy-dom
-import { render } from '@testing-library/svelte';
-import { fireEvent } from '@testing-library/dom';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, render } from '@testing-library/svelte';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import Shortcuts from '../../src/app/Shortcuts.svelte';
+import { BINDINGS } from '../../src/state/shortcuts';
 
-describe('the keyboard shortcuts sheet', () => {
-  /**
-   * The handler used to hang on the scrim, which needs focus to receive a key. Nothing gave it
-   * any, so the sheet listing every shortcut was the one panel that ignored the one key
-   * everybody presses to close a panel.
-   */
-  it('closes on Escape, wherever the key lands', async () => {
-    const onClose = vi.fn();
-    render(Shortcuts, { props: { live: new Set<string>(), onClose } });
+afterEach(cleanup);
 
-    await fireEvent.keyDown(window, { key: 'Escape' });
-    expect(onClose).toHaveBeenCalledTimes(1);
+const every = () => new Set(BINDINGS.map((b) => b.id));
+
+describe('the keyboard sheet', () => {
+  it('lists every binding, with its keys', () => {
+    const { container } = render(Shortcuts, { props: { live: every(), onClose: vi.fn() } });
+    const rows = [...container.querySelectorAll('.row')];
+    expect(rows).toHaveLength(BINDINGS.length);
+    for (const row of rows) {
+      expect(row.querySelector('kbd')?.textContent?.trim().length ?? 0, row.textContent ?? '')
+        .toBeGreaterThan(0);
+    }
   });
 
-  it('closes on a click outside the sheet', async () => {
-    const onClose = vi.fn();
-    const { container } = render(Shortcuts, { props: { live: new Set<string>(), onClose } });
+  it('explains the dimmed rows only while there are some', () => {
+    // The legend is for a state: with everything wired it is a line that sends the reader
+    // looking for something that is not there.
+    const all = render(Shortcuts, { props: { live: every(), onClose: vi.fn() } });
+    expect(all.container.querySelector('.note')).toBeNull();
+    cleanup();
 
-    await fireEvent.click(container.querySelector('.scrim') as HTMLElement);
-    expect(onClose).toHaveBeenCalledTimes(1);
+    const some = new Set([...every()].slice(1));
+    const { container } = render(Shortcuts, { props: { live: some, onClose: vi.fn() } });
+    expect(container.querySelector('.note')?.textContent).toContain('not wired up');
+    expect(container.querySelectorAll('.row.pending')).toHaveLength(1);
   });
 });

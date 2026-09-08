@@ -418,3 +418,42 @@ describe('how much of a repository to take', () => {
     });
   });
 });
+
+describe('the directory a clone or a new repository lands in', () => {
+  /**
+   * It was read-only, so a path on the clipboard could not be pasted and a field that looked
+   * like somewhere to type silently was not. The Choose… dialog is still there for anyone who
+   * would rather browse.
+   */
+  it('can be typed as well as chosen', async () => {
+    const { view } = await page();
+    await fireEvent.click(
+      [...view.container.querySelectorAll('button.action')].find(
+        (b) => b.textContent?.includes('Clone'),
+      ) as HTMLButtonElement,
+    );
+
+    const into = [...view.container.querySelectorAll('.form label')]
+      .find((l) => l.textContent?.includes('Into'))
+      ?.querySelector('input') as HTMLInputElement;
+    expect(into, 'the form has a directory field').toBeTruthy();
+    expect(into.readOnly, 'and it is not read-only').toBe(false);
+
+    await fireEvent.input(into, { target: { value: '/home/dev/work' } });
+    expect(into.value).toBe('/home/dev/work');
+  });
+
+  it('says both ways in the placeholder, so neither is hidden', async () => {
+    const { view } = await page();
+    await fireEvent.click(
+      [...view.container.querySelectorAll('button.action')].find(
+        (b) => b.textContent?.includes('Create'),
+      ) as HTMLButtonElement,
+    );
+    const into = [...view.container.querySelectorAll('.form label')]
+      .find((l) => l.querySelector('.name')?.textContent?.trim() === 'In')
+      ?.querySelector('input') as HTMLInputElement;
+    expect(into.placeholder).toBe('type or choose a directory');
+    expect(into.readOnly).toBe(false);
+  });
+});

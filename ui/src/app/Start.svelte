@@ -182,7 +182,13 @@
         </label>
         <label>
           <span class="name">Into</span>
-          <input bind:value={cloneParent} placeholder="choose a directory" readonly />
+          <!--
+            Typed as well as chosen. It was read-only, so a path on the clipboard — which is how
+            most people carry one — could not be pasted, and the field looked like somewhere to
+            type and silently was not. A directory that does not exist is git's to complain
+            about, and the window already shows what git says.
+          -->
+          <input bind:value={cloneParent} placeholder="type or choose a directory" spellcheck="false" />
           <button class="pick" onclick={() => void pickInto('clone')}>Choose…</button>
         </label>
         <label>
@@ -265,7 +271,7 @@
       <section class="form">
         <label>
           <span class="name">In</span>
-          <input bind:value={createParent} placeholder="choose a directory" readonly />
+          <input bind:value={createParent} placeholder="type or choose a directory" spellcheck="false" />
           <button class="pick" onclick={() => void pickInto('create')}>Choose…</button>
         </label>
         <label>
