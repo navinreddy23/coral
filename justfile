@@ -179,8 +179,14 @@ kernel-clone:
     git -C '{{kernel}}' config gc.auto 0
     git -C '{{kernel}}' commit-graph write --reachable --no-progress
 
+# Reads the clone above and works in a shared copy beside it, never in the clone itself.
 kernel-test: kernel-clone
     CORAL_KERNEL_REPO='{{kernel}}' bash tests/kernel/run.sh
+
+# Throws away the scenario clone. The benchmark clone it was made from is not touched.
+kernel-clean:
+    rm -rf '{{kernel}}-scenarios'
+    @echo 'removed {{kernel}}-scenarios; the next kernel-test rebuilds it
 
 # Stands an sshd up on a high port and checks a pinned key reaches the right account.
 ssh-test:

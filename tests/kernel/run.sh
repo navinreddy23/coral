@@ -11,7 +11,15 @@ set -uo pipefail
 # not used; each scenario checks its own outcomes.
 trap 'printf "  \033[31mERROR\033[0m line %s exited %s\n" "$LINENO" "$?" >&2' ERR
 
-REPO="${CORAL_KERNEL_REPO:-$HOME/.cache/coral-bench/linux}"
+# The clone the scenarios are measured against, which is never the one they are run on. Half
+# of them commit, merge, rebase and cherry-pick, and doing that in somebody's benchmark clone
+# means an interrupted run leaves them with `bench/` branches, a moved HEAD and a dirty
+# checkout of the kernel. `SOURCE` is only ever read from.
+SOURCE="${CORAL_KERNEL_REPO:-$HOME/.cache/coral-bench/linux}"
+# Its own repository rather than a worktree: a worktree would share the ref store, so the
+# branches these scenarios make would still appear in `git branch` over there. `--shared`
+# costs no object copy, so the price is one checkout, paid once and then reused.
+REPO="${CORAL_KERNEL_WORK:-${SOURCE}-scenarios}"
 # CI hardware is slower than a developer laptop; budgets are multiplied by this.
 SCALE="${CORAL_BUDGET_SCALE:-1}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -25,20 +33,46 @@ miss() { printf '  \033[33mSKIP\033[0m %s\n' "$1"; skip=$((skip+1)); }
 
 budget() { echo $(( $1 * SCALE )); }
 
-require_repo() {
-    [ -d "$REPO/.git" ] || { echo "no kernel clone at $REPO; run 'just kernel-clone'" >&2; exit 1; }
-    [ -x "$CORAL" ] || { echo "no release binary at $CORAL; run 'cargo build --release'" >&2; exit 1; }
+# Builds the working clone, or brings the one from last time back to a known state.
+#
+# Reused rather than rebuilt: the checkout is a minute and the commit-graph another two, and
+# paying that on every run would make the suite something nobody reaches for. What is not
+# reused is its state — every run starts from the source's HEAD with no scenario branches.
+prepare_work_clone() {
+    if [ ! -d "$REPO/.git" ]; then
+        echo "building the scenario clone at $REPO (once; it shares $SOURCE's objects)"
+        git clone --shared --quiet "$SOURCE" "$REPO" || {
+            echo "could not clone $SOURCE to $REPO" >&2
+            exit 1
+        }
+        git -C "$REPO" config gc.auto 0
+        git -C "$REPO" config user.name "Coral Scenarios"
+        git -C "$REPO" config user.email "scenarios@coral.invalid"
+        git -C "$REPO" config commit.gpgsign false
+        # The graph is what the budgets assume, and a shared clone does not inherit the
+        # source's: it lives in that repository's own object directory.
+        echo "writing its commit-graph (once)"
+        git -C "$REPO" commit-graph write --reachable --no-progress
+    fi
 
-    # Refuse to start on a repository a previous run left mid-operation: the scenarios would
-    # compound the mess and every later assertion would be meaningless.
-    if [ -n "$(git -C "$REPO" status --porcelain)" ]; then
-        echo "clone at $REPO has uncommitted changes; clean it before running" >&2
-        exit 1
-    fi
-    if [ -n "$(git -C "$REPO" for-each-ref --format='%(refname)' 'refs/heads/bench/*')" ]; then
-        echo "clone at $REPO still has bench/ branches from an earlier run" >&2
-        exit 1
-    fi
+    # Whatever the last run left, this run does not inherit.
+    git -C "$REPO" merge --abort           >/dev/null 2>&1 || true
+    git -C "$REPO" rebase --abort          >/dev/null 2>&1 || true
+    git -C "$REPO" cherry-pick --abort     >/dev/null 2>&1 || true
+    git -C "$REPO" fetch --quiet origin    >/dev/null 2>&1 || true
+    git -C "$REPO" checkout --quiet --force -B master "$(git -C "$SOURCE" rev-parse HEAD)" \
+        >/dev/null 2>&1
+    for stale in $(git -C "$REPO" for-each-ref --format='%(refname:short)' 'refs/heads/bench/*'); do
+        git -C "$REPO" branch -qD "$stale"
+    done
+    git -C "$REPO" reset  --quiet --hard
+    git -C "$REPO" clean  --quiet -fd
+}
+
+require_repo() {
+    [ -d "$SOURCE/.git" ] || { echo "no kernel clone at $SOURCE; run 'just kernel-clone'" >&2; exit 1; }
+    [ -x "$CORAL" ] || { echo "no release binary at $CORAL; run 'cargo build --release'" >&2; exit 1; }
+    prepare_work_clone
 }
 
 # Scenario 1 — open and report. Budget: 300 ms to a usable RepoInfo.
