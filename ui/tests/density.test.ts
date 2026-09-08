@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { DEFAULT_METRICS, ROW_HEIGHTS, fittedMetrics, metricsFor } from '../src/graph/layout';
 import { TOKENS_CSS, blocks, declarations } from './stylesheet';
 
@@ -62,5 +65,24 @@ describe('the three densities', () => {
 
   it('leave the shipped metrics alone when nothing is passed', () => {
     expect(fittedMetrics(3, 400)).toEqual(DEFAULT_METRICS);
+  });
+});
+
+describe('the canvas beside the rows', () => {
+  /**
+   * The lanes are drawn at whatever row height the caller laid its rows out at.
+   *
+   * `fittedMetrics` defaults to the shipped metrics, so a canvas that called it with the width
+   * alone drew a 28px grid beside 24px rows: every node a pixel further from its own commit
+   * than the last, and by the bottom of the screen a node against the wrong message. Nothing
+   * in a unit test can see that, because a canvas has no 2d context outside a browser, so the
+   * wiring itself is what is checked.
+   */
+  it('is fitted from the metrics it is given, not the ones it ships with', () => {
+    const source = readFileSync(
+      resolve(import.meta.dirname, '../src/graph/GraphCanvas.svelte'),
+      'utf8',
+    );
+    expect(source).toContain('fittedMetrics(maxLane, width, base)');
   });
 });

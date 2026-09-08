@@ -45,12 +45,14 @@ function recorder(): {
   segments: Segment[];
   corners: Corner[];
   discs: Disc[];
+  rings: Disc[];
   labels: Label[];
 } {
   const segments: Segment[] = [];
   const corners: Corner[] = [];
   const labels: Label[] = [];
   const discs: Disc[] = [];
+  const rings: Disc[] = [];
   let pendingArc: Disc | null = null;
   let at = { x: 0, y: 0 };
   let pending: Segment | null = null;
@@ -100,7 +102,8 @@ function recorder(): {
     stroke() {
       if (pendingArc) {
         pendingArc.stroke = String(ctx.strokeStyle);
-        discs.push(pendingArc);
+        // A circle that was never filled is a ring around something else, not a node.
+        (pendingArc.fill === '' ? rings : discs).push(pendingArc);
         pendingArc = null;
         return;
       }
@@ -108,7 +111,14 @@ function recorder(): {
       pending = null;
     },
   };
-  return { ctx: ctx as unknown as CanvasRenderingContext2D, segments, corners, discs, labels };
+  return {
+    ctx: ctx as unknown as CanvasRenderingContext2D,
+    segments,
+    corners,
+    discs,
+    rings,
+    labels,
+  };
 }
 
 /**
@@ -160,7 +170,10 @@ describe('drawLanes', () => {
     const window: Window = { first: 150, last: 170 };
     const { ctx, segments } = recorder();
 
-    drawLanes(ctx, frame, window, DEFAULT_METRICS, ['#a', '#b', '#c', '#d'], 120, 600, ['#fill']);
+    drawLanes(ctx, frame, window, DEFAULT_METRICS, 120, 600, {
+      colours: ['#a', '#b', '#c', '#d'],
+      fills: ['#fill'],
+    });
 
     const run = verticalsIn(3, segments);
     expect(run.length).toBeGreaterThan(0);
@@ -182,7 +195,10 @@ describe('drawLanes', () => {
 
     const window: Window = { first: 80, last: 100 };
     const { ctx, segments } = recorder();
-    drawLanes(ctx, frame, window, DEFAULT_METRICS, Array(12).fill('#000'), 200, 600, ['#fill']);
+    drawLanes(ctx, frame, window, DEFAULT_METRICS, 200, 600, {
+      colours: Array(12).fill('#000'),
+      fills: ['#fill'],
+    });
 
     for (const lane of [2, 5, 6, 9]) {
       const covered = verticalsIn(lane, segments).reduce((n, s) => n + (s.y1 - s.y0), 0);
@@ -203,7 +219,10 @@ describe('drawLanes', () => {
 
     const window: Window = { first: 40, last: 60 };
     const { ctx, segments } = recorder();
-    drawLanes(ctx, frame, window, DEFAULT_METRICS, Array(8).fill('#000'), 200, 600, ['#fill']);
+    drawLanes(ctx, frame, window, DEFAULT_METRICS, 200, 600, {
+      colours: Array(8).fill('#000'),
+      fills: ['#fill'],
+    });
 
     const bottom = Math.max(...verticalsIn(4, segments).map((s) => s.y1));
     // The node's own row centre, and not a pixel below it.
@@ -218,7 +237,10 @@ describe('drawing a node', () => {
     const window: Window = { first: 0, last: 3 };
     const { ctx, discs } = recorder();
 
-    drawLanes(ctx, frame, window, DEFAULT_METRICS, ['#a', '#b', '#c'], 200, 200, ['#fill']);
+    drawLanes(ctx, frame, window, DEFAULT_METRICS, 200, 200, {
+      colours: ['#a', '#b', '#c'],
+      fills: ['#fill'],
+    });
 
     // One per visible row, on its own lane.
     expect(discs.length).toBe(4);
@@ -232,17 +254,11 @@ describe('drawing a node', () => {
     const frame = longRunFrame(20, 2);
     const { ctx, labels } = recorder();
 
-    drawLanes(
-      ctx,
-      frame,
-      { first: 0, last: 3 },
-      DEFAULT_METRICS,
-      ['#a'],
-      200,
-      200,
-      ['#fill'],
-      (row) => (row === 1 ? 'LT' : null),
-    );
+    drawLanes(ctx, frame, { first: 0, last: 3 }, DEFAULT_METRICS, 200, 200, {
+      colours: ['#a'],
+      fills: ['#fill'],
+      initials: (row) => (row === 1 ? 'LT' : null),
+    });
 
     expect(labels).toHaveLength(1);
     expect(labels[0]?.text).toBe('LT');
@@ -254,18 +270,12 @@ describe('drawing a node', () => {
     const fills = ['#f0', '#f1', '#f2', '#f3'];
     const { ctx, discs, labels } = recorder();
 
-    drawLanes(
-      ctx,
-      frame,
-      { first: 0, last: 1 },
-      DEFAULT_METRICS,
-      ['#lane'],
-      200,
-      200,
+    drawLanes(ctx, frame, { first: 0, last: 1 }, DEFAULT_METRICS, 200, 200, {
+      colours: ['#lane'],
       fills,
-      () => 'LT',
-      (row) => (row === 0 ? 'a@example.com' : 'b@example.com'),
-    );
+      initials: () => 'LT',
+      author: (row) => (row === 0 ? 'a@example.com' : 'b@example.com'),
+    });
 
     // Two authors, two fills; the same author would give the same one on every row.
     expect(discs).toHaveLength(2);
@@ -278,7 +288,10 @@ describe('drawing a node', () => {
   it('leaves a node blank while its metadata is still loading', () => {
     const frame = longRunFrame(20, 2);
     const { ctx, labels, discs } = recorder();
-    drawLanes(ctx, frame, { first: 0, last: 3 }, DEFAULT_METRICS, ['#a'], 200, 200, ['#fill']);
+    drawLanes(ctx, frame, { first: 0, last: 3 }, DEFAULT_METRICS, 200, 200, {
+      colours: ['#a'],
+      fills: ['#fill'],
+    });
     // The disc is drawn at full size either way, so a node does not change under the pointer
     // as a scroll settles.
     expect(labels).toHaveLength(0);
@@ -290,7 +303,10 @@ describe('drawing a node', () => {
     // half its width outside what `graphWidthFor` allows for, against the message beside it.
     const frame = longRunFrame(20, 2);
     const { ctx, discs } = recorder();
-    drawLanes(ctx, frame, { first: 0, last: 3 }, DEFAULT_METRICS, ['#a'], 200, 200, ['#fill']);
+    drawLanes(ctx, frame, { first: 0, last: 3 }, DEFAULT_METRICS, 200, 200, {
+      colours: ['#a'],
+      fills: ['#fill'],
+    });
 
     expect(discs.length).toBe(4);
     expect(discs.every((d) => d.radius < DEFAULT_METRICS.nodeRadius)).toBe(true);
@@ -302,7 +318,10 @@ describe('an edge that changes lane', () => {
   it('turns through a rounded corner rather than a lazy diagonal', () => {
     const frame = longRunFrame(20, 3);
     const { ctx, corners } = recorder();
-    drawLanes(ctx, frame, { first: 0, last: 3 }, DEFAULT_METRICS, ['#a', '#b', '#c', '#d'], 200, 200, ['#fill']);
+    drawLanes(ctx, frame, { first: 0, last: 3 }, DEFAULT_METRICS, 200, 200, {
+      colours: ['#a', '#b', '#c', '#d'],
+      fills: ['#fill'],
+    });
 
     // Row 0 opens lane 3 for its second parent; that is the only lane change in the window.
     expect(corners).toHaveLength(1);
@@ -320,7 +339,10 @@ describe('an edge that changes lane', () => {
     const frame = longRunFrame(20, 3);
     const { ctx, corners } = recorder();
     // A window past row 0 has only the straight first-parent run in it.
-    drawLanes(ctx, frame, { first: 5, last: 8 }, DEFAULT_METRICS, ['#a', '#b', '#c', '#d'], 200, 200, ['#fill']);
+    drawLanes(ctx, frame, { first: 5, last: 8 }, DEFAULT_METRICS, 200, 200, {
+      colours: ['#a', '#b', '#c', '#d'],
+      fills: ['#fill'],
+    });
     expect(corners).toHaveLength(0);
   });
 });
@@ -331,10 +353,75 @@ describe('a graph drawn tight', () => {
     const tight = { ...DEFAULT_METRICS, laneWidth: 7, nodeRadius: 3, laneOrigin: 5 };
     const { ctx, discs, labels } = recorder();
 
-    drawLanes(ctx, frame, { first: 0, last: 3 }, tight, ['#a'], 200, 200, ['#fill'], () => 'LT');
+    drawLanes(ctx, frame, { first: 0, last: 3 }, tight, 200, 200, {
+      colours: ['#a'],
+      fills: ['#fill'],
+      initials: () => 'LT',
+    });
 
     // The nodes are still drawn; it is only the letters in them that would be a smudge.
     expect(discs).toHaveLength(4);
     expect(labels).toHaveLength(0);
+  });
+});
+
+describe('the commit that is checked out', () => {
+  it('is ringed, clear of its own node, in the colour it was given', () => {
+    const frame = longRunFrame(20, 2);
+    const { ctx, discs, rings } = recorder();
+
+    drawLanes(ctx, frame, { first: 0, last: 3 }, DEFAULT_METRICS, 200, 200, {
+      colours: ['#lane'],
+      fills: ['#fill'],
+      headRow: 2,
+      headRing: '#brand',
+    });
+
+    expect(rings).toHaveLength(1);
+    expect(rings[0]?.stroke).toBe('#brand');
+    expect(rings[0]?.y).toBe(rowY(2, 0, DEFAULT_METRICS));
+    // Outside the node, so the lane colour ringing it is still readable underneath.
+    expect(rings[0]?.radius).toBeGreaterThan(DEFAULT_METRICS.nodeRadius);
+    // And the four nodes are drawn as they always were.
+    expect(discs).toHaveLength(4);
+  });
+
+  it('is ringed nowhere when nothing says which row it is on', () => {
+    const frame = longRunFrame(20, 2);
+    const { ctx, rings } = recorder();
+    drawLanes(ctx, frame, { first: 0, last: 3 }, DEFAULT_METRICS, 200, 200, {
+      colours: ['#lane'],
+      fills: ['#fill'],
+    });
+    expect(rings).toHaveLength(0);
+  });
+
+  it('keeps the ring inside its own row and off the lane beside it, however tight the graph', () => {
+    // A kernel merge region is thirty lanes in a column sized for eight, and HEAD is usually
+    // the first row on screen. A ring at a fixed offset ran into the next lane in the first
+    // case and was cut off by the top of the canvas in the second.
+    const frame = longRunFrame(20, 2);
+    for (const metrics of [
+      DEFAULT_METRICS,
+      { ...DEFAULT_METRICS, rowHeight: 24 },
+      { ...DEFAULT_METRICS, rowHeight: 32 },
+      { ...DEFAULT_METRICS, laneWidth: 7, nodeRadius: 3, laneOrigin: 5 },
+    ]) {
+      const { ctx, rings } = recorder();
+      drawLanes(ctx, frame, { first: 0, last: 3 }, metrics, 200, 200, {
+        colours: ['#lane'],
+        fills: ['#fill'],
+        headRow: 2,
+        headRing: '#brand',
+      });
+
+      const edge = (rings[0]?.radius ?? 0) + 1;
+      expect(edge, 'outside its own node').toBeGreaterThan(metrics.nodeRadius);
+      // Half a row is all there is above a node before the row boundary, and the canvas is cut
+      // off there when the row is the first one drawn.
+      expect(edge, 'inside its own row').toBeLessThanOrEqual(metrics.rowHeight / 2);
+      // The next lane along is a two-pixel line at the lane pitch.
+      expect(edge, 'clear of the next lane').toBeLessThan(metrics.laneWidth);
+    }
   });
 });

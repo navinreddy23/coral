@@ -448,6 +448,21 @@ describe('the shell', () => {
     expect(container.querySelector('aside.wip-panel')).toBeNull();
   });
 
+  it('sticks the working copy row to the top of the list rather than below it', async () => {
+    // Sticky moves the element and nothing else, so an offset here leaves the first commit
+    // where it was and drops the working copy row on top of it. It was held 22px clear for a
+    // column header the redesign removed, and 22 of the first commit's 28 pixels went under
+    // it — its ref pills, its node and the ring on it. happy-dom does not lay out, so this
+    // reads the rule.
+    await shell();
+    const rule = [...document.styleSheets]
+      .flatMap((sheet) => [...(sheet.cssRules ?? [])])
+      .map((r) => r.cssText)
+      .find((text) => /\.wip[^{]*\{/u.test(text) && /position:\s*sticky/u.test(text));
+    expect(rule, 'the working copy row is pinned').toBeDefined();
+    expect(rule, 'and pinned at the very top').toMatch(/top:\s*0(px)?\s*;/u);
+  });
+
   it('keeps the row click target above the cells that are positioned', async () => {
     // The message cell is a positioned element, because the lane band hangs off it, and it
     // comes after the click overlay in the row. Without a raise on the overlay the cell sat on

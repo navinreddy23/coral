@@ -221,6 +221,17 @@ export function nodeColours(root: HTMLElement): string[] {
 }
 
 /**
+ * The brand colour, which is what rings the node HEAD is on.
+ *
+ * The one place coral is used inside the graph, and the only thing in the column that is not a
+ * lane colour: it has to be a colour no lane can take, or the ring would read as a lane.
+ */
+export function brandColour(root: HTMLElement): string {
+  const found = getComputedStyle(root).getPropertyValue('--brand').trim();
+  return found.length > 0 ? found : NO_STYLESHEET;
+}
+
+/**
  * What to draw with when the stylesheet cannot be read at all.
  *
  * Only reachable in a test that mounts the canvas with no document behind it, or in a webview

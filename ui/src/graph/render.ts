@@ -16,6 +16,22 @@ const NODE_LABEL = '#ffffff';
 /** Smallest node that can hold two letters legibly. */
 const LABELLED_FROM = 7;
 
+/** Everything about a lane column that is not its geometry. */
+export interface LaneStyle {
+  /** Ring colour per lane, cycled. */
+  colours: string[];
+  /** Node fill per author, cycled, and the fill of a row whose author has not arrived. */
+  fills: string[];
+  /** Author initials for a row, or null while its metadata is still loading. */
+  initials?: (row: number) => string | null;
+  /** The author's identity, which fixes the node's fill. Null while it is loading. */
+  author?: (row: number) => string | null;
+  /** The row HEAD is on, or null when it is off screen or on nothing this frame knows. */
+  headRow?: number | null;
+  /** What to ring that row with. The brand colour, read from the stylesheet by the caller. */
+  headRing?: string;
+}
+
 /**
  * Draws the lane column onto a canvas.
  *
@@ -29,13 +45,13 @@ export function drawLanes(
   frame: Frame,
   window: Window,
   metrics: Metrics,
-  colours: string[],
   width: number,
   height: number,
-  fills: string[],
-  initials: (row: number) => string | null = () => null,
-  author: (row: number) => string | null = () => null,
+  style: LaneStyle,
 ): void {
+  const { colours, fills } = style;
+  const initials = style.initials ?? (() => null);
+  const author = style.author ?? (() => null);
   ctx.clearRect(0, 0, width, height);
   // An even width centred on an integer coordinate covers whole pixels; 1.5px straddles two
   // and is rendered as two half-lit ones, which reads as a soft line rather than a thin one.
@@ -116,6 +132,16 @@ export function drawLanes(
     ctx.strokeStyle = laneColour(lane, colours);
     ctx.stroke();
 
+    // The commit that is checked out, ringed clear of its own node so the lane colour under it
+    // stays readable. The gap is left unpainted rather than filled: the canvas is transparent
+    // over the row, so what shows through is the row's own background, selected or not.
+    if (row === style.headRow) {
+      ctx.strokeStyle = style.headRing ?? laneColour(lane, colours);
+      ctx.beginPath();
+      ctx.arc(x, y, headRadius(metrics), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     // Only where there is room for them to be read. In a merge region the lanes are drawn
     // tight and the node is a few pixels across; two letters in it are a smudge, and a smudge
     // in every node is worse than a plain dot.
@@ -125,6 +151,22 @@ export function drawLanes(
       ctx.fillText(label, x, y + 0.5);
     }
   }
+}
+
+/**
+ * Where the ring on the HEAD node sits.
+ *
+ * Three pixels outside the node where there is room, and less where there is not. It has to
+ * stay inside its own row: HEAD is usually near the top of the graph, and a ring drawn at a
+ * fixed offset had its top cut off by the edge of the canvas whenever HEAD was the first row
+ * on screen. The lane pitch bounds it too — at the pitch a kernel merge region is drawn at,
+ * a ring three pixels out crosses the line of the next lane along.
+ *
+ * The stroke straddles the path, so the mark itself reaches a pixel past this on each side.
+ */
+function headRadius(m: Metrics): number {
+  const clear = Math.min(m.laneWidth - 2, m.rowHeight / 2 - 2);
+  return Math.max(m.nodeRadius + 1, Math.min(m.nodeRadius + 3, clear));
 }
 
 /**

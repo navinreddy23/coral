@@ -2,7 +2,15 @@
   import { onMount } from 'svelte';
 
   import type { Frame } from './frame';
-  import { fittedMetrics, GRAPH_COLUMN_PX, laneColours, nodeColours } from './layout';
+  import {
+    brandColour,
+    DEFAULT_METRICS,
+    fittedMetrics,
+    GRAPH_COLUMN_PX,
+    laneColours,
+    nodeColours,
+    type Metrics,
+  } from './layout';
   import { drawLanes, resizeCanvas } from './render';
   import type { Theme } from '../state/theme.svelte';
 
@@ -20,6 +28,8 @@
     initials = () => null,
     author = () => null,
     maxLane = 0,
+    headRow = null,
+    base = DEFAULT_METRICS,
   }: {
     frame: Frame | null;
     firstRow?: number;
@@ -40,16 +50,28 @@
     author?: (row: number) => string | null;
     /** The widest lane on screen, which decides how tightly the lanes have to be drawn. */
     maxLane?: number;
+    /** The row HEAD is on, which is ringed. Null when nothing is checked out. */
+    headRow?: number | null;
+    /**
+     * The metrics before the lane column is fitted to its width.
+     *
+     * The row height is the caller's, not this component's: the list beside it lays its rows
+     * out from `--row-h`, and a canvas that derived its own put every node a growing distance
+     * from the commit it belongs to at any density but the default.
+     */
+    base?: Metrics;
   } = $props();
 
   let canvas: HTMLCanvasElement;
   let colours: string[] = $state([]);
   let fills: string[] = $state([]);
+  let brand = $state('');
   let pending = false;
 
   function readTokens() {
     colours = laneColours(document.documentElement);
     fills = nodeColours(document.documentElement);
+    brand = brandColour(document.documentElement);
   }
 
   onMount(readTokens);
@@ -74,7 +96,7 @@
 
   function paint() {
     if (!canvas || !frame) return;
-    const metrics = fittedMetrics(maxLane, width);
+    const metrics = fittedMetrics(maxLane, width, base);
     const ctx = resizeCanvas(canvas, width, height, window.devicePixelRatio || 1);
     if (!ctx) return;
 
@@ -86,7 +108,14 @@
       // plus its length, not its length alone.
       last: Math.min(frame.startRow + frame.rowCount - 1, firstRow + perScreen + 2),
     };
-    drawLanes(ctx, frame, win, metrics, colours, width, height, fills, initials, author);
+    drawLanes(ctx, frame, win, metrics, width, height, {
+      colours,
+      fills,
+      initials,
+      author,
+      headRow,
+      headRing: brand,
+    });
   }
 
   $effect(() => {
@@ -96,6 +125,8 @@
     void initials;
     void author;
     void maxLane;
+    void headRow;
+    void base;
     void width;
     void height;
     void colours;

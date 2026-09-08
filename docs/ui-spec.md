@@ -173,8 +173,8 @@ same three numbers reach the stylesheet and the canvas metrics, which cannot rea
 
 - Canvas draws only visible rows plus one screen of overscan. Edges are Bézier curves between
   rows; lanes take a stable colour from the eight-colour palette in `tokens.css`. Commit nodes
-  show the author avatar once loaded, otherwise a filled circle in the lane colour. The HEAD
-  node is larger with a ring.
+  show the author avatar once loaded, otherwise a filled circle in the lane colour. The commit
+  HEAD is on carries a second ring in the brand colour, clear of its own.
 - Label pills sit on the row of their target. A local and remote branch of the same name
   collapse into one pill with a remote avatar. The HEAD pill is highlighted; a branch with an
   open PR gets a badge. Click selects, double-click on a branch pill checks out, hover

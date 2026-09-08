@@ -506,6 +506,20 @@
    */
   let detachedRow = $state<number | null>(null);
 
+  /**
+   * The row that is checked out, which the graph rings.
+   *
+   * Detached, HEAD has no ref and the row is looked up by object id; on a branch it is wherever
+   * that branch was placed. Null until the refs have arrived, so nothing is ringed rather than
+   * the wrong thing being.
+   */
+  const headRow = $derived.by(() => {
+    if (detachedRow !== null) return detachedRow;
+    if (headName === null) return null;
+    const on = refs.groups.local.find((r) => r.short === headName);
+    return on?.row ?? null;
+  });
+
   $effect(() => {
     const head = info?.head;
     const path = info?.path;
@@ -3822,6 +3836,8 @@
             initials={nodeInitials}
             author={nodeAuthor}
             maxLane={widestLane(graph.frame, rows)}
+            {headRow}
+            base={metrics}
           />
         </div>
         <ul class="rows" style:top="{listTop(scrollTop)}px">
@@ -4335,7 +4351,11 @@
    * down the leading edge survives a hover passing over the row below.
    */
   .wip {
-    position: sticky; top: 22px; z-index: 1; cursor: pointer;
+    /* Stuck at the very top, not below it: an offset here does not push the rows down with it,
+       so a WIP row held 22px clear of the scrollport sat on top of the first commit. The find
+       bar is sticky at zero as well and paints over this one, which is what its z-index is
+       for. */
+    position: sticky; top: 0; z-index: 1; cursor: pointer;
     background: var(--warn-soft); box-shadow: inset 2px 0 0 var(--warn);
     /* It is a button, and a button is shrink-to-fit even as a grid container. Every other row
        is a list item and stretches on its own, which is why the difference only showed once
