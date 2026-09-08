@@ -345,9 +345,23 @@ glyph, and in a diff a reader checking whether a line says `!=` or `!==` should 
 how the face draws them. Six sizes and no more, plus one for lettering inside a disc or a badge,
 which is sized to the shape holding it rather than to the reading scale.
 
-**Icons** are one drawn set on a 24-unit grid, in `ui/src/app/icon.ts`. Stroke weight is not
-stored with them — `Icon.svelte` derives it from the size asked for, so a glyph on an
-eleven-pixel branch pill and one in a twenty-pixel button land on the same optical weight.
+**Icons** are one drawn set on a 24-unit grid, in `ui/src/app/icon.ts`, in the graph's own
+vocabulary: a lane is stroked and a commit is filled. Generalised to the rest of the set that
+reads as stroke the structure, fill the subject — a gear is stroked and its hub is solid, an eye
+is stroked and its pupil is solid, a page is stroked and the line added to it is solid. The rule
+is what gives a glyph somewhere for the eye to land; a set drawn entirely in hairlines of one
+weight reads as grey noise at sixteen pixels, which is what the first attempt did.
+
+The toolbar's four are drawn from git rather than from file transfer. Pull and push were a
+download arrow and an upload arrow — what every application that moves bytes uses; the bar is
+where a commit comes from now, the solid disc is where it ends up, and the two mirror each
+other. Stash and pop put that disc into the same box the sidebar heads its stash list with.
+Patch is a page with one line added and one removed, rather than a page with a plus on it,
+which is what "new file" looks like everywhere.
+
+Stroke weight is not stored with a glyph — `Icon.svelte` derives it from the size asked for, so
+one on an eleven-pixel branch pill and one in a twenty-pixel button land on the same optical
+weight.
 
 **The mark** is one commit, the two branches leaving it, and the trunk carrying on past them:
 a commit graph and a piece of coral, which is a thing that grows by branching. Four nodes, not

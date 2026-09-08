@@ -22,7 +22,8 @@ describe('the icon set', () => {
   it('draws something for every name it offers', () => {
     for (const name of NAMES) {
       const glyph = ICONS[name];
-      const drawn = (glyph.paths?.length ?? 0) + (glyph.solid?.length ?? 0);
+      const drawn = (glyph.paths?.length ?? 0) + (glyph.solid?.length ?? 0)
+        + (glyph.dots?.length ?? 0);
       expect(drawn, `${name} draws nothing`).toBeGreaterThan(0);
     }
   });
@@ -37,6 +38,13 @@ describe('the icon set', () => {
           expect(value, `${name} has ${value} in "${d.slice(0, 30)}…"`).toBeGreaterThanOrEqual(-24);
           expect(value, `${name} has ${value}`).toBeLessThanOrEqual(24);
         }
+      }
+      for (const [x, y, r] of glyph.dots ?? []) {
+        // A disc has to be inside the square with its whole radius, not only its centre.
+        expect(x - r, `${name}: a dot runs off the left`).toBeGreaterThanOrEqual(0);
+        expect(y - r, `${name}: a dot runs off the top`).toBeGreaterThanOrEqual(0);
+        expect(x + r, `${name}: a dot runs off the right`).toBeLessThanOrEqual(24);
+        expect(y + r, `${name}: a dot runs off the bottom`).toBeLessThanOrEqual(24);
       }
     }
   });
@@ -55,17 +63,19 @@ describe('the stroke weight', () => {
     expect(strokeFor(16)).toBeGreaterThan(strokeFor(24));
   });
 
-  it('lands near a pixel and a third on screen at every ordinary size', () => {
+  it('lands near a pixel and a half on screen at every ordinary size', () => {
+    // Heavier than the hairline the first set used, so a stroke holds its own beside the
+    // filled masses now standing next to it.
     for (const size of [12, 14, 16, 18, 20]) {
       const onScreen = (strokeFor(size) * size) / 24;
-      expect(onScreen, `at ${size}px`).toBeGreaterThan(1.2);
-      expect(onScreen, `at ${size}px`).toBeLessThan(1.5);
+      expect(onScreen, `at ${size}px`).toBeGreaterThan(1.3);
+      expect(onScreen, `at ${size}px`).toBeLessThan(1.6);
     }
   });
 
   it('stops short at each end, so a tiny glyph does not close into a blob', () => {
-    expect(strokeFor(4)).toBeLessThanOrEqual(2.8);
-    expect(strokeFor(64)).toBeGreaterThanOrEqual(1.6);
+    expect(strokeFor(4)).toBeLessThanOrEqual(3);
+    expect(strokeFor(64)).toBeGreaterThanOrEqual(1.7);
   });
 });
 

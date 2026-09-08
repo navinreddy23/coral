@@ -46,6 +46,9 @@
   {#each glyph.solid ?? [] as d (d)}
     <path {d} fill="currentColor" stroke="none" />
   {/each}
+  {#each glyph.dots ?? [] as [x, y, r] (`${x},${y}`)}
+    <circle cx={x} cy={y} {r} fill="currentColor" stroke="none" />
+  {/each}
 </svg>
 
 <style>
