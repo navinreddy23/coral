@@ -29,6 +29,17 @@ export interface KeyEvent {
   meta: boolean;
 }
 
+/**
+ * How a binding is written, by id, or nothing where there is none.
+ *
+ * The toolbar's buttons are icons now, so their tooltips carry the shortcut as well as the
+ * name — and reading it from here rather than spelling it out beside the button keeps one
+ * table for the help overlay and the tooltips both.
+ */
+export function keysOf(id: string): string | null {
+  return BINDINGS.find((binding) => binding.id === id)?.keys ?? null;
+}
+
 /** True when the primary modifier is held, and no other. Ctrl on Linux and Windows. */
 function primary(e: KeyEvent): boolean {
   return (e.ctrl || e.meta) && !e.alt;

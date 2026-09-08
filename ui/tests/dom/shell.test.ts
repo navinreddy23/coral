@@ -352,8 +352,8 @@ describe('the shell', () => {
     dialog.mockResolvedValue(null);
 
     const patch = [...container.querySelectorAll('button.action')].find(
-      (b) => b.textContent?.includes('Patch'),
-    ) as HTMLButtonElement;
+        (b) => b.getAttribute('aria-label') === 'Patch',
+      ) as HTMLButtonElement;
     expect(patch, 'the toolbar carries a patch button').toBeDefined();
     await fireEvent.click(patch);
 
@@ -373,11 +373,13 @@ describe('the shell', () => {
     });
     // The button says which of its two jobs it will do, so that is what says the pair took.
     const patchButton = () =>
-      [...container.querySelectorAll('button.action')].find((b) =>
-        b.textContent?.includes('Patch'),
+      [...container.querySelectorAll('button.action')].find(
+        (b) => b.getAttribute('aria-label') === 'Patch',
       ) as HTMLButtonElement;
     await waitFor(() => {
-      if (!patchButton().title.includes('Write')) throw new Error('not comparing yet');
+      if (!patchButton().title.includes('write the commits')) {
+        throw new Error('not comparing yet');
+      }
     });
 
     const dialog = vi.mocked(openDialog);
@@ -969,9 +971,9 @@ describe('what an action leaves behind', () => {
     wire({ ...fetched, repo_refs: spikeOn(2) });
     invoke.mockClear();
 
-    const fetch = [...container.querySelectorAll('button.action')].find((b) =>
-      b.textContent?.includes('Fetch'),
-    ) as HTMLButtonElement;
+    const fetch = [...container.querySelectorAll('button.action')].find(
+        (b) => b.getAttribute('aria-label') === 'Fetch',
+      ) as HTMLButtonElement;
     expect(fetch, 'the toolbar carries a fetch button').toBeDefined();
     await fireEvent.click(fetch);
 
@@ -1000,8 +1002,8 @@ describe('what an action leaves behind', () => {
     invoke.mockClear();
 
     await fireEvent.click(
-      [...container.querySelectorAll('button.action')].find((b) =>
-        b.textContent?.includes('Fetch'),
+      [...container.querySelectorAll('button.action')].find(
+        (b) => b.getAttribute('aria-label') === 'Fetch',
       ) as HTMLButtonElement,
     );
 
@@ -1022,8 +1024,8 @@ describe('what an action leaves behind', () => {
     invoke.mockClear();
 
     await fireEvent.click(
-      [...container.querySelectorAll('button.action')].find((b) =>
-        b.textContent?.includes('Fetch'),
+      [...container.querySelectorAll('button.action')].find(
+        (b) => b.getAttribute('aria-label') === 'Fetch',
       ) as HTMLButtonElement,
     );
 
