@@ -91,6 +91,24 @@ describe('the component stylesheets', () => {
   });
 });
 
+describe('a glyph in the middle of a sentence', () => {
+  /**
+   * `Icon.svelte` renders a block, which is right in every row and button that holds one and
+   * wrong inside a paragraph: the line breaks at the glyph and again after it, and the mark is
+   * left stranded on a line of its own with the rest of the sentence below it.
+   */
+  it('is put back in the run of words by whatever wraps it', () => {
+    const offenders: string[] = [];
+    for (const { name, css, source } of STYLES) {
+      // A wrapper inside a paragraph, which is the only place this goes wrong.
+      if (!/<p[^>]*>[\s\S]*?<span class="glyph">[\s\S]*?<\/p>/u.test(source)) continue;
+      const rule = /\.glyph\s*\{([^}]*)\}/u.exec(css)?.[1] ?? '';
+      if (!/display:\s*inline/u.test(rule)) offenders.push(name);
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe('the token file', () => {
   it('offers a size for lettering inside a shape, outside the reading scale', () => {
     expect(tokens('light').has('text-mark')).toBe(true);

@@ -96,8 +96,18 @@
     border-left: 2px solid var(--border-strong); padding-left: var(--space-3);
   }
   code { font-family: var(--font-mono); font-variant-ligatures: none; }
-  /* The button's own glyph, so the sentence points at something the eye can find. */
+  /*
+   * The button's own glyph, in the middle of a sentence, so it points at something the eye
+   * can find.
+   *
+   * `Icon.svelte` draws a block, which is right everywhere it sits in a row of its own and
+   * wrong here: it broke the line at the icon and again after it, leaving the mark stranded on
+   * a line of its own with the rest of the sentence below it. Inline-flex puts it back in the
+   * run of words, and the shift is what sets it on the letters' own centre rather than their
+   * baseline.
+   */
   .glyph {
+    display: inline-flex; align-items: center; vertical-align: -2px;
     font-size: var(--text-base); padding: 0 3px; border-radius: 3px;
     background: var(--bg-2); color: var(--fg-1);
   }

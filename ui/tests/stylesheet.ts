@@ -61,15 +61,21 @@ export function blocks(css: string): [string, string][] {
   );
 }
 
-/** Every component that has a `<style>` block, as a name and its CSS. */
-export function componentStyles(): { name: string; css: string }[] {
-  const out: { name: string; css: string }[] = [];
+/**
+ * Every component that has a `<style>` block: its name, its CSS, and the whole file.
+ *
+ * The source comes with it because some rules are only wrong in combination with the markup
+ * they style — a glyph drawn as a block is right in a button and wrong inside a paragraph —
+ * and finding the file again from the name alone means knowing which directory it was in.
+ */
+export function componentStyles(): { name: string; css: string; source: string }[] {
+  const out: { name: string; css: string; source: string }[] = [];
   for (const dir of ['src/app', 'src/graph']) {
     for (const file of readdirSync(resolve(ROOT, dir))) {
       if (!file.endsWith('.svelte')) continue;
       const source = readFileSync(resolve(ROOT, dir, file), 'utf8');
       const style = /<style>([\s\S]*?)<\/style>/.exec(source);
-      if (style?.[1]) out.push({ name: file, css: style[1] });
+      if (style?.[1]) out.push({ name: file, css: style[1], source });
     }
   }
   return out;
