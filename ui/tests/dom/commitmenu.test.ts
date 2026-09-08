@@ -134,6 +134,12 @@ async function openMenu(container: HTMLElement): Promise<string[]> {
   return [...container.querySelectorAll('.menu .label')].map((e) => e.textContent?.trim() ?? '');
 }
 
+/** Whether the menu item of that name is there but cannot be used. */
+function disabledItem(container: HTMLElement, label: string): boolean {
+  const button = itemNamed(container, label) as HTMLButtonElement;
+  return button.disabled;
+}
+
 function itemNamed(container: HTMLElement, label: string): HTMLElement {
   const found = [...container.querySelectorAll('.menu .label')].find(
     (e) => e.textContent?.trim() === label,
@@ -545,15 +551,14 @@ describe('the branch and tag menu', () => {
     await expand(container, 'Tags');
     const labels = await refMenu(container, 'v1.0.0');
     expect(labels).not.toContain('Fast-forward master to v1.0.0');
-    expect(labels).not.toContain('Merge v1.0.0 into master');
-    expect(labels).not.toContain('Rebase master onto v1.0.0');
     expect(labels).toContain('Fast-forward v1.0.0 to master…');
   });
 
-  it('still offers to edit the commits made since a tag', async () => {
-    // `rebase -i` onto an ancestor lists everything committed since it, which is how anybody
-    // edits the history since their last release. Hiding it with the three that do nothing
-    // took away the reason to right-click a release tag at all.
+  it('keeps the rest of the group whichever way the tag stands', async () => {
+    // Only the fast-forward changes direction. Merging or rebasing onto something the branch
+    // already contains is a no-op git states plainly, and `rebase -i` onto an ancestor is not
+    // a no-op at all — it is how anybody edits the history since their last release. Removing
+    // them left a menu with one line in it.
     const { container } = await shell(
       {
         repo_refs: [on('v1.0.0', { kind: 'tag', annotated: false })],
@@ -563,6 +568,8 @@ describe('the branch and tag menu', () => {
     );
     await expand(container, 'Tags');
     const labels = await refMenu(container, 'v1.0.0');
+    expect(labels).toContain('Merge v1.0.0 into master');
+    expect(labels).toContain('Rebase master onto v1.0.0');
     expect(labels).toContain('Rebase master onto v1.0.0, interactively');
   });
 
@@ -809,28 +816,28 @@ describe('merging and rebasing from the graph', () => {
     expect(labels.some((l) => l.startsWith('Rebase master onto'))).toBe(false);
   });
 
-  it('offers only the interactive rebase on a commit the branch has passed', async () => {
-    // The reported bug, on a commit row: master is in front, so there is nothing to bring in
-    // and no fast-forward backwards to it. Editing the commits since it is the exception, and
-    // is the whole reason to right-click an old commit.
+  it('says why rather than vanishing when a bare commit cannot be fast-forwarded to', async () => {
+    // A commit row carries no ref to move, so there is no other direction to offer. The line
+    // stays where it is, disabled, saying which way round they are: it used to read
+    // "Fast-forward master to <sha>", which git refuses because master is in front.
     const { container } = await shell({ rev_ancestry: 'behind' });
     const labels = await openMenu(container);
     const short = oidOf(frame, 0).slice(0, 8);
-    expect(labels.some((l) => l.startsWith('Fast-forward'))).toBe(false);
-    expect(labels.some((l) => l.startsWith('Merge '))).toBe(false);
-    expect(labels).not.toContain(`Rebase master onto ${short}`);
+    expect(labels).toContain(`Fast-forward master to ${short}`);
+    expect(disabledItem(container, `Fast-forward master to ${short}`)).toBe(true);
     expect(labels).toContain(`Rebase master onto ${short}, interactively`);
   });
 
-  it('drops the fast-forward when the two have diverged, and keeps the rest', async () => {
-    // git refuses a fast-forward that would lose commits, so offering one is offering a
-    // failure. A merge or a rebase is exactly what this case is for.
+  it('disables the fast-forward when the two have diverged, and keeps the rest', async () => {
+    // git refuses a fast-forward that would lose commits, so it cannot be run — but a line
+    // that disappears teaches nobody why. A merge or a rebase is what this case is for.
     const { container } = await shell(
       { repo_refs: [on('topic', { kind: 'local_branch' })], rev_ancestry: 'diverged' },
       true,
     );
     const labels = await openMenu(container);
-    expect(labels.some((l) => l.startsWith('Fast-forward'))).toBe(false);
+    expect(labels).toContain('Fast-forward master to topic');
+    expect(disabledItem(container, 'Fast-forward master to topic')).toBe(true);
     expect(labels).toContain('Merge topic into master');
     expect(labels).toContain('Rebase master onto topic');
   });

@@ -854,101 +854,108 @@
       here.find((r) => r.kind.kind === 'remote_branch') ??
       here.find((r) => r.kind.kind === 'tag');
     const rev = named?.short ?? oid.slice(0, 8);
-    const items = combineItems(rev, headName, where);
+    const items = combineItems(named ?? null, rev, headName, where);
     return items.length === 0 ? [] : [...items, { kind: 'separator' }];
   }
 
   /**
-   * Bringing a revision into the current branch, offered only where it can happen.
+   * The fast-forward line, pointing whichever way git could actually take it.
    *
-   * Which of the four appear depends on where the revision stands. A revision the current
-   * branch already contains has nothing to bring in: there is no fast-forward to it, merging
-   * it does nothing, and rebasing onto it replays this branch onto its own ancestor. All four
-   * were offered regardless, so right-clicking a release tag on an up-to-date master read
-   * "Fast-forward master to v1.0.0", which git refuses because master is the one in front. A
-   * diverged revision keeps the merge and the rebases and loses the fast-forward, which git
-   * refuses for the same reason.
+   * One line, always in the same place, because a menu whose items come and go is a menu
+   * nobody can learn. What changes is the direction and whether it can be used. A ref the
+   * branch is behind is fast-forwarded to; a ref the branch has passed is fast-forwarded
+   * *from*, which moves it — a branch by fast-forward with no checkout, a tag by replacement,
+   * which is asked about first because whoever has fetched the old one keeps it. A bare commit
+   * behind, or two that have diverged, can be neither, and the line says why rather than
+   * vanishing: it read "Fast-forward master to v1.0.0" on an up-to-date master, which git
+   * refuses because master is the one in front.
    */
-  function combineItems(rev: string, head: string, where: Ancestry): MenuItem[] {
-    if (where === 'same') return [];
+  function fastForwardItem(
+    ref: PlacedRef | null,
+    rev: string,
+    head: string,
+    where: Ancestry,
+  ): MenuItem {
     const busy = actions.busy || worktree.busy;
-    const editing: MenuItem = {
-      kind: 'item',
-      label: `Rebase ${head} onto ${rev}, interactively`,
-      disabled: busy,
-      run: () => info && void rebase.load(info.path, rev),
-    };
-    // The one thing that still means something behind: `rebase -i` onto an ancestor lists the
-    // commits made since it, which is how anybody edits everything since the last release.
-    // Plain rebase there answers "up to date" and merge answers "already up to date", so those
-    // two go; this one is the reason to right-click a release tag at all.
-    if (where === 'behind') return [editing];
-
-    const items: MenuItem[] = [];
     if (where === 'ahead') {
-      items.push({
+      return {
         kind: 'item',
         label: `Fast-forward ${head} to ${rev}`,
         hint: 'never a merge commit',
         disabled: busy,
         run: () => void act({ kind: 'merge', rev, mode: 'ffOnly' }),
-      });
+      };
     }
-    items.push({
+    if (where === 'behind' && ref?.kind.kind === 'local_branch') {
+      return {
+        kind: 'item',
+        label: `Fast-forward ${ref.short} to ${head}`,
+        hint: 'without checking it out',
+        disabled: busy,
+        run: () => void act({ kind: 'branchFastForward', name: ref.short, at: head }),
+      };
+    }
+    if (where === 'behind' && ref?.kind.kind === 'tag') {
+      return {
+        kind: 'item',
+        // Named for the direction rather than for the plumbing: git moves a tag by replacing
+        // it, and the hint says so.
+        label: `Fast-forward ${ref.short} to ${head}…`,
+        hint: 'replaces the tag',
+        danger: true,
+        disabled: busy,
+        run: () => void moveTag(ref.short, head),
+      };
+    }
+    return {
       kind: 'item',
-      label: `Merge ${rev} into ${head}`,
-      disabled: busy,
-      run: () => void act({ kind: 'merge', rev, mode: 'auto' }),
-    });
-    items.push({
-      kind: 'item',
-      label: `Rebase ${head} onto ${rev}`,
-      disabled: busy,
-      run: () => void act({ kind: 'rebase', onto: rev }),
-    });
-    items.push(editing);
-    return items;
+      label: `Fast-forward ${head} to ${rev}`,
+      hint: where === 'behind' ? `${head} is already past it` : 'they have diverged',
+      disabled: true,
+      run: () => {},
+    };
   }
 
   /**
-   * Moving a ref the current branch has left behind up to where it is.
+   * Bringing a revision into the current branch, and taking it along when the branch is in
+   * front.
    *
-   * The other half of the same question, and the one the menu was missing: when the branch is
-   * in front, the operation that makes sense is not bringing the ref in but taking it along.
-   * A branch goes by fast-forward and needs no checkout. A tag does not fast-forward — it has
-   * no history of its own to extend — so moving one is a replacement, and is asked about
-   * first, because whoever has already fetched the old one keeps it.
+   * Every line is always here; only the fast-forward changes direction. Merging or rebasing
+   * onto something the branch already contains is a no-op git states plainly, which is a
+   * better answer than an item that is not there — and `rebase -i` onto an ancestor is not a
+   * no-op at all: it lists every commit made since, which is how anybody edits the history
+   * since their last release.
    */
-  function catchUpItems(ref: PlacedRef, head: string, where: Ancestry): MenuItem[] {
-    if (where !== 'behind') return [];
+  function combineItems(
+    ref: PlacedRef | null,
+    rev: string,
+    head: string,
+    where: Ancestry,
+  ): MenuItem[] {
+    // The row the branch is already on. Everything here would be about itself.
+    if (where === 'same') return [];
     const busy = actions.busy || worktree.busy;
-    if (ref.kind.kind === 'local_branch') {
-      return [
-        {
-          kind: 'item',
-          label: `Fast-forward ${ref.short} to ${head}`,
-          hint: 'without checking it out',
-          disabled: busy,
-          run: () => void act({ kind: 'branchFastForward', name: ref.short, at: head }),
-        },
-      ];
-    }
-    if (ref.kind.kind === 'tag') {
-      return [
-        {
-          kind: 'item',
-          // Named for the direction rather than for the plumbing. git moves a tag by replacing
-          // it, and the hint says so, but "fast-forward v1.0.0 to master" is what the person
-          // looking at a release tag behind their branch is after.
-          label: `Fast-forward ${ref.short} to ${head}…`,
-          hint: 'replaces the tag',
-          danger: true,
-          disabled: busy,
-          run: () => void moveTag(ref.short, head),
-        },
-      ];
-    }
-    return [];
+    return [
+      fastForwardItem(ref, rev, head, where),
+      {
+        kind: 'item',
+        label: `Merge ${rev} into ${head}`,
+        disabled: busy,
+        run: () => void act({ kind: 'merge', rev, mode: 'auto' }),
+      },
+      {
+        kind: 'item',
+        label: `Rebase ${head} onto ${rev}`,
+        disabled: busy,
+        run: () => void act({ kind: 'rebase', onto: rev }),
+      },
+      {
+        kind: 'item',
+        label: `Rebase ${head} onto ${rev}, interactively`,
+        disabled: busy,
+        run: () => info && void rebase.load(info.path, rev),
+      },
+    ];
   }
 
   /** Moves a tag, after saying what that costs anyone who already has it. */
@@ -1017,10 +1024,7 @@
     }
 
     if (!current && ref.kind.kind !== 'stash' && headName !== null) {
-      const combine = [
-        ...combineItems(ref.short, head, where),
-        ...catchUpItems(ref, head, where),
-      ];
+      const combine = combineItems(ref, ref.short, head, where);
       if (combine.length > 0) items.push({ kind: 'separator' }, ...combine);
     }
 
