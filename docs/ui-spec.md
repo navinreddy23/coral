@@ -47,7 +47,13 @@ flatters itself by half a point.
 └──────────────┴──────────────────────────────────────────┴───────────────┘
 ```
 
-Left and right panels collapse; widths persist per repository. The theme follows the desktop
+Left and right panels fold away and come back, from the two buttons at the trailing end of the
+toolbar, from `Ctrl+\` and `Ctrl+K`, or from the command palette. The choice is remembered, and
+each panel keeps the width it had. Both together are three hundred pixels, which on a small
+screen is most of a diff — the buttons sit beside the terminal's for that reason, since all
+three act on the window rather than on the repository. Their glyph carries the state: a filled
+strip is a panel that is showing and a ruled edge is one that is not. Widths persist per
+repository. The theme follows the desktop
 unless it is told not to. Panel splitters are draggable, and the two that size the commit
 list's columns are invisible until the pointer is on them — there is no line to draw between
 the branch pills and the nodes they point at without cutting the one thing that ties them

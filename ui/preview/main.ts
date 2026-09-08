@@ -370,6 +370,7 @@ mount(Toolbar, {
   props: {
     repo: 'coral', path: REPO, submodule: null, branch: 'master',
     busy: false, comparing: false, terminalOpen: false,
+    leftPanel: true, rightPanel: true, rightPanelUsable: true,
     onAction: () => {}, onLeaveSubmodule: () => {},
     onPullMenu: () => {}, onPushMenu: () => {},
   },

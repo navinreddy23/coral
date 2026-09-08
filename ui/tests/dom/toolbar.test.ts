@@ -17,6 +17,9 @@ function bar(overrides: Record<string, unknown> = {}) {
       busy: false,
       comparing: false,
       terminalOpen: false,
+      leftPanel: true,
+      rightPanel: true,
+      rightPanelUsable: true,
       onAction: vi.fn(),
       onLeaveSubmodule: vi.fn(),
       onPullMenu: vi.fn(),
@@ -35,7 +38,8 @@ describe('the toolbar', () => {
     // The words are gone from the face of the buttons; nothing else about them is.
     const { container } = bar();
     expect(buttons(container).map((b) => b.getAttribute('aria-label'))).toEqual([
-      'Undo', 'Redo', 'Fetch', 'Pull', 'Push', 'Branch', 'Stash', 'Pop', 'Patch', 'Terminal',
+      'Undo', 'Redo', 'Fetch', 'Pull', 'Push', 'Branch', 'Stash', 'Pop', 'Patch',
+      'Left panel', 'Right panel', 'Terminal',
     ]);
   });
 
@@ -89,12 +93,14 @@ describe('the toolbar', () => {
     expect(carets).toEqual(['Choose how to pull', 'Choose what to push']);
   });
 
-  it('keeps the terminal at the far end, away from the repository actions', () => {
-    // It acts on the window, not on the repository, and sitting inside the run of git actions
+  it('keeps the parts of the window at the far end, away from the repository actions', () => {
+    // They act on the window, not on the repository, and sitting inside the run of git actions
     // is what made that unclear.
     const { container } = bar();
-    expect(container.querySelector('.trailing [aria-label="Terminal"]')).not.toBeNull();
-    expect(container.querySelector('.actions [aria-label="Terminal"]')).toBeNull();
+    for (const label of ['Left panel', 'Right panel', 'Terminal']) {
+      expect(container.querySelector(`.trailing [aria-label="${label}"]`), label).not.toBeNull();
+      expect(container.querySelector(`.actions [aria-label="${label}"]`), label).toBeNull();
+    }
   });
 
   it('says whether the terminal pane is showing', () => {
@@ -110,6 +116,69 @@ describe('the toolbar', () => {
       buttons(container).find((b) => b.getAttribute('aria-label') === label);
     expect(named('Push')?.disabled).toBe(true);
     expect(named('Terminal')?.disabled).toBe(false);
+  });
+
+  it('draws each side panel as showing or as folded away', () => {
+    // The glyph carries the state, not a lit button: both panels are showing in the state the
+    // window ships in, so lighting them would mean a toolbar that glows for no reason.
+    const shown = bar().container;
+    const hidden = bar({ leftPanel: false, rightPanel: false }).container;
+    const strips = (root: HTMLElement, label: string) =>
+      root.querySelector(`[aria-label="${label}"] svg`)?.querySelectorAll('path[fill]').length ?? 0;
+
+    expect(strips(shown, 'Left panel'), 'showing: a filled strip').toBe(1);
+    expect(strips(hidden, 'Left panel'), 'folded: a ruled edge, nothing filled').toBe(0);
+    expect(strips(shown, 'Right panel')).toBe(1);
+    expect(strips(hidden, 'Right panel')).toBe(0);
+  });
+
+  it('tells a screen reader whether each panel is showing', () => {
+    const shown = bar().container;
+    const hidden = bar({ leftPanel: false, rightPanel: false }).container;
+    const pressed = (root: HTMLElement, label: string) =>
+      root.querySelector(`[aria-label="${label}"]`)?.getAttribute('aria-pressed');
+
+    expect(pressed(shown, 'Left panel')).toBe('true');
+    expect(pressed(hidden, 'Left panel')).toBe('false');
+    expect(pressed(shown, 'Right panel')).toBe('true');
+    expect(pressed(hidden, 'Right panel')).toBe('false');
+  });
+
+  it('says what pressing it will do, rather than what the panel is', () => {
+    // A button that says "hide" while the thing is already hidden is worse than one that says
+    // nothing at all.
+    const title = (root: HTMLElement, label: string) =>
+      root.querySelector(`[aria-label="${label}"]`)?.getAttribute('title') ?? '';
+
+    expect(title(bar().container, 'Left panel')).toMatch(/^Hide the left panel/);
+    expect(title(bar({ leftPanel: false }).container, 'Left panel')).toMatch(/^Show the left panel/);
+    expect(title(bar().container, 'Left panel')).toContain('(Ctrl \\)');
+    expect(title(bar().container, 'Right panel')).toContain('(Ctrl K)');
+  });
+
+  it('asks the window to fold a panel away, by the name the keyboard uses', () => {
+    const onAction = vi.fn();
+    const { container } = bar({ onAction });
+    (container.querySelector('[aria-label="Left panel"]') as HTMLButtonElement).click();
+    (container.querySelector('[aria-label="Right panel"]') as HTMLButtonElement).click();
+    expect(onAction.mock.calls.map((c) => c[0])).toEqual(['panel.left', 'panel.right']);
+  });
+
+  it('stops offering the right panel while the conflict tool has the window', () => {
+    // It is suppressed for as long as a merge is stopped, so the button would be a control
+    // that visibly does nothing.
+    const { container } = bar({ rightPanelUsable: false });
+    const right = container.querySelector('[aria-label="Right panel"]') as HTMLButtonElement;
+    expect(right.disabled).toBe(true);
+    expect(right.title).toContain('conflict tool');
+  });
+
+  it('leaves the two panel toggles unlit, and lights only the terminal', () => {
+    // Three lit buttons in the state the window ships in is a toolbar that shouts.
+    const { container } = bar({ terminalOpen: true });
+    const lit = [...container.querySelectorAll('button.action.on')]
+      .map((b) => b.getAttribute('aria-label'));
+    expect(lit).toEqual(['Terminal']);
   });
 
   it('shows the way out of a submodule on the crumb it belongs to', () => {

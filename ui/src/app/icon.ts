@@ -242,6 +242,34 @@ export const ICONS = {
   },
 
   /* ── the diff's own controls ─────────────────────────────────────────────────────── */
+  /*
+   * The two side panels, and what they look like folded away.
+   *
+   * The glyph carries the state rather than the button under it: a filled strip is a panel
+   * that is showing and a ruled edge is one that is not. Lighting the button instead would
+   * have both of them lit whenever the window is in the state it ships in, which is a toolbar
+   * that glows for no reason.
+   */
+  panelLeft: {
+    paths: ['M3.5 5.6A1.6 1.6 0 0 1 5.1 4h13.8a1.6 1.6 0 0 1 1.6 1.6v12.8a1.6 1.6 0 0 1-1.6 1.6H5.1a1.6 1.6 0 0 1-1.6-1.6Z'],
+    solid: ['M5.1 5.6h4.3v12.8H5.1Z'],
+  },
+  panelLeftOff: {
+    paths: [
+      'M3.5 5.6A1.6 1.6 0 0 1 5.1 4h13.8a1.6 1.6 0 0 1 1.6 1.6v12.8a1.6 1.6 0 0 1-1.6 1.6H5.1a1.6 1.6 0 0 1-1.6-1.6Z',
+      'M9.4 5.6v12.8',
+    ],
+  },
+  panelRight: {
+    paths: ['M3.5 5.6A1.6 1.6 0 0 1 5.1 4h13.8a1.6 1.6 0 0 1 1.6 1.6v12.8a1.6 1.6 0 0 1-1.6 1.6H5.1a1.6 1.6 0 0 1-1.6-1.6Z'],
+    solid: ['M14.6 5.6h4.3v12.8h-4.3Z'],
+  },
+  panelRightOff: {
+    paths: [
+      'M3.5 5.6A1.6 1.6 0 0 1 5.1 4h13.8a1.6 1.6 0 0 1 1.6 1.6v12.8a1.6 1.6 0 0 1-1.6 1.6H5.1a1.6 1.6 0 0 1-1.6-1.6Z',
+      'M14.6 5.6v12.8',
+    ],
+  },
   columns: {
     paths: ['M3.5 5.6A1.6 1.6 0 0 1 5.1 4h13.8a1.6 1.6 0 0 1 1.6 1.6v12.8a1.6 1.6 0 0 1-1.6 1.6H5.1a1.6 1.6 0 0 1-1.6-1.6Z'],
     solid: ['M5.1 5.6h5.7v12.8H5.1Z'],

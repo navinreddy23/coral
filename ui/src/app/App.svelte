@@ -2317,6 +2317,18 @@
             },
           ]),
       {
+        id: 'panel-left',
+        label: views.current.sidebar ? 'Hide the left panel' : 'Show the left panel',
+        group: 'View',
+        run: () => views.set('sidebar', !views.current.sidebar),
+      },
+      {
+        id: 'panel-right',
+        label: views.current.details ? 'Hide the right panel' : 'Show the right panel',
+        group: 'View',
+        run: () => views.set('details', !views.current.details),
+      },
+      {
         id: 'terminal',
         label: terminal.open ? 'Hide the terminal' : 'Show the terminal',
         group: 'View',
@@ -2467,6 +2479,10 @@
       case 'stash': return void act({ kind: 'stashPush', message: null });
       case 'pop': return void act({ kind: 'stashApply', index: 0, pop: true });
       case 'terminal': return terminal.toggle();
+      // The same two the keyboard reaches, so a panel folded away by one comes back by the
+      // other and the choice is remembered either way.
+      case 'panel.left': return views.set('sidebar', !views.current.sidebar);
+      case 'panel.right': return views.set('details', !views.current.details);
       case 'branch': {
         void (async () => {
           const { choice, text } = await ask({
@@ -3494,6 +3510,9 @@
       busy={worktree.busy || actions.busy}
       comparing={selection.pair !== null}
       terminalOpen={terminal.open}
+      leftPanel={views.current.sidebar}
+      rightPanel={views.current.details}
+      rightPanelUsable={!merge.inProgress}
       onAction={toolbarAction}
       onLeaveSubmodule={() => void leaveSubmodule()}
       onPullMenu={pullMenu}

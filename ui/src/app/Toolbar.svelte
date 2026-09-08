@@ -11,6 +11,9 @@
     busy,
     comparing,
     terminalOpen,
+    leftPanel,
+    rightPanel,
+    rightPanelUsable,
     onAction,
     onLeaveSubmodule,
     onPullMenu,
@@ -26,6 +29,16 @@
     /** Whether two commits are picked, which is what decides what the patch button does. */
     comparing: boolean;
     terminalOpen: boolean;
+    /** Whether each side panel is showing, which is what its own button draws. */
+    leftPanel: boolean;
+    rightPanel: boolean;
+    /**
+     * Whether the right panel can be shown at all.
+     *
+     * A stopped merge takes the whole centre and suppresses it, so the button would otherwise
+     * be a control that visibly does nothing.
+     */
+    rightPanelUsable: boolean;
     onAction: (name: string) => void;
     onLeaveSubmodule: () => void;
     /** Opens the choice of how a pull should integrate, at the caret. */
@@ -41,6 +54,14 @@
     hint: string;
     /** The binding in `shortcuts.ts` whose keys belong in the tooltip, where there is one. */
     binding?: string;
+    /**
+     * Whether the thing this shows is showing, for a control that turns something on and off.
+     *
+     * It changes the tooltip's verb — a button that says "hide" while the thing is already
+     * hidden is worse than one that says nothing — and it is what a screen reader is told.
+     */
+    on?: boolean;
+    disabled?: boolean;
   }
 
   /**
@@ -83,13 +104,42 @@
     ],
   ]);
 
-  const terminal = $derived<Action>({
-    name: 'terminal',
-    label: 'Terminal',
-    icon: 'terminal',
-    hint: terminalOpen ? 'hide the pane' : 'open one in this repository',
-    binding: 'terminal',
-  });
+  /*
+   * The parts of the window, as opposed to the things that act on the repository.
+   *
+   * They sit together at the far end for that reason. On a narrow window this is the row
+   * somebody reaches for first: the two side panels take three hundred pixels between them,
+   * which is most of a diff.
+   */
+  const parts = $derived<Action[]>([
+    {
+      name: 'panel.left',
+      label: 'Left panel',
+      icon: leftPanel ? 'panelLeft' : 'panelLeftOff',
+      hint: 'branches, tags and stashes',
+      binding: 'panel.left',
+      on: leftPanel,
+    },
+    {
+      name: 'panel.right',
+      label: 'Right panel',
+      icon: rightPanel ? 'panelRight' : 'panelRightOff',
+      hint: rightPanelUsable
+        ? 'the commit, or what you are about to commit'
+        : 'the conflict tool has the whole window until it is settled',
+      binding: 'panel.detail',
+      on: rightPanel,
+      disabled: !rightPanelUsable,
+    },
+    {
+      name: 'terminal',
+      label: 'Terminal',
+      icon: 'terminal',
+      hint: 'a shell in this repository',
+      binding: 'terminal',
+      on: terminalOpen,
+    },
+  ]);
 
   /**
    * What a button says when the pointer rests on it.
@@ -100,7 +150,10 @@
    */
   function tip(action: Action): string {
     const keys = action.binding === undefined ? null : keysOf(action.binding);
-    return `${action.label} — ${action.hint}${keys === null ? '' : ` (${keys})`}`;
+    const name = action.on === undefined
+      ? action.label
+      : `${action.on ? 'Hide' : 'Show'} the ${action.label.toLowerCase()}`;
+    return `${name} — ${action.hint}${keys === null ? '' : ` (${keys})`}`;
   }
 
   /** The last path segment, which is what a submodule is called. */
@@ -167,16 +220,19 @@
   </div>
 
   <div class="trailing">
-    <button
-      class="action"
-      class:on={terminalOpen}
-      title={tip(terminal)}
-      aria-label={terminal.label}
-      aria-pressed={terminalOpen}
-      onclick={() => onAction('terminal')}
-    >
-      <Icon name="terminal" size={17} />
-    </button>
+    {#each parts as part (part.name)}
+      <button
+        class="action"
+        class:on={part.name === 'terminal' && part.on}
+        disabled={part.disabled}
+        title={tip(part)}
+        aria-label={part.label}
+        aria-pressed={part.on}
+        onclick={() => onAction(part.name)}
+      >
+        <Icon name={part.icon} size={17} />
+      </button>
+    {/each}
   </div>
 </div>
 
