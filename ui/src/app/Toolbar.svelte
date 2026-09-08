@@ -271,7 +271,19 @@
     height: 40px; box-sizing: border-box; padding: 0 var(--space-3) 0 var(--space-4);
     border-bottom: 1px solid var(--border); background: var(--bg-1);
   }
-  .where { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+  /*
+   * A column of its own width, not of its contents'.
+   *
+   * The actions begin where this ends, so sizing it to the text moved every button whenever
+   * the branch name did: checking out `feature/hand-test` after `main` slid Fetch, Pull, Push
+   * and the rest sixty-six pixels to the right, which is more than two buttons. Reaching for
+   * one and pressing another is not something a toolbar may do. The names elide instead, and
+   * each carries the whole of itself in its tooltip.
+   */
+  .where {
+    display: flex; align-items: center; gap: var(--space-2);
+    flex: 0 0 240px; min-width: 0; overflow: hidden;
+  }
   .step, .col { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
   .step.sub { flex-direction: row; align-items: center; gap: var(--space-1); }
   /*

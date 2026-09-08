@@ -209,3 +209,33 @@ describe('the toolbar', () => {
     expect(container.querySelector('.step.sub .leave')).not.toBeNull();
   });
 });
+
+describe('where the buttons are', () => {
+  /**
+   * The actions begin where the breadcrumb ends, so a breadcrumb sized to its text moved every
+   * button whenever the branch name did. Checking out `feature/hand-test` after `main` slid
+   * Fetch, Pull, Push and the rest more than two button widths to the right, and a hand
+   * reaching for one pressed another. happy-dom does not lay out, so this reads the rule.
+   */
+  it('does not let the branch name move them', () => {
+    bar();
+    const rule = [...document.styleSheets]
+      .flatMap((sheet) => [...(sheet.cssRules ?? [])])
+      .map((r) => r.cssText)
+      .find((text) => /\.where[^{]*\{/u.test(text) && /flex-basis/u.test(text));
+    expect(rule, 'the breadcrumb has a width of its own').toBeDefined();
+    // A basis in pixels, not `auto`: `auto` is the content's width, which is the fault.
+    expect(rule).toMatch(/flex-basis:\s*\d+px/u);
+    expect(rule).toMatch(/flex-grow:\s*0/u);
+    expect(rule, 'and clips rather than growing').toMatch(/overflow:\s*hidden/u);
+  });
+
+  it('still names the whole of what it elides', () => {
+    // The tooltip is where the full path and the full branch name go.
+    const { container } = bar({ path: '/home/dev/a-very-long-directory-name/coral' });
+    const steps = [...container.querySelectorAll('.where .step')];
+    expect(steps.some((s) => s.getAttribute('title')?.includes('a-very-long-directory-name'))).toBe(
+      true,
+    );
+  });
+});

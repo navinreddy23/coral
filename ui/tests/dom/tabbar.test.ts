@@ -473,3 +473,38 @@ describe('a strip with more tabs than fit', () => {
     expect(container.querySelector('.tail .find'), 'in the tail').not.toBeNull();
   });
 });
+
+describe('choosing a group\'s colour', () => {
+  /**
+   * The menu's subject is the colour, so it shows the colour. It named the eight in words and
+   * drew none of them, and marked the current one with a `✓` typed into the hint slot — where
+   * a keystroke goes — leaving the tick gutter the menu draws for exactly this empty.
+   */
+  async function colours(container: HTMLElement) {
+    await fireEvent.contextMenu(container.querySelector('.group') as HTMLElement);
+    const colour = [...container.querySelectorAll('.menu .row')].find(
+      (r) => r.textContent?.trim() === 'Colour',
+    ) as HTMLElement;
+    await fireEvent.mouseEnter(colour.parentElement as HTMLElement);
+    return [...container.querySelectorAll('.menu .sub .row')] as HTMLElement[];
+  }
+
+  it('draws each colour beside its name', async () => {
+    const { container } = bar();
+    const rows = await colours(container);
+    expect(rows.length, 'the eight lane colours').toBe(8);
+    for (const row of rows) {
+      const swatch = row.querySelector('.swatch') as HTMLElement | null;
+      expect(swatch, `${row.textContent?.trim()} has a swatch`).not.toBeNull();
+      expect(swatch?.style.background).toMatch(/^var\(--lane-\d\)$/u);
+    }
+  });
+
+  it('ticks the one in force in the gutter, not in the hint', async () => {
+    const { container } = bar();
+    const rows = await colours(container);
+    const ticked = rows.filter((r) => r.querySelector('.tick svg') !== null);
+    expect(ticked.map((r) => r.textContent?.trim()), 'exactly the current one').toEqual(['Blue']);
+    expect(container.querySelector('.menu .sub .hint'), 'and nothing in the hint slot').toBeNull();
+  });
+});

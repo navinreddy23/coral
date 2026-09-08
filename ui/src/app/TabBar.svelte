@@ -162,7 +162,10 @@
           items: COLOURS.map((c) => ({
             kind: 'item' as const,
             label: c.label,
-            hint: group.colour === c.id ? '✓' : undefined,
+            swatch: laneColour(c.id),
+            // The menu draws a tick in its own leading gutter; this used to put a `✓` in the
+            // hint slot instead, which is where a keystroke goes, and left the gutter empty.
+            checked: group.colour === c.id,
             run: () => void tabs.recolour(group.id, c.id),
           })),
         },

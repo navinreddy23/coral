@@ -13,6 +13,13 @@
          * which is where every other menu on the desktop puts it.
          */
         checked?: boolean;
+        /**
+         * A colour this item stands for, drawn as a disc before the label.
+         *
+         * For a menu whose subject is the colour itself: reading the word "Olive" and
+         * imagining it is the one thing such a menu should not ask.
+         */
+        swatch?: string;
         disabled?: boolean;
         /** Marks a destructive choice, which is drawn in the danger colour. */
         danger?: boolean;
@@ -124,6 +131,9 @@
                   <span class="tick">
                     {#if child.checked}<Icon name="check" size={12} />{/if}
                   </span>
+                  {#if child.swatch}
+                    <span class="swatch" style:background={child.swatch}></span>
+                  {/if}
                   <span class="label">{child.label}</span>
                   {#if child.hint}<span class="hint">{child.hint}</span>{/if}
                 </button>
@@ -140,6 +150,7 @@
         onclick={() => choose(item)}
       >
         <span class="tick">{#if item.checked}<Icon name="check" size={12} />{/if}</span>
+        {#if item.swatch}<span class="swatch" style:background={item.swatch}></span>{/if}
         <span class="label">{item.label}</span>
         {#if item.hint}<span class="hint">{item.hint}</span>{/if}
       </button>
@@ -185,6 +196,12 @@
   .label {
     flex: 0 1 auto; min-width: 0; margin-right: auto;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* The colour itself, before its name. The ring is what keeps a pale one visible on the
+     panel's own ground, which is nearly white in the light theme. */
+  .swatch {
+    flex: 0 0 auto; width: 11px; height: 11px; border-radius: 50%;
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 18%);
   }
   .hint {
     flex: 0 8 auto; min-width: 0; color: var(--fg-2); font-size: var(--text-sm);
