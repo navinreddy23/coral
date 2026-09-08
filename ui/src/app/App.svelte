@@ -3977,6 +3977,10 @@
           onGrouping={(g) => views.set('commitFiles', g)}
           onOpenFile={openFile}
           onClearCompare={clearCompare}
+          onCopied={(ok, what) =>
+            ok
+              ? toasts.push('ok', `Copied ${what.toLowerCase()}`)
+              : toasts.push('error', `Could not copy ${what.toLowerCase()}`)}
         />
       {/if}
     {/if}

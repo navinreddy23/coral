@@ -108,15 +108,6 @@
 
 <div class="panel">
   <header>
-    <!-- Leading, and apart from the rest: it is the only control in the header that takes
-         something away, and it is where the reference puts it. -->
-    <button
-      class="discard"
-      disabled={!worktree.dirty || worktree.busy}
-      title="Discard every change in the working copy"
-      aria-label="Discard all changes"
-      onclick={() => onDiscard(worktree.status?.entries ?? [])}
-    >🗑</button>
     <span class="count">
       {worktree.dirty ? worktree.status?.entries.length ?? 0 : 'No'} file
       change{(worktree.status?.entries.length ?? 0) === 1 ? '' : 's'}
@@ -128,6 +119,17 @@
       <button class:on={grouping === 'path'} onclick={() => onGrouping('path')}>Path</button>
       <button class:on={grouping === 'tree'} onclick={() => onGrouping('tree')}>Tree</button>
     </div>
+    <!--
+      Trailing, and last. It is the only control in this panel that takes something away, and
+      it used to be the first thing the pointer reached on its way in from the graph.
+    -->
+    <button
+      class="discard"
+      disabled={!worktree.dirty || worktree.busy}
+      title="Discard every change in the working copy"
+      aria-label="Discard all changes"
+      onclick={() => onDiscard(worktree.status?.entries ?? [])}
+    ><Icon name="trash" size={14} /></button>
   </header>
 
   {#if worktree.error}
@@ -157,6 +159,12 @@
     <h3>
       <span class="caret"><Icon name="chevronDown" size={13} /></span>
       Unstaged files ({worktree.unstaged.length})
+      {#if grouping === 'tree' && worktree.unstaged.length > 0}
+        <button
+          class="expand"
+          onclick={() => (anyClosed ? expandAll('unstaged') : collapseAll('unstaged'))}
+        >{anyClosed ? 'Expand all' : 'Collapse all'}</button>
+      {/if}
       {#if worktree.unstaged.length > 0}
         <button
           class="all"
@@ -164,11 +172,6 @@
         >Stage all changes</button>
       {/if}
     </h3>
-    {#if grouping === 'tree' && worktree.unstaged.length > 0}
-      <button class="expand" onclick={() => (anyClosed ? expandAll('unstaged') : collapseAll('unstaged'))}>
-        {anyClosed ? 'Expand all' : 'Collapse all'}
-      </button>
-    {/if}
     {#if worktree.unstaged.length === 0}
       <p class="empty">Nothing unstaged.</p>
     {:else if grouping === 'tree'}
@@ -313,7 +316,7 @@
   .count { font-weight: 600; color: var(--fg-0); }
   .on { color: var(--fg-2); }
   .branch {
-    font-size: 11px; padding: 1px 7px; border-radius: 9px;
+    font-size: var(--text-sm); padding: 1px 8px; border-radius: var(--radius-pill);
     background: var(--accent-soft); color: var(--accent);
     max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
@@ -323,9 +326,10 @@
    * the wrong instinct to encourage above a list of unsaved work.
    */
   .discard {
-    flex: 0 0 auto; font: inherit; font-size: 13px; line-height: 1; cursor: pointer;
-    padding: 3px var(--space-2); border-radius: var(--radius-1);
+    flex: 0 0 auto; display: flex; font: inherit; cursor: pointer;
+    padding: 3px; border-radius: var(--radius-1);
     background: var(--bg-1); border: 1px solid var(--border); color: var(--fg-2);
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
   }
   .discard:hover:not(:disabled) {
     background: var(--danger-soft); border-color: var(--danger); color: var(--danger);
@@ -336,7 +340,7 @@
     border: 1px solid var(--border); border-radius: var(--radius-1); overflow: hidden;
   }
   .toggle button {
-    font: inherit; font-size: 11px; cursor: pointer; padding: 1px var(--space-2);
+    font: inherit; font-size: var(--text-sm); cursor: pointer; padding: 2px var(--space-2);
     background: var(--bg-0); border: 0; color: var(--fg-2);
   }
   .toggle button:hover { color: var(--fg-0); }
@@ -344,7 +348,7 @@
 
   h3 {
     display: flex; align-items: center; gap: var(--space-1);
-    font-size: 11px; font-weight: 700; color: var(--fg-1);
+    font-size: var(--text-base); font-weight: 600; color: var(--fg-1);
     margin: var(--space-2) 0 var(--space-1);
   }
   h3.conflict { color: var(--danger); }
@@ -352,23 +356,28 @@
   /* The whole-list action, set apart from the heading it belongs to rather than looking like
      part of the count. */
   .all {
-    margin-left: auto; font: inherit; font-size: 10px; font-weight: 600; cursor: pointer;
+    margin-left: auto; font: inherit; font-size: var(--text-xs); font-weight: 600;
+    cursor: pointer;
     padding: 1px var(--space-2); border-radius: var(--radius-1);
     background: var(--bg-2); border: 1px solid var(--border); color: var(--fg-1);
   }
   .all:hover { background: var(--bg-3); color: var(--fg-0); }
+  /* Beside the whole-list action, and set as a link rather than a button: it changes how the
+     list is drawn, where the button beside it changes what is in the index. */
   .expand {
-    font: inherit; font-size: 10px; cursor: pointer; padding: 0 0 2px 4px;
-    background: var(--bg-1); border: 0; color: var(--accent);
+    margin-left: auto; font: inherit; font-size: var(--text-xs); cursor: pointer;
+    padding: 0; background: var(--bg-1); border: 0; color: var(--accent);
   }
   .expand:hover { text-decoration: underline; }
+  /* With the link before it taking the leftover room, the button no longer needs to. */
+  .expand + .all { margin-left: var(--space-2); }
   /* A real edge, not a hairline: the two halves are different places and a file moves between
      them, which the eye has to be able to see happen. */
   .between {
     border: 0; height: 1px; margin: var(--space-3) 0;
     background: var(--border-strong);
   }
-  .empty { margin: 0 0 var(--space-2) 4px; color: var(--fg-2); font-size: 11px; }
+  .empty { margin: 0 0 var(--space-2) 4px; color: var(--fg-2); font-size: var(--text-sm); }
 
   .flat { list-style: none; margin: 0; padding: 0; }
   .flat li { display: flex; align-items: center; }
@@ -403,34 +412,52 @@
   .flat li:hover .act { visibility: visible; }
   .act:hover { background: var(--bg-3); color: var(--fg-0); }
 
-  /* Pinned to the foot of the panel: the message is the last step, and it must not scroll away
-     under a long list of changes. */
+  /*
+   * Pinned to the foot of the panel: the message is the last step, and it must not scroll away
+   * under a long list of changes.
+   *
+   * Drawn as its own surface rather than as a rule with fields under it. Everything above is a
+   * list of what has happened; this is the one place in the panel where something is written,
+   * and giving it an edge and a fill of its own says which of the two it is.
+   */
   .compose {
     position: sticky; bottom: 0; margin-top: var(--space-3);
     display: flex; flex-direction: column; gap: var(--space-2);
-    padding-top: var(--space-3); border-top: 1px solid var(--border);
-    background: var(--bg-1);
+    padding: var(--space-3); border: 1px solid var(--border);
+    border-radius: var(--radius-2);
+    background: var(--bg-2);
   }
-  .amend { display: flex; align-items: center; gap: var(--space-2); color: var(--fg-1); }
+  .amend {
+    display: flex; align-items: center; gap: var(--space-2);
+    color: var(--fg-1); font-size: var(--text-base);
+  }
   .field { position: relative; display: flex; }
   .summary, .description {
-    flex: 1; min-width: 0; font: inherit; font-size: 12px;
+    flex: 1; min-width: 0; font: inherit; font-size: var(--text-base);
     padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-1);
     background: var(--bg-0); color: var(--fg-0);
+    transition: border-color var(--fast) var(--ease);
   }
-  .summary { padding-right: 3em; }
-  .description { resize: vertical; }
+  .summary { padding-right: 3em; font-weight: 500; }
+  .description { resize: vertical; line-height: var(--leading-body); }
   .summary:focus, .description:focus { border-color: var(--accent); }
+  /*
+   * Quiet until it matters. A number counting down beside every keystroke is a nag; what the
+   * user needs to know is when the summary has grown past what git will show on one line.
+   */
   .limit {
     position: absolute; right: var(--space-2); top: 50%; transform: translateY(-50%);
-    font-size: 10px; color: var(--fg-2); font-variant-numeric: tabular-nums;
-    pointer-events: none;
+    font-size: var(--text-xs); color: var(--fg-2); font-variant-numeric: tabular-nums;
+    opacity: 0; transition: opacity var(--fast) var(--ease); pointer-events: none;
   }
-  .limit.over { color: var(--warn); }
+  .field:focus-within .limit, .limit.over { opacity: 1; }
+  .limit.over { color: var(--warn); font-weight: 600; }
   .commit {
-    font: inherit; font-weight: 600; padding: var(--space-2); cursor: pointer;
+    font: inherit; font-size: var(--text-md); font-weight: 600;
+    padding: var(--space-2); cursor: pointer;
     background: var(--accent); color: var(--accent-fg); border: 0;
     border-radius: var(--radius-1);
+    transition: background var(--fast) var(--ease);
   }
   .commit:hover:not(:disabled) { background: var(--accent-hover); }
   .commit:disabled { background: var(--bg-3); color: var(--fg-2); cursor: default; }

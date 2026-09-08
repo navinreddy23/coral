@@ -1,5 +1,9 @@
 <script lang="ts">
   import FileTree from './FileTree.svelte';
+  import Icon from './Icon.svelte';
+  import { shortAge } from './age';
+  import { copyText } from './clipboard';
+  import { authorColourIndex, initialsOf } from '../graph/initials';
   import { buildTree } from '../diff/tree';
   import { commitTree } from '../ipc/commands';
   import { messageOf } from '../ipc/error';
@@ -19,6 +23,7 @@
     onGrouping,
     onOpenFile,
     onClearCompare,
+    onCopied,
   }: {
     detail: CommitDetail | null;
     /** Which repository the commit is in, for reading its tree. */
@@ -40,7 +45,27 @@
     grouping: Grouping;
     onGrouping: (grouping: Grouping) => void;
     onOpenFile: (path: string) => void;
+    /** Says whether the clipboard took the object id, which a button cannot tell on its own. */
+    onCopied: (ok: boolean, what: string) => void;
   } = $props();
+
+  /**
+   * The disc behind an author's initials, keyed by who they are.
+   *
+   * The same eight fills the canvas draws its nodes with, chosen the same way, so the row that
+   * was clicked and the panel that answers carry one mark between them. They are dark in both
+   * themes on purpose — the letters on them are white in both.
+   */
+  const NODE_FILLS = ['--node-1', '--node-2', '--node-3', '--node-4',
+                      '--node-5', '--node-6', '--node-7', '--node-8'];
+
+  function faceOf(name: string): string {
+    return `var(${NODE_FILLS[authorColourIndex(name, NODE_FILLS.length)] ?? '--node-1'})`;
+  }
+
+  async function onCopyOid(oid: string): Promise<void> {
+    onCopied(await copyText(oid), 'The object id');
+  }
 
   function absolute(seconds: number): string {
     return new Date(seconds * 1000).toLocaleString();
@@ -164,6 +189,24 @@
     </p>
   {:else}
     <h2>{detail.commit.summary}</h2>
+
+    <!--
+      Who wrote it, on one line, with the same initials disc the graph draws its nodes with —
+      so the row you clicked and the panel that answers wear the same mark.
+    -->
+    <div class="who">
+      <span class="face" style:background={faceOf(detail.commit.author.name)}>
+        {initialsOf(detail.commit.author.name)}
+      </span>
+      <span class="names">
+        <span class="name">{detail.commit.author.name}</span>
+        <span class="mail">{detail.commit.author.email}</span>
+      </span>
+      <span class="when" title={absolute(detail.commit.author.time)}>
+        {shortAge(detail.commit.author.time)}
+      </span>
+    </div>
+
     {#if detail.commit.body}
       <pre class="body">{detail.commit.body}</pre>
     {/if}
@@ -174,11 +217,6 @@
       column's width, leaving nothing for the values.
     -->
     <dl>
-      <dt>Author</dt>
-      <dd>
-        {detail.commit.author.name} &lt;{detail.commit.author.email}&gt;
-        <span class="when">{absolute(detail.commit.author.time)}</span>
-      </dd>
       {#if rewritten}
         <dt>Committer</dt>
         <dd>
@@ -187,7 +225,12 @@
         </dd>
       {/if}
       <dt>Commit</dt>
-      <dd class="mono break">{detail.commit.oid}</dd>
+      <dd class="mono break">
+        <span class="oid">{detail.commit.oid}</span>
+        <button class="copy" title="Copy the object id" onclick={() => onCopyOid(detail.commit.oid)}>
+          <Icon name="copy" size={12} />
+        </button>
+      </dd>
       {#if detail.commit.parents.length > 0}
         <dt>{detail.commit.parents.length > 1 ? 'Parents' : 'Parent'}</dt>
         <dd class="mono">
@@ -267,10 +310,47 @@
    * transparent, so text on it drops from subpixel to grayscale antialiasing and the whole
    * column reads soft. Naming the colour on the text elements themselves is what fixes it.
    */
-  h2, h3, dt, dd, .muted, .error, .all { background: var(--bg-1); }
+  h2, h3, dt, dd, .muted, .error, .all, .name, .mail, .when { background: var(--bg-1); }
   h2 {
-    font-size: 14px; font-weight: 600; line-height: 1.35;
+    font-size: var(--text-lg); font-weight: 600; line-height: 1.3;
     margin: 0 0 var(--space-3); color: var(--fg-0);
+    /* Balanced, so a two-line summary does not leave one word alone on the second line. */
+    text-wrap: balance;
+  }
+
+  /*
+   * Who wrote it, as a line rather than as a row of a table.
+   *
+   * The author used to be a value in the same grid as the object id, under a 10px uppercase
+   * label — the least interesting kind of typography for the most human fact on the panel.
+   */
+  .who {
+    display: flex; align-items: center; gap: var(--space-2);
+    margin-bottom: var(--space-3); min-width: 0;
+  }
+  /* The same disc the canvas fills a node with, at the same size, so the row that was clicked
+     and the panel that answers wear one mark between them. */
+  .face {
+    flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.02em;
+    /* White in both themes, which is why the node palette is dark in both. */
+    color: #ffffff;
+  }
+  .names { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+  .name {
+    font-size: var(--text-md); font-weight: 600; color: var(--fg-0);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .mail {
+    font-size: var(--text-sm); color: var(--fg-2);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* The relative date, with the exact one on the tooltip: "3 hours ago" answers the question
+     people actually ask of a commit, and the timestamp answers the one they ask afterwards. */
+  .when {
+    margin-left: auto; flex: 0 0 auto; align-self: flex-start;
+    color: var(--fg-2); font-size: var(--text-sm); font-variant-numeric: tabular-nums;
   }
   /*
    * Section headings are set as a rule with a label on it, so the panel reads as a few short
@@ -278,7 +358,7 @@
    */
   h3 {
     display: flex; align-items: center; gap: var(--space-2);
-    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+    font-size: var(--text-base); font-weight: 600;
     color: var(--fg-2); margin: var(--space-4) 0 var(--space-2);
   }
   h3::after {
@@ -287,7 +367,7 @@
   /* Going back to one commit, which is a step out of a mode rather than an action on the
      repository, so it is set as a link rather than as a button with a fill. */
   .single {
-    align-self: flex-start; font: inherit; font-size: 12px; cursor: pointer;
+    align-self: flex-start; font: inherit; font-size: var(--text-base); cursor: pointer;
     background: none; border: 0; padding: 0; color: var(--accent);
   }
   .single:hover { text-decoration: underline; }
@@ -298,7 +378,8 @@
     background: var(--bg-0); border-radius: var(--radius-1);
     /* A rule down the leading edge, as a quoted message is set everywhere else. */
     box-shadow: inset 2px 0 0 var(--border-strong);
-    font-family: var(--font-mono); font-size: 11px; line-height: 1.5;
+    font-family: var(--font-mono); font-size: var(--text-sm);
+    line-height: var(--leading-body);
     white-space: pre-wrap; word-break: break-word; color: var(--fg-0);
   }
   dl {
@@ -308,15 +389,21 @@
     grid-template-columns: fit-content(35%) minmax(0, 1fr);
     gap: var(--space-2) var(--space-3); margin: 0;
   }
-  dt {
-    color: var(--fg-2); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
-    padding-top: 1px;
-  }
+  dt { color: var(--fg-2); font-size: var(--text-sm); padding-top: 1px; }
   /* An address or an object id has no space to break at, so it would otherwise run past the
      panel edge and be clipped rather than wrapping. */
   dd { margin: 0; min-width: 0; color: var(--fg-1); overflow-wrap: anywhere; }
   dd.break { word-break: break-all; }
-  .when { display: block; color: var(--fg-2); }
+  /* The forty characters and the button that takes them sit on one line, so the id can wrap
+     without the button wrapping under it. */
+  dd.break { display: flex; align-items: flex-start; gap: var(--space-1); }
+  .oid { min-width: 0; }
+  .copy {
+    flex: 0 0 auto; display: flex; padding: 2px; margin-top: -1px; cursor: pointer;
+    background: var(--bg-1); border: 0; border-radius: var(--radius-1); color: var(--fg-2);
+    transition: color var(--fast) var(--ease), background var(--fast) var(--ease);
+  }
+  .copy:hover { color: var(--fg-0); background: var(--bg-2); }
   .parent { display: block; }
   .muted { color: var(--fg-2); }
   .error { color: var(--danger); }
