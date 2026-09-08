@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.1
+## 1.0.2
 
 Two lives on one machine, a repository taken without all of it, and a menu that offers what
 can actually happen. As with 1.0.0, nearly all of it came from driving the window rather than
