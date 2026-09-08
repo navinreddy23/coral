@@ -117,12 +117,23 @@
 <svelte:window onkeydown={key} />
 
 <div class="prefs">
-  <nav>
-    <button class="back" onclick={onClose}>← Close preferences</button>
-    <p class="heading">Preferences</p>
+  <!--
+    A header with the way out at its trailing end, which is where every other panel that covers
+    this window puts one and where the hand goes looking. It was a text link at the top of the
+    side nav, reading as one more thing to open rather than as the way back.
+  -->
+  <header>
+    <h2>Preferences</h2>
     {#if repoName !== ''}
-      <p class="repo" title={repository}>{repoName}</p>
+      <span class="repo" title={repository}>{repoName}</span>
     {/if}
+    <button class="shut" onclick={onClose} title="Close preferences (Esc)">
+      <Icon name="close" size={15} />Close
+    </button>
+  </header>
+
+  <div class="body">
+  <nav>
     {#each panes as pane (pane.id)}
       <button class="pane" class:on={active === pane.id} onclick={() => (chosen = pane.id)}>
         <span class="glyph"><Icon name={pane.icon} size={14} /></span>{pane.label}
@@ -152,35 +163,51 @@
   {:else if active === 'about'}
     <About {onCopied} />
   {/if}
+  </div>
 </div>
 
 <style>
   .prefs {
-    position: absolute; inset: 0; z-index: 12; display: flex;
+    position: absolute; inset: 0; z-index: 12; display: flex; flex-direction: column;
     background: var(--bg-0);
   }
+  /* Opaque, like every surface here that carries text: WebKit antialiases with subpixel
+     precision only where it knows what is behind. */
+  header {
+    display: flex; align-items: center; gap: var(--space-3);
+    flex: 0 0 auto; padding: var(--space-2) var(--space-3);
+    background: var(--bg-1); border-bottom: 1px solid var(--border);
+  }
+  h2 {
+    margin: 0; font-size: var(--text-lg); font-weight: 600; color: var(--fg-0);
+    flex: 0 0 auto;
+  }
+  /* Beside the title, so the two panes that are about one repository say which one before
+     anything on them is read. */
+  .repo {
+    flex: 1; min-width: 0;
+    font-size: var(--text-base); color: var(--fg-2);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /*
+   * The word as well as the cross.
+   *
+   * Every other panel here closes on a bare cross, and that is right for one that overlays
+   * part of the window: what is behind it says what closing goes back to. This one covers
+   * everything, so there is nothing on screen to make sense of a lone glyph.
+   */
+  .shut {
+    display: flex; align-items: center; gap: var(--space-1);
+    margin-left: auto; flex: 0 0 auto; cursor: pointer;
+    font: inherit; font-size: var(--text-base);
+    padding: 4px var(--space-2); border-radius: var(--radius-1);
+    background: var(--bg-2); border: 1px solid var(--border); color: var(--fg-1);
+  }
+  .shut:hover { background: var(--bg-3); color: var(--fg-0); }
+  .body { flex: 1; min-height: 0; display: flex; }
   nav {
     width: 240px; flex: 0 0 auto; padding: var(--space-2);
     border-right: 1px solid var(--border); background: var(--bg-1);
-  }
-  .back {
-    display: block; width: 100%; text-align: left; font: inherit; font-size: var(--text-base);
-    cursor: pointer; padding: var(--space-2); border-radius: var(--radius-1);
-    background: var(--bg-1); border: 0; color: var(--accent);
-  }
-  .back:hover { background: var(--bg-2); }
-  .heading {
-    margin: var(--space-4) var(--space-2) var(--space-2);
-    font-size: var(--text-xs); font-weight: 600; text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--fg-2);
-  }
-  /* Under the heading, so the two panes that are about one repository say which one before
-     anything on them is read. */
-  .repo {
-    margin: 0 var(--space-2) var(--space-2);
-    font-size: var(--text-base); font-weight: 600; color: var(--fg-1);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .pane {
     display: flex; align-items: center; gap: var(--space-2);
