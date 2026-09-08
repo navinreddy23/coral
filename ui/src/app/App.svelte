@@ -554,9 +554,11 @@
     const out: Record<string, number> = {
       local: refs.groups.local.length,
       remote: remotes.list.length,
+      stashes: stashes.list.length,
       tags: refs.groups.tags.length,
     };
-    if (stashes.list.length > 0) out['stashes'] = stashes.list.length;
+    // The panel draws these two only where there is something in them, so the rail does the
+    // same: an icon that opened the panel onto a heading that is not there is a dead click.
     if (hosting.pullRequests.length > 0) out['prs'] = hosting.pullRequests.length;
     if (refs.submodules.length > 0) out['submodules'] = refs.submodules.length;
     return out;

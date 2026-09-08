@@ -39,8 +39,18 @@ describe('the left panel minimised', () => {
   it('leaves out a section this repository does not have', () => {
     // The panel itself draws no submodule heading where there are no submodules, and a rail
     // that offered one would open the panel onto nothing.
-    const { container } = rail({ counts: { local: 3, remote: 1, tags: 0 } });
-    expect(labels(container)).toEqual(['Local', 'Remote', 'Tags']);
+    const { container } = rail({ counts: { local: 3, remote: 1, stashes: 0, tags: 0 } });
+    expect(labels(container)).toEqual(['Local', 'Remote', 'Stashes', 'Tags']);
+  });
+
+  it('keeps a section the panel draws empty, because the panel draws it', () => {
+    // The stash list is always there, saying "nothing stashed". The rail is a map of the
+    // panel, so it says the same in its own tooltip rather than dropping the icon.
+    const { container } = rail({ counts: { local: 1, remote: 0, stashes: 0, tags: 0 } });
+    expect(labels(container)).toContain('Stashes');
+    expect(
+      container.querySelector('[aria-label="Stashes"]')?.getAttribute('title'),
+    ).toBe('Stashes — 0 stashes');
   });
 
   it('carries the count in the tooltip, which is what the width costs it', () => {
@@ -49,6 +59,8 @@ describe('the left panel minimised', () => {
       container.querySelector(`[aria-label="${label}"]`)?.getAttribute('title');
     expect(tip('Tags')).toBe('Tags — 944 tags');
     expect(tip('Stashes'), 'one of a thing is not one things').toBe('Stashes — 1 stash');
+    // Neither of these pluralises by adding an s, which is what an `n === 1 ? '' : 's'` did.
+    expect(tip('Local')).toBe('Local — 12 branches');
   });
 
   it('asks the window to open the panel at the section that was clicked', () => {

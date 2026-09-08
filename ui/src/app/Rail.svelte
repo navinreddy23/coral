@@ -12,7 +12,13 @@
    * away instead of behind a keystroke nobody remembers.
    */
   const { counts, host, onOpen }: {
-    /** How many rows each section holds, for the tooltip. Absent sections are not drawn. */
+    /**
+     * How many rows each section holds, for the tooltip.
+     *
+     * A section the panel itself does not draw is left out entirely rather than listed as
+     * empty, so the rail stays a map of the panel: an icon that opened it onto a heading that
+     * is not there is a dead click.
+     */
     counts: Record<string, number>;
     /** What the remotes point at, so the remote icon is the host's own mark. */
     host: HostMarkKind;
@@ -24,25 +30,26 @@
     key: string;
     title: string;
     icon: IconName;
-    /** What one row of the section is called, for the tooltip's count. */
-    each: string;
+    /** What a row of the section is called, both ways: "branch" does not pluralise by an s. */
+    one: string;
+    many: string;
   }
 
   /** In the order the panel itself lists them, so the rail is a map of it. */
   const RUNGS: Rung[] = [
-    { key: 'local', title: 'Local', icon: 'branch', each: 'branch' },
-    { key: 'remote', title: 'Remote', icon: 'cloud', each: 'remote' },
-    { key: 'stashes', title: 'Stashes', icon: 'stash', each: 'stash' },
-    { key: 'tags', title: 'Tags', icon: 'tag', each: 'tag' },
-    { key: 'prs', title: 'Requests', icon: 'request', each: 'request' },
-    { key: 'submodules', title: 'Submodules', icon: 'folder', each: 'submodule' },
+    { key: 'local', title: 'Local', icon: 'branch', one: 'branch', many: 'branches' },
+    { key: 'remote', title: 'Remote', icon: 'cloud', one: 'remote', many: 'remotes' },
+    { key: 'stashes', title: 'Stashes', icon: 'stash', one: 'stash', many: 'stashes' },
+    { key: 'tags', title: 'Tags', icon: 'tag', one: 'tag', many: 'tags' },
+    { key: 'prs', title: 'Requests', icon: 'request', one: 'request', many: 'requests' },
+    { key: 'submodules', title: 'Submodules', icon: 'folder', one: 'submodule', many: 'submodules' },
   ];
 
   const rungs = $derived(RUNGS.filter((rung) => counts[rung.key] !== undefined));
 
   function tip(rung: Rung): string {
     const n = counts[rung.key] ?? 0;
-    return `${rung.title} — ${n} ${rung.each}${n === 1 ? '' : 's'}`;
+    return `${rung.title} — ${n} ${n === 1 ? rung.one : rung.many}`;
   }
 </script>
 
