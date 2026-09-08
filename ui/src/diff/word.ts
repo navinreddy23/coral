@@ -18,12 +18,22 @@ function words(text: string): string[] {
 }
 
 /**
- * How much of a line may be marked before the marking stops saying anything.
+ * How much of the shorter line has to survive before marking says anything.
  *
- * Past this the line was rewritten rather than edited, and highlighting nine tenths of it only
- * tells the reader what the line's own colour already did.
+ * The question is not how much changed but whether these are the same line at all: two lines
+ * with almost nothing in common were paired by their position in the run, not because one
+ * became the other, and marking nine tenths of such a pair only repeats what the line's own
+ * colour already said.
+ *
+ * Asked this way round rather than as "how much is marked", because a line that was only
+ * added to fails that test and is exactly the case marking is best at: `line two` becoming
+ * `line two, rewritten by hand` is seventy per cent new, and every word of the original is
+ * still there to be seen.
  */
-const MOST_OF_IT = 0.7;
+const ENOUGH_SURVIVES = 0.25;
+
+/** And a floor in characters, for the short lines a fraction cannot speak for. */
+const AT_LEAST = 3;
 
 /** The largest table the token diff will build for one pair of lines. */
 const PAIR_CELLS = 40_000;
@@ -74,8 +84,11 @@ export function markedPair(before: string, after: string): { left: Span[]; right
   const left = spansOf(a, head, tail, shared.a);
   const right = spansOf(b, head, tail, shared.b);
 
-  if (markedLength(left) > before.length * MOST_OF_IT) return null;
-  if (markedLength(right) > after.length * MOST_OF_IT) return null;
+  // Blank space is not evidence of anything: two lines that share only their indentation are
+  // not the same line, however many spaces they begin with.
+  const survives = keptLength(left);
+  if (survives < AT_LEAST) return null;
+  if (survives < Math.min(before.length, after.length) * ENOUGH_SURVIVES) return null;
   return { left, right };
 }
 
@@ -185,6 +198,10 @@ function spansOf(tokens: string[], head: number, tail: number, shared: boolean[]
   return out;
 }
 
-function markedLength(spans: readonly Span[]): number {
-  return spans.reduce((n, span) => (span.marked ? n + span.text.length : n), 0);
+/** The printing characters both sides kept, which is what says they are the same line. */
+function keptLength(spans: readonly Span[]): number {
+  return spans.reduce(
+    (n, span) => (span.marked ? n : n + span.text.replace(/\s+/gu, '').length),
+    0,
+  );
 }

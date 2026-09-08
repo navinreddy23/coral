@@ -65,6 +65,23 @@ describe('what changed inside a line', () => {
     expect(marked(pair?.right ?? [])).toEqual(['      ']);
   });
 
+  it('marks what was added to the end of a line, however much that is', () => {
+    // Seventy per cent of the new line is new, and every word of the old one is still there.
+    // A guard on how much changed threw this away; a guard on how much survived keeps it.
+    const pair = markedPair('line two', 'line two, rewritten by hand');
+    expect(marked(pair?.left ?? [])).toEqual([]);
+    expect(marked(pair?.right ?? [])).toEqual([', rewritten by hand']);
+  });
+
+  it('says nothing when the two lines share only their indentation', () => {
+    // Blank space is not evidence: leading spaces are what every line in a file has.
+    expect(markedPair('    alpha', '    beta_gamma')).toBeNull();
+  });
+
+  it('says nothing when what survived is too short to point at', () => {
+    expect(markedPair('x', 'x' + ' plus a great deal more that is entirely new')).toBeNull();
+  });
+
   it('says nothing at all where the line was rewritten', () => {
     // Marking nine tenths of a line only repeats what the line's own colour already said.
     expect(markedPair('let total = count + 1;', 'emit(&mut out, "done")?;')).toBeNull();
