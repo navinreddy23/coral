@@ -149,9 +149,9 @@
 
   /* ---- what is being opened ---- */
 
-  h2 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: var(--fg-0); }
+  h2 { margin: 0; font-size: var(--text-xl); font-weight: 600; letter-spacing: -0.01em; color: var(--fg-0); }
   .path {
-    margin: 4px 0 0; font-size: 11px; color: var(--fg-2);
+    margin: 4px 0 0; font-size: var(--text-sm); color: var(--fg-2);
     max-width: 40em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
 
@@ -206,16 +206,16 @@
   }
 
   .label {
-    font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--fg-2);
+    font-size: var(--text-sm); letter-spacing: 0.04em; text-transform: uppercase; color: var(--fg-2);
   }
   .rail li.done .label { color: var(--fg-1); }
   .rail li.now .label { color: var(--fg-0); font-weight: 600; }
 
-  .says { margin: var(--space-3) 0 0; font-size: 13px; color: var(--fg-1); }
+  .says { margin: var(--space-3) 0 0; font-size: var(--text-md); color: var(--fg-1); }
 
   .note {
     margin: var(--space-5) 0 0; max-width: 32em; line-height: 1.5;
-    font-size: 11px; color: var(--fg-2);
+    font-size: var(--text-sm); color: var(--fg-2);
   }
 
   /*

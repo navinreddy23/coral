@@ -322,21 +322,21 @@
     flex: 1; min-height: 0; overflow-y: auto;
     background: var(--bg-0); color: var(--fg-1);
     padding: var(--space-5) var(--space-5) var(--space-4);
-    font-size: 12px;
+    font-size: var(--text-base);
   }
   .page { max-width: 64em; margin: 0 auto; }
   header { display: flex; align-items: center; gap: var(--space-3); }
   h2 {
-    flex: 1; margin: 0 0 var(--space-4); font-size: 20px; font-weight: 600; color: var(--fg-0);
+    flex: 1; margin: 0 0 var(--space-4); font-size: var(--text-xl); font-weight: 600; color: var(--fg-0);
     background: var(--bg-0);
   }
   h3 {
-    margin: var(--space-4) 0 var(--space-2); font-size: 11px; font-weight: 700;
+    margin: var(--space-4) 0 var(--space-2); font-size: var(--text-sm); font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.07em; color: var(--fg-2);
     background: var(--bg-0);
   }
   .shut {
-    font: inherit; font-size: 16px; line-height: 1; cursor: pointer; align-self: flex-start;
+    display: flex; font: inherit; line-height: 1; cursor: pointer; align-self: flex-start;
     background: var(--bg-0); border: 0; color: var(--fg-2); padding: 0 var(--space-2);
   }
   .shut:hover { color: var(--fg-0); }
@@ -344,14 +344,14 @@
   .actions { display: flex; gap: var(--space-3); margin-bottom: var(--space-4); }
   .action {
     display: flex; align-items: center; gap: var(--space-2);
-    font: inherit; font-size: 13px; cursor: pointer;
+    font: inherit; font-size: var(--text-md); cursor: pointer;
     padding: var(--space-2) var(--space-4);
     background: var(--bg-1); color: var(--fg-0);
     border: 1px solid var(--border); border-radius: var(--radius-1);
   }
   .action:hover { background: var(--bg-2); border-color: var(--border-strong); }
   .action.on { background: var(--accent-soft); border-color: var(--accent); }
-  .glyph { font-size: 14px; color: var(--accent); }
+  .glyph { display: flex; color: var(--accent); }
 
   .form {
     display: flex; flex-direction: column; gap: var(--space-3);
@@ -362,14 +362,14 @@
   .form label { display: flex; align-items: center; gap: var(--space-3); background: var(--bg-1); }
   .form .name { flex: 0 0 auto; width: 7em; color: var(--fg-2); background: var(--bg-1); }
   .form input:not([type='checkbox']) {
-    flex: 1; min-width: 0; font: inherit; font-size: 12px; padding: 4px var(--space-2);
+    flex: 1; min-width: 0; font: inherit; font-size: var(--text-base); padding: 4px var(--space-2);
     background: var(--bg-0); color: var(--fg-0);
     border: 1px solid var(--border-strong); border-radius: var(--radius-1);
   }
   .form input:focus { border-color: var(--accent); outline: none; }
   .tick { gap: var(--space-2); }
   .pick, .primary {
-    flex: 0 0 auto; font: inherit; font-size: 12px; cursor: pointer;
+    flex: 0 0 auto; font: inherit; font-size: var(--text-base); cursor: pointer;
     padding: 4px var(--space-3); border-radius: var(--radius-1);
     background: var(--bg-2); border: 1px solid var(--border); color: var(--fg-1);
   }
@@ -379,29 +379,29 @@
   .go { display: flex; justify-content: flex-end; }
   .says { margin: 0; color: var(--fg-2); background: var(--bg-1); }
   /* Beneath the picker it qualifies, and quieter than the form it sits in. */
-  .note { margin: -2px 0 0; font-size: 11px; color: var(--fg-2); background: var(--bg-1); }
+  .note { margin: -2px 0 0; font-size: var(--text-sm); color: var(--fg-2); background: var(--bg-1); }
   .history select {
-    flex: 0 1 auto; min-width: 0; font: inherit; font-size: 12px;
+    flex: 0 1 auto; min-width: 0; font: inherit; font-size: var(--text-base);
     padding: 5px var(--space-2); border-radius: var(--radius-1);
     border: 1px solid var(--border); background: var(--bg-0); color: var(--fg-0);
   }
   .depth {
-    flex: 0 0 auto; width: 5em; font: inherit; font-size: 12px;
+    flex: 0 0 auto; width: 5em; font: inherit; font-size: var(--text-base);
     padding: 5px var(--space-2); border-radius: var(--radius-1);
     border: 1px solid var(--border); background: var(--bg-0); color: var(--fg-0);
   }
   .units { flex: 0 0 auto; color: var(--fg-2); }
   .sshkey select {
-    flex: 1 1 auto; min-width: 0; font: inherit; font-size: 12px;
+    flex: 1 1 auto; min-width: 0; font: inherit; font-size: var(--text-base);
     padding: 5px var(--space-2); border-radius: var(--radius-1);
     border: 1px solid var(--border); background: var(--bg-0); color: var(--fg-0);
   }
-  .mono { font-family: var(--font-mono); }
+  .mono { font-family: var(--font-mono); font-variant-ligatures: none; }
   .error { color: var(--danger); margin: 0 0 var(--space-3); background: var(--bg-0); }
   .none { color: var(--fg-2); margin: 0; background: var(--bg-0); }
 
   .filter {
-    width: 100%; box-sizing: border-box; font: inherit; font-size: 12px;
+    width: 100%; box-sizing: border-box; font: inherit; font-size: var(--text-base);
     padding: 5px var(--space-3);
     background: var(--bg-0); color: var(--fg-0);
     border: 1px solid var(--border-strong); border-radius: var(--radius-1);
@@ -410,7 +410,7 @@
 
   .recent-head { display: flex; align-items: baseline; gap: var(--space-3); }
   .clear {
-    margin-left: auto; font: inherit; font-size: 11px; cursor: pointer;
+    margin-left: auto; font: inherit; font-size: var(--text-sm); cursor: pointer;
     background: none; border: 0; color: var(--fg-2); padding: 0;
   }
   .clear:hover { color: var(--danger); text-decoration: underline; }
@@ -427,16 +427,16 @@
     flex: 1; min-width: 0; text-align: left; font: inherit; cursor: pointer;
     padding: var(--space-2); background: none; border: 0; color: var(--fg-1);
   }
-  .repo-name { grid-area: 1 / 1; color: var(--accent); font-weight: 600; font-size: 13px; }
-  .repo-when { grid-area: 1 / 2; color: var(--fg-2); font-size: 11px; }
+  .repo-name { grid-area: 1 / 1; color: var(--accent); font-weight: 600; font-size: var(--text-md); }
+  .repo-when { grid-area: 1 / 2; color: var(--fg-2); font-size: var(--text-sm); }
   .repo-path {
-    grid-area: 2 / 1 / 3 / 3; min-width: 0; color: var(--fg-2); font-size: 11px;
+    grid-area: 2 / 1 / 3 / 3; min-width: 0; color: var(--fg-2); font-size: var(--text-sm);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   /* On the row being pointed at only: a column of crosses beside a list of repositories reads
      as a list of things to delete. */
   .forget {
-    flex: 0 0 auto; font: inherit; font-size: 12px; line-height: 1; cursor: pointer;
+    flex: 0 0 auto; font: inherit; font-size: var(--text-base); line-height: 1; cursor: pointer;
     padding: 0 var(--space-2); background: none; border: 0; color: var(--fg-2);
     visibility: hidden;
   }

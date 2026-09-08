@@ -298,7 +298,7 @@
    * of the panel empty and a repository with two hundred pushed the commit box off the end.
    */
   .panel {
-    display: flex; flex-direction: column; gap: var(--space-2); font-size: 12px;
+    display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-base);
     flex: 1; min-height: 0;
   }
   .panel > section {
@@ -385,7 +385,7 @@
   .file {
     display: flex; align-items: center; gap: var(--space-2);
     flex: 1; min-width: 0; text-align: left; cursor: pointer;
-    font: inherit; font-size: 12px; padding: 2px var(--space-2);
+    font: inherit; font-size: var(--text-base); padding: 2px var(--space-2);
     background: var(--bg-1); border: 0; color: var(--fg-1);
   }
   .file.open { background: var(--accent-soft); color: var(--fg-0); }
@@ -396,7 +396,7 @@
   }
   .mark {
     flex: 0 0 auto; width: 12px; text-align: center;
-    font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm); font-weight: 700;
   }
   .mark.added { color: var(--ok); }
   .mark.deleted { color: var(--danger); }
@@ -404,7 +404,7 @@
   .mark.modified { color: var(--lane-1); }
   .mark.conflict { color: var(--danger); }
   .act {
-    flex: 0 0 auto; font: inherit; font-size: 13px; line-height: 1; width: 1.6em;
+    flex: 0 0 auto; font: inherit; font-size: var(--text-md); line-height: 1; width: 1.6em;
     cursor: pointer; visibility: hidden;
     background: var(--bg-2); border: 1px solid var(--border); border-radius: 3px;
     color: var(--fg-1); margin-right: var(--space-1);

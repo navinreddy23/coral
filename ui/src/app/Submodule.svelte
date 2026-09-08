@@ -120,9 +120,9 @@
     border-bottom: 1px solid var(--border);
   }
   .glyph { color: var(--fg-2); }
-  h2 { margin: 0; font-size: 14px; font-weight: 600; flex: 1; }
+  h2 { margin: 0; font-size: var(--text-lg); font-weight: 600; flex: 1; }
   .shut {
-    font: inherit; font-size: 18px; line-height: 1; cursor: pointer;
+    display: flex; font: inherit; line-height: 1; cursor: pointer;
     background: var(--bg-1); border: 0; color: var(--fg-2); padding: 0 var(--space-2);
   }
   .shut:hover { color: var(--fg-0); }
@@ -130,14 +130,14 @@
   .body {
     flex: 1; min-height: 0; overflow-y: auto;
     padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3);
-    align-items: flex-start; font-size: 12px;
+    align-items: flex-start; font-size: var(--text-base);
   }
   label {
     display: flex; flex-direction: column; gap: var(--space-1);
-    font-size: 11px; color: var(--fg-2); width: 100%; max-width: 44em;
+    font-size: var(--text-sm); color: var(--fg-2); width: 100%; max-width: 44em;
   }
   input {
-    font: inherit; font-size: 12px; font-family: var(--font-mono);
+    font: inherit; font-size: var(--text-base); font-family: var(--font-mono); font-variant-ligatures: none;
     padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-1);
     background: var(--bg-0); color: var(--fg-0);
   }
@@ -155,7 +155,7 @@
   .revision { width: 100%; max-width: 44em; }
   h3 {
     display: flex; align-items: baseline; gap: var(--space-2);
-    margin: 0 0 var(--space-2); font-size: 11px; font-weight: 700;
+    margin: 0 0 var(--space-2); font-size: var(--text-sm); font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-2);
   }
   .when { text-transform: none; letter-spacing: 0; font-weight: 400; }
@@ -164,12 +164,12 @@
     gap: var(--space-2) var(--space-3); margin: 0;
     padding: var(--space-3); background: var(--bg-2); border-radius: var(--radius-1);
   }
-  dt { color: var(--fg-2); font-size: 11px; }
+  dt { color: var(--fg-2); font-size: var(--text-sm); }
   dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--fg-1); }
 
   .row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
   button:not(.shut) {
-    font: inherit; font-size: 12px; cursor: pointer;
+    font: inherit; font-size: var(--text-base); cursor: pointer;
     padding: var(--space-2) var(--space-3); border-radius: var(--radius-1);
     background: var(--bg-2); border: 1px solid var(--border); color: var(--fg-1);
   }

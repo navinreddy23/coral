@@ -164,26 +164,26 @@
     border-right: 1px solid var(--border); background: var(--bg-1);
   }
   .back {
-    display: block; width: 100%; text-align: left; font: inherit; font-size: 12px;
+    display: block; width: 100%; text-align: left; font: inherit; font-size: var(--text-base);
     cursor: pointer; padding: var(--space-2); border-radius: var(--radius-1);
     background: var(--bg-1); border: 0; color: var(--accent);
   }
   .back:hover { background: var(--bg-2); }
   .heading {
     margin: var(--space-4) var(--space-2) var(--space-2);
-    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+    font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
     color: var(--fg-2);
   }
   /* Under the heading, so the two panes that are about one repository say which one before
      anything on them is read. */
   .repo {
     margin: 0 var(--space-2) var(--space-2);
-    font-size: 12px; font-weight: 600; color: var(--fg-1);
+    font-size: var(--text-base); font-weight: 600; color: var(--fg-1);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .pane {
     display: flex; align-items: center; gap: var(--space-2);
-    width: 100%; text-align: left; font: inherit; font-size: 12px; cursor: pointer;
+    width: 100%; text-align: left; font: inherit; font-size: var(--text-base); cursor: pointer;
     padding: 4px var(--space-2); border-radius: var(--radius-1);
     background: var(--bg-1); border: 0; color: var(--fg-1);
   }

@@ -98,7 +98,7 @@
 
   .line {
     display: flex; align-items: baseline; gap: var(--space-2); height: 17px;
-    font-family: var(--font-mono); font-size: 11px; line-height: 17px; white-space: pre;
+    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm); line-height: 17px; white-space: pre;
   }
   .line .tick { flex: 0 0 14px; text-align: center; }
   .line .tick input { margin: 0; vertical-align: middle; cursor: pointer; }

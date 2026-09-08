@@ -45,21 +45,21 @@
     background: var(--bg-0); border: 1px solid var(--border); color: var(--fg-0);
     text-align: left; cursor: default;
   }
-  h2 { margin: 0 0 var(--space-1); font-size: 15px; }
-  .note { margin: 0 0 var(--space-4); font-size: 12px; color: var(--fg-2); }
+  h2 { margin: 0 0 var(--space-1); font-size: var(--text-lg); }
+  .note { margin: 0 0 var(--space-4); font-size: var(--text-base); color: var(--fg-2); }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); }
   h3 {
-    font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+    font-size: var(--text-sm); text-transform: uppercase; letter-spacing: 0.05em;
     color: var(--fg-2); margin: 0 0 var(--space-2);
   }
   .row {
     display: flex; align-items: baseline; gap: var(--space-3);
-    padding: 2px 0; font-size: 12px;
+    padding: 2px 0; font-size: var(--text-base);
   }
   .row.pending { opacity: 0.45; }
   .label { flex: 1; color: var(--fg-1); }
   kbd {
-    font-family: var(--font-mono); font-size: 11px; white-space: nowrap;
+    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm); white-space: nowrap;
     padding: 1px var(--space-2); border-radius: 3px;
     background: var(--bg-2); border: 1px solid var(--border); color: var(--fg-0);
   }

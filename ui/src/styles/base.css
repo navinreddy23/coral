@@ -22,7 +22,15 @@ html, body {
 
 #app { height: 100%; }
 
-code, .mono { font-family: var(--font-mono); }
+/*
+ * No ligatures, deliberately.
+ *
+ * JetBrains Mono turns `!==` into a single glyph, and `->`, `=>`, `<=` and `>=` with it. In an
+ * editor that is a matter of taste; in a diff it is not. This window exists to show exactly
+ * what changed, and a reader checking whether a line says `!=` or `!==` should not have to
+ * know how the face draws them.
+ */
+code, .mono { font-family: var(--font-mono); font-variant-ligatures: none; }
 
 /*
  * Figures line up in a column. Object ids, ahead/behind counts and dates are all read down a
@@ -73,7 +81,7 @@ code, .mono { font-family: var(--font-mono); }
  * catches the handful of animations that name their own duration.
  */
 @media (prefers-reduced-motion: reduce) {
-  :root { --fast: 0ms; --slow: 0ms; }
+  :root { --fast: 0ms; --slow: 0ms; --slower: 0ms; }
   *, *::before, *::after {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;

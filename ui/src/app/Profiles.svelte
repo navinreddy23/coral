@@ -198,21 +198,21 @@
 <style>
   .pane {
     flex: 1; min-width: 0; overflow-y: auto; padding: var(--space-4);
-    background: var(--bg-0); color: var(--fg-1); font-size: 12px;
+    background: var(--bg-0); color: var(--fg-1); font-size: var(--text-base);
   }
   h2 {
-    margin: 0 0 var(--space-3); font-size: 18px; font-weight: 600; color: var(--fg-0);
+    margin: 0 0 var(--space-3); font-size: var(--text-xl); font-weight: 600; color: var(--fg-0);
     background: var(--bg-0);
   }
   h3 {
-    margin: var(--space-5) 0 var(--space-2); font-size: 14px; font-weight: 600;
+    margin: var(--space-5) 0 var(--space-2); font-size: var(--text-lg); font-weight: 600;
     color: var(--fg-0); background: var(--bg-0);
   }
   p { margin: 0 0 var(--space-3); max-width: 68ch; line-height: 1.55; background: var(--bg-0); }
   .lede { color: var(--fg-1); }
   .muted { color: var(--fg-2); }
   .error { color: var(--danger); }
-  .mono { font-family: var(--font-mono); }
+  .mono { font-family: var(--font-mono); font-variant-ligatures: none; }
 
   .list { list-style: none; margin: 0 0 var(--space-3); padding: 0; max-width: 68ch; }
   .list li {
@@ -225,7 +225,7 @@
   .who { flex: 1 1 auto; min-width: 0; color: var(--fg-0); font-weight: 600;
          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .badge {
-    font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent);
+    font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent);
   }
 
   /* Eight small squares rather than a menu: the palette is the whole choice, and it is
@@ -238,7 +238,7 @@
   .swatch.picked { border-color: var(--fg-0); }
 
   .link {
-    font: inherit; font-size: 11px; cursor: pointer;
+    font: inherit; font-size: var(--text-sm); cursor: pointer;
     padding: 1px var(--space-2); border: 0; border-radius: var(--radius-1);
     background: transparent; color: var(--accent);
   }
@@ -250,13 +250,13 @@
   .field { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
   .name { flex: 0 0 auto; width: 9em; color: var(--fg-2); }
   input {
-    font: inherit; font-size: 12px; padding: 3px var(--space-2); min-width: 0; max-width: 26em;
+    font: inherit; font-size: var(--text-base); padding: 3px var(--space-2); min-width: 0; max-width: 26em;
     background: var(--bg-0); color: var(--fg-0);
     border: 1px solid var(--border-strong); border-radius: var(--radius-1);
   }
   .rename { flex: 1 1 auto; max-width: none; }
   .save, .add {
-    font: inherit; font-size: 12px; cursor: pointer;
+    font: inherit; font-size: var(--text-base); cursor: pointer;
     padding: 4px var(--space-3); border-radius: var(--radius-1);
     border: 1px solid var(--border-strong); background: var(--bg-2); color: var(--fg-0);
   }

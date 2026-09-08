@@ -1,0 +1,98 @@
+import { describe, expect, it } from 'vitest';
+
+import { componentStyles, tokens } from './stylesheet';
+
+/**
+ * The rules the whole interface is drawn by, as assertions rather than as good intentions.
+ *
+ * Three of these are about consistency and one is about rendering. The rendering one is the
+ * important one: WebKit antialiases text on a composited layer with subpixel precision only
+ * where it knows what is behind it, so a surface carrying text and no background of its own
+ * silently drops to grayscale and reads soft. That is invisible in a screenshot taken in a
+ * browser and obvious in the real window, which is exactly the kind of fault a test should
+ * be holding rather than a person.
+ */
+const STYLES = componentStyles();
+
+/** Components that float free of the page, and may therefore cast a shadow. */
+const OVERLAYS = new Set([
+  'Menu.svelte', 'Ask.svelte', 'Palette.svelte', 'Toasts.svelte', 'HostAccount.svelte',
+  'RebasePicker.svelte', 'Shortcuts.svelte', 'TabBar.svelte', 'DiffView.svelte',
+]);
+
+/** Literal colours that are correct and say so where they are written. */
+const ALLOWED_LITERALS = new Set([
+  // The letters inside a commit node's disc. White in both themes, which is the whole reason
+  // the node palette is dark in both.
+  '#ffffff',
+]);
+
+describe('the component stylesheets', () => {
+  it('write no colour that is not a token', () => {
+    const offenders: string[] = [];
+    for (const { name, css } of STYLES) {
+      for (const found of css.matchAll(/#[0-9a-f]{3,8}\b/gi)) {
+        if (!ALLOWED_LITERALS.has(found[0].toLowerCase())) offenders.push(`${name}: ${found[0]}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('write no type size that is not on the scale', () => {
+    // Eighty-three components wrote `12px`, sixty-one wrote `11px`, and five different sizes
+    // were used for what was the same heading in five panels.
+    const offenders: string[] = [];
+    for (const { name, css } of STYLES) {
+      for (const found of css.matchAll(/font-size:\s*(\d+)px/g)) {
+        offenders.push(`${name}: ${found[1]}px`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('cast a shadow only where something floats above the page', () => {
+    // A shadow is a large soft fill. On a row it would be repainted on every scroll frame, and
+    // this window scrolls a million rows.
+    const offenders: string[] = [];
+    for (const { name, css } of STYLES) {
+      if (OVERLAYS.has(name)) continue;
+      for (const found of css.matchAll(/box-shadow:\s*([^;]+);/g)) {
+        const value = found[1] ?? '';
+        // An inset shadow is a border drawn on one edge, and a shadow with no blur is a ring
+        // round a drop target. Neither is an elevation, and neither costs anything to repaint.
+        if (/\binset\b/.test(value) || value.includes('var(--ring)')) continue;
+        if (/^0 0 0 /.test(value.trim())) continue;
+        offenders.push(`${name}: ${value.trim()}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('time every transition from the two duration tokens', () => {
+    /*
+     * So that motion has one switch. `base.css` sets both to nothing under
+     * `prefers-reduced-motion`, which turns off every animation in the window at once; a
+     * component that writes its own `160ms` opts itself out of that silently.
+     *
+     * The rendering rule that cannot be checked here is the other half of this file's
+     * subject: every surface carrying text has to paint an opaque background of its own or
+     * WebKit drops it to grayscale antialiasing. It is not lintable from the CSS text —
+     * a row is deliberately transparent so the lane canvas shows through it, and its cells
+     * are what paint — so the commit list's version of it is asserted against real rules in
+     * `tests/dom/shell.test.ts` instead.
+     */
+    const offenders: string[] = [];
+    for (const { name, css } of STYLES) {
+      for (const found of css.matchAll(/transition:[^;]*?(\d+m?s)/g)) {
+        offenders.push(`${name}: ${found[1]}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe('the token file', () => {
+  it('offers a size for lettering inside a shape, outside the reading scale', () => {
+    expect(tokens('light').has('text-mark')).toBe(true);
+  });
+});

@@ -92,18 +92,18 @@
     overflow: hidden;
   }
   input {
-    font: inherit; font-size: 13px; padding: var(--space-3);
+    font: inherit; font-size: var(--text-md); padding: var(--space-3);
     border: 0; border-bottom: 1px solid var(--border);
     background: var(--bg-0); color: var(--fg-0); outline: none;
   }
   ul { list-style: none; margin: 0; padding: var(--space-1) 0; overflow-y: auto; }
   button {
     display: flex; align-items: center; gap: var(--space-3);
-    width: 100%; text-align: left; cursor: pointer; font: inherit; font-size: 12px;
+    width: 100%; text-align: left; cursor: pointer; font: inherit; font-size: var(--text-base);
     padding: 4px var(--space-3); background: var(--bg-0); border: 0; color: var(--fg-1);
   }
   button.on, button:hover { background: var(--bg-2); color: var(--fg-0); }
   .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .group { flex: 0 0 auto; font-size: 11px; color: var(--fg-2); }
-  .empty { padding: var(--space-3); font-size: 12px; color: var(--fg-2); }
+  .group { flex: 0 0 auto; font-size: var(--text-sm); color: var(--fg-2); }
+  .empty { padding: var(--space-3); font-size: var(--text-base); color: var(--fg-2); }
 </style>

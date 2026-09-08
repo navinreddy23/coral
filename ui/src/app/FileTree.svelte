@@ -90,7 +90,7 @@
   button {
     display: flex; align-items: center; gap: var(--space-2);
     width: 100%; text-align: left; cursor: pointer;
-    font: inherit; font-size: 12px; padding: 1px var(--space-2) 1px 4px;
+    font: inherit; font-size: var(--text-base); padding: 1px var(--space-2) 1px 4px;
     background: var(--bg-1); border: 0; color: var(--fg-1);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
@@ -98,7 +98,7 @@
   .file.open { background: var(--accent-soft); color: var(--fg-0); }
   .dir { color: var(--fg-2); }
   .caret { width: 9px; flex: 0 0 auto; }
-  .mark { flex: 0 0 auto; width: 10px; font-family: var(--font-mono); font-size: 10px; }
+  .mark { flex: 0 0 auto; width: 10px; font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-xs); }
   .mark.added { color: var(--ok); }
   .mark.deleted { color: var(--danger); }
   .mark.renamed, .mark.copied { color: var(--accent); }

@@ -326,21 +326,21 @@
           <button
             onclick={() => step(-1)}
             disabled={changeRows.length === 0}
-            title="Previous change">↑</button
+            title="Previous change"><Icon name="chevronUp" size={14} /></button
           >
           <button
             onclick={() => step(1)}
             disabled={changeRows.length === 0}
-            title="Next change">↓</button
+            title="Next change"><Icon name="chevronDown" size={14} /></button
           >
         </div>
       {:else if diff.mode === 'inline'}
         <div class="steps">
           <button onclick={() => stepInline(-1)} disabled={!anyChange} title="Previous change"
-            >↑</button
+            ><Icon name="chevronUp" size={14} /></button
           >
           <button onclick={() => stepInline(1)} disabled={!anyChange} title="Next change"
-            >↓</button
+            ><Icon name="chevronDown" size={14} /></button
           >
         </div>
       {/if}
@@ -532,8 +532,8 @@
 <style>
   .diff { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-0); }
   header {
-    display: flex; align-items: center; gap: var(--space-3);
-    height: 34px; padding: 0 var(--space-3); flex: 0 0 auto;
+    display: flex; align-items: center; gap: var(--space-2);
+    height: 36px; padding: 0 var(--space-2) 0 var(--space-3); flex: 0 0 auto;
     border-bottom: 1px solid var(--border); background: var(--bg-1);
   }
   /*
@@ -545,43 +545,70 @@
   /* Normal weight. The file name is a label on the diff, not a heading over it, and mono at
      twelve pixels already reads heavier than the interface font beside it. */
   .path {
-    flex: 1; min-width: 0; font-size: 12px; font-weight: 400; color: var(--fg-1);
+    flex: 1; min-width: 0; font-size: var(--text-base); font-weight: 400; color: var(--fg-1);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .tally { flex: 0 0 auto; font-size: 11px; display: flex; gap: var(--space-2); }
+  .tally {
+    flex: 0 0 auto; font-size: var(--text-sm); display: flex; gap: var(--space-2);
+    font-family: var(--font-mono); font-variant-ligatures: none; font-variant-numeric: tabular-nums;
+  }
   .added { color: var(--ok); }
   .removed { color: var(--danger); }
-  .toggle { display: flex; border: 1px solid var(--border); border-radius: 3px; overflow: hidden; }
+
+  /*
+   * One shape for every control in this header.
+   *
+   * There were three: a bordered group of segments, a lone bordered button, and a pair of
+   * arrows in boxes of their own with a third radius. Six controls, four outlines and three
+   * corner radii across thirty-four pixels.
+   *
+   * Segments now sit in a filled track with the chosen one lifted out of it, which is what
+   * says a set of choices rather than a row of buttons; everything else is a plain button
+   * with no outline until the pointer is on it.
+   */
+  .toggle {
+    display: flex; gap: 2px; flex: 0 0 auto;
+    padding: 2px; border-radius: var(--radius-1); background: var(--bg-2);
+  }
   .toggle button {
-    font: inherit; font-size: 11px; cursor: pointer; padding: 1px var(--space-2);
-    background: var(--bg-0); border: 0; color: var(--fg-1);
+    font: inherit; font-size: var(--text-sm); cursor: pointer; padding: 2px var(--space-2);
+    background: none; border: 0; border-radius: 4px; color: var(--fg-2);
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
   }
   .toggle button:hover { color: var(--fg-0); }
-  .toggle button.on { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+  .toggle button.on {
+    background: var(--bg-0); color: var(--fg-0); font-weight: 600;
+    box-shadow: var(--elevate-1);
+  }
   .close {
-    font: inherit; cursor: pointer; background: var(--bg-0); border: 0; color: var(--fg-2);
-    padding: 2px var(--space-2); border-radius: var(--radius-1);
+    display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
+    width: 24px; height: 24px; margin-left: var(--space-1);
+    font: inherit; cursor: pointer; background: none; border: 0; color: var(--fg-2);
+    border-radius: var(--radius-1);
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
   }
   .close:hover { color: var(--fg-0); background: var(--bg-2); }
 
   .body { flex: 1; min-height: 0; display: flex; }
 
-  .steps { display: flex; gap: 2px; }
-  .steps button, .ws {
-    font: inherit; font-size: 12px; cursor: pointer; line-height: 18px;
-    background: var(--bg-0); border: 1px solid var(--border); border-radius: 3px;
-    color: var(--fg-1); padding: 0 6px;
+  .steps { display: flex; gap: 2px; flex: 0 0 auto; }
+  .steps button, .ws, .wider {
+    display: flex; align-items: center; justify-content: center;
+    font: inherit; font-size: var(--text-sm); cursor: pointer;
+    min-width: 24px; height: 24px; padding: 0 var(--space-2);
+    background: none; border: 0; border-radius: var(--radius-1);
+    color: var(--fg-2);
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
   }
-  .steps button:hover:not(:disabled), .ws:hover { background: var(--bg-2); color: var(--fg-0); }
-  .wider {
-    font: inherit; font-size: 11px; cursor: pointer;
-    padding: 2px var(--space-2); border-radius: var(--radius-1);
-    background: var(--bg-2); border: 1px solid var(--border-strong); color: var(--fg-1);
+  .steps button { padding: 0; }
+  .steps button:hover:not(:disabled), .ws:hover, .wider:hover {
+    background: var(--bg-2); color: var(--fg-0);
   }
-  .wider:hover { background: var(--bg-3); }
-  .wider.on { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
-  .steps button:disabled { color: var(--fg-2); cursor: default; }
-  .ws.on { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  .steps button:disabled { opacity: 0.4; cursor: default; }
+  /* A pressed toggle keeps the tinted fill rather than the solid accent: these sit beside the
+     segmented tracks, and two different ways of saying "chosen" in one header is one too
+     many. */
+  .wider.on, .ws.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 
   /*
    * The file's history, beside the change it made rather than above it: the list is scrolled
@@ -594,7 +621,7 @@
   }
   .entry {
     display: flex; align-items: center; gap: var(--space-2); width: 100%; text-align: left;
-    font: inherit; font-size: 12px; cursor: pointer; color: var(--fg-1);
+    font: inherit; font-size: var(--text-base); cursor: pointer; color: var(--fg-1);
     background: var(--bg-1); border: 0; border-radius: var(--radius-1);
     padding: var(--space-1) var(--space-2); overflow: hidden;
   }
@@ -610,10 +637,10 @@
   }
   .what { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .subject { color: var(--fg-0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .by { color: var(--fg-2); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .sha { flex: 0 0 auto; color: var(--fg-2); font-size: 11px; }
+  .by { color: var(--fg-2); font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sha { flex: 0 0 auto; color: var(--fg-2); font-size: var(--text-sm); }
   .deeper {
-    width: 100%; font: inherit; font-size: 11px; cursor: pointer; margin-top: var(--space-2);
+    width: 100%; font: inherit; font-size: var(--text-sm); cursor: pointer; margin-top: var(--space-2);
     background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-1);
     color: var(--fg-1); padding: var(--space-1);
   }
@@ -627,7 +654,7 @@
   }
   .chip {
     display: inline-flex; gap: var(--space-2); align-items: baseline;
-    font-family: var(--font-ui); font-size: 11px; color: var(--fg-1);
+    font-family: var(--font-ui); font-size: var(--text-sm); color: var(--fg-1);
   }
   .chip .when { color: var(--fg-2); }
   .scroll { flex: 1; min-width: 0; overflow: auto; }
@@ -663,7 +690,8 @@
   }
   .lines {
     border-collapse: collapse; width: 100%;
-    font-family: var(--font-mono); font-size: 11px; font-weight: 400; line-height: 17px;
+    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm); font-weight: 400;
+    line-height: 17px;
   }
   /*
    * A gutter has to look like one. At `--bg-1` it is three percent off the page the code sits
@@ -679,7 +707,7 @@
   td.no {
     width: 1%; white-space: nowrap; text-align: right; user-select: none;
     padding: 0 var(--space-2) 0 var(--space-3); color: var(--fg-2); background: var(--bg-2);
-    border-right: 1px solid var(--border-strong);
+    border-right: 1px solid var(--border);
     /* Numbers only ever read down the column, so they line up. */
     font-variant-numeric: tabular-nums;
   }
@@ -699,7 +727,7 @@
    */
   .sheet {
     position: relative; overflow: hidden;
-    font-family: var(--font-mono); font-size: 11px; font-weight: 400; line-height: 17px;
+    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm); font-weight: 400; line-height: 17px;
   }
   .window { position: absolute; inset: 0 0 auto 0; will-change: transform; }
   /*
@@ -718,7 +746,7 @@
   .line .no {
     text-align: right; user-select: none; padding: 0 var(--space-2) 0 var(--space-3);
     color: var(--fg-2); background: var(--bg-2);
-    border-right: 1px solid var(--border-strong); box-sizing: border-box;
+    border-right: 1px solid var(--border); box-sizing: border-box;
     font-variant-numeric: tabular-nums;
   }
   .cell {
@@ -743,7 +771,7 @@
   .where { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .hunk-acts { flex: 0 0 auto; display: flex; gap: var(--space-1); }
   .hunk-acts button {
-    font: inherit; font-family: var(--font-ui); font-size: 11px; cursor: pointer;
+    font: inherit; font-family: var(--font-ui); font-size: var(--text-sm); cursor: pointer;
     background: var(--bg-0); border: 1px solid var(--border); border-radius: 3px;
     color: var(--fg-1); padding: 0 6px; line-height: 17px;
   }
@@ -763,8 +791,8 @@
     background: var(--bg-2); color: var(--fg-2); padding: 3px var(--space-2);
     white-space: pre; user-select: none;
     border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
-    font-size: 10px; letter-spacing: 0.02em;
+    font-size: var(--text-xs); letter-spacing: 0.02em;
   }
-  .muted { color: var(--fg-2); padding: var(--space-3); font-size: 12px; }
-  .error { color: var(--danger); padding: var(--space-3); font-size: 12px; }
+  .muted { color: var(--fg-2); padding: var(--space-3); font-size: var(--text-base); }
+  .error { color: var(--danger); padding: var(--space-3); font-size: var(--text-base); }
 </style>

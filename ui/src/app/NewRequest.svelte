@@ -119,37 +119,37 @@
   }
   header { padding: var(--space-2); border-bottom: 1px solid var(--border); background: var(--bg-1); }
   .back {
-    font: inherit; font-size: 12px; cursor: pointer; padding: var(--space-2);
+    font: inherit; font-size: var(--text-base); cursor: pointer; padding: var(--space-2);
     border-radius: var(--radius-1); background: var(--bg-1); border: 0; color: var(--accent);
   }
   .back:hover { background: var(--bg-2); }
   .heading {
-    margin: var(--space-2) 0 0 var(--space-2); font-size: 14px; font-weight: 600;
+    margin: var(--space-2) 0 0 var(--space-2); font-size: var(--text-lg); font-weight: 600;
     color: var(--fg-0);
   }
   .form { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); max-width: 46em; }
-  .where { margin: 0; display: flex; align-items: center; gap: var(--space-2); font-size: 13px; }
+  .where { margin: 0; display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-md); }
   .branch {
-    font-family: var(--font-mono); font-size: 12px;
+    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-base);
     padding: 1px var(--space-2); border-radius: 999px;
     background: var(--accent-soft); color: var(--fg-0);
   }
   .arrow { color: var(--fg-2); }
-  .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--fg-2); }
+  .field { display: flex; flex-direction: column; gap: 4px; font-size: var(--text-base); color: var(--fg-2); }
   input, textarea, select {
-    font: inherit; font-size: 13px; color: var(--fg-0);
+    font: inherit; font-size: var(--text-md); color: var(--fg-0);
     padding: var(--space-2); border-radius: var(--radius-1);
     background: var(--bg-1); border: 1px solid var(--border-strong);
   }
-  textarea { resize: vertical; font-family: var(--font-mono); font-size: 12px; }
-  .draft { display: flex; align-items: center; gap: var(--space-2); font-size: 13px; color: var(--fg-1); }
-  .bad { margin: 0; color: var(--danger); font-size: 12px; }
+  textarea { resize: vertical; font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-base); }
+  .draft { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-md); color: var(--fg-1); }
+  .bad { margin: 0; color: var(--danger); font-size: var(--text-base); }
   .acts { display: flex; gap: var(--space-2); }
   .go {
-    font: inherit; font-size: 13px; cursor: pointer;
+    font: inherit; font-size: var(--text-md); cursor: pointer;
     padding: var(--space-2) var(--space-4); border-radius: var(--radius-1);
     background: var(--accent); border: 1px solid var(--accent); color: var(--accent-fg);
   }
   .go:disabled { background: var(--bg-2); border-color: var(--border-strong); color: var(--fg-2); cursor: default; }
-  .muted { color: var(--fg-2); font-size: 12px; }
+  .muted { color: var(--fg-2); font-size: var(--text-base); }
 </style>

@@ -752,7 +752,7 @@
   .row.current { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent-line); }
   .ref.static { cursor: default; }
   .dots {
-    flex: 0 0 auto; font: inherit; font-size: 14px; line-height: 1; cursor: pointer;
+    flex: 0 0 auto; display: flex; font: inherit; line-height: 1; cursor: pointer;
     padding: 0 var(--space-2); background: var(--bg-1); border: 0; color: var(--fg-2);
     visibility: hidden;
   }
@@ -800,16 +800,16 @@
   }
   .solo-banner.quiet { background: var(--bg-2); box-shadow: inset 2px 0 0 var(--border-strong); }
   .solo-banner .tag {
-    flex: 0 0 auto; font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+    flex: 0 0 auto; font-size: var(--text-mark); font-weight: 700; letter-spacing: 0.08em;
     color: var(--accent); background: var(--bg-0); border-radius: 3px;
     padding: 1px var(--space-1);
   }
   .solo-banner .who {
     flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    font-size: 11px; font-weight: 600; color: var(--fg-0);
+    font-size: var(--text-sm); font-weight: 600; color: var(--fg-0);
   }
   .solo-banner .leave {
-    flex: 0 0 auto; font: inherit; font-size: 10px; cursor: pointer;
+    flex: 0 0 auto; font: inherit; font-size: var(--text-xs); cursor: pointer;
     padding: 1px var(--space-2); border: 1px solid var(--border-strong);
     border-radius: 3px; background: var(--bg-0); color: var(--fg-1);
   }
@@ -832,7 +832,7 @@
   .state {
     flex: 0 0 auto; width: 14px; height: 13px; margin-right: var(--space-1);
     line-height: 13px; text-align: center;
-    border-radius: 50%; font-size: 9px; font-weight: 700; color: var(--bg-0);
+    border-radius: 50%; font-size: var(--text-mark); font-weight: 700; color: var(--bg-0);
   }
   .state.open { background: var(--ok); }
   .state.draft { background: var(--fg-2); }
@@ -841,11 +841,11 @@
   /* The drop target, outlined rather than filled so the branch name stays readable under it. */
   .ref.over { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 3px; }
   .tick { color: var(--accent); flex: 0 0 auto; }
-  .track { margin-left: auto; font-size: 10px; color: var(--fg-2); flex: 0 0 auto; }
-  .none { margin: 0 0 var(--space-2) var(--space-4); font-size: 11px; color: var(--fg-2); }
+  .track { margin-left: auto; font-size: var(--text-xs); color: var(--fg-2); flex: 0 0 auto; }
+  .none { margin: 0 0 var(--space-2) var(--space-4); font-size: var(--text-sm); color: var(--fg-2); }
   .more, .link {
     display: block; text-align: left; cursor: pointer;
-    padding: 3px var(--space-4); font-size: 11px; color: var(--accent);
+    padding: 3px var(--space-4); font-size: var(--text-sm); color: var(--accent);
     background: var(--bg-1); border: 0; font-family: inherit;
   }
   .link { display: inline; padding: 0; }

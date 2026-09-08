@@ -300,7 +300,7 @@
   aside {
     width: var(--details-w, 340px); flex: 0 0 auto; overflow-y: auto;
     border-left: 1px solid var(--border); background: var(--bg-1);
-    padding: var(--space-3); font-size: 12px;
+    padding: var(--space-3); font-size: var(--text-base);
   }
   /*
    * Every element that carries text in this panel paints its own opaque background.
@@ -333,7 +333,7 @@
   .face {
     flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    font-size: 9px; font-weight: 700; letter-spacing: 0.02em;
+    font-size: var(--text-mark); font-weight: 700; letter-spacing: 0.02em;
     /* White in both themes, which is why the node palette is dark in both. */
     color: #ffffff;
   }
@@ -378,7 +378,7 @@
     background: var(--bg-0); border-radius: var(--radius-1);
     /* A rule down the leading edge, as a quoted message is set everywhere else. */
     box-shadow: inset 2px 0 0 var(--border-strong);
-    font-family: var(--font-mono); font-size: var(--text-sm);
+    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm);
     line-height: var(--leading-body);
     white-space: pre-wrap; word-break: break-word; color: var(--fg-0);
   }
@@ -418,12 +418,12 @@
     overflow: hidden;
   }
   .toggle button {
-    font: inherit; font-size: 11px; cursor: pointer; padding: 1px var(--space-2);
+    font: inherit; font-size: var(--text-sm); cursor: pointer; padding: 1px var(--space-2);
     background: var(--bg-0); border: 0; color: var(--fg-2);
   }
   .toggle button:hover { color: var(--fg-0); }
   .toggle button.on { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
-  .all { display: flex; align-items: center; gap: var(--space-1); font-size: 11px; color: var(--fg-2); }
+  .all { display: flex; align-items: center; gap: var(--space-1); font-size: var(--text-sm); color: var(--fg-2); }
   /* The directory gives way first; a truncated path that has lost its file name identifies
      nothing, which is the one part that must always survive. */
   .dir { flex: 0 1 auto; min-width: 0; color: var(--fg-2);
@@ -438,7 +438,7 @@
      path text alone. */
   .file {
     display: flex; align-items: center; gap: var(--space-2);
-    width: 100%; text-align: left; font: inherit; font-size: 12px;
+    width: 100%; text-align: left; font: inherit; font-size: var(--text-base);
     padding: 2px var(--space-2); margin: 0 calc(-1 * var(--space-2));
     background: var(--bg-1); border: 0; border-radius: var(--radius-1); cursor: pointer;
     color: var(--fg-1); overflow: hidden;
@@ -448,14 +448,14 @@
     background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent-line);
   }
   .path { flex: 1; min-width: 0; display: flex; overflow: hidden; white-space: nowrap; }
-  .from { color: var(--fg-2); font-size: 11px; }
+  .from { color: var(--fg-2); font-size: var(--text-sm); }
   /*
    * The change letter on a tinted square. A bare coloured letter at 11px is a smudge; the
    * plate gives it an edge and makes the column scannable.
    */
   .mark {
     flex: 0 0 auto; width: 15px; height: 15px; line-height: 15px; text-align: center;
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-xs);
     border-radius: 3px; background: var(--bg-2); color: var(--fg-2);
   }
   .mark.added { color: var(--ok); background: var(--ok-soft); }

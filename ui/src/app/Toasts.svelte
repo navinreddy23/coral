@@ -52,7 +52,7 @@
     border: 1px solid var(--border-strong); border-radius: var(--radius-2);
     /* It floats over the window, so it needs to read as above the page rather than in it. */
     box-shadow: 0 6px 20px rgb(0 0 0 / 16%);
-    font-size: 12px;
+    font-size: var(--text-base);
   }
   /* The kind is carried by a bar down the leading edge as well as by the glyph, so it survives
      being read at a glance and by anyone who cannot separate the colours. */
@@ -63,7 +63,7 @@
 
   .mark {
     flex: 0 0 auto; width: 16px; height: 16px; line-height: 16px; text-align: center;
-    border-radius: 50%; font-size: 11px; font-weight: 700; color: var(--accent-fg);
+    border-radius: 50%; font-size: var(--text-sm); font-weight: 700; color: var(--accent-fg);
   }
   .toast.ok .mark { background: var(--ok); }
   .toast.info .mark { background: var(--accent); }
@@ -73,17 +73,17 @@
   .text { flex: 1; min-width: 0; }
   .title { margin: 0; font-weight: 600; }
   .detail {
-    margin: 2px 0 0; color: var(--fg-1); font-size: 11px; line-height: 1.4;
+    margin: 2px 0 0; color: var(--fg-1); font-size: var(--text-sm); line-height: 1.4;
     /* git can report a paragraph; the toast shows the first few lines and no more. */
     max-height: 4.5em; overflow: hidden; white-space: pre-wrap; word-break: break-word;
   }
   .shut {
-    flex: 0 0 auto; font: inherit; font-size: 14px; line-height: 1; cursor: pointer;
+    flex: 0 0 auto; display: flex; font: inherit; line-height: 1; cursor: pointer;
     padding: 0 var(--space-1); background: none; border: 0; color: var(--fg-2);
   }
   .shut:hover { color: var(--fg-0); }
   .all {
-    font: inherit; font-size: 11px; cursor: pointer;
+    font: inherit; font-size: var(--text-sm); cursor: pointer;
     padding: 2px var(--space-2); border-radius: var(--radius-1);
     background: var(--bg-2); border: 1px solid var(--border); color: var(--fg-1);
   }

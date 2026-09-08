@@ -116,15 +116,15 @@
     background: var(--bg-0); border: 1px solid var(--border-strong);
     border-radius: var(--radius-2);
   }
-  h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--fg-0); }
+  h2 { margin: 0; font-size: var(--text-lg); font-weight: 600; color: var(--fg-0); }
   /* `pre-line`, so a detail can put the thing being destroyed on a line of its own and the
      warning on another. Run together they read as one sentence that says neither. */
   .detail {
-    margin: var(--space-2) 0 0; font-size: 12px; color: var(--fg-2); line-height: 1.5;
+    margin: var(--space-2) 0 0; font-size: var(--text-base); color: var(--fg-2); line-height: 1.5;
     white-space: pre-line;
   }
   input {
-    width: 100%; box-sizing: border-box; font: inherit; font-size: 13px;
+    width: 100%; box-sizing: border-box; font: inherit; font-size: var(--text-md);
     margin-top: var(--space-3); padding: var(--space-2);
     border: 1px solid var(--border-strong); border-radius: var(--radius-1);
     background: var(--bg-0); color: var(--fg-0);
@@ -134,7 +134,7 @@
     display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-4);
   }
   button {
-    font: inherit; font-size: 12px; cursor: pointer; padding: var(--space-1) var(--space-3);
+    font: inherit; font-size: var(--text-base); cursor: pointer; padding: var(--space-1) var(--space-3);
     background: var(--bg-1); border: 1px solid var(--border-strong);
     border-radius: var(--radius-1); color: var(--fg-1);
   }

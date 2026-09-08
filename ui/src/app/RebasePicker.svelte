@@ -118,7 +118,7 @@
   .panel {
     width: min(720px, 92vw); max-height: 76vh; display: flex; flex-direction: column;
     background: var(--bg-0); border: 1px solid var(--border); border-radius: 6px;
-    overflow: hidden; font-size: 12px;
+    overflow: hidden; font-size: var(--text-base);
   }
   header {
     display: flex; align-items: baseline; gap: var(--space-3);
@@ -135,14 +135,14 @@
   .dropped .summary, .dropped .sha { text-decoration: line-through; color: var(--fg-2); }
   .grip { cursor: grab; color: var(--fg-2); user-select: none; }
   select {
-    font: inherit; font-size: 11px; width: 6.5em;
+    font: inherit; font-size: var(--text-sm); width: 6.5em;
     background: var(--bg-0); color: var(--fg-1);
     border: 1px solid var(--border); border-radius: 3px;
   }
   .sha { color: var(--fg-2); flex: 0 0 auto; }
   .summary { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .message {
-    flex: 1; min-width: 0; font: inherit; font-size: 12px;
+    flex: 1; min-width: 0; font: inherit; font-size: var(--text-base);
     padding: 1px var(--space-2);
     border: 1px solid var(--accent); border-radius: var(--radius-1);
     background: var(--bg-0); color: var(--fg-0);
@@ -154,7 +154,7 @@
   }
   .spacer { flex: 1; }
   button {
-    font: inherit; font-size: 11px; cursor: pointer; padding: 2px var(--space-3);
+    font: inherit; font-size: var(--text-sm); cursor: pointer; padding: 2px var(--space-3);
     background: var(--bg-0); border: 1px solid var(--border); border-radius: 3px;
     color: var(--fg-1);
   }

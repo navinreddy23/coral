@@ -159,42 +159,42 @@
     border-radius: var(--radius-2);
   }
   h2 {
-    margin: 0; font-size: 14px; font-weight: 600; color: var(--fg-0);
+    margin: 0; font-size: var(--text-lg); font-weight: 600; color: var(--fg-0);
     display: flex; align-items: center; gap: var(--space-2);
   }
   .where {
-    margin: var(--space-1) 0 0; font-size: 12px; color: var(--fg-2);
-    font-family: var(--font-mono);
+    margin: var(--space-1) 0 0; font-size: var(--text-base); color: var(--fg-2);
+    font-family: var(--font-mono); font-variant-ligatures: none;
   }
   .state {
     margin: var(--space-3) 0 0; padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-1); font-size: 12px; line-height: 1.5;
+    border-radius: var(--radius-1); font-size: var(--text-base); line-height: 1.5;
     background: var(--bg-1); color: var(--fg-2);
     border-left: 2px solid var(--border-strong);
   }
   .state.on { border-left-color: var(--accent); color: var(--fg-1); }
   .field {
     display: flex; flex-direction: column; gap: 4px;
-    margin-top: var(--space-3); font-size: 12px; color: var(--fg-2);
+    margin-top: var(--space-3); font-size: var(--text-base); color: var(--fg-2);
   }
   input {
-    width: 100%; box-sizing: border-box; font: inherit; font-size: 13px;
+    width: 100%; box-sizing: border-box; font: inherit; font-size: var(--text-md);
     padding: var(--space-2); border: 1px solid var(--border-strong);
     border-radius: var(--radius-1); background: var(--bg-0); color: var(--fg-0);
   }
   input:focus { border-color: var(--accent); outline: none; }
-  .hint { margin: var(--space-2) 0 0; font-size: 11px; color: var(--fg-2); line-height: 1.6; }
+  .hint { margin: var(--space-2) 0 0; font-size: var(--text-sm); color: var(--fg-2); line-height: 1.6; }
   .hint a { color: var(--accent); }
   code {
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm);
     padding: 0 3px; border-radius: 3px; background: var(--bg-2);
   }
-  .bad { margin: var(--space-2) 0 0; color: var(--danger); font-size: 12px; }
+  .bad { margin: var(--space-2) 0 0; color: var(--danger); font-size: var(--text-base); }
   .acts {
     display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-4);
   }
   button {
-    font: inherit; font-size: 12px; cursor: pointer; padding: var(--space-1) var(--space-3);
+    font: inherit; font-size: var(--text-base); cursor: pointer; padding: var(--space-1) var(--space-3);
     background: var(--bg-1); border: 1px solid var(--border-strong);
     border-radius: var(--radius-1); color: var(--fg-1);
   }

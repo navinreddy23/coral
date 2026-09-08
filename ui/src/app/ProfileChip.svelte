@@ -34,7 +34,7 @@
   .chip {
     flex: 0 0 auto; max-width: 11em;
     display: inline-flex; align-items: center; gap: 5px;
-    font: inherit; font-size: 11px; font-weight: 600; cursor: pointer;
+    font: inherit; font-size: var(--text-sm); font-weight: 600; cursor: pointer;
     padding: 2px var(--space-2); border-radius: 999px;
     border: 1px solid var(--border); background: var(--bg-1); color: var(--fg-1);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

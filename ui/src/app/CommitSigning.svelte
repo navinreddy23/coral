@@ -237,11 +237,11 @@
 
 <style>
   .pane { padding: var(--space-4) var(--space-5); overflow-y: auto; flex: 1; min-width: 0; }
-  h2 { margin: 0 0 var(--space-4); font-size: 17px; font-weight: 600; color: var(--fg-0); }
+  h2 { margin: 0 0 var(--space-4); font-size: var(--text-xl); font-weight: 600; color: var(--fg-0); }
 
   .level { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-4); }
   .level button {
-    font: inherit; font-size: 11px; cursor: pointer; padding: 2px var(--space-3);
+    font: inherit; font-size: var(--text-sm); cursor: pointer; padding: 2px var(--space-3);
     background: var(--bg-1); border: 1px solid var(--border); border-radius: var(--radius-1);
     color: var(--fg-1);
   }
@@ -249,18 +249,18 @@
     background: var(--accent); border-color: var(--accent); color: var(--accent-fg);
     font-weight: 600;
   }
-  .note { font-size: 11px; color: var(--fg-2); }
+  .note { font-size: var(--text-sm); color: var(--fg-2); }
 
   dl {
     display: grid; grid-template-columns: fit-content(30%) minmax(0, 1fr);
     gap: var(--space-3) var(--space-4); margin: 0; align-items: baseline;
   }
-  dt { text-align: right; color: var(--fg-1); font-size: 12px; }
+  dt { text-align: right; color: var(--fg-1); font-size: var(--text-base); }
   dd { margin: 0; min-width: 0; }
   .row { display: flex; gap: var(--space-2); align-items: center; }
 
   input, select {
-    font: inherit; font-size: 12px; padding: 3px var(--space-2);
+    font: inherit; font-size: var(--text-base); padding: 3px var(--space-2);
     border: 1px solid var(--border-strong); border-radius: var(--radius-1);
     background: var(--bg-0); color: var(--fg-0); min-width: 0;
   }
@@ -272,7 +272,7 @@
   input:focus, select:focus { border-color: var(--accent); outline: none; }
 
   .refresh, .generate {
-    font: inherit; font-size: 12px; cursor: pointer; padding: 3px var(--space-3);
+    font: inherit; font-size: var(--text-base); cursor: pointer; padding: 3px var(--space-3);
     background: var(--bg-1); border: 1px solid var(--border-strong);
     border-radius: var(--radius-1); color: var(--fg-1);
   }
@@ -280,13 +280,13 @@
   .generate { color: var(--ok); font-weight: 600; }
   button:disabled { opacity: 0.5; cursor: default; }
 
-  .hint { margin: var(--space-1) 0 0; font-size: 11px; color: var(--fg-2); line-height: 1.5; max-width: 46em; }
+  .hint { margin: var(--space-1) 0 0; font-size: var(--text-sm); color: var(--fg-2); line-height: 1.5; max-width: 46em; }
   .hint.warn { color: var(--warn); }
   .tag {
-    margin-left: var(--space-2); font-size: 10px; padding: 0 6px; border-radius: 999px;
+    margin-left: var(--space-2); font-size: var(--text-xs); padding: 0 6px; border-radius: 999px;
     background: var(--accent-soft); color: var(--accent);
   }
-  .check { display: flex; align-items: center; gap: var(--space-2); font-size: 12px; color: var(--fg-1); }
+  .check { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-base); color: var(--fg-1); }
 
   .link {
     font: inherit; font-size: inherit; cursor: pointer; padding: 0;
@@ -296,14 +296,14 @@
   footer {
     display: flex; align-items: center; gap: var(--space-3);
     margin-top: var(--space-5); padding-top: var(--space-3);
-    border-top: 1px solid var(--border); font-size: 12px;
+    border-top: 1px solid var(--border); font-size: var(--text-base);
   }
   .spacer { flex: 1; }
   .muted { color: var(--fg-2); }
   .done { color: var(--ok); }
   .error { color: var(--danger); }
   .primary {
-    font: inherit; font-size: 12px; cursor: pointer; padding: 3px var(--space-4);
+    font: inherit; font-size: var(--text-base); cursor: pointer; padding: 3px var(--space-4);
     background: var(--accent); border: 1px solid var(--accent); border-radius: var(--radius-1);
     color: var(--accent-fg); font-weight: 600;
   }

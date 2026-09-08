@@ -102,7 +102,7 @@
     display: flex; align-items: center; gap: var(--space-3);
     flex: 0 0 auto; height: 24px; padding: 0 var(--space-3);
     border-top: 1px solid var(--border); background: var(--bg-1);
-    font-size: 11px; color: var(--fg-2);
+    font-size: var(--text-sm); color: var(--fg-2);
     /* Nothing here may reflow the window: it is the one strip that must stay put while an
        operation runs and the counts either side of it change. */
     overflow: hidden; white-space: nowrap;
@@ -133,7 +133,7 @@
 
   .logs {
     display: inline-flex; align-items: center; gap: 4px;
-    font: inherit; font-size: 11px; cursor: pointer;
+    font: inherit; font-size: var(--text-sm); cursor: pointer;
     padding: 1px var(--space-2); margin-right: calc(-1 * var(--space-2));
     border: 0; border-radius: var(--radius-1);
     background: transparent; color: var(--fg-2);

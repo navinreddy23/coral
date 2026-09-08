@@ -416,12 +416,12 @@
   header {
     display: flex; align-items: center; gap: var(--space-3);
     height: 34px; padding: 0 var(--space-3); flex: 0 0 auto;
-    border-bottom: 1px solid var(--border); background: var(--bg-1); font-size: 12px;
+    border-bottom: 1px solid var(--border); background: var(--bg-1); font-size: var(--text-base);
   }
   .spacer { flex: 1; }
-  .warn { color: var(--danger); font-size: 11px; }
+  .warn { color: var(--danger); font-size: var(--text-sm); }
   button {
-    font: inherit; font-size: 11px; cursor: pointer; padding: 2px var(--space-2);
+    font: inherit; font-size: var(--text-sm); cursor: pointer; padding: 2px var(--space-2);
     background: var(--bg-0); border: 1px solid var(--border); border-radius: 3px;
     color: var(--fg-1);
   }
@@ -453,10 +453,10 @@
    * binary conflict shows — and the later rule wins: the badge came out white on the row's own
    * light fill, fifteen pixels wide, with the words spilling past it.
    */
-  .oneshot { font-size: 10px; color: var(--fg-2); }
+  .oneshot { font-size: var(--text-xs); color: var(--fg-2); }
   .wholesale { display: flex; gap: 2px; flex: 0 0 auto; padding-left: var(--space-3); }
-  .wholesale button { font-size: 10px; padding: 0 var(--space-2); }
-  .done { padding: var(--space-3); font-size: 12px; color: var(--fg-2); }
+  .wholesale button { font-size: var(--text-xs); padding: 0 var(--space-2); }
+  .done { padding: var(--space-3); font-size: var(--text-base); color: var(--fg-2); }
 
   /* The pane holding everything to the right of the file list: a bar, the two sides, the
      result. It scrolls nothing itself; each sheet scrolls on its own. */
@@ -465,7 +465,7 @@
     flex: 0 0 auto;
     display: flex; align-items: center; gap: var(--space-2);
     padding: var(--space-2) var(--space-3); background: var(--bg-1);
-    border-bottom: 1px solid var(--border); font-size: 12px;
+    border-bottom: 1px solid var(--border); font-size: var(--text-base);
   }
   .path { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -477,14 +477,14 @@
   .pane + .pane { border-left: 1px solid var(--border); }
   .pane .head {
     flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2);
-    padding: var(--space-1) var(--space-2); font-size: 11px;
+    padding: var(--space-1) var(--space-2); font-size: var(--text-sm);
     background: var(--bg-1); border-bottom: 1px solid var(--border);
   }
   .pane .head .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pane .head button { font-size: 10px; flex: 0 0 auto; }
+  .pane .head button { font-size: var(--text-xs); flex: 0 0 auto; }
   .pane .tag {
     display: inline-block; width: 15px; text-align: center; border-radius: 3px;
-    font-size: 10px; font-weight: 700; color: var(--accent-fg);
+    font-size: var(--text-xs); font-weight: 700; color: var(--accent-fg);
   }
   .pane.ours .tag { background: var(--lane-7); }
   .pane.theirs .tag { background: var(--lane-3); }
@@ -497,21 +497,21 @@
     flex: 1; min-height: 0; width: 100%; box-sizing: border-box; resize: none;
     padding: var(--space-2) var(--space-3); background: var(--bg-0); color: var(--fg-0);
     border: 0; outline: 1px solid var(--accent); outline-offset: -1px;
-    font-family: var(--font-mono); font-size: 11px; line-height: 17px; white-space: pre;
+    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm); line-height: 17px; white-space: pre;
   }
-  .whole { padding: var(--space-3); font-size: 12px; color: var(--fg-1); max-width: 60ch; }
+  .whole { padding: var(--space-3); font-size: var(--text-base); color: var(--fg-1); max-width: 60ch; }
   .whole p { margin: 0 0 var(--space-3); line-height: 1.5; }
   .choices { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-  .choices button { font-size: 12px; padding: var(--space-1) var(--space-3); }
+  .choices button { font-size: var(--text-base); padding: var(--space-1) var(--space-3); }
   /* A branch name and a commit subject are both long; neither row must grow to fit them. */
   .wholesale button,
   .blocks > .bar > button {
     max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .muted { color: var(--fg-2); padding: var(--space-3); font-size: 12px; }
-  .error { color: var(--danger); padding: var(--space-2) var(--space-3); font-size: 12px; margin: 0; }
+  .muted { color: var(--fg-2); padding: var(--space-3); font-size: var(--text-base); }
+  .error { color: var(--danger); padding: var(--space-2) var(--space-3); font-size: var(--text-base); margin: 0; }
   .stopped {
-    margin: 0; padding: var(--space-2) var(--space-3); font-size: 11px;
+    margin: 0; padding: var(--space-2) var(--space-3); font-size: var(--text-sm);
     color: var(--warn); background: var(--warn-soft);
     border-bottom: 1px solid var(--border); white-space: pre-wrap;
   }

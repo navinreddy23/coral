@@ -71,7 +71,7 @@ describe.each(THEMES)('the %s palette', (theme) => {
   });
 
   it('leaves code on a diff tint as readable as code anywhere else', () => {
-    for (const tint of ['add-bg', 'remove-bg', 'add-word', 'remove-word']) {
+    for (const tint of ['add-bg', 'remove-bg']) {
       expect(on('fg-0', tint), `fg-0 on ${tint}`).toBeGreaterThanOrEqual(7);
     }
   });

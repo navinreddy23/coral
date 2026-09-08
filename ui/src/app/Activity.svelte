@@ -96,9 +96,9 @@
     padding: var(--space-3) var(--space-4);
     border-bottom: 1px solid var(--border);
   }
-  h2 { margin: 0; font-size: 14px; font-weight: 600; flex: 1; }
+  h2 { margin: 0; font-size: var(--text-lg); font-weight: 600; flex: 1; }
   .shut {
-    font: inherit; font-size: 18px; line-height: 1; cursor: pointer;
+    display: flex; font: inherit; line-height: 1; cursor: pointer;
     background: var(--bg-1); border: 0; color: var(--fg-2); padding: 0 var(--space-2);
   }
   .shut:hover { color: var(--fg-0); }
@@ -109,7 +109,7 @@
   }
   .spacer { flex: 1; }
   .tab {
-    font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+    font: inherit; font-size: var(--text-base); font-weight: 600; cursor: pointer;
     padding: var(--space-2) var(--space-3);
     background: var(--bg-1); border: 0; border-bottom: 2px solid transparent;
     color: var(--fg-2);
@@ -117,20 +117,20 @@
   .tab:hover { color: var(--fg-0); }
   .tab.on { color: var(--fg-0); border-bottom-color: var(--accent); }
   .act {
-    font: inherit; font-size: 11px; cursor: pointer;
+    font: inherit; font-size: var(--text-sm); cursor: pointer;
     padding: 2px var(--space-3); margin: var(--space-2) 0;
     background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-1);
     color: var(--fg-1);
   }
   .act:hover { background: var(--bg-3); color: var(--fg-0); }
 
-  .note { margin: 0; padding: var(--space-4); color: var(--fg-2); font-size: 12px; }
+  .note { margin: 0; padding: var(--space-4); color: var(--fg-2); font-size: var(--text-base); }
   .note.error { color: var(--danger); }
 
   .lines {
     list-style: none; margin: 0; padding: var(--space-2) var(--space-4);
     flex: 1; min-height: 0; overflow-y: auto;
-    font-family: var(--font-mono); font-size: 11px; line-height: 1.6;
+    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm); line-height: 1.6;
   }
   /* Fixed columns rather than one wrapped line: the times line up, so the gaps between
      operations can be read down the column without reading the operations. */

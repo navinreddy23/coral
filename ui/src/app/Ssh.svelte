@@ -228,16 +228,16 @@
     flex: 1; min-width: 0; overflow-y: auto;
     padding: var(--space-4) var(--space-5);
     display: flex; flex-direction: column; gap: var(--space-3); align-items: flex-start;
-    font-size: 12px;
+    font-size: var(--text-base);
   }
   header { display: flex; align-items: center; gap: var(--space-4); width: 100%; }
-  h2 { margin: 0; font-size: 15px; font-weight: 600; flex: 1; }
-  h3 { margin: 0; font-size: 12px; font-weight: 600; }
+  h2 { margin: 0; font-size: var(--text-lg); font-weight: 600; flex: 1; }
+  h3 { margin: 0; font-size: var(--text-base); font-weight: 600; }
 
   .levels { display: flex; border: 1px solid var(--border); border-radius: var(--radius-1);
             overflow: hidden; }
   .levels button {
-    font: inherit; font-size: 11px; cursor: pointer; padding: 3px var(--space-3);
+    font: inherit; font-size: var(--text-sm); cursor: pointer; padding: 3px var(--space-3);
     background: var(--bg-0); border: 0; color: var(--fg-2);
   }
   .levels button:hover { color: var(--fg-0); }
@@ -250,34 +250,34 @@
   }
   .effective strong { color: var(--fg-0); }
   .tag {
-    margin-left: var(--space-2); font-size: 10px; padding: 0 6px; border-radius: 999px;
+    margin-left: var(--space-2); font-size: var(--text-xs); padding: 0 6px; border-radius: 999px;
     background: var(--bg-3); color: var(--fg-2);
   }
   .tag.set { background: var(--accent-soft); color: var(--accent); }
 
   label {
     display: flex; flex-direction: column; gap: var(--space-1);
-    font-size: 11px; color: var(--fg-2); width: 100%; max-width: 44em;
+    font-size: var(--text-sm); color: var(--fg-2); width: 100%; max-width: 44em;
   }
   .check { flex-direction: row; align-items: center; gap: var(--space-2);
-           font-size: 12px; color: var(--fg-0); }
+           font-size: var(--text-base); color: var(--fg-0); }
   .row { display: flex; gap: var(--space-2); }
   .row input { flex: 1; min-width: 0; }
   input, select {
-    font: inherit; font-size: 12px;
+    font: inherit; font-size: var(--text-base);
     padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-1);
     background: var(--bg-0); color: var(--fg-0);
   }
-  input:not([type]), input[type='password'] { font-family: var(--font-mono); }
+  input:not([type]), input[type='password'] { font-family: var(--font-mono); font-variant-ligatures: none; }
   input:focus, select:focus { border-color: var(--accent); }
   input:disabled { background: var(--bg-2); color: var(--fg-2); }
-  .hint { margin: 0; font-size: 11px; color: var(--fg-2); max-width: 44em; line-height: 1.5; }
+  .hint { margin: 0; font-size: var(--text-sm); color: var(--fg-2); max-width: 44em; line-height: 1.5; }
   .error { margin: 0; color: var(--danger); }
   .ok { margin: 0; color: var(--ok); }
 
   .buttons { display: flex; gap: var(--space-2); flex-wrap: wrap; }
   .buttons button, .row button, .generate button {
-    font: inherit; font-size: 12px; cursor: pointer;
+    font: inherit; font-size: var(--text-base); cursor: pointer;
     padding: var(--space-2) var(--space-3); border-radius: var(--radius-1);
     background: var(--bg-2); border: 1px solid var(--border); color: var(--fg-1);
   }

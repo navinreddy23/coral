@@ -74,19 +74,19 @@
 
 <style>
   section { padding: var(--space-4); overflow: auto; flex: 1; }
-  h2 { margin: 0 0 var(--space-3); font-size: 14px; }
+  h2 { margin: 0 0 var(--space-3); font-size: var(--text-lg); }
   dl {
     display: grid; grid-template-columns: max-content 1fr;
     gap: var(--space-2) var(--space-3); margin: 0 0 var(--space-4); align-items: baseline;
   }
-  dt { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-2); }
-  dd { margin: 0; font-size: 13px; color: var(--fg-0); }
-  .mono { font-family: var(--font-mono); }
-  .muted { color: var(--fg-2); font-size: 12px; }
-  .bad { color: var(--danger); font-size: 12px; }
+  dt { font-size: var(--text-sm); text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-2); }
+  dd { margin: 0; font-size: var(--text-md); color: var(--fg-0); }
+  .mono { font-family: var(--font-mono); font-variant-ligatures: none; }
+  .muted { color: var(--fg-2); font-size: var(--text-base); }
+  .bad { color: var(--danger); font-size: var(--text-base); }
   .line { display: flex; align-items: center; gap: var(--space-3); margin: 0 0 var(--space-4); }
   button {
-    font: inherit; font-size: 12px; cursor: pointer;
+    font: inherit; font-size: var(--text-base); cursor: pointer;
     padding: 4px var(--space-3); border-radius: var(--radius-1);
     background: var(--bg-2); border: 1px solid var(--border-strong); color: var(--fg-0);
   }

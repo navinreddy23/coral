@@ -533,7 +533,7 @@
   /* Dropping here takes the tab out of every group, which needs saying while it is happening. */
   .bar.loose { box-shadow: inset 0 -3px 0 var(--accent); }
   .group {
-    font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap;
+    font: inherit; font-size: var(--text-sm); font-weight: 600; cursor: pointer; white-space: nowrap;
     align-self: center; margin: 0 var(--space-1) 4px var(--space-1);
     padding: 2px var(--space-2); border: 0; border-radius: 999px;
     background: var(--band); color: var(--bg-0);
@@ -545,7 +545,7 @@
    */
   .group .tally {
     margin-left: var(--space-1); padding: 0 5px; border-radius: 999px;
-    background: var(--bg-0); color: var(--band); font-size: 10px; font-weight: 700;
+    background: var(--bg-0); color: var(--band); font-size: var(--text-xs); font-weight: 700;
   }
 
   .tab {
@@ -600,7 +600,7 @@
 
   .pick {
     display: flex; align-items: center; gap: var(--space-2);
-    font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap;
+    font: inherit; font-size: var(--text-base); cursor: pointer; white-space: nowrap;
     max-width: 13em; min-width: 0;
     align-self: stretch; padding: 0 var(--space-1) 0 var(--space-3);
     background: transparent; border: 0; color: var(--fg-1);
@@ -612,7 +612,7 @@
   /* The close button appears on the tab being pointed at, and on the active one always: a row
      of crosses is noise, and a tab with no visible way to close it is a trap. */
   .shut {
-    font: inherit; font-size: 13px; line-height: 1; cursor: pointer;
+    font: inherit; font-size: var(--text-md); line-height: 1; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     width: 18px; height: 18px; margin-right: var(--space-2);
     padding: 0; border-radius: 50%;
@@ -645,10 +645,10 @@
   .ring {
     display: flex; align-items: center; justify-content: center;
     width: 26px; height: 26px; border-radius: 50%;
-    font: inherit; font-size: 16px; line-height: 1; color: var(--fg-2);
+    font: inherit; font-size: var(--text-lg); line-height: 1; color: var(--fg-2);
   }
   .add:hover .ring { color: var(--fg-0); background: var(--bg-3); }
-  .error { align-self: center; color: var(--danger); font-size: 11px; }
+  .error { align-self: center; color: var(--danger); font-size: var(--text-sm); }
 
   /* Pinned to the trailing edge so it stays reachable however far the bar has scrolled — which
      is exactly the case it exists for. */
@@ -672,7 +672,7 @@
     box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
   }
   .finder input {
-    width: 100%; box-sizing: border-box; font: inherit; font-size: 12px;
+    width: 100%; box-sizing: border-box; font: inherit; font-size: var(--text-base);
     padding: var(--space-2); margin-bottom: var(--space-2);
     border: 1px solid var(--border); border-radius: var(--radius-1);
     background: var(--bg-0); color: var(--fg-0);
@@ -681,18 +681,18 @@
   .heading {
     display: flex; align-items: center; gap: var(--space-2);
     margin: 0 0 var(--space-1) var(--space-1);
-    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+    font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
     color: var(--fg-2);
   }
   .heading .tally {
     margin-left: auto; background: var(--bg-2); border-radius: 999px; padding: 0 6px;
-    font-size: 10px;
+    font-size: var(--text-xs);
   }
   .finder ul { list-style: none; margin: 0; padding: 0; }
   .finder li { display: flex; align-items: stretch; }
   .hit {
     display: flex; align-items: center; gap: var(--space-2);
-    flex: 1; min-width: 0; text-align: left; font: inherit; font-size: 12px;
+    flex: 1; min-width: 0; text-align: left; font: inherit; font-size: var(--text-base);
     padding: var(--space-2); border-radius: var(--radius-1); cursor: pointer;
     background: var(--bg-2); border: 0; color: var(--fg-0);
   }
@@ -701,20 +701,20 @@
   .what { display: flex; flex-direction: column; min-width: 0; flex: 1; }
   .what .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .where {
-    font-size: 10px; color: var(--fg-2);
+    font-size: var(--text-xs); color: var(--fg-2);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   /* The group's own colour, so a tab found here is placed as well as named. */
   .tag {
-    flex: 0 0 auto; font-size: 10px; padding: 0 6px; border-radius: 999px;
+    flex: 0 0 auto; font-size: var(--text-xs); padding: 0 6px; border-radius: 999px;
     background: var(--band); color: var(--bg-0);
   }
   .drop {
-    flex: 0 0 auto; font: inherit; font-size: 14px; line-height: 1; cursor: pointer;
+    flex: 0 0 auto; font: inherit; font-size: var(--text-lg); line-height: 1; cursor: pointer;
     padding: 0 var(--space-2); background: var(--bg-2); border: 0; color: var(--fg-2);
   }
   .drop:hover { color: var(--danger); }
-  .none { padding: var(--space-3); color: var(--fg-2); font-size: 12px; }
+  .none { padding: var(--space-3); color: var(--fg-2); font-size: var(--text-base); }
 
   /* The icon picker, hung where the menu was rather than under the tab: the menu is where the
      click that asked for it happened, and the bar may have scrolled since. */
@@ -738,7 +738,7 @@
   .cell:hover { background: var(--bg-2); }
   .cell.on { border-color: var(--accent); background: var(--accent-soft); }
   .reset {
-    width: 100%; font: inherit; font-size: 11px; cursor: pointer;
+    width: 100%; font: inherit; font-size: var(--text-sm); cursor: pointer;
     padding: var(--space-2); border-radius: var(--radius-1);
     background: var(--bg-1); border: 1px solid var(--border); color: var(--fg-1);
   }

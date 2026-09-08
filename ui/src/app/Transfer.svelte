@@ -51,7 +51,7 @@
     display: flex; align-items: center; gap: var(--space-3);
     padding: 4px var(--space-3);
     background: var(--bg-1); border-bottom: 1px solid var(--border);
-    font-size: 11px; color: var(--fg-1);
+    font-size: var(--text-sm); color: var(--fg-1);
   }
   .what { flex: 0 0 auto; font-weight: 600; }
   .track {
@@ -77,7 +77,7 @@
   .count { flex: 0 0 auto; color: var(--fg-2); font-variant-numeric: tabular-nums; }
   .queued { flex: 0 0 auto; color: var(--fg-2); }
   .stop {
-    flex: 0 0 auto; font: inherit; font-size: 11px; cursor: pointer;
+    flex: 0 0 auto; font: inherit; font-size: var(--text-sm); cursor: pointer;
     padding: 1px var(--space-2); border-radius: var(--radius-1);
     border: 1px solid var(--border-strong); background: var(--bg-2); color: var(--fg-0);
   }

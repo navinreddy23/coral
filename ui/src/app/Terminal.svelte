@@ -254,10 +254,10 @@
     display: flex; align-items: center; gap: var(--space-2);
     height: 24px; flex: 0 0 auto; padding: 0 var(--space-2);
     background: var(--bg-1); border-bottom: 1px solid var(--border);
-    font-size: 11px; color: var(--fg-2);
+    font-size: var(--text-sm); color: var(--fg-2);
   }
   .title { font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; }
-  .shell { font-size: 10px; }
+  .shell { font-size: var(--text-xs); }
   .spacer { flex: 1; }
   .dock { display: flex; gap: 2px; }
   header button {
@@ -266,7 +266,7 @@
   }
   header button:hover { background: var(--bg-2); color: var(--fg-0); }
   header button.on { background: var(--bg-3); color: var(--fg-0); }
-  .error { margin: 0; padding: var(--space-2); font-size: 11px; color: var(--danger); }
+  .error { margin: 0; padding: var(--space-2); font-size: var(--text-sm); color: var(--danger); }
   /* xterm measures itself against this box, so it must have a size of its own rather than
      being sized by the terminal it contains. */
   .host { flex: 1; min-height: 0; min-width: 0; padding: var(--space-1) var(--space-2); }

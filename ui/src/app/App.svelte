@@ -4165,7 +4165,7 @@
   .swap { position: relative; }
   .face {
     position: absolute; inset: 0; display: grid; place-items: center;
-    transition: transform 260ms cubic-bezier(0.34, 1.3, 0.64, 1), opacity 200ms ease;
+    transition: transform var(--slower) var(--ease-spring), opacity var(--slow) var(--ease);
   }
   .swap .moon { transform: rotate(0deg) scale(1); opacity: 1; }
   .swap .sun { transform: rotate(-90deg) scale(0.4); opacity: 0; }

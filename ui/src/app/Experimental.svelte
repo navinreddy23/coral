@@ -128,14 +128,14 @@
 <style>
   section {
     flex: 1; min-width: 0; overflow-y: auto; padding: var(--space-4);
-    background: var(--bg-0); color: var(--fg-1); font-size: 12px;
+    background: var(--bg-0); color: var(--fg-1); font-size: var(--text-base);
   }
   h2 {
-    margin: 0 0 var(--space-3); font-size: 18px; font-weight: 600; color: var(--fg-0);
+    margin: 0 0 var(--space-3); font-size: var(--text-xl); font-weight: 600; color: var(--fg-0);
     background: var(--bg-0);
   }
   h3 {
-    margin: var(--space-5) 0 var(--space-2); font-size: 14px; font-weight: 600;
+    margin: var(--space-5) 0 var(--space-2); font-size: var(--text-lg); font-weight: 600;
     color: var(--fg-0); background: var(--bg-0);
   }
   p { margin: 0 0 var(--space-3); max-width: 68ch; line-height: 1.55; background: var(--bg-0); }
@@ -145,17 +145,17 @@
   /* The licence is a statement about what is being shipped, set apart from the instructions so
      it is not read as one of them. */
   .note {
-    color: var(--fg-2); font-size: 11px; line-height: 1.6;
+    color: var(--fg-2); font-size: var(--text-sm); line-height: 1.6;
     border-left: 2px solid var(--border-strong); padding-left: var(--space-3);
   }
-  .mono { font-family: var(--font-mono); }
+  .mono { font-family: var(--font-mono); font-variant-ligatures: none; }
   .field {
     display: flex; align-items: center; gap: var(--space-3);
     margin-bottom: var(--space-3);
   }
   .name { flex: 0 0 auto; width: 9em; color: var(--fg-2); }
   select {
-    font: inherit; font-size: 12px; padding: 3px var(--space-2); min-width: 0; max-width: 40em;
+    font: inherit; font-size: var(--text-base); padding: 3px var(--space-2); min-width: 0; max-width: 40em;
     background: var(--bg-0); color: var(--fg-0);
     border: 1px solid var(--border-strong); border-radius: var(--radius-1);
   }

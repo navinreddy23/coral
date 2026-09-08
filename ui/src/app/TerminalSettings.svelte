@@ -78,41 +78,41 @@
 <style>
   .pane {
     flex: 1; min-width: 0; overflow-y: auto; padding: var(--space-4);
-    background: var(--bg-0); color: var(--fg-1); font-size: 12px;
+    background: var(--bg-0); color: var(--fg-1); font-size: var(--text-base);
   }
   h2 {
-    margin: 0 0 var(--space-3); font-size: 18px; font-weight: 600; color: var(--fg-0);
+    margin: 0 0 var(--space-3); font-size: var(--text-xl); font-weight: 600; color: var(--fg-0);
     background: var(--bg-0);
   }
   h3 {
-    margin: var(--space-5) 0 var(--space-2); font-size: 14px; font-weight: 600;
+    margin: var(--space-5) 0 var(--space-2); font-size: var(--text-lg); font-weight: 600;
     color: var(--fg-0); background: var(--bg-0);
   }
   p { margin: 0 0 var(--space-3); max-width: 68ch; line-height: 1.55; background: var(--bg-0); }
   .lede { color: var(--fg-1); }
   .muted { color: var(--fg-2); }
   .note {
-    color: var(--fg-2); font-size: 11px; line-height: 1.6;
+    color: var(--fg-2); font-size: var(--text-sm); line-height: 1.6;
     border-left: 2px solid var(--border-strong); padding-left: var(--space-3);
   }
-  code { font-family: var(--font-mono); }
+  code { font-family: var(--font-mono); font-variant-ligatures: none; }
   /* The button's own glyph, so the sentence points at something the eye can find. */
   .glyph {
-    font-size: 12px; padding: 0 3px; border-radius: 3px;
+    font-size: var(--text-base); padding: 0 3px; border-radius: 3px;
     background: var(--bg-2); color: var(--fg-1);
   }
   .field { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2); }
   .name { flex: 0 0 auto; width: 9em; color: var(--fg-2); }
   #shell {
     flex: 1 1 auto; min-width: 0; max-width: 34em;
-    font: inherit; font-size: 12px; font-family: var(--font-mono);
+    font: inherit; font-size: var(--text-base); font-family: var(--font-mono); font-variant-ligatures: none;
     padding: 3px var(--space-2);
     background: var(--bg-0); color: var(--fg-0);
     border: 1px solid var(--border-strong); border-radius: var(--radius-1);
   }
   .check { display: inline-flex; align-items: center; gap: var(--space-2); cursor: pointer; }
   .link {
-    font: inherit; font-size: 12px; cursor: pointer; padding: 0;
+    font: inherit; font-size: var(--text-base); cursor: pointer; padding: 0;
     background: none; border: 0; color: var(--accent); text-decoration: underline;
   }
 </style>

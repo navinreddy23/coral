@@ -159,12 +159,12 @@
      * against, and a border alone leaves it looking pasted onto the page.
      */
     box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
-    font-size: 12px;
+    font-size: var(--text-base);
   }
   .wrap { position: relative; }
   .row {
     display: flex; align-items: center; gap: var(--space-3);
-    width: 100%; text-align: left; font: inherit; font-size: 12px;
+    width: 100%; text-align: left; font: inherit; font-size: var(--text-base);
     padding: 5px var(--space-3); cursor: pointer;
     background: var(--bg-0); border: 0; color: var(--fg-0);
   }
@@ -184,7 +184,7 @@
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .hint {
-    flex: 0 8 auto; min-width: 0; color: var(--fg-2); font-size: 11px;
+    flex: 0 8 auto; min-width: 0; color: var(--fg-2); font-size: var(--text-sm);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .more { flex: 0 0 auto; color: var(--fg-2); display: flex; }

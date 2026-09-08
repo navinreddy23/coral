@@ -211,9 +211,9 @@
     padding: var(--space-3) var(--space-4);
     border-bottom: 1px solid var(--border);
   }
-  h2 { margin: 0; font-size: 14px; font-weight: 600; flex: 1; }
+  h2 { margin: 0; font-size: var(--text-lg); font-weight: 600; flex: 1; }
   .shut {
-    font: inherit; font-size: 18px; line-height: 1; cursor: pointer;
+    display: flex; font: inherit; line-height: 1; cursor: pointer;
     background: var(--bg-1); border: 0; color: var(--fg-2); padding: 0 var(--space-2);
   }
   .shut:hover { color: var(--fg-0); }
@@ -232,36 +232,36 @@
   }
   .pick:hover { background: var(--bg-2); }
   .pick.on { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent-line); }
-  .name { font-size: 12px; font-weight: 600; color: var(--fg-0); }
+  .name { font-size: var(--text-base); font-weight: 600; color: var(--fg-0); }
   .url {
-    font-size: 11px; color: var(--fg-2); max-width: 100%;
+    font-size: var(--text-sm); color: var(--fg-2); max-width: 100%;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .add { color: var(--accent); font-size: 12px; }
+  .add { color: var(--accent); font-size: var(--text-base); }
 
   .form {
     flex: 1; min-width: 0; overflow-y: auto;
     padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3);
     align-items: flex-start;
   }
-  h3 { margin: 0; font-size: 13px; font-weight: 600; }
+  h3 { margin: 0; font-size: var(--text-md); font-weight: 600; }
   label {
     display: flex; flex-direction: column; gap: var(--space-1);
-    font-size: 11px; color: var(--fg-2); width: 100%; max-width: 44em;
+    font-size: var(--text-sm); color: var(--fg-2); width: 100%; max-width: 44em;
   }
   input {
-    font: inherit; font-size: 12px; font-family: var(--font-mono);
+    font: inherit; font-size: var(--text-base); font-family: var(--font-mono); font-variant-ligatures: none;
     padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-1);
     background: var(--bg-0); color: var(--fg-0);
   }
   input:focus { border-color: var(--accent); }
   input[readonly] { color: var(--fg-2); background: var(--bg-2); }
-  .hint { margin: 0; font-size: 11px; color: var(--fg-2); max-width: 40em; line-height: 1.5; }
-  .error { margin: 0; color: var(--danger); font-size: 12px; max-width: 44em; }
+  .hint { margin: 0; font-size: var(--text-sm); color: var(--fg-2); max-width: 40em; line-height: 1.5; }
+  .error { margin: 0; color: var(--danger); font-size: var(--text-base); max-width: 44em; }
 
   .row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
   .row button {
-    font: inherit; font-size: 12px; cursor: pointer;
+    font: inherit; font-size: var(--text-base); cursor: pointer;
     padding: var(--space-2) var(--space-3); border-radius: var(--radius-1);
     background: var(--bg-2); border: 1px solid var(--border); color: var(--fg-1);
   }
