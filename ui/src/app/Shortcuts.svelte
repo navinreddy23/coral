@@ -37,12 +37,13 @@
   .scrim {
     position: fixed; inset: 0; z-index: 10; border: 0; padding: 0;
     display: flex; align-items: center; justify-content: center;
-    background: rgb(0 0 0 / 45%);
+    background: var(--scrim);
   }
   .sheet {
     max-height: 82vh; overflow-y: auto; width: min(820px, 92vw);
-    padding: var(--space-5); border-radius: 6px;
-    background: var(--bg-0); border: 1px solid var(--border); color: var(--fg-0);
+    padding: var(--space-5); border-radius: var(--radius-2);
+    background: var(--bg-0); border: 1px solid var(--border-strong);
+    box-shadow: var(--elevate-2); color: var(--fg-0);
     text-align: left; cursor: default;
   }
   h2 { margin: 0 0 var(--space-1); font-size: var(--text-lg); }

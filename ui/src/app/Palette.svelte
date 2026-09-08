@@ -82,28 +82,43 @@
 <style>
   .scrim {
     position: fixed; inset: 0; z-index: 20;
-    background: rgb(0 0 0 / 28%);
+    background: var(--scrim);
     display: flex; justify-content: center; align-items: flex-start;
     padding-top: 12vh;
   }
   .panel {
-    width: min(560px, 90vw); max-height: 60vh; display: flex; flex-direction: column;
-    background: var(--bg-0); border: 1px solid var(--border); border-radius: 6px;
+    width: min(600px, 90vw); max-height: 60vh; display: flex; flex-direction: column;
+    background: var(--bg-0); border: 1px solid var(--border-strong);
+    border-radius: var(--radius-2); box-shadow: var(--elevate-2);
     overflow: hidden;
   }
+  /*
+   * A line to type on rather than a field to fill in. There is nothing else on this panel to
+   * be confused with, and a bordered box inside a bordered panel is one edge too many.
+   */
   input {
-    font: inherit; font-size: var(--text-md); padding: var(--space-3);
+    font: inherit; font-size: var(--text-lg); padding: var(--space-3) var(--space-4);
     border: 0; border-bottom: 1px solid var(--border);
     background: var(--bg-0); color: var(--fg-0); outline: none;
   }
-  ul { list-style: none; margin: 0; padding: var(--space-1) 0; overflow-y: auto; }
+  input::placeholder { color: var(--fg-2); }
+  ul { list-style: none; margin: 0; padding: var(--space-1); overflow-y: auto; }
   button {
     display: flex; align-items: center; gap: var(--space-3);
     width: 100%; text-align: left; cursor: pointer; font: inherit; font-size: var(--text-base);
-    padding: 4px var(--space-3); background: var(--bg-0); border: 0; color: var(--fg-1);
+    padding: 5px var(--space-2); background: var(--bg-0); border: 0;
+    border-radius: var(--radius-1); color: var(--fg-1);
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
   }
-  button.on, button:hover { background: var(--bg-2); color: var(--fg-0); }
+  /* The row the arrow keys are on is filled; a hover only tints, so the two never look alike
+     and the keyboard stays the thing driving the list. */
+  button:hover { background: var(--bg-2); color: var(--fg-0); }
+  button.on { background: var(--accent-soft); color: var(--fg-0); font-weight: 500; }
   .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .group { flex: 0 0 auto; font-size: var(--text-sm); color: var(--fg-2); }
-  .empty { padding: var(--space-3); font-size: var(--text-base); color: var(--fg-2); }
+  .group {
+    flex: 0 0 auto; font-size: var(--text-xs); color: var(--fg-2);
+    padding: 1px var(--space-2); border-radius: var(--radius-pill); background: var(--bg-2);
+  }
+  button.on .group { background: var(--bg-0); }
+  .empty { padding: var(--space-4); font-size: var(--text-base); color: var(--fg-2); }
 </style>

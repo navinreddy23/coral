@@ -112,7 +112,7 @@
 
 <style>
   .scrim {
-    position: fixed; inset: 0; z-index: 20; background: rgb(0 0 0 / 28%);
+    position: fixed; inset: 0; z-index: 20; background: var(--scrim);
     display: flex; justify-content: center; align-items: flex-start; padding-top: 8vh;
   }
   .panel {

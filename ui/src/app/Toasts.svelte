@@ -51,19 +51,21 @@
     background: var(--bg-0); color: var(--fg-0);
     border: 1px solid var(--border-strong); border-radius: var(--radius-2);
     /* It floats over the window, so it needs to read as above the page rather than in it. */
-    box-shadow: 0 6px 20px rgb(0 0 0 / 16%);
+    box-shadow: var(--elevate-2);
     font-size: var(--text-base);
   }
   /* The kind is carried by a bar down the leading edge as well as by the glyph, so it survives
      being read at a glance and by anyone who cannot separate the colours. */
-  .toast.ok { box-shadow: inset 3px 0 0 var(--ok), 0 6px 20px rgb(0 0 0 / 16%); }
-  .toast.info { box-shadow: inset 3px 0 0 var(--accent), 0 6px 20px rgb(0 0 0 / 16%); }
-  .toast.warn { box-shadow: inset 3px 0 0 var(--warn), 0 6px 20px rgb(0 0 0 / 16%); }
-  .toast.error { box-shadow: inset 3px 0 0 var(--danger), 0 6px 20px rgb(0 0 0 / 16%); }
+  .toast.ok { box-shadow: inset 3px 0 0 var(--ok), var(--elevate-2); }
+  .toast.info { box-shadow: inset 3px 0 0 var(--accent), var(--elevate-2); }
+  .toast.warn { box-shadow: inset 3px 0 0 var(--warn), var(--elevate-2); }
+  .toast.error { box-shadow: inset 3px 0 0 var(--danger), var(--elevate-2); }
 
   .mark {
     flex: 0 0 auto; width: 16px; height: 16px; line-height: 16px; text-align: center;
-    border-radius: 50%; font-size: var(--text-sm); font-weight: 700; color: var(--accent-fg);
+    /* The page's own colour: these fills are dark in the light theme and light in the
+       dark one, so what reads on them is whatever the page is not. */
+    border-radius: 50%; font-size: var(--text-sm); font-weight: 700; color: var(--bg-0);
   }
   .toast.ok .mark { background: var(--ok); }
   .toast.info .mark { background: var(--accent); }

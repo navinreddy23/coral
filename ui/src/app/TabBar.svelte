@@ -669,7 +669,7 @@
     padding: var(--space-2);
     background: var(--bg-0); color: var(--fg-0);
     border: 1px solid var(--border-strong); border-radius: var(--radius-2);
-    box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+    box-shadow: var(--elevate-2);
   }
   .finder input {
     width: 100%; box-sizing: border-box; font: inherit; font-size: var(--text-base);
@@ -723,7 +723,7 @@
     padding: var(--space-2);
     background: var(--bg-0); color: var(--fg-0);
     border: 1px solid var(--border-strong); border-radius: var(--radius-2);
-    box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+    box-shadow: var(--elevate-2);
   }
   .grid {
     display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-1);

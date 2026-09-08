@@ -151,22 +151,25 @@
   .scrim { position: fixed; inset: 0; z-index: 60; }
   .menu {
     position: fixed; z-index: 61; min-width: 15em; max-width: 32em;
-    padding: var(--space-1) 0;
+    /* Padding all round rather than only top and bottom, so a hovered row is a rounded chip
+       inside the panel rather than a band running into its edges. */
+    padding: var(--space-1);
     background: var(--bg-0); color: var(--fg-0);
     border: 1px solid var(--border-strong); border-radius: var(--radius-2);
     /*
      * The one place a shadow is worth its cost: a menu floats over content it must be legible
      * against, and a border alone leaves it looking pasted onto the page.
      */
-    box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+    box-shadow: var(--elevate-2);
     font-size: var(--text-base);
   }
   .wrap { position: relative; }
   .row {
-    display: flex; align-items: center; gap: var(--space-3);
+    display: flex; align-items: center; gap: var(--space-2);
     width: 100%; text-align: left; font: inherit; font-size: var(--text-base);
-    padding: 5px var(--space-3); cursor: pointer;
-    background: var(--bg-0); border: 0; color: var(--fg-0);
+    padding: 5px var(--space-2); cursor: pointer;
+    background: var(--bg-0); border: 0; border-radius: var(--radius-1); color: var(--fg-0);
+    transition: background var(--fast) var(--ease);
   }
   .row:hover:not(:disabled), .row:focus-visible:not(:disabled) {
     background: var(--accent-soft);
@@ -194,13 +197,13 @@
     flex: 0 0 auto; width: 14px; display: flex; align-items: center;
     color: var(--accent);
   }
-  .rule { height: 1px; margin: var(--space-1) 0; background: var(--border); }
+  .rule { height: 1px; margin: var(--space-1) var(--space-2); background: var(--border); }
   /* Opens to the right of its parent row, overlapping it by a pixel so the pointer can cross
      between the two without passing over the page and closing it. */
   .sub {
     position: absolute; left: calc(100% - 2px); top: -5px; min-width: 12em;
-    padding: var(--space-1) 0;
+    padding: var(--space-1);
     background: var(--bg-0); border: 1px solid var(--border-strong);
-    border-radius: var(--radius-2); box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+    border-radius: var(--radius-2); box-shadow: var(--elevate-2);
   }
 </style>
