@@ -63,6 +63,8 @@ describe('the component stylesheets', () => {
         const value = found[1] ?? '';
         // An inset shadow is a border drawn on one edge, and a shadow with no blur is a ring
         // round a drop target. Neither is an elevation, and neither costs anything to repaint.
+        // `none` takes one away, which is the opposite of what this is looking for.
+        if (value.trim() === 'none') continue;
         if (/\binset\b/.test(value) || value.includes('var(--ring)')) continue;
         if (/^0 0 0 /.test(value.trim())) continue;
         offenders.push(`${name}: ${value.trim()}`);

@@ -3777,8 +3777,17 @@
             class:here={find.current === row}
               oncontextmenu={(e) => rightClickRow(e, row)}
             >
+              <!--
+                A click target, not a place to arrive at. Left in the tab order it was a
+                million stops, each announced as "Select commit", and it put a focus ring on
+                whichever row the pointer last used — which `j` and `k` then moved the
+                highlight away from, leaving two rows claiming to be the current one. The list
+                is walked with j, k, the arrows, Home and End, all bound on the window, and
+                the selected row is what says where you are.
+              -->
               <button
                 class="hit"
+                tabindex="-1"
                 onclick={(e) => pick(row, e)}
                 aria-label="Select commit"
               ></button>
@@ -4297,6 +4306,8 @@
   }
   /* The whole row is the target; a button laid over it keeps that keyboard-reachable without
      nesting interactive elements inside one another. */
+  /* See the note on the element: it takes clicks and never keyboard focus. */
+  .hit:focus-visible { box-shadow: none; }
   .hit {
     position: absolute; inset: 0; width: 100%; height: 100%;
     background: none; border: 0; padding: 0; margin: 0; cursor: pointer;

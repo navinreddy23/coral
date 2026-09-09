@@ -1358,3 +1358,35 @@ describe("the webview's own context menu", () => {
     expect(event.defaultPrevented).toBe(false);
   });
 });
+
+describe('moving down the list with the keyboard', () => {
+  /**
+   * The row overlay is a click target, not a place to arrive at.
+   *
+   * Left in the tab order it put a focus ring on whichever row was last clicked, and `j` and
+   * `k` then moved the highlight away from it — two rows claiming to be the current one, the
+   * ring drawn as a rule right across the pane because the overlay is wider than the pane is.
+   * It was also a million tab stops, every one of them announced as "Select commit".
+   *
+   * Nothing is lost: the list is walked with j, k, the arrows, Home and End, all bound on the
+   * window rather than on anything focused, and the selected row is what says where you are.
+   */
+  it('leaves no ring behind on the row the pointer last used', async () => {
+    const { container } = await shell();
+    const hit = container.querySelector('li.row button.hit') as HTMLButtonElement;
+    expect(hit.getAttribute('tabindex')).toBe('-1');
+
+    const rules = [...document.styleSheets]
+      .flatMap((sheet) => [...(sheet.cssRules ?? [])])
+      .map((r) => r.cssText);
+    const quiet = rules.find((text) => /\.hit[^{]*:focus-visible/u.test(text));
+    expect(quiet).toMatch(/box-shadow:\s*none/u);
+  });
+
+  it('still selects the row it is clicked on', async () => {
+    const { container } = await shell();
+    const rows = [...container.querySelectorAll('li.row')];
+    await fireEvent.click(rows[1]?.querySelector('button.hit') as HTMLButtonElement);
+    expect(rows[1]?.classList.contains('selected')).toBe(true);
+  });
+});
