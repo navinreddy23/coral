@@ -87,7 +87,7 @@ fn default_shell() -> String {
                 return candidate.to_owned();
             }
         }
-        return std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_owned());
+        std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_owned())
     }
     #[cfg(not(windows))]
     {
