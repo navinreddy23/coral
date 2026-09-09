@@ -20,8 +20,10 @@ permissions:
 
 concurrency:
   group: release-${{ github.ref }}
-  # Never interrupt a half-uploaded release.
-  cancel-in-progress: false
+  # Never interrupt a tag: a half-uploaded release is worse than a wasted build. A rehearsal on
+  # a branch has nothing to lose, and letting those queue behind each other means the run that
+  # carries the newest fix waits on the runs that do not.
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
 env:
   CARGO_TERM_COLOR: always
