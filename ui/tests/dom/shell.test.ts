@@ -1065,6 +1065,31 @@ describe('changing profile', () => {
     };
   }
 
+  /**
+   * A profile's colour is how it is recognised: it is the dot on the chip in the title strip
+   * and the dot beside its name in the settings list. The one list it was missing from was the
+   * menu that chip opens — the list you choose a profile from.
+   */
+  it('marks each profile in the switcher with its own colour', async () => {
+    const view = await shell({ profile_list: registry('personal') });
+    const chip = await waitFor(() => {
+      const found = view.container.querySelector('.strip .chip') as HTMLElement | null;
+      if (!found) throw new Error('no chip yet');
+      return found;
+    });
+    await fireEvent.click(chip);
+
+    const named = [...view.container.querySelectorAll('.menu button')].filter((b) =>
+      /Personal|Work/u.test(b.textContent ?? ''),
+    );
+    expect(named.length).toBe(2);
+    for (const row of named) {
+      const swatch = row.querySelector('.swatch') as HTMLElement | null;
+      expect(swatch, `${row.textContent?.trim()} has a swatch`).not.toBeNull();
+      expect(swatch?.style.background).toMatch(/^var\(--lane-\d\)$/u);
+    }
+  });
+
   it('names the profile in the title strip', async () => {
     const view = await shell({ profile_list: registry('work') });
     await waitFor(() => {

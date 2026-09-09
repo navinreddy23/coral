@@ -67,6 +67,7 @@
   import { TerminalState } from '../state/terminal.svelte';
   import { SigningState } from '../state/signing.svelte';
   import { SshState } from '../state/ssh.svelte';
+  import { laneColour } from './lane';
   import { beside, elideRef } from './path';
   import { checkoutOf, divergence, remoteOf, withoutRemote } from './refname';
   import { orderRefs, pillChars, pillNamed } from './pill';
@@ -2802,6 +2803,9 @@
         ...profiles.all.map((profile): MenuItem => ({
           kind: 'item',
           label: profile.name,
+          // The colour is how a profile is recognised in the chip above this menu and in the
+          // settings list; the one place it was missing was the list you choose from.
+          swatch: laneColour(profile.colour),
           hint: profile.id === profiles.currentId ? 'current' : undefined,
           disabled: profile.id === profiles.currentId,
           run: () => void changeProfile(profile.id),
