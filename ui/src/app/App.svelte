@@ -67,7 +67,7 @@
   import { TerminalState } from '../state/terminal.svelte';
   import { SigningState } from '../state/signing.svelte';
   import { SshState } from '../state/ssh.svelte';
-  import { elideRef } from './path';
+  import { beside, elideRef } from './path';
   import { checkoutOf, divergence, remoteOf, withoutRemote } from './refname';
   import { orderRefs, pillChars, pillNamed } from './pill';
   import {
@@ -1665,7 +1665,9 @@
   }
 
   async function worktreeAt(oid: string) {
-    const where = await pickDirectory('Where should the new working tree go?');
+    // The repository's own parent, which is where working trees for it go: a new one may not
+    // be made inside the repository, and its siblings are where people keep them.
+    const where = await pickDirectory('Where should the new working tree go?', beside(info?.path));
     if (where === null) return;
     const branch = await askText(
       'Branch for the new working tree',
@@ -1690,7 +1692,7 @@
    */
   async function applyPatch() {
     if (!info) return;
-    const files = await pickPatchFiles('Which patch files should be applied?');
+    const files = await pickPatchFiles('Which patch files should be applied?', info?.path);
     if (files.length === 0) return;
     const { choice } = await ask({
       title: files.length === 1 ? 'Commit the patch?' : `Commit the ${files.length} patches?`,
@@ -1752,13 +1754,13 @@
       if (choice !== 'yes') return;
     }
 
-    const where = await pickDirectory('Where should the patches be written?');
+    const where = await pickDirectory('Where should the patches be written?', info?.path);
     if (where === null) return;
     await act({ kind: 'patch', rev: pair.to.oid, from: pair.from.oid, directory: where });
   }
 
   async function patchOf(oid: string) {
-    const where = await pickDirectory('Where should the patch be written?');
+    const where = await pickDirectory('Where should the patch be written?', info?.path);
     if (where === null) return;
     await act({ kind: 'patch', rev: oid, from: null, directory: where });
   }

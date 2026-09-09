@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { elidePath, elideRef } from '../src/app/path';
+import { beside, elidePath, elideRef } from '../src/app/path';
 
 describe('elidePath', () => {
   it('leaves a path that fits alone', () => {
@@ -101,5 +101,21 @@ describe('a branch name whose own last segment is too long', () => {
       const short = elideRef('origin/maintenance/code-savings-ddiv-dmul-removal', max);
       expect(short.length, `max ${max}: ${short}`).toBeLessThanOrEqual(max);
     }
+  });
+});
+
+/**
+ * A new working tree may not be made inside the repository it belongs to, so the repository
+ * itself is the one place its picker must not start. Its parent is where people keep them.
+ */
+describe('the directory something sits in', () => {
+  it('is the one above it', () => {
+    expect(beside('/home/dev/journal')).toBe('/home/dev');
+    expect(beside('/home/dev/journal/')).toBe('/home/dev');
+  });
+
+  it('is nothing at the root, and nothing without a path at all', () => {
+    expect(beside('/journal')).toBeUndefined();
+    expect(beside(undefined)).toBeUndefined();
   });
 });

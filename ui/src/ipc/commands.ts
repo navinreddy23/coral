@@ -518,9 +518,20 @@ export function commitUrl(
   return invoke<string | null>('commit_url', { path, oid, remote });
 }
 
-/** Asks where a patch file should be written. */
-export async function pickDirectory(title: string): Promise<string | null> {
-  const chosen = await openDialog({ directory: true, multiple: false, title });
+/**
+ * Asks for a directory, starting in `startIn` where the caller has one to offer.
+ *
+ * Without it the picker opens wherever the process started — the terminal Coral was launched
+ * from, or the home directory — and every one of these questions is about the repository that
+ * is open. Writing a patch out of it meant navigating back to it first, every time.
+ */
+export async function pickDirectory(title: string, startIn?: string): Promise<string | null> {
+  const chosen = await openDialog({
+    directory: true,
+    multiple: false,
+    title,
+    ...(startIn === undefined ? {} : { defaultPath: startIn }),
+  });
   return typeof chosen === 'string' ? chosen : null;
 }
 
@@ -532,11 +543,12 @@ export async function pickDirectory(title: string): Promise<string | null> {
  * file dialog's order is its own business and a series applied out of order fails on the
  * second patch.
  */
-export async function pickPatchFiles(title: string): Promise<string[]> {
+export async function pickPatchFiles(title: string, startIn?: string): Promise<string[]> {
   const chosen = await openDialog({
     multiple: true,
     title,
     filters: [{ name: 'Patches', extensions: ['patch', 'diff', 'eml', 'mbox', 'txt'] }],
+    ...(startIn === undefined ? {} : { defaultPath: startIn }),
   });
   const files = Array.isArray(chosen) ? chosen : typeof chosen === 'string' ? [chosen] : [];
   return [...files].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));

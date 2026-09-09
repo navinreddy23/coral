@@ -57,3 +57,16 @@ export function elideRef(name: string, max: number): string {
   // own start gives `…/REAN2-6063-discard-…`, which identifies one.
   return `…/${last.slice(0, Math.max(1, max - 3))}…`;
 }
+
+/**
+ * The directory something sits in, or undefined when there is no directory above it.
+ *
+ * For a picker that should open *beside* a repository rather than inside it: a new working
+ * tree may not be made within the repository it belongs to, and its siblings are where people
+ * keep them.
+ */
+export function beside(path: string | undefined): string | undefined {
+  if (path === undefined) return undefined;
+  const at = path.replace(/[/\\]+$/u, '').lastIndexOf('/');
+  return at > 0 ? path.slice(0, at) : undefined;
+}
