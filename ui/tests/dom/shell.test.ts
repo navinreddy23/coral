@@ -757,6 +757,24 @@ describe('the shell', () => {
     expect(cells[2]).toContain('message');
   });
 
+  /**
+   * The start page is what a new tab is, and the tab strip presents it as one: a selected tab
+   * beside the repository's. The status line under it went on naming the other tab's branch
+   * and counting its commits, over a page with no repository on it at all.
+   */
+  it('says nothing about a repository while the new-tab page is up', async () => {
+    const { container } = await shell();
+    await waitFor(() => {
+      if (!container.querySelector('footer.status')) throw new Error('no status bar yet');
+    });
+
+    await fireEvent.keyDown(window, { key: 't', ctrlKey: true });
+    await waitFor(() => {
+      if (!container.querySelector('.start')) throw new Error('no start page');
+    });
+    expect(container.querySelector('footer.status')).toBeNull();
+  });
+
   it('opens the palette on its shortcut and closes it again', async () => {
     const { container } = await shell();
     await fireEvent.keyDown(window, { key: 'p', ctrlKey: true });

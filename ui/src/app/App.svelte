@@ -4054,7 +4054,10 @@
     </div>
   {/if}
 
-  {#if info}
+  <!-- Not while the new-tab page is up: the strip presents it as a tab of its own, and a line
+       naming another tab's branch under a page with no repository on it is describing
+       something that is not on screen. -->
+  {#if info && !showStart}
     <StatusBar
       branch={headName}
       head={refs.groups.local.find((r) => r.short === headName)}
