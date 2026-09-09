@@ -90,3 +90,35 @@ describe('the message git prepared', () => {
     expect(draft.summary).toBe('Oops: a stray debug line');
   });
 });
+
+describe('taking a prepared message back', () => {
+  /**
+   * A merge finished from the conflict tool never passes through the commit panel, so nothing
+   * cleared the draft: the box was left holding "Merge branch 'side'" over a commit that had
+   * already been made, ready to be suggested for whatever was staged next.
+   */
+  it('empties the box when the operation it belonged to is over', () => {
+    const draft = new CommitState();
+    draft.prepare("Merge branch 'side'");
+    draft.withdraw();
+    expect(draft.summary).toBe('');
+    expect(draft.description).toBe('');
+  });
+
+  it('leaves alone what was typed over it', () => {
+    const draft = new CommitState();
+    draft.prepare("Merge branch 'side'");
+    draft.summary = 'Bring the tea page in from side';
+    draft.withdraw();
+    expect(draft.summary).toBe('Bring the tea page in from side');
+  });
+
+  it('takes nothing back twice, nor anything it did not put there', () => {
+    const draft = new CommitState();
+    draft.prepare('Oops: a stray debug line');
+    draft.withdraw();
+    draft.summary = 'Something else entirely';
+    draft.withdraw();
+    expect(draft.summary).toBe('Something else entirely');
+  });
+});

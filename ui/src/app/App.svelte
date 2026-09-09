@@ -402,7 +402,14 @@
     const said = merge.operation?.prepared ?? null;
     if (said === prepared) return;
     prepared = said;
-    if (said !== null && commitDraft.message === '') commitDraft.prepare(said);
+    // Gone means the operation it belonged to is over, so what it put there goes with it —
+    // finishing a merge from the conflict tool never passes through the commit panel, and the
+    // box was left holding the merge message over a commit already made.
+    if (said === null) {
+      commitDraft.withdraw();
+      return;
+    }
+    if (commitDraft.message === '') commitDraft.prepare(said);
   });
   const hosting = new HostingState();
 

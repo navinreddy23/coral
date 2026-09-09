@@ -62,7 +62,27 @@ export class CommitState {
     const [summary, ...rest] = message.split('\n');
     this.summary = summary ?? '';
     this.description = rest.join('\n').trim();
+    this.#prepared = this.message;
   }
+
+  /**
+   * Takes a prepared message back when the operation it belonged to is over.
+   *
+   * A merge finished from the conflict tool never passes through this panel, so nothing
+   * cleared the draft and the box was left holding "Merge branch 'side'" over a commit that
+   * had already been made. Left alone if it has been edited since: that is somebody's own
+   * message now, whatever it started as.
+   */
+  withdraw(): void {
+    if (this.#prepared !== null && this.message === this.#prepared) {
+      this.summary = '';
+      this.description = '';
+    }
+    this.#prepared = null;
+  }
+
+  /** What `prepare` put there, so it can be told from something typed over it. */
+  #prepared: string | null = null;
 
   /** Empties a seeded message again, unless it has been edited since it was put there. */
   unseed(): void {
@@ -82,5 +102,6 @@ export class CommitState {
     this.description = '';
     this.amend = false;
     this.#seeded = null;
+    this.#prepared = null;
   }
 }
