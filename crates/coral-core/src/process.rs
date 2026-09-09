@@ -1351,11 +1351,7 @@ fn why_it_failed(stderr: &str) -> String {
         })
         .collect();
     let lines: Vec<&str> = shown.iter().map(String::as_str).collect();
-    let named: Vec<&str> = lines
-        .iter()
-        .copied()
-        .filter(|l| names_a_failure(l))
-        .collect();
+    let named = named_failures(&lines);
     if !named.is_empty() {
         return named.join("\n");
     }
@@ -1426,6 +1422,29 @@ fn scrubbed(stderr: &str) -> String {
 }
 
 /// A line that says what went wrong rather than what to do about it.
+/// The lines that name a failure, with the lists that belong to them.
+///
+/// git writes a failure whose object is a set of paths as a sentence ending in a colon and an
+/// indented list under it: "error: Your local changes to the following files would be
+/// overwritten by merge:" and then the files. Taking the named lines alone left that sentence
+/// hanging on its colon, telling the reader that something would be overwritten and never
+/// which. What follows and is not indented is git's advice for a terminal, and stays out.
+fn named_failures<'a>(lines: &[&'a str]) -> Vec<&'a str> {
+    let mut out: Vec<&str> = Vec::new();
+    let mut listing = false;
+    for line in lines {
+        if names_a_failure(line) {
+            listing = line.trim_end().ends_with(':');
+            out.push(line);
+        } else if listing && line.starts_with([' ', '\t']) && !line.trim().is_empty() {
+            out.push(line);
+        } else {
+            listing = false;
+        }
+    }
+    out
+}
+
 fn names_a_failure(line: &str) -> bool {
     let bare = line.trim().strip_prefix("remote:").unwrap_or(line).trim();
     bare.starts_with("fatal:") || bare.starts_with("error:") || bare.starts_with("ERROR:")
@@ -1478,6 +1497,32 @@ mod failure_tests {
         assert_eq!(
             why_it_failed(stderr),
             "error: could not apply 051e21f… we changed hello"
+        );
+    }
+
+    /// A failure whose object is a list of paths reads as a sentence ending in a colon with
+    /// the paths indented under it. Kept apart, the sentence dangles: the reader is told that
+    /// something would be overwritten and never which thing.
+    #[test]
+    fn keeps_the_list_a_failure_ends_on_a_colon_to_introduce() {
+        let stderr = "error: Your local changes to the following files would be \
+                      overwritten by merge:\n\tlog.txt\n\tnotes.md\n\
+                      Please commit your changes or stash them before you merge.\nAborting";
+        assert_eq!(
+            why_it_failed(stderr),
+            "error: Your local changes to the following files would be overwritten by \
+             merge:\n\tlog.txt\n\tnotes.md",
+            "the paths come with it, and the advice for a terminal does not"
+        );
+    }
+
+    #[test]
+    fn takes_no_list_from_a_failure_that_did_not_introduce_one() {
+        // An indented line after a failure that ends in a full stop belongs to something else.
+        let stderr = "error: it went wrong.\n\tsome indented aside\nfatal: and again";
+        assert_eq!(
+            why_it_failed(stderr),
+            "error: it went wrong.\nfatal: and again"
         );
     }
 
