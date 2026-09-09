@@ -159,16 +159,71 @@ describe('the title bar Coral draws', () => {
     const { container } = await shell();
     const strip = container.querySelector('.strip') as HTMLElement;
 
-    await fireEvent.mouseDown(strip, { button: 0 });
+    await fireEvent.mouseDown(strip, { button: 0, clientX: 200, clientY: 12 });
+    await fireEvent.mouseMove(window, { clientX: 260, clientY: 40 });
     expect(win.calls, 'the bare strip moves it').toEqual(['startDragging']);
+    await fireEvent.mouseUp(window);
 
-    // The empty stretch of the tab strip is the same surface, and the tabs are dragged with
-    // the pointer themselves, so neither a tab nor a button may start a window drag.
+    // The empty stretch of the tab strip is the same surface and moves the window too. The
+    // tabs are dragged with the pointer themselves, so neither a tab nor a button may.
     win.calls = [];
-    await fireEvent.mouseDown(container.querySelector('nav.bar') as HTMLElement, { button: 0 });
-    await fireEvent.mouseDown(container.querySelector('.tab .pick') as HTMLElement, { button: 0 });
+    for (const at of ['nav.bar', '.tab .pick'] as const) {
+      await fireEvent.mouseDown(container.querySelector(at) as HTMLElement, {
+        button: 0,
+        clientX: 200,
+        clientY: 12,
+      });
+      await fireEvent.mouseMove(window, { clientX: 260, clientY: 40 });
+      await fireEvent.mouseUp(window);
+    }
     await fireEvent.mouseDown(named(container, 'Settings') as HTMLElement, { button: 0 });
+    await fireEvent.mouseMove(window, { clientX: 260, clientY: 40 });
+    await fireEvent.mouseUp(window);
+    expect(win.calls, 'the bare stretch, and nothing else').toEqual(['startDragging']);
+  });
+
+  /**
+   * A press that never moves is a click, and a click on the strip must do nothing to the
+   * window. Handing the pointer to the window manager on the press itself made every click a
+   * drag of zero distance, and a window manager that snaps a drag near the top of the screen
+   * answered that by maximising — so clicking the strip, which is at the top of the screen by
+   * definition, threw the window full size.
+   */
+  it('does nothing at all when the press does not move', async () => {
+    const { container } = await shell();
+    const strip = container.querySelector('.strip') as HTMLElement;
+
+    await fireEvent.mouseDown(strip, { button: 0, clientX: 200, clientY: 12 });
+    await fireEvent.mouseUp(window, { clientX: 200, clientY: 12 });
+    expect(win.calls, 'a click leaves the window alone').toEqual([]);
+
+    // Nor does a hand that wobbles a pixel or two on the way back up.
+    await fireEvent.mouseDown(strip, { button: 0, clientX: 200, clientY: 12 });
+    await fireEvent.mouseMove(window, { clientX: 202, clientY: 13 });
+    await fireEvent.mouseUp(window, { clientX: 202, clientY: 13 });
+    expect(win.calls).toEqual([]);
+  });
+
+  it('stops listening once the press is over, so a later move is not a drag', async () => {
+    const { container } = await shell();
+    const strip = container.querySelector('.strip') as HTMLElement;
+
+    await fireEvent.mouseDown(strip, { button: 0, clientX: 200, clientY: 12 });
+    await fireEvent.mouseUp(window, { clientX: 200, clientY: 12 });
+    await fireEvent.mouseMove(window, { clientX: 400, clientY: 300 });
+    expect(win.calls).toEqual([]);
+  });
+
+  it('hands the pointer over exactly once, however far it goes', async () => {
+    const { container } = await shell();
+    const strip = container.querySelector('.strip') as HTMLElement;
+
+    await fireEvent.mouseDown(strip, { button: 0, clientX: 200, clientY: 12 });
+    await fireEvent.mouseMove(window, { clientX: 260, clientY: 40 });
+    await fireEvent.mouseMove(window, { clientX: 300, clientY: 80 });
+    await fireEvent.mouseMove(window, { clientX: 360, clientY: 120 });
     expect(win.calls).toEqual(['startDragging']);
+    await fireEvent.mouseUp(window);
   });
 
   it('never starts a window drag from a panel\'s backdrop', async () => {

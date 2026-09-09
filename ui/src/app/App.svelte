@@ -868,12 +868,20 @@
     };
   }
 
+  /** How far the pointer must move before a press on the strip becomes a window drag. */
+  const DRAG_SLOP = 4;
+
   /**
-   * Moves the window, by pressing anywhere in the strip that is not something to press.
+   * Moves the window, by dragging anywhere in the strip that is not something to press.
    *
    * Written here rather than left to `data-tauri-drag-region`, whose handler also maximises
    * the window on a double click. A tab strip is somewhere people click twice by accident and
    * having the window jump to full screen for it is not worth the gesture.
+   *
+   * The pointer reaches the window manager only once it has actually moved. Handing it over on
+   * the press itself made a plain click a drag of zero distance, and a window manager that
+   * snaps a drag near the top of the screen answered that by maximising — so clicking the
+   * strip, which is at the top of the screen by definition, threw the window full size.
    */
   function stripDrag(event: MouseEvent) {
     if (event.button !== 0) return;
@@ -884,7 +892,21 @@
     // delivered, so pressing outside the drawer did nothing at all.
     if (target?.closest('button, a, input, textarea, select, .tab, .scrim')) return;
     event.preventDefault();
-    void startDragging();
+
+    const from = { x: event.clientX, y: event.clientY };
+    const moved = (e: MouseEvent) => {
+      if (Math.abs(e.clientX - from.x) < DRAG_SLOP && Math.abs(e.clientY - from.y) < DRAG_SLOP) {
+        return;
+      }
+      done();
+      void startDragging();
+    };
+    const done = () => {
+      window.removeEventListener('mousemove', moved);
+      window.removeEventListener('mouseup', done);
+    };
+    window.addEventListener('mousemove', moved);
+    window.addEventListener('mouseup', done);
   }
 
   async function useSystemTitleBar(on: boolean) {
