@@ -7,11 +7,8 @@ name: Release
 on:
   push:
     tags: ['v*']
-    # TEMPORARY, removed before this branch is merged: `workflow_dispatch` is only offered once
-    # the workflow exists on the default branch, so this is how the five legs get rehearsed
-    # before anyone tags anything.
-    branches: ['ci/github-builds']
-  # So a release can be rehearsed without cutting a tag.
+  # So a release can be rehearsed without cutting a tag: this builds all five platforms and
+  # publishes nothing, because only a tag reaches the job that publishes.
   workflow_dispatch:
 
 # The bundle legs only read. Publishing is one job, and it is the only one that can write.
