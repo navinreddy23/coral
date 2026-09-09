@@ -52,6 +52,18 @@ export class CommitState {
     this.#seeded = this.message;
   }
 
+  /**
+   * Fills the draft in from the message git prepared for the next commit.
+   *
+   * Not [`seed`]: that message is put there by ticking amend and taken away by unticking it,
+   * where this one is the starting point for a commit that is going to be made either way.
+   */
+  prepare(message: string): void {
+    const [summary, ...rest] = message.split('\n');
+    this.summary = summary ?? '';
+    this.description = rest.join('\n').trim();
+  }
+
   /** Empties a seeded message again, unless it has been edited since it was put there. */
   unseed(): void {
     if (this.#seeded !== null && this.message === this.#seeded) {

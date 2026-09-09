@@ -386,6 +386,23 @@
   /** Bumped to ask the branch panel for the caret; see the prop's own note. */
   let filterTick = $state(0);
   const merge = new MergeState();
+  /**
+   * The message git prepared, put in the box the one time it appears.
+   *
+   * A merge, cherry-pick or revert asked for without committing leaves the changes staged and
+   * writes the message it would have used into the git dir. Coral opens no editor, so that
+   * message went nowhere and the subject had to be typed out again from the row above.
+   *
+   * Once per message, and never over something already written: it is a starting point, not a
+   * correction, and a box being retyped must not be overwritten under the caret.
+   */
+  let prepared: string | null = null;
+  $effect(() => {
+    const said = merge.operation?.prepared ?? null;
+    if (said === prepared) return;
+    prepared = said;
+    if (said !== null && commitDraft.message === '') commitDraft.prepare(said);
+  });
   const hosting = new HostingState();
 
   /** The branch a pull or merge request is being opened for, or null. */

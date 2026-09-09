@@ -61,6 +61,14 @@ pub struct Operation {
     /// patch does not reverse them, and telling somebody who just opened a patch file that a
     /// rebase is in progress with its sides reversed is two pieces of wrong information.
     pub applying: bool,
+
+    /// The message git wrote for the commit that will finish this, if there is one.
+    ///
+    /// git leaves it in `MERGE_MSG` and reads it back when it opens an editor. Coral does not
+    /// open one, so without this the message was simply dropped: a merge or a cherry-pick
+    /// asked for without committing leaves the changes staged and the commit box empty, and
+    /// the subject that git had already written had to be typed out again from the row above.
+    pub prepared: Option<String>,
 }
 
 impl RepoLocation {
@@ -111,6 +119,7 @@ impl RepoLocation {
                     interactive: false,
                     resumable: true,
                     applying: false,
+                    prepared: self.prepared_message(),
                 })
             }
             OpState::Clean if self.has_unmerged(runner).await? => {
@@ -135,6 +144,7 @@ impl RepoLocation {
                     interactive: false,
                     resumable: false,
                     applying: false,
+                    prepared: self.prepared_message(),
                 })
             }
             OpState::Bisect | OpState::Clean => Ok(Operation {
@@ -150,6 +160,7 @@ impl RepoLocation {
                 interactive: false,
                 resumable: false,
                 applying: false,
+                prepared: self.prepared_message(),
             }),
         }
     }
@@ -244,6 +255,7 @@ impl RepoLocation {
             interactive: self.git_path(dir).join("interactive").exists(),
             resumable: true,
             applying,
+            prepared: self.prepared_message(),
         })
     }
 
@@ -266,7 +278,20 @@ impl RepoLocation {
             interactive: false,
             resumable: true,
             applying: false,
+            prepared: self.prepared_message(),
         })
+    }
+
+    /// The message git prepared for the commit that ends the operation in progress.
+    ///
+    /// `MERGE_MSG` is written by merge, cherry-pick, revert and squash alike, and stays until
+    /// the commit is made. Its comment lines are git's own and never part of the message: git
+    /// strips them itself when it reads the file back out of the editor.
+    fn prepared_message(&self) -> Option<String> {
+        let raw = std::fs::read_to_string(self.git_path("MERGE_MSG")).ok()?;
+        let said: Vec<&str> = raw.lines().filter(|line| !line.starts_with('#')).collect();
+        let text = said.join("\n").trim().to_owned();
+        (!text.is_empty()).then_some(text)
     }
 
     fn read_rebase_file(&self, dir: &str, name: &str) -> Option<String> {

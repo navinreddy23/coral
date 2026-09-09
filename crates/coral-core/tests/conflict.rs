@@ -501,3 +501,65 @@ fn an_unmerged_index_is_an_operation_even_with_no_marker_file() {
         assert_eq!(loc.conflicts(&runner).await.unwrap().len(), 1);
     });
 }
+
+/// git writes the message the next commit should carry into `MERGE_MSG`, and leaves it there
+/// until that commit is made.
+///
+/// It matters most where Coral does not commit for you: a cherry-pick or a merge asked for
+/// without committing leaves the changes staged and the message on disk, and the window's
+/// commit box was empty. Somebody who had just picked "Oops: a stray debug line" had to type
+/// its subject again from the row above.
+#[tokio::test]
+async fn the_message_git_prepared_for_the_next_commit_is_readable() {
+    let repo = TestRepo::new().write("f.txt", "base\n").commit("base");
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo
+        .write("g.txt", "side\n")
+        .commit("a change worth picking");
+    let picked = repo.git(["rev-parse", "HEAD"]);
+    repo.git(["checkout", "--quiet", "main"]);
+    let (runner, loc) = open(&repo).await;
+
+    assert_eq!(
+        loc.operation(&runner).await.unwrap().prepared,
+        None,
+        "nothing is pending yet"
+    );
+
+    loc.cherry_pick(&runner, &[&picked], false).await.unwrap();
+
+    let op = loc.operation(&runner).await.unwrap();
+    assert_eq!(op.prepared.as_deref(), Some("a change worth picking"));
+}
+
+/// The file holds git's own comment lines, which are not part of the message.
+#[tokio::test]
+async fn the_prepared_message_arrives_without_the_lines_git_would_strip() {
+    let repo = TestRepo::new().write("f.txt", "one\n").commit("base");
+    let (runner, loc) = open(&repo).await;
+    std::fs::write(
+        repo.path().join(".git").join("MERGE_MSG"),
+        "Merge branch 'side'\n\nwhy it was merged\n\n# Conflicts:\n#\tf.txt\n",
+    )
+    .unwrap();
+
+    let op = loc.operation(&runner).await.unwrap();
+    assert_eq!(
+        op.prepared.as_deref(),
+        Some("Merge branch 'side'\n\nwhy it was merged")
+    );
+}
+
+/// A file that is nothing but comments has no message in it, and an empty box beats a blank one.
+#[tokio::test]
+async fn a_prepared_message_of_nothing_but_comments_is_no_message() {
+    let repo = TestRepo::new().write("f.txt", "one\n").commit("base");
+    let (runner, loc) = open(&repo).await;
+    std::fs::write(
+        repo.path().join(".git").join("MERGE_MSG"),
+        "# Conflicts:\n#\tf.txt\n",
+    )
+    .unwrap();
+
+    assert_eq!(loc.operation(&runner).await.unwrap().prepared, None);
+}

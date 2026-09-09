@@ -55,3 +55,38 @@ describe('seeding an amend', () => {
     expect(draft.summary).toBe('a new commit');
   });
 });
+
+describe('the message git prepared', () => {
+  /**
+   * A merge, cherry-pick or revert asked for without committing leaves the changes staged and
+   * writes the message it would have used into the git dir. Coral opens no editor, so the
+   * subject git had already chosen went nowhere and had to be typed again from the row above.
+   */
+  it('fills the box as a subject and a body', () => {
+    const draft = new CommitState();
+    draft.prepare("Merge branch 'side'\n\nwhy it was merged");
+    expect(draft.summary).toBe("Merge branch 'side'");
+    expect(draft.description).toBe('why it was merged');
+    expect(draft.message).toBe("Merge branch 'side'\n\nwhy it was merged");
+  });
+
+  it('takes a message that is only a subject', () => {
+    const draft = new CommitState();
+    draft.prepare('Oops: a stray debug line');
+    expect(draft.summary).toBe('Oops: a stray debug line');
+    expect(draft.description).toBe('');
+  });
+
+  /**
+   * Unlike the message an amend is seeded with, this one is not taken back. Amend puts a
+   * message there because a tick was pressed and removes it when that tick is undone; this is
+   * a starting point for a commit that is going to be made either way.
+   */
+  it('stays when an amend is ticked and unticked over it', () => {
+    const draft = new CommitState();
+    draft.prepare('Oops: a stray debug line');
+    draft.amend = true;
+    draft.unseed();
+    expect(draft.summary).toBe('Oops: a stray debug line');
+  });
+});

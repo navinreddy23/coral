@@ -240,7 +240,16 @@ resumable: boolean,
  * patch does not reverse them, and telling somebody who just opened a patch file that a
  * rebase is in progress with its sides reversed is two pieces of wrong information.
  */
-applying: boolean, };
+applying: boolean, 
+/**
+ * The message git wrote for the commit that will finish this, if there is one.
+ *
+ * git leaves it in `MERGE_MSG` and reads it back when it opens an editor. Coral does not
+ * open one, so without this the message was simply dropped: a merge or a cherry-pick
+ * asked for without committing leaves the changes staged and the commit box empty, and
+ * the subject that git had already written had to be typed out again from the row above.
+ */
+prepared: string | null, };
 
 /**
  * How far through a multi-step operation git has got.
