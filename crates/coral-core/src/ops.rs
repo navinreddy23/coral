@@ -521,10 +521,36 @@ impl RepoLocation {
             }
         };
 
+        // An interactive rebase can owe a new message to the commit it is stopped on. Written
+        // in before continuing, because continuing is what records that commit: a reword whose
+        // commit also conflicts hands the rebase to the merge tool, and what continues it from
+        // there is this. Held only inside the call that started the rebase, the message
+        // somebody typed into the picker was dropped and the commit kept its old one.
+        if matches!(action, OpAction::Continue) && subcommand == "rebase" {
+            self.settle_reword(runner).await?;
+        }
+
         // `--continue` must not open an editor for the message git has already written. The
         // runner sets GIT_EDITOR=":" on every command, so it accepts the existing message.
         let cmd = GitCommand::write("op", self.display_path()).args([subcommand, verb]);
-        self.run_stoppable(runner, cmd).await
+        let outcome = self.run_stoppable(runner, cmd).await?;
+
+        // An interactive rebase can be carrying rewords that have not been applied yet: a
+        // commit set to reword is replayed as an `edit`, and the new message is written on when
+        // the rebase stops on it. A conflict on that very commit hands the rebase to the merge
+        // tool, and what continues it from there is this — so without this the message somebody
+        // typed into the picker was silently dropped and the commit kept its old one.
+        if matches!(action, OpAction::Abort) {
+            self.forget_rewords();
+            return Ok(outcome);
+        }
+        if subcommand != "rebase" {
+            return Ok(outcome);
+        }
+        if outcome.completed {
+            self.forget_rewords();
+        }
+        Ok(outcome)
     }
 
     /// Runs a command that may legitimately stop for conflicts.

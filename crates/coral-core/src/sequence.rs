@@ -230,6 +230,11 @@ impl crate::repo::RepoLocation {
         }
 
         // Reword becomes edit, and the message is kept against the commit it belongs to.
+        //
+        // Written to the git dir rather than held here, because this call does not always see
+        // the rebase through: a conflict hands it to the merge tool, and what continues it from
+        // there is `op`. A message that lived only in this function was dropped the moment the
+        // commit being reworded was also the one that conflicted.
         let mut messages: std::collections::BTreeMap<String, String> =
             std::collections::BTreeMap::new();
         let mut plan = todo.clone();
@@ -244,6 +249,7 @@ impl crate::repo::RepoLocation {
                 }
             }
         }
+        self.remember_rewords(&messages);
 
         let path = self.git_path("coral-rebase-todo");
         std::fs::write(&path, plan.render()).map_err(|e| CoralError::Protocol {
@@ -300,21 +306,83 @@ impl crate::repo::RepoLocation {
         // must not be able to spin.
         for _ in 0..=plan.items.len() {
             if outcome.completed || !outcome.conflicts.is_empty() {
-                return Ok(outcome);
+                break;
             }
             let stopped = self.operation(runner).await?.stopped_at;
             let Some(message) = stopped.as_deref().and_then(|oid| messages.get(oid)) else {
                 // A stop the user asked for, or one nothing here can answer.
-                return Ok(outcome);
+                break;
             };
             self.amend_message(runner, message).await?;
             outcome = self.op(runner, crate::ops::OpAction::Continue).await?;
         }
+        if outcome.completed {
+            self.forget_rewords();
+        }
         Ok(outcome)
     }
 
+    /// Where the messages a rebase still owes are kept.
+    fn rewords_path(&self) -> std::path::PathBuf {
+        self.git_path("coral-rebase-rewords")
+    }
+
+    /// Puts the messages an interactive rebase still owes where a later continue can find them.
+    pub(crate) fn remember_rewords(&self, messages: &std::collections::BTreeMap<String, String>) {
+        if messages.is_empty() {
+            self.forget_rewords();
+            return;
+        }
+        if let Ok(text) = serde_json::to_string(messages) {
+            let _ = std::fs::write(self.rewords_path(), text);
+        }
+    }
+
+    /// The messages a rebase still owes, keyed by the commit each belongs to.
+    ///
+    /// Unreadable or malformed is the same as none: a rebase that cannot find them replays the
+    /// commits with the messages they already have, which is what git would have done anyway.
+    #[must_use]
+    pub(crate) fn rewords(&self) -> std::collections::BTreeMap<String, String> {
+        std::fs::read_to_string(self.rewords_path())
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default()
+    }
+
+    /// Forgets them, for a rebase that finished or was abandoned.
+    pub(crate) fn forget_rewords(&self) {
+        let _ = std::fs::remove_file(self.rewords_path());
+    }
+
+    /// Puts the message a rebase owes the commit it is stopped on where git will use it.
+    ///
+    /// Which of the two places depends on whether that commit has been recorded yet, and git
+    /// keeps the answer itself: it writes `amend` into the rebase directory when it stops on a
+    /// commit it has already made. Before that, `message` is the text `--continue` will commit
+    /// with; after it, the commit exists and has to be amended.
+    pub(crate) async fn settle_reword(
+        &self,
+        runner: &crate::process::GitRunner,
+    ) -> Result<(), CoralError> {
+        let Some(oid) = self.operation(runner).await?.stopped_at else {
+            return Ok(());
+        };
+        let waiting = self.rewords();
+        let Some(message) = waiting.get(&oid) else {
+            return Ok(());
+        };
+        let dir = self.git_path("rebase-merge");
+        if dir.join("amend").exists() {
+            self.amend_message(runner, message).await?;
+        } else {
+            let _ = std::fs::write(dir.join("message"), message);
+        }
+        Ok(())
+    }
+
     /// Replaces the message of the commit a rebase has stopped on.
-    async fn amend_message(
+    pub(crate) async fn amend_message(
         &self,
         runner: &crate::process::GitRunner,
         message: &str,

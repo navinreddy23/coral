@@ -542,3 +542,98 @@ async fn a_range_written_out_applies_as_the_same_commits_elsewhere() {
     );
     assert_eq!(target.git(["status", "--short"]).trim(), "");
 }
+
+/// A reword on a commit that also conflicts.
+///
+/// The reword is replayed as an `edit` and the message written on when the rebase stops there.
+/// A conflict stops it first and hands the rebase to whatever settles conflicts, so the
+/// message has to outlive the call that started the rebase — held in this function it was
+/// dropped, and the commit kept the message the user had just replaced.
+#[test]
+fn a_reword_survives_a_conflict_on_the_same_commit() {
+    let repo = TestRepo::new()
+        .write("f.txt", "base\n")
+        .commit("base")
+        .write("f.txt", "from the topic\n")
+        .commit("the commit being reworded");
+    let onto = repo.git(["rev-parse", "HEAD~1"]);
+    repo.git(["branch", "--quiet", "topic"]);
+    repo.git(["checkout", "--quiet", "HEAD~1"]);
+    let repo = repo.write("f.txt", "from elsewhere\n").commit("elsewhere");
+    let target = repo.git(["rev-parse", "HEAD"]);
+    repo.git(["checkout", "--quiet", "topic"]);
+    let _ = onto;
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+        let mut todo = loc.rebase_todo(&runner, &target).await.unwrap();
+        assert_eq!(todo.items.len(), 1, "one commit to replay");
+        todo.items[0].step = Step::Reword;
+        todo.items[0].message = Some("the message the user typed".to_owned());
+
+        let stopped = loc
+            .rebase_interactive(&runner, &target, &todo, &coral_binary())
+            .await
+            .unwrap();
+        assert!(!stopped.completed, "it stops on the conflict");
+        assert_eq!(stopped.conflicts, vec!["f.txt".to_owned()]);
+
+        // Settle it the way the merge tool does, then continue through the same path it uses.
+        std::fs::write(repo.path().join("f.txt"), "settled\n").unwrap();
+        repo.git(["add", "f.txt"]);
+        let done = loc.op(&runner, OpAction::Continue).await.unwrap();
+        assert!(done.completed, "the rebase finishes: {}", done.message);
+    });
+
+    assert_eq!(summaries(&repo)[0], "the message the user typed");
+    assert!(
+        !repo
+            .path()
+            .join(".git")
+            .join("coral-rebase-rewords")
+            .exists(),
+        "and nothing is left behind for the next rebase to pick up"
+    );
+}
+
+/// Abandoning one throws the messages away with it.
+#[test]
+fn abandoning_a_rebase_forgets_the_messages_it_owed() {
+    let repo = TestRepo::new()
+        .write("f.txt", "base\n")
+        .commit("base")
+        .write("f.txt", "from the topic\n")
+        .commit("the commit being reworded");
+    repo.git(["branch", "--quiet", "topic"]);
+    repo.git(["checkout", "--quiet", "HEAD~1"]);
+    let repo = repo.write("f.txt", "from elsewhere\n").commit("elsewhere");
+    let target = repo.git(["rev-parse", "HEAD"]);
+    repo.git(["checkout", "--quiet", "topic"]);
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+        let mut todo = loc.rebase_todo(&runner, &target).await.unwrap();
+        todo.items[0].step = Step::Reword;
+        todo.items[0].message = Some("never applied".to_owned());
+        let stopped = loc
+            .rebase_interactive(&runner, &target, &todo, &coral_binary())
+            .await
+            .unwrap();
+        assert!(!stopped.completed);
+
+        loc.op(&runner, OpAction::Abort).await.unwrap();
+    });
+
+    assert_eq!(summaries(&repo)[0], "the commit being reworded");
+    assert!(
+        !repo
+            .path()
+            .join(".git")
+            .join("coral-rebase-rewords")
+            .exists()
+    );
+}
