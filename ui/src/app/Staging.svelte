@@ -285,10 +285,13 @@
     <textarea class="description" rows="3" placeholder="Description" bind:value={draft.description}
     ></textarea>
     <button class="commit" disabled={!canCommit} onclick={onCommit}>
-      {#if draft.amend}
-        Amend the previous commit
-      {:else if total === 0}
+      <!-- A disabled button says what is missing rather than what it would have done. -->
+      {#if total === 0 && !draft.amend}
         Stage something to commit
+      {:else if draft.summary.trim().length === 0}
+        Write a summary to commit
+      {:else if draft.amend}
+        Amend the previous commit
       {:else}
         Commit {total} file{total === 1 ? '' : 's'}
       {/if}

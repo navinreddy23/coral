@@ -89,6 +89,22 @@ describe('the staging panel', () => {
     invoke.mockImplementation(async () => status());
   });
 
+  it('says a summary is what is missing, not how many files it would take', async () => {
+    // The button already names what is missing when nothing is staged. With something staged
+    // and the box above it empty it stayed disabled and read "Commit 1 file", which says
+    // nothing about why pressing it does nothing.
+    const { container } = await panel();
+    const button = container.querySelector('button.commit') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.textContent?.replace(/\s+/gu, ' ').trim()).toBe('Write a summary to commit');
+
+    await fireEvent.input(container.querySelector('.summary') as HTMLInputElement, {
+      target: { value: 'a summary' },
+    });
+    expect(button.disabled).toBe(false);
+    expect(button.textContent?.replace(/\s+/gu, ' ').trim()).toBe('Commit 1 file');
+  });
+
   it('puts unstaged above staged, which is the direction work moves', async () => {
     const { container } = await panel();
     const [first, second] = headings(container);
