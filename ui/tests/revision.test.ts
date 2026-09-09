@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { checkoutItems, combineItems, type RevisionActions } from '../src/app/revision';
+import { checkoutItems, combineItems, resetItem, type RevisionActions } from '../src/app/revision';
 import type { PlacedRef } from '../src/ipc/commands';
 import type { Ancestry } from '../src/ipc/types';
 
@@ -151,5 +151,48 @@ describe('bringing a revision into the branch', () => {
     const items = combineItems(tag('v1.0.0'), 'v1.0.0', 'master', 'behind', on);
     press(items, 'Rebase master onto v1.0.0, interactively');
     expect(on.rebaseInteractively.mock.calls).toEqual([['v1.0.0']]);
+  });
+});
+
+describe('resetting a branch to a commit', () => {
+  /**
+   * The same words did two different things. Right-clicking a commit row opened a submenu and
+   * asked which reset; right-clicking the tag or branch label *on that row* ran a hard one
+   * behind a confirmation. A reader who learned the first meaning met the second by surprise.
+   */
+  it('always asks which reset, wherever it is opened from', () => {
+    const soft = vi.fn();
+    const mixed = vi.fn();
+    const hard = vi.fn();
+    const item = resetItem('main', { soft, mixed, hard }, false);
+
+    expect(item.kind).toBe('submenu');
+    if (item.kind !== 'submenu') throw new Error('a submenu');
+    expect(item.label).toBe('Reset main to this commit');
+    expect(labels(item.items)).toEqual([
+      'Soft — keep the index and the working copy',
+      'Mixed — keep the working copy',
+      'Hard — discard everything since',
+    ]);
+
+    press(item.items, 'Soft — keep the index and the working copy');
+    press(item.items, 'Mixed — keep the working copy');
+    press(item.items, 'Hard — discard everything since');
+    expect([soft.mock.calls.length, mixed.mock.calls.length, hard.mock.calls.length]).toEqual([
+      1, 1, 1,
+    ]);
+  });
+
+  it('marks only the one that throws work away', () => {
+    const item = resetItem('main', { soft: vi.fn(), mixed: vi.fn(), hard: vi.fn() }, false);
+    if (item.kind !== 'submenu') throw new Error('a submenu');
+    const danger = item.items.map((i) => (i.kind === 'item' ? i.danger === true : false));
+    expect(danger).toEqual([false, false, true]);
+  });
+
+  it('refuses every mode while something else is running', () => {
+    const item = resetItem('main', { soft: vi.fn(), mixed: vi.fn(), hard: vi.fn() }, true);
+    if (item.kind !== 'submenu') throw new Error('a submenu');
+    expect(item.items.every((i) => i.kind === 'item' && i.disabled === true)).toBe(true);
   });
 });

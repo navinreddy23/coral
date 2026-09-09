@@ -70,7 +70,13 @@
   import { elideRef } from './path';
   import { checkoutOf, divergence, remoteOf, withoutRemote } from './refname';
   import { orderRefs, pillChars, pillNamed } from './pill';
-  import { checkoutItems, combineItems, type RevisionActions } from './revision';
+  import {
+    checkoutItems,
+    combineItems,
+    resetItem,
+    type ResetModes,
+    type RevisionActions,
+  } from './revision';
   import { count, discardWords } from './discard';
   import { bandWidth, columnWidth, laneToken } from '../graph/column';
   import { shortAge } from './age';
@@ -1185,13 +1191,7 @@
     items.push({ kind: 'separator' });
     items.push({ kind: 'item', label: 'Create branch here', run: () => void branchAt(oid) });
     items.push({ kind: 'item', label: 'Cherry pick commit…', run: () => void cherryPick(oid) });
-    items.push({
-      kind: 'item',
-      label: `Reset ${head} to this commit`,
-      run: () => void confirmHardReset(oid, head),
-      danger: true,
-      disabled: busy,
-    });
+    items.push(resetItem(head, resetModes(oid, head), busy));
     items.push({
       kind: 'item',
       label: 'Revert commit',
@@ -1578,28 +1578,7 @@
           label: 'Cherry pick commit…',
           run: () => void cherryPick(oid),
         },
-        {
-          kind: 'submenu',
-          label: `Reset ${branch} to this commit`,
-          items: [
-            {
-              kind: 'item',
-              label: 'Soft — keep the index and the working copy',
-              run: () => void act({ kind: 'reset', rev: oid, mode: 'soft' }),
-            },
-            {
-              kind: 'item',
-              label: 'Mixed — keep the working copy',
-              run: () => void act({ kind: 'reset', rev: oid, mode: 'mixed' }),
-            },
-            {
-              kind: 'item',
-              label: 'Hard — discard everything since',
-              danger: true,
-              run: () => void confirmHardReset(oid, branch),
-            },
-          ],
-        },
+        resetItem(branch, resetModes(oid, branch), actions.busy),
         {
           kind: 'item',
           label: 'Revert commit',
@@ -1788,6 +1767,15 @@
     });
     if (choice === null) return;
     await act({ kind: 'rewrite', rev: oid, how: 'drop', message: null });
+  }
+
+  /** What each reset actually runs, for whichever menu offers the line. */
+  function resetModes(oid: string, branch: string): ResetModes {
+    return {
+      soft: () => void act({ kind: 'reset', rev: oid, mode: 'soft' }),
+      mixed: () => void act({ kind: 'reset', rev: oid, mode: 'mixed' }),
+      hard: () => void confirmHardReset(oid, branch),
+    };
   }
 
   async function confirmHardReset(oid: string, branch: string) {
@@ -3248,6 +3236,18 @@
 
 
   const rows = $derived(windowRows(graph.frame));
+
+  /*
+   * Keep the highlight on the commit it was put on, whatever the walk renumbered.
+   *
+   * A commit, an amend, a revert, a cherry-pick, a rebase and a reset all rewrite the rows
+   * under the reader, and the selection was a row number. After reverting a commit the
+   * highlight sat on the row below the one it had marked, describing a different commit from
+   * the panel beside it.
+   */
+  $effect(() => {
+    selection.reanchor(graph.frame);
+  });
 
   /**
    * What is known about each row on screen.

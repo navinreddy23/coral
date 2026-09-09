@@ -171,3 +171,47 @@ function fastForwardItem(
     run: () => {},
   };
 }
+
+/** What resetting a branch to a commit can mean, in the three ways git means it. */
+export interface ResetModes {
+  soft: () => void;
+  mixed: () => void;
+  /** Asks first: this is the one that discards work nobody can get back. */
+  hard: () => void;
+}
+
+/**
+ * Moving a branch to the commit under the pointer, as the three things that can mean.
+ *
+ * One line rather than three, because "reset" is one idea and which of them applies is the
+ * detail. Shared between the commit row and the branch or tag label sitting on it: they had
+ * the same words on them and did different things, the label's line running a hard reset with
+ * no mode offered at all.
+ */
+export function resetItem(branch: string, on: ResetModes, busy: boolean): MenuItem {
+  return {
+    kind: 'submenu',
+    label: `Reset ${branch} to this commit`,
+    items: [
+      {
+        kind: 'item',
+        label: 'Soft — keep the index and the working copy',
+        disabled: busy,
+        run: on.soft,
+      },
+      {
+        kind: 'item',
+        label: 'Mixed — keep the working copy',
+        disabled: busy,
+        run: on.mixed,
+      },
+      {
+        kind: 'item',
+        label: 'Hard — discard everything since',
+        danger: true,
+        disabled: busy,
+        run: on.hard,
+      },
+    ],
+  };
+}
