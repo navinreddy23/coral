@@ -383,6 +383,7 @@ fn gpg_in_its_own_keyring(home: &std::path::Path) -> std::path::PathBuf {
 /// Ignored by default: it creates a keyring and a 4096-bit key, which takes long enough to be
 /// unwelcome in a normal run. `cargo test -- --ignored` runs it, and it is the only test that
 /// proves the settings this screen writes actually produce a signed commit.
+#[cfg(unix)]
 #[test]
 #[ignore = "generates a real gpg key; run with --ignored"]
 fn a_generated_key_signs_a_commit() {

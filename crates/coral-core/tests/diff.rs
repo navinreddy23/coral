@@ -27,11 +27,17 @@ fn every_shape() -> TestRepo {
         .write("with space.txt", "spaced and changed\n");
     r.git(["rm", "--quiet", "del.txt"]);
     r.git(["mv", "ren.txt", "ren-new.txt"]);
-    std::fs::set_permissions(
-        r.path().join("mode.txt"),
-        std::os::unix::fs::PermissionsExt::from_mode(0o755),
-    )
-    .unwrap();
+    // Windows git records no executable bit, and `std::os::unix` is not compiled there at all,
+    // so the mode-change shape and the test that reads it are unix-only.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(
+            r.path().join("mode.txt"),
+            std::fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+    }
     r.git(["add", "--all"]);
     r
 }
@@ -173,6 +179,7 @@ async fn a_binary_file_reports_no_counts_and_no_hunks() {
 }
 
 /// A mode change carries no hunks; the file must still be reported.
+#[cfg(unix)]
 #[tokio::test]
 async fn a_mode_only_change_is_reported_without_hunks() {
     let repo = every_shape();

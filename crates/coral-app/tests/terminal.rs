@@ -2,8 +2,13 @@
 //!
 //! Not a command runner: a git user expects their prompt, their aliases and their pager, and
 //! every one of those needs a tty on the other end. These check that is what they get.
+//!
+//! The ones that open a shell open `/bin/sh`, so they are unix-only. What Coral chooses on
+//! Windows is covered by the three below that need no shell of their own.
 
+#[cfg(unix)]
 use std::io::{Read as _, Write};
+#[cfg(unix)]
 use std::time::{Duration, Instant};
 
 use coral_app_lib::terminal::{output_event, spawn_shell};
@@ -14,12 +19,14 @@ use coral_app_lib::terminal::{output_event, spawn_shell};
 /// the shell writes something, so a deadline checked around the read is never reached — the
 /// test simply stops there, which is exactly what an earlier version of this file did. It is
 /// the same reason the application reads on a thread.
+#[cfg(unix)]
 struct Shell {
     writer: Box<dyn Write + Send>,
     child: Box<dyn portable_pty::Child + Send + Sync>,
     output: std::sync::mpsc::Receiver<Option<String>>,
 }
 
+#[cfg(unix)]
 impl Shell {
     /// Opens a shell in `path`.
     ///
@@ -83,6 +90,7 @@ impl Shell {
     }
 }
 
+#[cfg(unix)]
 impl Drop for Shell {
     fn drop(&mut self) {
         let _ = self.child.kill();
@@ -90,6 +98,7 @@ impl Drop for Shell {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn a_shell_runs_in_the_repository_it_was_opened_for() {
     // The working directory is the whole point: a terminal that opens somewhere else makes
@@ -104,6 +113,7 @@ fn a_shell_runs_in_the_repository_it_was_opened_for() {
     assert!(seen.contains(&wanted), "expected {wanted} in:\n{seen}");
 }
 
+#[cfg(unix)]
 #[test]
 fn git_runs_in_it_and_sees_the_repository() {
     let dir = tempfile::tempdir().unwrap();
@@ -130,6 +140,7 @@ fn git_runs_in_it_and_sees_the_repository() {
     assert!(seen.contains("a terminal commit"), "got:\n{seen}");
 }
 
+#[cfg(unix)]
 #[test]
 fn programs_are_told_they_are_on_a_terminal() {
     // What makes colour, a pager and a progress meter behave. A pipe would answer no, and
@@ -141,6 +152,7 @@ fn programs_are_told_they_are_on_a_terminal() {
     assert!(seen.contains("IS_A_TTY"), "got:\n{seen}");
 }
 
+#[cfg(unix)]
 #[test]
 fn the_terminal_reports_the_size_it_was_opened_at() {
     // A shell asks how wide it is before drawing its first prompt; one started at the wrong
@@ -152,6 +164,7 @@ fn the_terminal_reports_the_size_it_was_opened_at() {
     assert!(seen.contains("45 123"), "got:\n{seen}");
 }
 
+#[cfg(unix)]
 #[test]
 fn resizing_reaches_the_shell() {
     // Without this a full-screen program draws to the size it was told at startup, and the
@@ -182,6 +195,7 @@ fn resizing_reaches_the_shell() {
     let _ = child.wait();
 }
 
+#[cfg(unix)]
 #[test]
 fn a_shell_does_not_outlive_the_session_that_started_it() {
     // Sixty-two of them accumulated during one afternoon of testing before `Session` learned
