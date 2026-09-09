@@ -346,14 +346,13 @@ async fn a_clone_abandoned_part_way_through_leaves_nothing_behind() {
     // presses Stop, git has made the directory and filled some of it, and the removal has to
     // happen after the child is dead rather than racing it.
     let source = TestRepo::new().write("a.txt", "1\n").commit("base");
-    // Enough that the clone is still going when it is cut. Read from the system's random
-    // source, because anything generated from a pattern packs down to nothing and finishes
-    // before there is anything to abandon.
-    let mut noise = std::fs::File::open("/dev/urandom").expect("a random source");
+    // Enough that the clone is still going when it is cut. Random rather than generated,
+    // because anything from a pattern packs down to nothing and finishes before there is
+    // anything to abandon. Through getrandom rather than /dev/urandom, which Windows has no
+    // equivalent of.
     for n in 0..8 {
-        use std::io::Read as _;
         let mut filler = vec![0_u8; 8 * 1024 * 1024];
-        noise.read_exact(&mut filler).expect("read noise");
+        getrandom::fill(&mut filler).expect("a random source");
         std::fs::write(source.path().join(format!("bulk{n}.bin")), filler).unwrap();
     }
     source.git(["add", "-A"]);
@@ -424,7 +423,10 @@ async fn a_shallow_clone_takes_the_tip_and_grafts_the_rest() {
         .unwrap();
     let count = String::from_utf8_lossy(&count.stdout).trim().to_owned();
     assert_eq!(count, "1", "one commit, not three");
-    assert_eq!(std::fs::read_to_string(made.join("a.txt")).unwrap(), "3\n");
+    // The clone takes the machine's own core.autocrlf, which git for Windows sets to true, so
+    // what is under test is the content rather than the line ending it arrived with.
+    let tip = std::fs::read_to_string(made.join("a.txt")).unwrap();
+    assert_eq!(tip.replace("\r\n", "\n"), "3\n");
 }
 
 #[tokio::test]

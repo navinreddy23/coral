@@ -211,7 +211,11 @@ async fn classifies_worktree_edits_without_naming_paths() {
     let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
     let loc = located(&repo).await;
 
-    let c = classify(&loc, &repo.path().join("deep/nested/file.c")).expect("in the worktree");
+    // Canonical, because classify strips a prefix lexically and macOS hands out temporary
+    // directories under /var, which is a symlink to /private/var. The location reports the
+    // resolved path, so an unresolved one here belongs to no repository at all.
+    let root = std::fs::canonicalize(repo.path()).unwrap();
+    let c = classify(&loc, &root.join("deep/nested/file.c")).expect("in the worktree");
     assert!(c.worktree);
     assert!(!c.index && !c.refs && !c.ops);
 

@@ -36,6 +36,7 @@ keyring = { workspace = true, features = ["windows-native-keyring-store"] }
 
 [dev-dependencies]
 tokio    = { workspace = true, features = ["rt-multi-thread", "macros"] }
+getrandom = { workspace = true }
 insta    = { workspace = true }
 tempfile = { workspace = true }
 
