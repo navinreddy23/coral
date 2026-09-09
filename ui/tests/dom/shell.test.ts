@@ -448,6 +448,78 @@ describe('the shell', () => {
     expect(container.querySelector('aside.wip-panel')).toBeNull();
   });
 
+  it('shows the working copy at once in a repository with nothing committed', async () => {
+    // The graph says "the panel on the right makes the first commit", and that was the first
+    // sentence a stranger read — pointing at a panel showing "a commit's author, message and
+    // files appear here". There is no commit to select, so there is nothing else it could show.
+    // A frame with no rows in it: the same golden header, with the two counts set to zero.
+    const empty = frameBytes.buffer.slice(
+      frameBytes.byteOffset,
+      frameBytes.byteOffset + frameBytes.byteLength,
+    );
+    const header = new DataView(empty);
+    header.setUint32(12, 0, true);
+    header.setUint32(16, 0, true);
+
+    wire({
+      graph_frame: empty,
+      repo_status: {
+        entries: [{ path: 'README.md', staged: null, worktree: 'untracked', conflict: null }],
+        conflicted: [],
+      },
+    });
+    const view = render(App);
+    const { container } = view;
+
+    await waitFor(() => {
+      if (!container.querySelector('aside.wip-panel')) throw new Error('not showing it yet');
+    });
+    expect(container.textContent).toContain('makes the first commit');
+    expect(container.textContent, 'and not the panel that waits for one').not.toContain(
+      "A commit's author",
+    );
+  });
+
+  it('asks who you are when git refuses the first commit for want of a name', async () => {
+    /*
+     * On a machine where git has never been told a name it refuses and explains itself in
+     * nine lines about `git config --global`, which is a terminal's answer to a question
+     * asked in a window. This is the first thing a new user does, so it is asked here.
+     */
+    const { container } = await shell({
+      repo_status: {
+        entries: [{ path: 'README.md', staged: 'added', worktree: null, conflict: null }],
+        conflicted: [],
+      },
+      commit_staged: new Error(
+        "git commit exited with 128: fatal: unable to auto-detect email address (got 'x@y.(none)')",
+      ),
+    });
+
+    await waitFor(() => {
+      if (!container.querySelector('button.row.wip')) throw new Error('no working copy row yet');
+    });
+    await fireEvent.click(container.querySelector('button.row.wip') as HTMLButtonElement);
+    await waitFor(() => {
+      if (!container.querySelector('input.summary')) throw new Error('no staging panel yet');
+    });
+    const summary = container.querySelector('input.summary') as HTMLInputElement;
+    summary.value = 'Start the notebook';
+    await fireEvent.input(summary);
+    // The button, not the keystroke: the panel used to commit by a path of its own, so a fix
+    // in the window only ever ran down one of the two.
+    await fireEvent.click(container.querySelector('button.commit') as HTMLButtonElement);
+
+    const dialog = await waitFor(() => {
+      const found = container.querySelector('[role="dialog"]');
+      if (!found) throw new Error('nothing asked');
+      return found as HTMLElement;
+    });
+    expect(dialog.textContent).toContain('Git does not know who you are');
+    // Not git's own advice, which is what was shown before.
+    expect(dialog.textContent).not.toContain('git config --global');
+  });
+
   it('takes down the stopped notice once nothing is stopped', async () => {
     /*
      * "merge stopped on conflicts" waits to be dismissed, which is right for a failure nobody

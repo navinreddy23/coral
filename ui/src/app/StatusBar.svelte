@@ -83,7 +83,8 @@
     </button>
   {/if}
   {#if commits > 0}
-    <span class="count">{commits.toLocaleString()} commits</span>
+    <!-- A repository with one commit in it has one commit in it. -->
+    <span class="count">{commits.toLocaleString()} commit{commits === 1 ? '' : 's'}</span>
   {/if}
   <span class="muted">git {gitVersion}</span>
 

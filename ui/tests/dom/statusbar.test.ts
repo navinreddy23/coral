@@ -51,6 +51,14 @@ describe('the status bar', () => {
     const { container } = bar();
     expect(container.textContent).toContain('master');
     expect(container.textContent).toContain('1,481,528 commits');
+  });
+
+  it('counts one commit as one commit', () => {
+    // The very first commit in a new repository is the one a stranger sees, and it read
+    // "1 commits".
+    const { container } = render(StatusBar, { props: { ...base, commits: 1 } });
+    expect(container.textContent).toContain('1 commit');
+    expect(container.textContent).not.toContain('1 commits');
     expect(container.textContent).toContain('git 2.43.0');
   });
 

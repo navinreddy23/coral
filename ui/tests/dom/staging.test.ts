@@ -68,6 +68,7 @@ async function panel(over: Record<string, unknown> = {}) {
         onGrouping: () => {},
         onDiscard: () => {},
         onFileMenu: () => {},
+        onCommit: () => {},
         onOpenFile,
         ...over,
       },
@@ -149,8 +150,8 @@ describe('the staging panel', () => {
   });
 
   it('joins the summary and the description the way git expects', async () => {
-    const { container, worktree } = await panel();
-    const commit = vi.spyOn(worktree, 'commit').mockResolvedValue(undefined);
+    const onCommit = vi.fn();
+    const { container, commit } = await panel({ onCommit });
 
     await fireEvent.input(container.querySelector('.summary') as HTMLInputElement, {
       target: { value: 'app: do the thing' },
@@ -161,10 +162,10 @@ describe('the staging panel', () => {
     await fireEvent.click(container.querySelector('.commit') as HTMLButtonElement);
 
     // Subject, blank line, body.
-    expect(commit).toHaveBeenCalledWith(
-      'app: do the thing\n\nBecause the other thing was wrong.',
-      false,
-    );
+    expect(commit.message).toBe('app: do the thing\n\nBecause the other thing was wrong.');
+    // And the panel asks the window to make it, rather than reaching for the engine itself:
+    // the window's own commit is the same act, and a refusal has to be answered once.
+    expect(onCommit).toHaveBeenCalledTimes(1);
   });
 
   it('counts down to the summary limit rather than refusing a long one', async () => {
@@ -195,6 +196,7 @@ describe('the staging panel', () => {
         onGrouping: () => {},
         onDiscard: () => {},
         onFileMenu: () => {},
+        onCommit: () => {},
         onOpenFile: vi.fn(),
       },
     });
@@ -217,6 +219,7 @@ describe('the staging panel', () => {
         onGrouping: () => {},
         onDiscard: () => {},
         onFileMenu: () => {},
+        onCommit: () => {},
         onOpenFile: vi.fn(),
       },
     });
@@ -287,6 +290,7 @@ describe('what a folder row says is under it', () => {
         onGrouping: () => {},
         onDiscard: () => {},
         onFileMenu: () => {},
+        onCommit: () => {},
         onOpenFile: vi.fn(),
       },
     });
@@ -306,6 +310,7 @@ describe('what a folder row says is under it', () => {
         onGrouping: () => {},
         onDiscard: () => {},
         onFileMenu: () => {},
+        onCommit: () => {},
         onOpenFile: vi.fn(),
       },
     });

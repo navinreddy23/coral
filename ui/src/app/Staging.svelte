@@ -17,6 +17,7 @@
     onOpenFile,
     onDiscard,
     onFileMenu,
+    onCommit,
   }: {
     worktree: WorktreeState;
     /**
@@ -47,6 +48,16 @@
      * cannot be undone, and the window owns both the menu and the question that precedes it.
      */
     onFileMenu: (event: MouseEvent, entry: StatusEntry, staged: boolean) => void;
+    /**
+     * Makes the commit.
+     *
+     * Raised rather than done here. The panel used to call the engine itself, so the window's
+     * own commit — the one `Ctrl Enter` runs — was a second path through the same act, and
+     * anything the window wanted to do about a refusal only happened down one of them. git
+     * refusing for want of a name is exactly such a thing, and it is the first commit anybody
+     * makes.
+     */
+    onCommit: () => void;
   } = $props();
 
   /**
@@ -70,11 +81,6 @@
     focusedAt = draft.focusTick;
     summaryField?.focus();
   });
-
-  async function record() {
-    await worktree.commit(draft.message, draft.amend);
-    if (!worktree.error) draft.clear();
-  }
 
   /** Collapsed directories, per side, so expanding one list leaves the other alone. */
   let closedUnstaged = $state<Record<string, boolean>>({});
@@ -278,7 +284,7 @@
     </div>
     <textarea class="description" rows="3" placeholder="Description" bind:value={draft.description}
     ></textarea>
-    <button class="commit" disabled={!canCommit} onclick={record}>
+    <button class="commit" disabled={!canCommit} onclick={onCommit}>
       {#if draft.amend}
         Amend the previous commit
       {:else if total === 0}

@@ -147,6 +147,16 @@
   const selection = new SelectionState();
   const worktree = new WorktreeState();
   let showWip = $state(false);
+
+  /**
+   * Whether the panel is showing the working copy.
+   *
+   * In a repository with nothing committed it always is: there is no commit to select, so the
+   * panel would otherwise offer to show one, under a graph saying "the panel on the right
+   * makes the first commit" — which was the first thing a stranger read, pointing at a panel
+   * that was showing something else.
+   */
+  const stagingShowing = $derived(showWip || (graph.totalRows === 0 && worktree.dirty));
   const tabs = new TabsState();
   let showHelp = $state(false);
 
@@ -678,10 +688,60 @@
     }
     if (!commitDraft.ready(worktree)) return;
     await worktree.commit(commitDraft.message, commitDraft.amend);
-    if (!worktree.error) {
-      commitDraft.clear();
-      await reloadAll();
+    if (worktree.error) {
+      if (needsIdentity(worktree.error)) await offerToSayWhoYouAre();
+      return;
     }
+    commitDraft.clear();
+    await reloadAll();
+  }
+
+  /** git's own words for "I do not know who you are", in its three spellings. */
+  function needsIdentity(message: string): boolean {
+    return (
+      message.includes('unable to auto-detect email address') ||
+      message.includes('Please tell me who you are') ||
+      message.includes('empty ident name')
+    );
+  }
+
+  /**
+   * The first commit on a machine where git has never been told a name.
+   *
+   * git refuses and explains itself in nine lines about `git config --global`, which is a
+   * terminal's answer to a question asked in a window. This asks it here, writes the answer
+   * where the profile keeps it, and makes the commit — the message and the staged files are
+   * still where they were, so nothing is lost either way.
+   */
+  async function offerToSayWhoYouAre() {
+    const was = profiles.current.settings;
+    const name = await askText(
+      'Git does not know who you are',
+      'Every commit records a name and an address. They are kept on this profile, and every ' +
+        'repository opened under it uses them.\n\nYour name:',
+      was.user.name ?? '',
+    );
+    if (name === null || name.trim() === '') return;
+
+    const email = await askText(
+      'And an address',
+      'It goes on every commit you make, and anyone who reads the history can see it.\n\n' +
+        'Your email address:',
+      was.user.email ?? '',
+    );
+    if (email === null || email.trim() === '') return;
+
+    await profiles.setSettings(profiles.current.id, {
+      ...was,
+      user: { name: name.trim(), email: email.trim() },
+    });
+    if (profiles.error !== null) {
+      toasts.push('error', 'Could not save that', profiles.error);
+      return;
+    }
+    // Into this repository's own config as well, so the commit about to be retried carries it.
+    if (info) await profiles.applyHere(info.path);
+    await recordCommit(false);
   }
 
   /** Shows the working copy and puts the caret in the summary field. */
@@ -3609,7 +3669,7 @@
       {/if}
 
       {#if worktree.dirty}
-        <button class="row wip" class:selected={showWip} onclick={pickWip}>
+        <button class="row wip" class:selected={stagingShowing} onclick={pickWip}>
           <span class="cell refs"></span>
           <span class="cell graph-col"><span class="wip-node"></span></span>
           <span class="cell message">
@@ -3803,7 +3863,7 @@
         onresize={(px) => panes.resize('details', px)}
         onreset={() => panes.reset()}
       />
-      {#if showWip}
+      {#if stagingShowing}
         <aside class="wip-panel">
           <Staging
             {worktree}
@@ -3815,6 +3875,7 @@
             onOpenFile={openWorkingFile}
             onDiscard={(entries) => void discardChanges(entries)}
             onFileMenu={fileMenu}
+            onCommit={() => void recordCommit(false)}
           />
         </aside>
       {:else}
