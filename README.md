@@ -123,7 +123,8 @@ it; take it from your platform.
 
 ```
 # Ubuntu and Debian. Node from NodeSource, because the distribution's own has been older than 24.
-sudo apt install libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev
+sudo apt install libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev \
+  xdg-utils
 curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt install nodejs
 

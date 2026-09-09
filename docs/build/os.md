@@ -45,12 +45,18 @@ the `tauri` crate instead of two that can drift.
 Ubuntu and Debian, including 26.04:
 
 ```
-sudo apt install libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev
+sudo apt install libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev \
+  xdg-utils
 ```
 
-On a distribution without apt, the same four by their own names: the WebKitGTK 4.1
-development package, libxdo, the Ayatana appindicator, and librsvg. `build-essential`,
-`pkg-config`, `libssl-dev`, `curl`, `wget` and `file` are assumed present.
+On a distribution without apt, the same five by their own names: the WebKitGTK 4.1
+development package, libxdo, the Ayatana appindicator, librsvg, and the XDG desktop
+utilities. `build-essential`, `pkg-config`, `libssl-dev`, `curl`, `wget` and `file` are
+assumed present.
+
+The last of those is easy to miss because most desktops already have it: the AppImage
+bundler copies `/usr/bin/xdg-open` into the AppDir, and without it `just build` gets as far
+as the `.deb` and then stops.
 
 Then Node. Ubuntu's own `nodejs` package has been older than 24 on every release so far, so
 take it from NodeSource:

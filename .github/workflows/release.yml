@@ -106,8 +106,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev \
-            cmake
+            cmake xdg-utils
         # cmake builds zlib-ng, which gix pulls in through its max-performance feature.
+        # xdg-utils is for /usr/bin/xdg-open, which the AppImage bundler copies into the
+        # AppDir: the x86-64 runner image happens to carry it and the arm64 one does not.
 
       - uses: dtolnay/rust-toolchain@stable
 
