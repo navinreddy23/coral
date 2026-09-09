@@ -277,6 +277,41 @@ async fn a_cherry_pick_labels_the_incoming_side_with_the_commit() {
     );
 }
 
+/// A revert applies a commit backwards, so the side coming in is the state *before* it.
+///
+/// Named with the commit alone, the merge tool told the reader that taking side B gave them
+/// the commit named on it, when taking side B is precisely what throws that commit away. git
+/// writes "parent of <id> (<subject>)" in its own conflict markers for this reason, and those
+/// are the words used here.
+#[tokio::test]
+async fn a_revert_names_the_incoming_side_as_the_commit_it_undoes() {
+    let repo = TestRepo::new().write("f.txt", "base\n").commit("base");
+    let repo = repo
+        .write("f.txt", "coffee\n")
+        .commit("a page about coffee");
+    let undone = repo.git(["rev-parse", "HEAD"]);
+    let repo = repo.write("f.txt", "water\n").commit("a page about water");
+    let (runner, loc) = open(&repo).await;
+
+    let stopped = loc.revert(&runner, &[&undone]).await.unwrap();
+    assert!(!stopped.completed, "it conflicts with the commit after it");
+
+    let op = loc.operation(&runner).await.unwrap();
+    assert_eq!(op.state, OpState::Revert);
+    assert_eq!(op.labels.ours, "main");
+    assert!(
+        op.labels.theirs.starts_with("parent of "),
+        "the side is the state before the commit, not the commit: {}",
+        op.labels.theirs
+    );
+    assert!(
+        op.labels.theirs.ends_with("(a page about coffee)"),
+        "and it still says which commit is being undone: {}",
+        op.labels.theirs
+    );
+    assert!(!op.labels.swapped, "a revert does not reverse the sides");
+}
+
 /// During a rebase git replays your commits onto the target, so stage 2 is the *target* and
 /// stage 3 is your own work. Reporting the raw words would tell the user the opposite.
 #[tokio::test]

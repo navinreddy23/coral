@@ -85,9 +85,18 @@ impl RepoLocation {
                 // Named the way git names it in its own conflict messages, because the raw
                 // object id is what was here before: a forty-character label on a button, on
                 // a column header, and in every sentence the merge tool writes.
-                let theirs = match &stopped {
+                //
+                // A revert applies the commit backwards, so the side coming in is the state
+                // *before* it, and naming it with the commit alone told the reader that taking
+                // that side gave them the commit — the opposite of what it does. git writes
+                // "parent of <id> (<subject>)" in its own markers here, and so does this.
+                let named = match &stopped {
                     Some(oid) => self.name_of(runner, oid).await,
                     None => None,
+                };
+                let theirs = match (state, named) {
+                    (OpState::Revert, Some(name)) => Some(format!("parent of {name}")),
+                    (_, named) => named,
                 };
                 Ok(Operation {
                     state,
