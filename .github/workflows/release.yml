@@ -2,36 +2,100 @@ name: Release
 
 # One runner per platform. A Tauri bundle links the platform's own webview — WebKitGTK, WebKit,
 # WebView2 — and while Windows can be cross-compiled from Linux with cargo-xwin, a release is
-# built on Windows: only a Windows host produces an MSI, and only a Windows host can sign the
-# installer.
+# built on the platform it is for: only a Windows host can sign an installer, and linuxdeploy
+# cannot assemble an arm64 AppImage anywhere but on arm64.
 on:
   push:
     tags: ['v*']
+    # TEMPORARY, removed before this branch is merged: `workflow_dispatch` is only offered once
+    # the workflow exists on the default branch, so this is how the five legs get rehearsed
+    # before anyone tags anything.
+    branches: ['ci/github-builds']
   # So a release can be rehearsed without cutting a tag.
   workflow_dispatch:
+
+# The bundle legs only read. Publishing is one job, and it is the only one that can write.
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  # Never interrupt a half-uploaded release.
+  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Fails in seconds rather than after five bundles are built.
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: read
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^version *= *"\(.*\)".*/\1/p' Cargo.toml | head -1)
+          [ -n "$version" ] || { echo "::error::no version in Cargo.toml"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "building $version"
+
+          # The interface carries its own copy of the number and nothing enforces it, so it is
+          # enforced here.
+          ui=$(node -p "require('./ui/package.json').version")
+          [ "$ui" = "$version" ] \
+            || { echo "::error::ui/package.json says $ui, the crates say $version"; exit 1; }
+
+          # A tag that does not name the version the binaries carry is the one mistake that
+          # cannot be corrected after people have downloaded it.
+          if [ "${{ github.ref_type }}" = tag ]; then
+            [ "v$version" = "${{ github.ref_name }}" ] \
+              || { echo "::error::tag ${{ github.ref_name }} but the crates say $version"; exit 1; }
+            grep -qx "## $version" CHANGELOG.md \
+              || { echo "::error::CHANGELOG.md has no '## $version' section"; exit 1; }
+          fi
+
   bundle:
+    needs: meta
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            name: linux
-            # A universal build makes no sense here; the .deb and .AppImage are per-arch.
+          # Jammy, not latest: an AppImage demands the glibc of the machine that built it and
+          # glibc is forward compatible only, so 24.04 would set the floor at 2.39 and lock out
+          # Debian 12 and 22.04 itself.
+          - id: linux-x86_64
+            os: ubuntu-22.04
             args: ''
-          - os: macos-latest
-            name: macos
-            # Both architectures in one bundle: an Intel-only app runs under Rosetta on Apple
-            # silicon, and a native-only one will not start on an Intel Mac at all.
+          - id: linux-aarch64
+            os: ubuntu-22.04-arm
+            args: ''
+          # Both architectures in one bundle: an Intel-only app runs under Rosetta on Apple
+          # silicon, and a native-only one will not start on an Intel Mac at all. This is why
+          # there is no separate Intel leg.
+          - id: macos-universal
+            os: macos-latest
             args: '--target universal-apple-darwin'
-          - os: windows-latest
-            name: windows
+          - id: windows-x86_64
+            os: windows-latest
+            args: ''
+          # NSIS rather than MSI is already what the bundle config asks for, which is lucky:
+          # WiX v3, the one Tauri uses, has no arm64 support at all.
+          - id: windows-aarch64
+            os: windows-11-arm
             args: ''
     runs-on: ${{ matrix.os }}
+    # The default is six hours, which is what a hung leg would cost before anyone heard about it.
+    timeout-minutes: 120
+
+    env:
+      # build.rs prefers this to `git rev-parse`, so the About pane names the exact commit
+      # whatever shape the checkout has.
+      CORAL_COMMIT: ${{ github.sha }}
 
     steps:
       - uses: actions/checkout@v4
@@ -40,8 +104,10 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev \
-            libayatana-appindicator3-dev librsvg2-dev
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev \
+            cmake
+        # cmake builds zlib-ng, which gix pulls in through its max-performance feature.
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -49,7 +115,9 @@ jobs:
         if: runner.os == 'macOS'
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
-      - uses: Swatinem/rust-cache@v2
+      # Deliberately no Swatinem/rust-cache here. A repository gets 10 GB of Actions cache and
+      # the nightly kernel clone already takes ~6 GB of it, so five more release legs would only
+      # evict each other. Releases are rare and a cold build is the more reproducible one.
 
       - uses: actions/setup-node@v4
         with:
@@ -59,26 +127,121 @@ jobs:
 
       - run: cd ui && npm ci
 
-      # The CLI ships beside the application, so it has to exist before the bundle is
-      # assembled: the Linux .deb maps it onto /usr/bin/coral.
-      - run: cargo build --release -p coral-cli ${{ matrix.args }}
+      # The CLI ships beside the application, so it has to exist before the bundle is assembled:
+      # the Linux .deb maps it onto /usr/bin/coral. No --target on the native legs — the config
+      # names `target/release/coral` literally, and a triple moves it out from under that path.
+      - name: Build the command-line front end
+        if: runner.os != 'macOS'
+        run: cargo build --release -p coral-cli
+
+      # `universal-apple-darwin` is a Tauri CLI notion, not a rustc target, so the CLI is built
+      # per architecture and fused. Nearly free: the universal app compiles the same crates for
+      # both architectures anyway.
+      - name: Build the command-line front end, both architectures
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          cargo build --release -p coral-cli --target aarch64-apple-darwin
+          cargo build --release -p coral-cli --target x86_64-apple-darwin
+          mkdir -p target/release
+          lipo -create -output target/release/coral \
+            target/aarch64-apple-darwin/release/coral \
+            target/x86_64-apple-darwin/release/coral
+          lipo -info target/release/coral
 
       - uses: tauri-apps/tauri-action@v0
         with:
           projectPath: crates/coral-app
           args: ${{ matrix.args }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tauri names its output for the architecture in three different vocabularies — amd64, x64,
+      # x86_64 — and says nothing about which platform a .deb came from. One naming, so the
+      # release page reads.
+      - name: Collect the bundles under one naming
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          v='${{ needs.meta.outputs.version }}'
+          id='${{ matrix.id }}'
+          mkdir -p dist
+
+          for root in target/release/bundle target/universal-apple-darwin/release/bundle; do
+            [ -d "$root" ] || continue
+            for f in "$root"/deb/*.deb;           do cp "$f" "dist/Coral_${v}_${id}.deb"; done
+            for f in "$root"/appimage/*.AppImage; do cp "$f" "dist/Coral_${v}_${id}.AppImage"; done
+            for f in "$root"/dmg/*.dmg;           do cp "$f" "dist/Coral_${v}_${id}.dmg"; done
+            for f in "$root"/nsis/*-setup.exe;    do cp "$f" "dist/Coral_${v}_${id}-setup.exe"; done
+          done
+
+          # Only the .deb installs the CLI, so every other platform gets it as its own download
+          # or not at all.
+          if [ -f target/release/coral.exe ]; then
+            cp target/release/coral.exe "dist/coral_${v}_${id}.exe"
+          elif [ -f target/release/coral ]; then
+            tar -C target/release -czf "dist/coral_${v}_${id}.tar.gz" coral
+          fi
+
+          ls -l dist
+          [ -n "$(ls -A dist)" ] || { echo "::error::${id} produced no bundles"; exit 1; }
 
       - uses: actions/upload-artifact@v4
         with:
-          name: coral-${{ matrix.name }}
+          name: bundle-${{ matrix.id }}
           if-no-files-found: error
-          path: |
-            target/release/bundle/**/*.deb
-            target/release/bundle/**/*.AppImage
-            target/release/bundle/**/*.dmg
-            target/release/bundle/**/*.app
-            target/release/bundle/**/*.exe
-            target/release/bundle/**/*.msi
-            target/universal-apple-darwin/release/bundle/**/*.dmg
+          retention-days: 7
+          path: dist/*
+
+  # Only a tag reaches this. A manual run and the branch rehearsal build all five platforms and
+  # publish nothing.
+  release:
+    needs: [meta, bundle]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: bundle-*
+          merge-multiple: true
+
+      - name: Take the release notes from the changelog
+        shell: bash
+        run: |
+          set -euo pipefail
+          awk -v want="## ${{ needs.meta.outputs.version }}" '
+            $0 == want { inside = 1; next }
+            inside && /^## / { exit }
+            inside { print }
+          ' CHANGELOG.md > NOTES.md
+          # meta has already refused a tag whose section is missing, so an empty file here means
+          # the section exists and is empty, which is still not a release note.
+          [ -s NOTES.md ] || { echo "::error::the changelog section is empty"; exit 1; }
+          printf '\n---\n\nBuilt from `%s`. Neither signed nor notarised: macOS will refuse the\n' "$GITHUB_SHA" >> NOTES.md
+          printf 'bundle until it is cleared in System Settings, and Windows will show SmartScreen.\n' >> NOTES.md
+
+      - name: Checksums
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum ./*) > SHA256SUMS.txt
+          mv SHA256SUMS.txt dist/
+
+      # gh is on every runner, so publishing adds no third-party action to the release path.
+      - name: Publish a draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag='${{ github.ref_name }}'
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" dist/* --clobber
+          else
+            gh release create "$tag" dist/* \
+              --draft \
+              --title "Coral ${{ needs.meta.outputs.version }}" \
+              --notes-file NOTES.md
+          fi

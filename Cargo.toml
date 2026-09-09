@@ -12,7 +12,7 @@ version      = "1.1.0"
 edition      = "2024"
 rust-version = "1.88"
 license      = "MIT"
-repository   = "https://github.com/navin/coral"
+repository   = "https://github.com/navinreddy23/coral"
 
 [workspace.dependencies]
 coral-core    = { path = "crates/coral-core" }
