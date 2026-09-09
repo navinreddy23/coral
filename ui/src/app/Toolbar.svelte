@@ -213,7 +213,16 @@
     The repository, the submodule being looked at inside it, then the branch. The submodule
     carries its own way out, since it is a step into the tab rather than a tab of its own.
   -->
-  <div class="where">
+  <!--
+    Wide enough for what it holds, and no wider.
+
+    A fixed width is what stops the actions moving whenever the branch name changes. A
+    submodule adds a third step and a way out of it, and at the width set for two all three
+    labels came out cut — "REPOSIT…", "SUBMOD…", "BRAN…". This follows the one thing that
+    genuinely changes what the row has to hold, and it changes only when the reader steps into
+    a submodule or back out of one.
+  -->
+  <div class="where" style:--crumb={submodule === null ? '240px' : '370px'}>
     <span class="step" title={path}>
       <span class="label">repository</span>
       <span class="value">{repo}</span>
@@ -306,7 +315,7 @@
    */
   .where {
     display: flex; align-items: center; gap: var(--space-2);
-    flex: 0 0 240px; min-width: 0; overflow: hidden;
+    flex: 0 0 var(--crumb); min-width: 0; overflow: hidden;
   }
   .step, .col { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
   .step.sub { flex-direction: row; align-items: center; gap: var(--space-1); }

@@ -220,16 +220,39 @@ describe('where the buttons are', () => {
    * reaching for one pressed another. happy-dom does not lay out, so this reads the rule.
    */
   it('does not let the branch name move them', () => {
-    bar();
+    const { container } = bar();
     const rule = [...document.styleSheets]
       .flatMap((sheet) => [...(sheet.cssRules ?? [])])
       .map((r) => r.cssText)
       .find((text) => /\.where[^{]*\{/u.test(text) && /flex-basis/u.test(text));
     expect(rule, 'the breadcrumb has a width of its own').toBeDefined();
-    // A basis in pixels, not `auto`: `auto` is the content's width, which is the fault.
-    expect(rule).toMatch(/flex-basis:\s*\d+px/u);
     expect(rule).toMatch(/flex-grow:\s*0/u);
     expect(rule, 'and clips rather than growing').toMatch(/overflow:\s*hidden/u);
+    // A basis in pixels, not `auto`: `auto` is the content's width, which is the fault. The
+    // pixels come from the element, since a submodule needs a third step's worth of them.
+    const where = container.querySelector('.where') as HTMLElement;
+    expect(where.style.getPropertyValue('--crumb')).toMatch(/^\d+px$/u);
+  });
+
+  /**
+   * A submodule adds a third step and a way out of it, and the crumb's fixed width was set for
+   * two. All three labels came out cut — "REPOSIT…", "SUBMOD…", "BRAN…" — which reads as
+   * broken rather than as an elision.
+   *
+   * The width still does not follow the branch name; it follows whether a submodule is open,
+   * which is a step the reader took deliberately and expects the row to answer.
+   */
+  it('makes room for the third step, and only for that', () => {
+    const width = (over: Record<string, unknown>) => {
+      cleanup();
+      const el = bar(over).container.querySelector('.where') as HTMLElement;
+      return el.style.getPropertyValue('--crumb');
+    };
+    const plain = width({ submodule: null });
+    const inside = width({ submodule: 'books/journal' });
+    expect(plain).toMatch(/^\d+px$/u);
+    expect(Number.parseInt(inside, 10)).toBeGreaterThan(Number.parseInt(plain, 10));
+    expect(width({ submodule: null, branch: 'feature/a-very-long-branch-name' })).toBe(plain);
   });
 
   it('still names the whole of what it elides', () => {
