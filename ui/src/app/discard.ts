@@ -31,6 +31,9 @@ export function discardWords(
   if (tracked > 0) {
     choices.push({
       id: 'tracked',
+      // Both answers destroy work; the dialog marks them the way the menus mark the lines
+      // that open it.
+      danger: true,
       label:
         untracked > 0
           ? `Discard ${count(tracked, 'change')}, keep the new files`
@@ -40,6 +43,7 @@ export function discardWords(
   if (untracked > 0) {
     choices.push({
       id: 'all',
+      danger: true,
       label:
         tracked > 0
           ? `Discard everything, deleting ${count(untracked, 'new file')}`

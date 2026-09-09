@@ -149,3 +149,31 @@ describe('the button that destroys something', () => {
     expect(answers).toEqual([]);
   });
 });
+
+describe('a question with more than one answer', () => {
+  /**
+   * Every answer that destroys something is marked, not only the single-answer case. Discarding
+   * offers two — keep the new files, or delete them too — and going to a branch that is already
+   * here offers a checkout beside a hard reset. In each pair the destructive ones were the same
+   * grey as the safe one.
+   */
+  it('marks each of them on its own', () => {
+    const { container } = ask({
+      title: 'topic is already here',
+      asksText: false,
+      choices: [
+        { id: 'checkout', label: 'Checkout topic', primary: true },
+        { id: 'reset', label: 'Reset topic to origin/topic', danger: true },
+      ],
+    });
+    const marked = [...container.querySelectorAll('.choices button')].map((b) => [
+      b.textContent?.trim(),
+      b.classList.contains('danger'),
+    ]);
+    expect(marked).toEqual([
+      ['Cancel', false],
+      ['Checkout topic', false],
+      ['Reset topic to origin/topic', true],
+    ]);
+  });
+});

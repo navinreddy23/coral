@@ -65,3 +65,22 @@ describe('what discarding says it will cost', () => {
     }
   });
 });
+
+describe('which of the answers destroy something', () => {
+  /**
+   * Both of them do. The window marks every menu line that destroys something, and the dialog
+   * that asks whether to really do it marks its button; this dialog has two buttons and had
+   * neither.
+   */
+  it('marks them, and there is nothing here that does not', () => {
+    for (const [tracked, untracked] of [
+      [2, 0],
+      [0, 2],
+      [2, 2],
+    ] as const) {
+      const { choices } = discardWords(tracked, untracked, 'main');
+      expect(choices.length).toBeGreaterThan(0);
+      expect(choices.every((c) => c.danger === true), `${tracked}/${untracked}`).toBe(true);
+    }
+  });
+});

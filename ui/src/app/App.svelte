@@ -1523,7 +1523,9 @@
       initial: '',
       choices: [
         { id: 'checkout', label: `Checkout ${name}`, primary: true },
-        { id: 'reset', label: `Reset ${name} to ${ref.short}` },
+        // A hard reset: local commits lose their name and the working copy goes with them.
+        // The detail beside it says so; the button says so too.
+        { id: 'reset', label: `Reset ${name} to ${ref.short}`, danger: true },
       ],
     });
     if (choice === null) return;
