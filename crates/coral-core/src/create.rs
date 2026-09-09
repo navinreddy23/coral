@@ -109,20 +109,8 @@ impl RemoveOnDrop {
 
 impl Drop for RemoveOnDrop {
     fn drop(&mut self) {
-        if !self.armed {
-            return;
-        }
-        // The child is signalled rather than waited for, and Windows refuses to remove a
-        // directory while anything in it is still open, which a killed process's handles are
-        // until it actually exits. Unix unlinks an open file happily and succeeds on the first
-        // pass, so this waits up to a second and only ever does so on Windows. Blocking in a
-        // drop is worth it here: the alternative is a half-cloned repository the user finds
-        // later and cannot account for.
-        for _ in 0..20 {
-            if !self.at.exists() || std::fs::remove_dir_all(&self.at).is_ok() {
-                return;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(50));
+        if self.armed && self.at.exists() {
+            let _ = std::fs::remove_dir_all(&self.at);
         }
     }
 }

@@ -341,6 +341,9 @@ fn discarding_one_hunk_leaves_the_index_alone() {
 /// The header was written raw, so `diff --git a/new\nline.txt …` became two lines and
 /// `git apply` refused with "diff header lacks filename information", staging nothing. A tab
 /// was worse: git reads `--- ` up to the first tab, so the name silently lost its second half.
+// Unix only: every name below is one Windows refuses outright, which is why git has to quote
+// them in the first place.
+#[cfg(unix)]
 #[tokio::test]
 async fn stages_a_hunk_of_a_file_whose_name_git_has_to_quote() {
     for name in ["new\nline.txt", "tab\tsep.txt", "quote\"and\\slash.txt"] {

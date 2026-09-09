@@ -27,7 +27,7 @@ fn coral_binary() -> std::path::PathBuf {
     if at.ends_with("deps") {
         at.pop();
     }
-    let binary = at.join("coral");
+    let binary = at.join(if cfg!(windows) { "coral.exe" } else { "coral" });
     assert!(
         binary.exists(),
         "the CLI must be built for these: {}",

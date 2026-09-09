@@ -213,8 +213,12 @@ async fn classifies_worktree_edits_without_naming_paths() {
 
     // Canonical, because classify strips a prefix lexically and macOS hands out temporary
     // directories under /var, which is a symlink to /private/var. The location reports the
-    // resolved path, so an unresolved one here belongs to no repository at all.
+    // resolved path, so an unresolved one here belongs to no repository at all. Not on
+    // Windows, where canonicalize answers with a \\?\ extended path git never produces.
+    #[cfg(unix)]
     let root = std::fs::canonicalize(repo.path()).unwrap();
+    #[cfg(not(unix))]
+    let root = repo.path().to_path_buf();
     let c = classify(&loc, &root.join("deep/nested/file.c")).expect("in the worktree");
     assert!(c.worktree);
     assert!(!c.index && !c.refs && !c.ops);

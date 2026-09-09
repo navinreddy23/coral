@@ -20,9 +20,14 @@ async fn located(repo: &TestRepo) -> (GitRunner, RepoLocation) {
 
 // git reports a worktree's path resolved, and macOS puts temporary directories under /var,
 // which is a symlink to /private/var. The parent is what gets resolved, because the path
-// itself does not exist until git makes it.
+// itself does not exist until git makes it. Windows is left alone: canonicalize answers there
+// with a \\?\ extended path that git never produces, which breaks the same comparison.
 fn under(dir: &tempfile::TempDir, name: &str) -> std::path::PathBuf {
-    std::fs::canonicalize(dir.path()).unwrap().join(name)
+    #[cfg(unix)]
+    let base = std::fs::canonicalize(dir.path()).unwrap();
+    #[cfg(not(unix))]
+    let base = dir.path().to_path_buf();
+    base.join(name)
 }
 
 fn two_commits() -> TestRepo {
