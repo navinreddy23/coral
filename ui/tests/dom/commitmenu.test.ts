@@ -526,6 +526,60 @@ describe('the branch and tag menu', () => {
     });
   });
 
+  /**
+   * A branch that is not checked out had no way to reach a remote at all. Somebody with three
+   * topic branches ahead of origin had to check each one out to send it, and the toolbar's
+   * Push only ever means the branch you are standing on.
+   */
+  it('offers to push a branch that is not the one checked out', async () => {
+    const { container } = await shell(
+      {
+        repo_refs: [
+          on('main', { kind: 'local_branch' }),
+          on('topic', { kind: 'local_branch' }),
+        ],
+        repo_head: { name: 'main', detached: false },
+        remote_list: [
+          { name: 'origin', fetchUrl: 'git@example.com:x.git', pushUrl: 'git@example.com:x.git' },
+        ],
+      },
+      true,
+    );
+    await waitFor(() => {
+      if (!invoke.mock.calls.some(([cmd]) => cmd === 'remote_list')) throw new Error('not yet');
+    });
+    await new Promise((r) => setTimeout(r, 10));
+
+    const labels = await refMenu(container, 'topic');
+    expect(labels).toContain('Push topic to origin');
+
+    await fireEvent.click(itemNamed(container, 'Push topic to origin'));
+    await waitFor(() => {
+      expect(lastAction()).toEqual({
+        kind: 'push',
+        remote: 'origin',
+        setUpstream: true,
+        refspec: 'refs/heads/topic',
+        tags: false,
+        forceWithLease: false,
+        delete: false,
+      });
+    });
+  });
+
+  it('offers no push for a branch when there is no remote to push it to', async () => {
+    const { container } = await shell(
+      {
+        repo_refs: [on('main', { kind: 'local_branch' })],
+        repo_head: { name: 'main', detached: false },
+        remote_list: [],
+      },
+      true,
+    );
+    const labels = await refMenu(container, 'main');
+    expect(labels.some((l) => l.startsWith('Push main'))).toBe(false);
+  });
+
   it('offers no push for a tag when there is no remote to push it to', async () => {
     const { container } = await shell(
       { repo_refs: [on('v1.2.0', { kind: 'tag', annotated: false })], remote_list: [] },

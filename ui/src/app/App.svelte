@@ -1253,6 +1253,11 @@
     items.push({ kind: 'item', label: 'Copy commit sha', run: () => void copySha(oid) });
 
     if (ref.kind.kind === 'local_branch') {
+      const push = pushBranchItems(ref.short);
+      if (push.length > 0) items.push({ kind: 'separator' }, ...push);
+    }
+
+    if (ref.kind.kind === 'local_branch') {
       items.push({ kind: 'separator' });
       items.push({
         kind: 'item',
@@ -1408,28 +1413,65 @@
     return tagRemoteItems(name, false);
   }
 
+  /**
+   * Sending a branch to a remote, from the branch's own menu.
+   *
+   * The toolbar's Push only ever means the branch you are standing on, so a branch that was
+   * not checked out had no way to reach a remote at all: three topic branches ahead of origin
+   * meant checking each one out to send it. The upstream is set, as the toolbar's does, since
+   * a branch being pushed for the first time is the case this is for.
+   */
+  function pushBranchItems(name: string): MenuItem[] {
+    return remoteChoice(`Push ${name}`, (remote) =>
+      void act({
+        kind: 'push',
+        remote,
+        setUpstream: true,
+        refspec: `refs/heads/${name}`,
+        tags: false,
+        forceWithLease: false,
+        delete: false,
+      }),
+    );
+  }
+
   /** The same list again for taking the tag off a remote, which is the other half of pushing. */
   function deleteTagRemoteItems(name: string): MenuItem[] {
     return tagRemoteItems(name, true);
   }
 
   function tagRemoteItems(name: string, remove: boolean): MenuItem[] {
+    const verb = remove ? 'Delete' : 'Push';
+    return remoteChoice(
+      `${verb} ${name}`,
+      (remote) => (remove ? void deleteRemoteTag(name, remote) : pushTag(name, remote)),
+      { danger: remove, preposition: remove ? 'from' : 'to', ellipsis: remove },
+    );
+  }
+
+  /**
+   * An action against one remote, as one line or as a choice of them.
+   *
+   * One remote is one item; more than one is a choice, whether or not one of them is called
+   * origin. Falling back to the default when there were several made every other remote
+   * unreachable — a repository with a mirror could push to origin and had no way at all to
+   * send anything anywhere else.
+   */
+  function remoteChoice(
+    what: string,
+    at: (remote: string) => void,
+    how: { danger?: boolean; preposition?: string; ellipsis?: boolean } = {},
+  ): MenuItem[] {
     if (remotes.list.length === 0) return [];
     const busy = actions.busy || worktree.busy;
-    const verb = remove ? 'Delete' : 'Push';
-    const at = (remote: string) =>
-      remove ? void deleteRemoteTag(name, remote) : pushTag(name, remote);
-    // One remote is one item; more than one is a choice, whether or not one of them is called
-    // origin. Falling back to the default when there were several made every other remote
-    // unreachable for tags — a repository with a mirror could push a tag to origin and had no
-    // way at all to send it anywhere else.
+    const { danger = false, preposition = 'to', ellipsis = false } = how;
     if (remotes.list.length === 1) {
       const remote = remotes.list[0]?.name ?? 'origin';
       return [
         {
           kind: 'item',
-          label: `${verb} ${name} ${remove ? 'from' : 'to'} ${remote}${remove ? '…' : ''}`,
-          danger: remove,
+          label: `${what} ${preposition} ${remote}${ellipsis ? '…' : ''}`,
+          danger,
           disabled: busy,
           run: () => at(remote),
         },
@@ -1438,13 +1480,13 @@
     return [
       {
         kind: 'submenu',
-        label: `${verb} ${name}${remove ? ' from a remote' : ''}`,
+        label: `${what} ${preposition} a remote`,
         items: [...remotes.list]
           .sort((a, b) => Number(b.name === defaultRemote) - Number(a.name === defaultRemote))
           .map((r) => ({
             kind: 'item' as const,
             label: r.name,
-            danger: remove,
+            danger,
             disabled: busy,
             run: () => at(r.name),
           })),
