@@ -254,11 +254,20 @@ async fn notices_a_commit_as_a_ref_and_index_change() {
     let repo = repo.write("a.txt", "2\n").commit("second");
     drop(repo);
 
-    let change = next_change(&mut w).await.expect("a commit should notify");
-    assert!(
-        change.refs || change.index,
-        "a commit moves HEAD and the index"
-    );
+    // The watcher is allowed to deliver more than one notification, and on Windows the write to
+    // a.txt arrives on its own often enough to matter before the ref and index changes the
+    // commit makes. Wait for the one this is about rather than assume it comes first.
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        let change = next_change(&mut w).await.expect("a commit should notify");
+        if change.refs || change.index {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "a commit moves HEAD and the index"
+        );
+    }
 }
 
 /// A build touching thousands of files must not produce thousands of notifications.
