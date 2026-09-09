@@ -80,7 +80,10 @@ fn a_new_worktree_checks_a_commit_out_without_moving_the_current_one() {
 
         let list = loc.worktrees(&runner).await.unwrap();
         assert_eq!(list.len(), 2, "{list:?}");
-        assert!(list.iter().any(|w| std::path::Path::new(&w.path) == at), "{list:?}");
+        assert!(
+            list.iter().any(|w| std::path::Path::new(&w.path) == at),
+            "{list:?}"
+        );
     });
 
     // The new tree holds the older commit, and the original is where it was.
