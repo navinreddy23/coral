@@ -1312,7 +1312,7 @@
       asksText: false,
       placeholder: '',
       initial: '',
-      choices: [{ id: 'delete', label: `Delete ${branch}` }],
+      choices: [{ id: 'delete', label: `Delete ${branch}`, danger: true }],
     });
     if (choice !== 'delete') return;
     await act({
@@ -1371,7 +1371,7 @@
       asksText: false,
       placeholder: '',
       initial: '',
-      choices: [{ id: 'delete', label: `Delete ${name} from ${remote}` }],
+      choices: [{ id: 'delete', label: `Delete ${name} from ${remote}`, danger: true }],
     });
     if (choice !== 'delete') return;
     await act({
@@ -1493,7 +1493,7 @@
       asksText: false,
       placeholder: '',
       initial: '',
-      choices: [{ id: 'delete', label: `Delete ${name}` }],
+      choices: [{ id: 'delete', label: `Delete ${name}`, danger: true }],
     });
     if (choice !== 'delete') return;
     await act({ kind: 'branchDelete', name, force: true });
@@ -1506,7 +1506,7 @@
       asksText: false,
       placeholder: '',
       initial: '',
-      choices: [{ id: 'delete', label: `Delete ${name}` }],
+      choices: [{ id: 'delete', label: `Delete ${name}`, danger: true }],
     });
     if (choice !== 'delete') return;
     await act({ kind: 'tagDelete', name });
@@ -1763,7 +1763,7 @@
       asksText: false,
       placeholder: '',
       initial: '',
-      choices: [{ id: 'drop', label: 'Drop the commit', primary: true }],
+      choices: [{ id: 'drop', label: 'Drop the commit', primary: true, danger: true }],
     });
     if (choice === null) return;
     await act({ kind: 'rewrite', rev: oid, how: 'drop', message: null });
@@ -1787,7 +1787,7 @@
       asksText: false,
       placeholder: '',
       initial: '',
-      choices: [{ id: 'reset', label: 'Discard and reset', primary: true }],
+      choices: [{ id: 'reset', label: 'Discard and reset', primary: true, danger: true }],
     });
     if (choice === null) return;
     await act({ kind: 'reset', rev: oid, mode: 'hard' });
@@ -1924,7 +1924,7 @@
       placeholder: '',
       initial: '',
       // Nothing is primary, so Enter does not drop it.
-      choices: [{ id: 'drop', label: `Drop ${stash.name}` }],
+      choices: [{ id: 'drop', label: `Drop ${stash.name}`, danger: true }],
     });
     if (choice !== 'drop') return;
     await act({ kind: 'stashDrop', index: stash.index });
@@ -2041,7 +2041,7 @@
       asksText: false,
       placeholder: '',
       initial: '',
-      choices: [{ id: 'force', label: 'Force push' }],
+      choices: [{ id: 'force', label: 'Force push', danger: true }],
     });
     if (choice !== 'force') return;
     await act({
@@ -2171,7 +2171,7 @@
       asksText: false,
       placeholder: '',
       initial: '',
-      choices: [{ id: 'remove', label: 'Remove it', primary: true }],
+      choices: [{ id: 'remove', label: 'Remove it', primary: true, danger: true }],
     });
     if (choice === null) return;
     if (await remotes.edit({ kind: 'remove', name: remote })) {
@@ -2259,7 +2259,7 @@
         asksText: false,
         placeholder: '',
         initial: '',
-        choices: [{ id: 'discard', label: `Discard ${what}` }],
+        choices: [{ id: 'discard', label: `Discard ${what}`, danger: true }],
       });
       if (choice !== 'discard') return;
     }
@@ -2286,7 +2286,7 @@
       asksText: false,
       placeholder: '',
       initial: '',
-      choices: [{ id: 'delete', label: `Delete ${entry.path}` }],
+      choices: [{ id: 'delete', label: `Delete ${entry.path}`, danger: true }],
     });
     if (choice !== 'delete') return;
     await worktree.delete(untracked ? [] : [entry.path], untracked ? [entry.path] : []);
@@ -3195,7 +3195,7 @@
       asksText: false,
       placeholder: '',
       initial: '',
-      choices: [{ id: 'go', label: 'Delete it', primary: true }],
+      choices: [{ id: 'go', label: 'Delete it', primary: true, danger: true }],
     });
     if (choice === null) return;
     // Forced: a submodule with local edits refuses otherwise, and the user has just been told

@@ -109,3 +109,43 @@ describe('whether a question offers a field', () => {
     expect(primary.disabled).toBe(false);
   });
 });
+
+describe('the button that destroys something', () => {
+  /**
+   * This dialog already refuses to give a destructive question a key that answers it: Enter is
+   * pressed to dismiss things, and nothing that cannot be undone should be reachable that way.
+   * The button itself said nothing, though — "Delete v2" and "Cancel" were the same grey pair,
+   * in a window whose menus mark every destructive line in red.
+   */
+  it('is marked, where an ordinary one is not', () => {
+    const { container } = ask({
+      title: 'Delete the tag v2?',
+      asksText: false,
+      choices: [{ id: 'delete', label: 'Delete v2', danger: true }],
+    });
+    const button = [...container.querySelectorAll('.choices button')].find(
+      (b) => b.textContent?.trim() === 'Delete v2',
+    );
+    expect(button?.classList.contains('danger')).toBe(true);
+    expect(container.querySelector('button.cancel')?.classList.contains('danger')).toBe(false);
+  });
+
+  it('takes its colour from the token the rest of the window uses for this', () => {
+    ask({ asksText: false, choices: [{ id: 'delete', label: 'Delete', danger: true }] });
+    const rule = [...document.styleSheets]
+      .flatMap((sheet) => [...(sheet.cssRules ?? [])])
+      .map((r) => r.cssText)
+      .find((text) => /button\.danger/u.test(text));
+    expect(rule).toMatch(/var\(--danger/u);
+  });
+
+  it('is still not the one Enter answers', () => {
+    // Marking it must not quietly make it primary.
+    const { answers } = ask({
+      asksText: false,
+      choices: [{ id: 'delete', label: 'Delete', danger: true }],
+    });
+    void fireEvent.keyDown(window, { key: 'Enter' });
+    expect(answers).toEqual([]);
+  });
+});

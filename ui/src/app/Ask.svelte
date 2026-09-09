@@ -10,6 +10,13 @@
     label: string;
     /** The one the Enter key takes. */
     primary?: boolean;
+    /**
+     * Whether answering this destroys something.
+     *
+     * Marked the way the menus mark the lines that open these questions, so the last thing
+     * read before a tag goes, a branch goes or a change is discarded looks like what it is.
+     */
+    danger?: boolean;
   }
 
   const {
@@ -96,6 +103,7 @@
       {#each choices as choice (choice.id)}
         <button
           class:primary={choice.id === primary?.id}
+          class:danger={choice.danger === true}
           disabled={asksText && text.trim() === ''}
           onclick={() => answer(choice.id)}
         >
@@ -145,5 +153,11 @@
     font-weight: 600;
   }
   button.primary:hover:not(:disabled) { background: var(--accent-hover); }
+  /* Outlined rather than filled: a solid red button beside a grey Cancel reads as the one to
+     press, and this is the one to think about. */
+  button.danger:not(:disabled) {
+    color: var(--danger); border-color: var(--danger); background: var(--bg-0);
+  }
+  button.danger:hover:not(:disabled) { background: var(--danger-soft); color: var(--danger); }
   .cancel { margin-right: auto; border-color: transparent; background: var(--bg-0); }
 </style>
