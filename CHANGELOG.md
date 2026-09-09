@@ -1,5 +1,59 @@
 # Changelog
 
+## 1.1.1
+
+Forty-six fixes and the pipeline that builds them. Coral now ships for five platforms rather
+than for whichever one the release was cut on, and almost every fault below came from driving
+the window or from watching the build run somewhere nobody develops.
+
+### It builds for five platforms now
+
+- **Linux on x86-64 and ARM64, macOS as one universal bundle, Windows on x86-64 and ARM64.**
+  Every one of them on hardware GitHub gives away, so the set costs nothing to keep.
+- **The Linux bundles ask less of the machine they land on.** They are built on the oldest
+  distribution still supported rather than the newest available, which takes the glibc floor
+  from 2.39 to 2.34: the difference between refusing to start on Debian 12, Ubuntu 22.04 and
+  RHEL 9, and running on all three.
+- **A release could not have been published at all.** The workflow built bundles and then
+  uploaded them somewhere that expires and gives nobody a link, because it never named a tag.
+  Publishing is one job now, holding the only permission that can write, and a tag that does
+  not name the version the binaries carry is refused before anything is built.
+- **The command line ships everywhere.** It reached `/usr/bin/coral` through the Debian
+  package alone, so every other platform had no way to get it.
+
+### What building elsewhere found
+
+- **The test suite did not compile on Windows**, in three places, so that half of the promise
+  had never been checked at all.
+- **Cancelling a clone leaves its half-cloned repository behind on Windows.** Not fixed:
+  killing a process group is implemented for unix only, so git's own children outlive the
+  cancel and hold the directory open. It is written down where the next person will find it.
+- **The licence check had never once run.** Its tool installs no binary unless a feature is
+  named, says so in a warning, and exits successfully, so the failure only appeared much later
+  as a missing command. The same line in the README told everyone else to install it that way.
+
+### The window
+
+- **Clicking a tag on the kernel did nothing.** The ref was found, the scroll went to it, and
+  the selection was thrown away by the frame that arrived next. Selecting by object id rather
+  than by row number survives the paging.
+- **A reword lost its message when that commit also conflicted.** git finishes the rebase in
+  one continue after a conflicted edit, so a message amended afterwards was amended onto
+  nothing. It is written before the continue now.
+- **A tab that failed to open left the previous repository on screen**, under the new tab's
+  name, which is the worst way to be wrong about which repository you are looking at.
+- **Clicking the title strip maximised the window.** The pointer went to the window manager on
+  the press, so a click was a drag of no distance, and a drag at the top of the screen snaps.
+- **A merge left its message in the commit box after it was committed**, so the next commit
+  started with the last one's words.
+- **Twelve things the window said that were not true**, from a status line describing a
+  repository the tab was not showing, to a crumb that cut all three words of a submodule's
+  name, to failures that were all called "Something went wrong".
+- **Six controls that could not work were offered anyway**, including pushing a branch that
+  was not checked out and two buttons with nothing behind them.
+- **A repository can go while its tab is open**, which used to be a window that never
+  recovered.
+
 ## 1.1.0
 
 The window is redrawn from the tokens up. Colour, type, spacing, shape and motion come from
