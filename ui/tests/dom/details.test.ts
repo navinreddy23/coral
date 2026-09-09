@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { render } from '@testing-library/svelte';
+import { fireEvent, waitFor } from '@testing-library/dom';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
@@ -91,5 +92,51 @@ describe('the commit panel', () => {
       props: { ...props, detail: detail(files), openPath: 'a.c' },
     });
     expect(container.querySelector('ul.files button')?.className).toContain('open');
+  });
+});
+
+describe('counting the files a comparison turns up', () => {
+  /**
+   * The verb was appended whatever the count, so a comparison that turned up one file read
+   * "1 file differ".
+   */
+  function heading(count: number): string {
+    const files: ChangedFile[] = Array.from({ length: count }, (_, i) => ({
+      path: `f${i}.txt`,
+      oldPath: null,
+      change: 'modified',
+    }));
+    const { container } = render(Details, {
+      props: { ...props, detail: null, compare: { from: 'a'.repeat(40), to: 'b'.repeat(40), files } },
+    });
+    return container.querySelector('h3')?.textContent?.trim() ?? '';
+  }
+
+  it('agrees with itself about one file', () => {
+    expect(heading(1)).toBe('1 file differs');
+  });
+
+  it('and about several', () => {
+    expect(heading(3)).toBe('3 files differ');
+  });
+
+  it('and about none', () => {
+    expect(heading(0)).toBe('0 files differ');
+  });
+});
+
+describe('counting everything at a commit', () => {
+  /** The same slip the other way round: "1 files at this commit". */
+  it('counts one file as one file', async () => {
+    const { invoke } = await import('../../src/ipc/invoke');
+    vi.mocked(invoke).mockResolvedValue(['log.txt']);
+    const { container } = render(Details, { props: { ...props, detail: detail() } });
+
+    const box = container.querySelector('label.all input') as HTMLInputElement;
+    await fireEvent.click(box);
+    await waitFor(() => {
+      if (!container.querySelector('.count')) throw new Error('no count yet');
+    });
+    expect(container.querySelector('.count')?.textContent?.trim()).toBe('1 file at this commit');
   });
 });

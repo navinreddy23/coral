@@ -189,6 +189,9 @@
    */
   const marks = $derived(marksOf(split.rows));
 
+  /** git's own mark for an untracked directory it has not looked inside: a trailing slash. */
+  const isDirectory = $derived(diff.path?.endsWith('/') ?? false);
+
   /** The part of the file on screen, drawn over the marks so the strip says where you are. */
   const here = $derived.by(() => {
     const height = split.rows.length * ROW;
@@ -435,6 +438,17 @@
       <p class="muted">Binary file — no textual diff.</p>
     {:else if diff.file.tooLarge}
       <p class="muted">The file is past the size guard, so its contents were not read.</p>
+    {:else if isDirectory}
+      <!--
+        git collapses an untracked directory to one entry — `? notes/` — rather than listing
+        what is inside it, which is what keeps `status` fast on a repository with a build tree
+        in it. There is no diff to read for that entry, and answering "No line changes." said
+        the opposite of what is true of a directory full of new files.
+      -->
+      <p class="muted">
+        A directory of new files. git lists one that is not tracked as a single entry, so
+        there is nothing here to read line by line; staging it adds everything inside.
+      </p>
     {:else if diff.file.hunks.length === 0}
       <p class="muted">
         {diff.file.oldPath ? `Renamed from ${diff.file.oldPath}.` : 'No line changes.'}

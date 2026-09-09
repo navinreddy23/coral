@@ -244,7 +244,11 @@
 
   {#if compare || detail}
     <h3>
-      {files.length} file{files.length === 1 ? '' : 's'}{compare ? ' differ' : ''}
+      {files.length} file{files.length === 1 ? '' : 's'}{compare
+        ? files.length === 1
+          ? ' differs'
+          : ' differ'
+        : ''}
     </h3>
     <div class="filebar">
       <!-- Path and Tree are how the changed files are arranged. Everything at this commit is
@@ -265,7 +269,9 @@
       {:else if allError}
         <p class="error">{allError}</p>
       {:else}
-        <p class="muted count">{everything.length} files at this commit</p>
+        <p class="muted count">
+          {everything.length} file{everything.length === 1 ? '' : 's'} at this commit
+        </p>
         <FileTree nodes={tree} {openPath} {onOpenFile} startClosed />
       {/if}
     {:else if grouping === 'tree'}

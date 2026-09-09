@@ -127,6 +127,29 @@ describe('the diff viewer', () => {
     expect(container.querySelector('table')).toBeNull();
   });
 
+  /**
+   * git collapses an untracked directory to one entry — `? notes/` — rather than listing what
+   * is inside it, which is what keeps `status` fast on a repository with a build tree in it.
+   * Opening that entry answered "No line changes.", which is the opposite of what is true of a
+   * directory full of new files.
+   */
+  it('says what an untracked directory is, rather than that nothing changed', () => {
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'notes/';
+    diff.file = { ...fileDiff(), path: 'notes/', change: 'added', hunks: [], added: 0, removed: 0 };
+    const { container } = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+    expect(container.textContent).toContain('A directory of new files');
+    expect(container.textContent).not.toContain('No line changes');
+  });
+
+  it('still says nothing changed for a file that really did not', () => {
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'notes/deep.md';
+    diff.file = { ...fileDiff(), path: 'notes/deep.md', hunks: [], added: 0, removed: 0 };
+    const { container } = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+    expect(container.textContent).toContain('No line changes');
+  });
+
   it('reports the error instead of a blank pane', () => {
     const diff = new DiffState(new ViewsState());
     diff.path = 'gone.c';
