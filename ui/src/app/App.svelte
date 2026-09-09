@@ -887,7 +887,15 @@
       }
       // `actions` keeps the message for the status line; the toast is what carries it to
       // someone who is not looking at the bottom of the window.
-      if (actions.report) toasts.push('error', 'Something went wrong', actions.report.text);
+      //
+      // Titled with the name the engine gave the operation, so it reads as the counterpart of
+      // the success it would have been — "tag v1.0 failed" against "tag v1.0 complete". Only a
+      // failure that belongs to no named operation falls back to saying nothing in particular.
+      if (actions.report) {
+        const what = actions.report.what;
+        const title = what === null ? 'Something went wrong' : `${what} failed`;
+        toasts.push('error', title, actions.report.text);
+      }
       return false;
     }
 

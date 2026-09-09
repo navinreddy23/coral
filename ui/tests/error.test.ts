@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { codeOf, messageOf } from '../src/ipc/error';
+import { codeOf, messageOf, whatFailed } from '../src/ipc/error';
 
 describe('reading what went wrong', () => {
   it('reads the engine’s own message off a rejected command', () => {
@@ -46,5 +46,77 @@ describe('reading what went wrong', () => {
     expect(codeOf({ code: 'not_a_repository', message: 'x' })).toBe('not_a_repository');
     expect(codeOf(new Error('boom'))).toBeNull();
     expect(codeOf('a string')).toBeNull();
+  });
+});
+
+describe('taking git\'s plumbing out of what the reader is shown', () => {
+  /**
+   * The engine's message is right for the activity log, the CLI envelope and a bug report:
+   * `git tag exited with 128: fatal: 'a release' is not a valid tag name.` names the command
+   * and the exit code. A toast is none of those, and the reader has to step over eight words
+   * of machinery to reach the sentence that tells them what to type instead.
+   */
+  it('drops the command and the exit code, and the word git prints before its reason', () => {
+    expect(
+      messageOf({
+        code: 'git_error',
+        message: "git tag exited with 128: fatal: 'a release' is not a valid tag name.",
+      }),
+    ).toBe("'a release' is not a valid tag name.");
+  });
+
+  it('drops error: as well, which is the other word git leads with', () => {
+    expect(
+      messageOf({ code: 'git_error', message: 'git push exited with 1: error: failed to push' }),
+    ).toBe('failed to push');
+  });
+
+  it('leaves the lines after the first alone, which carry the detail', () => {
+    const said = messageOf({
+      code: 'git_error',
+      message: 'git merge exited with 1: fatal: refusing to merge\nerror: and here is why',
+    });
+    expect(said).toBe('refusing to merge\nerror: and here is why');
+  });
+
+  it('keeps a message that is only the machinery, rather than showing nothing at all', () => {
+    expect(messageOf({ code: 'git_error', message: 'git gc exited with 1: ' })).toBe(
+      'git gc exited with 1:',
+    );
+  });
+
+  it('drops the word on its own too, since only git writes it', () => {
+    // Nothing the engine says begins `fatal:` or `error:`, so there is no message of Coral's
+    // own for this to eat into.
+    expect(messageOf({ code: 'git_error', message: 'fatal: not a git repository' })).toBe(
+      'not a git repository',
+    );
+  });
+
+  it('leaves every other message exactly as the engine wrote it', () => {
+    expect(messageOf({ code: 'refused', message: 'the repository is not there' })).toBe(
+      'the repository is not there',
+    );
+    expect(messageOf({ code: 'refused', message: 'error while it is not a prefix' })).toBe(
+      'error while it is not a prefix',
+    );
+  });
+});
+
+describe('naming the operation a failure belongs to', () => {
+  /**
+   * A red toast titled "Something went wrong" says nothing the colour has not already said.
+   * The engine names every action for the journal — `tag v1.0`, `push main` — and that name is
+   * what the toast should be titled with, matching the wording a success gets.
+   */
+  it('reads the label the engine attached to the failure', () => {
+    expect(whatFailed({ code: 'git_error', message: 'no', what: 'tag v1.0' })).toBe('tag v1.0');
+  });
+
+  it('answers null when there is none, so the caller can say something general', () => {
+    expect(whatFailed({ code: 'git_error', message: 'no' })).toBeNull();
+    expect(whatFailed({ code: 'git_error', message: 'no', what: '' })).toBeNull();
+    expect(whatFailed('a plain string')).toBeNull();
+    expect(whatFailed(null)).toBeNull();
   });
 });

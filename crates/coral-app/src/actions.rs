@@ -427,7 +427,7 @@ pub async fn repo_action(
         }
         Err(e) => {
             entry.failed(&e.message);
-            Err(e)
+            Err(e.during(named))
         }
     }
 }
@@ -472,7 +472,7 @@ async fn logged(
         }
         Err(e) => {
             entry.failed(&e.message);
-            Err(e)
+            Err(e.during(label))
         }
     }
 }

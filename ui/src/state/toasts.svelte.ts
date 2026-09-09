@@ -78,10 +78,9 @@ export function describe(
   if (conflicted) {
     // A push that comes back rejected has not conflicted with anything: the branch moved on
     // the remote while this one was being written, and the answer is to fetch, not to resolve.
-    const stopped = /\[rejected]|\[remote rejected]|non-fast-forward/i.test(text)
-      ? `${what} was rejected`
-      : `${what} stopped on conflicts`;
-    return { kind: 'warn', title: stopped, detail: text };
+    const rejected = /\[rejected]|\[remote rejected]|non-fast-forward/i.test(text);
+    if (rejected) return { kind: 'warn', title: `${what} was rejected`, detail: text };
+    return { kind: 'warn', title: `${what} stopped on conflicts`, detail: whatIsLeftToSay(text) };
   }
   // git has two wordings for "nothing happened": merge and pull say "Already up to date.",
   // push says "Everything up-to-date". Both mean the same thing to the person reading it.
@@ -108,4 +107,21 @@ export function outcomeToast(
     return { kind: 'ok', title: what, detail: '' };
   }
   return describe(what, message, conflicted);
+}
+
+/**
+ * What is worth keeping from git's account of a stop on conflicts.
+ *
+ * The window answers a stop by opening the merge tool on the files that caused it, so the
+ * toast beside it does not need `error: could not revert 02c9e47… Add a page about coffee` —
+ * a failure reported where there was none, in git's words, restating the title above it. What
+ * survives is what the title does not carry, which in practice is git's CONFLICT lines naming
+ * the files.
+ */
+function whatIsLeftToSay(text: string): string {
+  return text
+    .split('\n')
+    .filter((line) => !/^\s*(?:error|hint|fatal):/iu.test(line))
+    .join('\n')
+    .trim();
 }

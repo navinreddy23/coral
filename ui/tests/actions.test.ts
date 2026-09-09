@@ -18,7 +18,7 @@ describe('running an action', () => {
     invoke.mockResolvedValue({ what: 'merge side', conflicted: false, message: '' });
     const actions = new ActionsState();
     await actions.run('/repo', { kind: 'merge', rev: 'side', mode: 'auto' });
-    expect(actions.report).toEqual({ text: 'merge side complete', tone: 'ok' });
+    expect(actions.report).toEqual({ text: 'merge side complete', tone: 'ok', what: null });
     expect(actions.busy).toBe(false);
   });
 
@@ -26,7 +26,7 @@ describe('running an action', () => {
     invoke.mockResolvedValue({ what: 'merge side', conflicted: true, message: '' });
     const actions = new ActionsState();
     await actions.run('/repo', { kind: 'merge', rev: 'side', mode: 'auto' });
-    expect(actions.report).toEqual({ text: 'merge side stopped on conflicts', tone: 'warn' });
+    expect(actions.report).toEqual({ text: 'merge side stopped on conflicts', tone: 'warn', what: null });
   });
 
   it('calls a rejected push rejected, not a conflict', async () => {
@@ -48,7 +48,7 @@ describe('running an action', () => {
       forceWithLease: false,
       delete: false,
     });
-    expect(actions.report).toEqual({ text: 'push v1.0 was rejected', tone: 'warn' });
+    expect(actions.report).toEqual({ text: 'push v1.0 was rejected', tone: 'warn', what: null });
   });
 
   it('does not call a pull that brought nothing a failure', async () => {
@@ -59,7 +59,7 @@ describe('running an action', () => {
     });
     const actions = new ActionsState();
     await actions.run('/repo', { kind: 'pull', remote: null, mode: 'rebase' });
-    expect(actions.report).toEqual({ text: 'pull: already up to date', tone: 'ok' });
+    expect(actions.report).toEqual({ text: 'pull: already up to date', tone: 'ok', what: null });
   });
 
   it('reports a failure rather than throwing at the caller', async () => {
@@ -69,9 +69,33 @@ describe('running an action', () => {
     const actions = new ActionsState();
     const outcome = await actions.run('/repo', { kind: 'checkout', rev: 'nope' });
     expect(outcome).toBeNull();
-    expect(actions.report).toEqual({ text: 'not a valid ref', tone: 'error' });
+    expect(actions.report).toEqual({ text: 'not a valid ref', tone: 'error', what: null });
     // Still usable: a failed action must not wedge the toolbar.
     expect(actions.busy).toBe(false);
+  });
+
+  /**
+   * The engine names every action for the journal, and a failure now carries that name. It is
+   * what the window titles the red toast with, in place of "Something went wrong" — which
+   * tells the reader only what the colour already told them.
+   */
+  it('keeps the name the engine gave the operation that failed', async () => {
+    invoke.mockImplementation(async () => {
+      // A Tauri command rejects with the serialized error, not with an `Error`.
+      // eslint-disable-next-line no-throw-literal
+      throw {
+        code: 'git_error',
+        message: "git tag exited with 128: fatal: 'a release' is not a valid tag name.",
+        what: 'tag a release',
+      };
+    });
+    const actions = new ActionsState();
+    await actions.run('/repo', { kind: 'tagCreate', name: 'a release', at: null, message: null });
+    expect(actions.report).toEqual({
+      text: "'a release' is not a valid tag name.",
+      tone: 'error',
+      what: 'tag a release',
+    });
   });
 
   it('refuses a second action while one is running', async () => {

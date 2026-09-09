@@ -103,6 +103,37 @@ describe('what to call an outcome that did not complete', () => {
     expect(said.title).toBe('rebase onto main stopped on conflicts');
   });
 
+  /**
+   * The window answers a stop by opening the merge tool on the files that stopped it, so the
+   * toast beside it saying `error: could not revert 02c9e47…` reports a failure where there
+   * was none, in git's words, restating the title underneath it.
+   */
+  it('does not repeat git\'s own complaint under a title that already says it', () => {
+    const said = phrase(
+      'revert 02c9e476',
+      'error: could not revert 02c9e47... Add a page about coffee\n' +
+        'hint: After resolving the conflicts, mark them with git add',
+      true,
+    );
+    expect(said.title).toBe('revert 02c9e476 stopped on conflicts');
+    expect(said.detail).toBe('');
+  });
+
+  it('keeps the part that names the files, which the title does not', () => {
+    const said = phrase(
+      'stash pop',
+      'error: could not apply 1a2b3c4\nCONFLICT (content): Merge conflict in log.txt',
+      true,
+    );
+    expect(said.detail).toBe('CONFLICT (content): Merge conflict in log.txt');
+  });
+
+  it('leaves a rejected push its reason, since nothing opens to explain that one', () => {
+    const said = phrase('push', 'error: failed to push some refs\n! [rejected] main -> main', true);
+    expect(said.title).toBe('push was rejected');
+    expect(said.detail).toContain('[rejected]');
+  });
+
   it('lets undo and redo say what they did, without completing the sentence', () => {
     // They answer with the whole thing — "undid commit" — where a fetch answers with "fetch"
     // and this adds the verb. Put through the same wording it read "undid commit complete".

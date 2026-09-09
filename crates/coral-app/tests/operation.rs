@@ -158,3 +158,32 @@ async fn a_merge_that_stopped_is_not_logged_as_finished() {
         "and does not also say it finished: {said:?}"
     );
 }
+
+/// A failure carries the name of the operation it belongs to.
+///
+/// Without it the window had nothing to title a red toast with but "Something went wrong",
+/// which says only what the colour already said, and left git's own account of the failure to
+/// do the whole job underneath it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_failed_action_says_which_operation_failed() {
+    let repo = TestRepo::new().write("a.txt", "one\n").commit("first");
+    let path = repo.path().display().to_string();
+
+    let failed = app::actions::run_action(
+        &path,
+        app::actions::Action::TagCreate {
+            name: "a release".to_owned(),
+            at: None,
+            message: None,
+        },
+    )
+    .await
+    .expect_err("git refuses a tag name with a space in it");
+
+    assert_eq!(failed.what.as_deref(), Some("tag a release"));
+    assert!(
+        failed.message.contains("not a valid tag name"),
+        "and still says why: {}",
+        failed.message
+    );
+}

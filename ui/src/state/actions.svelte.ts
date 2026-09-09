@@ -1,11 +1,13 @@
 import { runAction, type Action, type ActionOutcome } from '../ipc/commands';
-import { messageOf } from '../ipc/error';
+import { messageOf, whatFailed } from '../ipc/error';
 import { outcomeToast, type ToastKind } from './toasts.svelte';
 
 /** What the status line is showing about the last thing that ran. */
 export interface Report {
   text: string;
   tone: 'ok' | 'warn' | 'error';
+  /** The name the engine gave the operation, for a failure that belongs to one. */
+  what: string | null;
 }
 
 /** The status line has three tones where a toast has four; nothing happening reads as fine. */
@@ -40,10 +42,10 @@ export class ActionsState {
       // the line said "push v1.0 stopped on conflicts" for a rejected push while the toast
       // beside it said "was rejected", which is what actually happened.
       const said = outcomeToast(action.kind, outcome.what, outcome.message, outcome.conflicted);
-      this.report = { text: said.title, tone: toneOf(said.kind) };
+      this.report = { text: said.title, tone: toneOf(said.kind), what: null };
       return outcome;
     } catch (e) {
-      this.report = { text: messageOf(e), tone: 'error' };
+      this.report = { text: messageOf(e), tone: 'error', what: whatFailed(e) };
       return null;
     } finally {
       this.busy = false;

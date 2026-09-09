@@ -7,6 +7,13 @@ use coral_core::repo::{RepoInfo, RepoLocation};
 pub struct IpcError {
     code: &'static str,
     pub message: String,
+    /// What the failed operation is called, when it belongs to one the journal names.
+    ///
+    /// A red toast titled "Something went wrong" says nothing its colour has not. Actions
+    /// already carry a name — `tag v1.0`, `push main`, `fetch` — and a failure titled with it
+    /// reads the way a success does.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub what: Option<String>,
 }
 
 impl IpcError {
@@ -14,6 +21,13 @@ impl IpcError {
     #[must_use]
     pub fn is_cancelled(&self) -> bool {
         self.code == "cancelled"
+    }
+
+    /// Names the operation this failure belongs to.
+    #[must_use]
+    pub fn during(mut self, what: &str) -> Self {
+        self.what = Some(what.to_owned());
+        self
     }
 }
 
@@ -28,6 +42,7 @@ impl From<coral_core::CoralError> for IpcError {
         Self {
             code: e.code(),
             message: e.to_string(),
+            what: None,
         }
     }
 }
