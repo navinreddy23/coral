@@ -16,7 +16,8 @@ three.
 | Tauri CLI | 2.x | Embeds the interface into the binary and makes the bundles |
 
 ```
-cargo install just cargo-about cargo-deny
+cargo install just cargo-deny
+cargo install cargo-about --features cli
 cargo install tauri-cli --version "^2" --locked
 ```
 

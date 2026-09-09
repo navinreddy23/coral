@@ -133,7 +133,8 @@ xcode-select --install
 brew install node
 
 # Then, on either:
-cargo install just cargo-about cargo-deny
+cargo install just cargo-deny
+cargo install cargo-about --features cli
 cargo install tauri-cli --version "^2" --locked
 node --version && npm --version   # 24 or newer, and npm alongside it
 
