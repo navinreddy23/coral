@@ -37,6 +37,7 @@ const tea = 'a'.repeat(40);
 const coffee = 'b'.repeat(40);
 const water = 'c'.repeat(40);
 const revert = 'd'.repeat(40);
+const other = 'e'.repeat(40);
 
 describe('a selection that outlives the rows it was made on', () => {
   /**
@@ -67,7 +68,7 @@ describe('a selection that outlives the rows it was made on', () => {
 
   it("counts from the frame's own first row, not from zero", async () => {
     const selection = new SelectionState();
-    await selection.select(repo, 9000, coffee);
+    await selection.select(repo, 4098, coffee);
     selection.reanchor(frameOf(4096, [tea, coffee, water]));
     expect(selection.row).toBe(4097);
   });
@@ -104,8 +105,31 @@ describe('a selection that outlives the rows it was made on', () => {
     expect(selection.marks(3)).toBe(true);
     expect(selection.marks(1)).toBe(true);
 
-    selection.reanchor(frameOf(0, [revert, coffee, water]));
+    selection.reanchor(frameOf(0, [revert, coffee, water, other]));
     expect(selection.pair).toBeNull();
     expect(selection.marks(2)).toBe(false);
+  });
+
+  /**
+   * A frame is a window, not the whole graph. Scrolling away from a selected commit on a
+   * repository worth paging loads one that does not hold it, and reading that as "the commit
+   * is gone" threw the selection away for scrolling.
+   */
+  it('says nothing about a selection the frame does not reach', async () => {
+    const selection = new SelectionState();
+    await selection.select(repo, 4097, coffee);
+
+    // A window somewhere else entirely.
+    selection.reanchor(frameOf(0, [tea, water]));
+
+    expect(selection.row).toBe(4097);
+    expect(selection.detail).not.toBeNull();
+  });
+
+  it('still lets it go when the frame does reach and the commit is not there', async () => {
+    const selection = new SelectionState();
+    await selection.select(repo, 1, coffee);
+    selection.reanchor(frameOf(0, [tea, water, revert]));
+    expect(selection.row).toBeNull();
   });
 });

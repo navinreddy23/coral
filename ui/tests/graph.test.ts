@@ -130,3 +130,123 @@ describe('reloading the graph', () => {
     expect(asked).toEqual([false]);
   });
 });
+
+describe('asking for rows that are not loaded yet', () => {
+  const TOTAL = 200_000;
+  const WANT = 150_000;
+
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  /**
+   * The fixture's header says five rows starting at zero. This claims a repository worth
+   * paging, and a window that begins where the caller is looking — which is what the engine
+   * answers with, and what `covers` is asked about.
+   */
+  function holding(startRow: number): ArrayBuffer {
+    const buf = frame();
+    const view = new DataView(buf);
+    view.setUint32(8, startRow, true);
+    view.setUint32(16, TOTAL, true);
+    return buf;
+  }
+
+  function serve(answer: (start: number, nth: number) => ArrayBuffer, count: () => void) {
+    let nth = 0;
+    invoke.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === 'binary_self_test') {
+        return Uint8Array.from({ length: 4096 }, (_, i) => i % 251).buffer;
+      }
+      if (cmd === 'graph_rewalk') return null;
+      if (cmd === 'row_metadata') return [];
+      if (cmd === 'graph_frame') {
+        nth += 1;
+        count();
+        return answer(Number((args as { startRow?: number }).startRow ?? 0), nth);
+      }
+      throw new Error(`unstubbed ${cmd}`);
+    });
+  }
+
+  /**
+   * The window scrolls to a row and then asks for it before selecting.
+   *
+   * Scrolling starts the fetch for that window itself, so by the time the caller asked, a
+   * request for the same start was already in flight — and the answer was to return at once,
+   * as though the rows had arrived.
+   */
+  it('waits for a frame already on its way rather than answering as though it had come', async () => {
+    let release = () => {};
+    const held = new Promise<void>((r) => {
+      release = r;
+    });
+    let paging = false;
+    let paged = 0;
+    // Opening asks for the first window twice, fast then exact. Only what comes after that is
+    // the paging this is about.
+    serve((_start) => holding(paging ? WANT : 0), () => {
+      if (paging) paged += 1;
+    });
+    const inner = invoke.getMockImplementation();
+    invoke.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === 'graph_frame' && paging) await held;
+      return inner?.(cmd, args);
+    });
+
+    const graph = new GraphState();
+    await graph.open('/kernel');
+    paging = true;
+
+    const first = graph.ensureRows(WANT, WANT);
+    const second = graph.ensureRows(WANT, WANT);
+    let answered = false;
+    void second.then(() => {
+      answered = true;
+    });
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(answered, 'the second ask must not answer before the rows are there').toBe(false);
+
+    release();
+    await Promise.all([first, second]);
+    expect(paged, 'and it must not fetch the same window twice').toBe(1);
+    expect(graph.frame?.startRow).toBe(WANT);
+  });
+
+  /**
+   * The competing request. Scrolling to a row asks for its own window, and whichever request
+   * lands last is the one kept — so asking once could return with a neighbour's frame in place
+   * and the rows still missing. The caller has no way to tell, and selected nothing.
+   *
+   * Modelled by a first answer that does not hold what was asked for, which is what the caller
+   * sees when somebody else's frame wins.
+   */
+  it('keeps asking until the rows it was asked for are the ones in hand', async () => {
+    let paging = false;
+    let paged = 0;
+    serve((_start) => holding(paging && paged > 1 ? WANT : 0), () => {
+      if (paging) paged += 1;
+    });
+    const graph = new GraphState();
+    await graph.open('/kernel');
+    paging = true;
+
+    await graph.ensureRows(WANT, WANT);
+
+    expect(graph.frame?.startRow, 'the rows asked for are the ones in hand').toBe(WANT);
+    expect(paged, 'it asked again rather than giving up').toBeGreaterThan(1);
+  });
+
+  it('gives up rather than asking for ever', async () => {
+    let paged = 0;
+    serve(() => holding(0), () => {
+      paged += 1;
+    });
+    const graph = new GraphState();
+    await graph.open('/kernel');
+
+    await graph.ensureRows(WANT, WANT);
+    expect(paged).toBeLessThan(8);
+  });
+});

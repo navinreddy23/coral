@@ -1,6 +1,6 @@
 import { commitDetail, compareCommits } from '../ipc/commands';
 
-import { rowOfOid, type Frame } from '../graph/frame';
+import { covers, rowOfOid, type Frame } from '../graph/frame';
 import type { ChangedFile, CommitDetail } from '../ipc/types';
 import { messageOf } from '../ipc/error';
 
@@ -123,6 +123,11 @@ export class SelectionState {
   reanchor(frame: Frame | null): void {
     if (frame === null) return;
     const pair = this.pair;
+    // A frame is a window, not the whole graph. One that does not reach where the selection
+    // says it is says nothing about it: on a repository worth paging, scrolling away from a
+    // selected commit loads a window that does not hold it, and reading that as "the commit
+    // is gone" threw the selection away for scrolling.
+    if (!this.reaches(frame)) return;
     if (pair !== null) {
       const from = rowOfOid(frame, pair.from.oid);
       const to = rowOfOid(frame, pair.to.oid);
@@ -148,6 +153,15 @@ export class SelectionState {
     if (found === this.row) return;
     this.row = found;
     this.#anchor = { ...anchor, row: found };
+  }
+
+  /** Whether `frame` holds the rows the selection claims, and so can speak about them. */
+  reaches(frame: Frame): boolean {
+    const pair = this.pair;
+    if (pair !== null) {
+      return covers(frame, pair.to.row, pair.to.row) && covers(frame, pair.from.row, pair.from.row);
+    }
+    return this.row !== null && covers(frame, this.row, this.row);
   }
 
   /** True for a row that is one end of the comparison, so the list can mark both. */

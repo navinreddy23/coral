@@ -1179,7 +1179,7 @@
       items.push({
         kind: 'item',
         label: 'Show it in the graph',
-        run: () => ref.row !== null && void reveal(ref.row),
+        run: () => ref.row !== null && void revealAt(ref.row, ref.peeled ?? ref.target),
       });
     }
 
@@ -2639,6 +2639,20 @@
   }
 
   /**
+   * The same, for a caller that already knows which commit is on the row.
+   *
+   * Selecting through the frame means waiting for the right window to win a race against the
+   * scroll's own fetch, and on the kernel it did not always win: a tag clicked in the side
+   * panel scrolled a million rows into view and stayed unselected. A ref carries its object
+   * id, and the selection needs nothing else — only the drawing needs the rows.
+   */
+  async function revealAt(row: number, oid: string) {
+    scrollToRow(row);
+    if (info) void selection.select(info.path, row, oid);
+    await graph.ensureRows(row, row);
+  }
+
+  /**
    * Walks the repository again after the set of tips changed, and replaces everything placed
    * on it.
    *
@@ -2688,7 +2702,7 @@
    */
   async function selectRef(ref: PlacedRef) {
     if (ref.row !== null) {
-      await reveal(ref.row);
+      await revealAt(ref.row, ref.peeled ?? ref.target);
       return;
     }
     if (!info || scope.walks(ref.name)) return;
@@ -2696,7 +2710,7 @@
     await scope.reveal(path, ref.name);
     await rewalkForScope(path);
     const again = refs.all.find((r) => r.name === ref.name);
-    if (again?.row != null) await reveal(again.row);
+    if (again?.row != null) await revealAt(again.row, again.peeled ?? again.target);
   }
 
   /**
@@ -2973,7 +2987,7 @@
       // instead — which is what this used to do — moved the view to a commit that was not the
       // one just checked out.
       const row = await graphRowOf(info.path, info.head.oid).catch(() => null);
-      if (row !== null) await reveal(row);
+      if (row !== null) await revealAt(row, info.head.oid);
       return;
     }
     const name = info.head.name;

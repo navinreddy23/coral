@@ -41,6 +41,8 @@ export class GraphState {
   #inFlight = new Set<number>();
   /** Start row of the frame being fetched, so a scroll does not queue the same one twice. */
   #wantedStart = -1;
+  /** The paging fetch in flight, so a second ask for the same window waits for it. */
+  #loading: Promise<void> = Promise.resolve();
   /** Which walk the rows on screen came from, so a late read cannot write into the next one. */
   #walk = 0;
 
@@ -98,20 +100,44 @@ export class GraphState {
    */
   async ensureRows(first: number, last: number): Promise<void> {
     if (!this.#path || this.totalRows === 0) return;
-    if (covers(this.frame, first, last)) return;
+    // More than one pass, because the caller is not the only one asking. Revealing a ref
+    // scrolls to its row and then wants the rows before it can select one, and the scroll
+    // starts a fetch of its own for a neighbouring window — the compressed scroll range does
+    // not convert a row back to exactly itself. Whichever request lands last wins, so a single
+    // pass could return holding a frame that does not cover what was asked for, and the caller
+    // selected nothing. On the kernel that was a tag in the side panel scrolling into view and
+    // staying unselected until it was clicked again.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (covers(this.frame, first, last)) return;
+      const start = frameStartFor(first, this.totalRows);
+      await this.#load(start);
+      if (covers(this.frame, first, last)) return;
+      // Somebody else's frame won. Forget that this window was asked for, so the next pass
+      // asks again rather than waiting on a promise that has already settled.
+      if (this.#wantedStart === start) this.#wantedStart = -1;
+    }
+  }
 
-    const start = frameStartFor(first, this.totalRows);
-    if (this.#wantedStart === start) return;
+  /** Fetches one window, sharing the work when the same one is already on its way. */
+  async #load(start: number): Promise<void> {
+    if (this.#wantedStart === start) {
+      await this.#loading;
+      return;
+    }
     this.#wantedStart = start;
     const path = this.#path;
-    try {
-      const next = await graphFrame(path, start, false);
-      // A tab switch or a reload may have landed while this was in flight.
-      if (this.#wantedStart === start && this.#path === path) this.frame = next;
-    } catch (e) {
-      if (this.#wantedStart === start) this.#wantedStart = -1;
-      this.error = messageOf(e);
-    }
+    const work = (async () => {
+      try {
+        const next = await graphFrame(path, start, false);
+        // A tab switch or a reload may have landed while this was in flight.
+        if (this.#wantedStart === start && this.#path === path) this.frame = next;
+      } catch (e) {
+        if (this.#wantedStart === start) this.#wantedStart = -1;
+        this.error = messageOf(e);
+      }
+    })();
+    this.#loading = work;
+    await work;
   }
 
   /**
