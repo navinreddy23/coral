@@ -153,6 +153,25 @@ export class GraphState {
    * while reading row 2,900 of 3,000 drew the rows eighty thousand pixels below the viewport
    * and left an empty pane behind.
    */
+  /**
+   * Puts the rows away, for a tab that has no repository to show.
+   *
+   * Opening one that turns out not to be a repository leaves the window with nothing to draw,
+   * and the rows of whatever was open before are not it: the tab is named for the path that
+   * failed, and a million of somebody else's commits under that name is worse than an empty
+   * pane with the reason written across the top of it.
+   */
+  clear(): void {
+    this.frame = null;
+    this.provisional = false;
+    this.#path = '';
+    this.#framePath = '';
+    this.#wantedStart = -1;
+    this.#inFlight.clear();
+    this.#loaded.clear();
+    this.meta = new Map();
+  }
+
   forget(): void {
     this.#shapeChanged = true;
   }

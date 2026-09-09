@@ -1201,6 +1201,53 @@ describe('a repository that will not open', () => {
     });
     expect(container.querySelector('.splash')).toBeNull();
   });
+
+  /**
+   * Opening a path that turns out not to be a repository used to leave the last one on screen:
+   * its rows in the list, its branch in the crumb and its commit count along the bottom, all
+   * under a tab named for the path that failed.
+   */
+  it('takes the last repository off the screen rather than leaving it under the new name', async () => {
+    const other = '/srv/nowhere';
+    const both = {
+      tabs: [
+        { id: 1, path: REPO, group: null },
+        { id: 2, path: other, group: null },
+      ],
+      groups: [],
+    };
+    const table = answers({
+      session_get: { ...both, active: 1 },
+      tab_open: { ...both, active: 1 },
+      tab_activate: { ...both, active: 2 },
+    });
+    invoke.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === 'open_repo' && (args as { path?: string })?.path === other) {
+        throw new Error('not a git repository: /srv/nowhere');
+      }
+      if (!(cmd in table)) throw new Error(`unstubbed command ${cmd}`);
+      const answer = table[cmd];
+      if (answer instanceof Error) throw answer;
+      return answer;
+    });
+
+    const { container } = render(App);
+    await waitFor(() => {
+      if (container.querySelectorAll('li.row').length === 0) throw new Error('no rows yet');
+    });
+
+    const tabs = [...container.querySelectorAll('.tab .pick')] as HTMLButtonElement[];
+    expect(tabs.length).toBeGreaterThan(1);
+    await fireEvent.click(tabs[1] as HTMLButtonElement);
+
+    await waitFor(() => {
+      const banner = container.querySelector('.banner.error');
+      if (!banner) throw new Error('no banner yet');
+      expect(banner.textContent).toContain('not a git repository');
+    });
+    expect(container.querySelectorAll('li.row').length, 'no rows of the other one').toBe(0);
+    expect(container.querySelector('footer.status'), 'and nothing counting them').toBeNull();
+  });
 });
 
 describe('what an action leaves behind', () => {

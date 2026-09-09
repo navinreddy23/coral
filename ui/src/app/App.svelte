@@ -2795,6 +2795,14 @@
       // window, and the section simply appears when the answer arrives.
       void hosting.load(info.path);
     } catch (e) {
+      // Nothing is open. The tab is named for the path that failed, and the last repository's
+      // rows under that name are worse than an empty pane with the reason across the top:
+      // every count along the bottom and every name in the crumb would be another tab's.
+      info = null;
+      graph.clear();
+      refs.clear();
+      worktree.clear();
+      stashes.clear();
       error = messageOf(e);
     }
   }
