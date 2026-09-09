@@ -221,3 +221,44 @@ export function localRow(frame: Frame | null, row: number): number | null {
   if (!covers(frame, row, row) || !frame) return null;
   return row - frame.startRow;
 }
+
+/**
+ * The row a commit is on, searched within the window the frame holds.
+ *
+ * The window is what a selection can be redrawn against: rows are numbered by the walk, and a
+ * commit made, reverted or rebased renumbers every row above it, so a selection held as a row
+ * number quietly comes to mean a different commit. Bounded to the frame because the graph is a
+ * million rows and only these are in memory; a commit further away answers null, which is the
+ * caller's cue to let the selection go rather than move it somewhere wrong.
+ */
+export function rowOfOid(frame: Frame | null, oid: string): number | null {
+  if (frame === null) return null;
+  const wanted = hexBytes(oid, frame.hashLen);
+  if (wanted === null) return null;
+  for (let row = 0; row < frame.rowCount; row += 1) {
+    const at = row * frame.hashLen;
+    let same = true;
+    for (let i = 0; i < wanted.length; i += 1) {
+      if (frame.oids[at + i] !== wanted[i]) {
+        same = false;
+        break;
+      }
+    }
+    if (same) return frame.startRow + row;
+  }
+  return null;
+}
+
+/** An object id as the bytes to compare against a row, or null if it is not one. */
+function hexBytes(oid: string, hashLen: number): Uint8Array | null {
+  // An odd length would compare half a byte, which no amount of masking makes meaningful.
+  if (oid.length === 0 || oid.length % 2 !== 0 || oid.length > hashLen * 2) return null;
+  // Tested whole rather than pair by pair: `parseInt` reads the leading digits and stops, so
+  // `1z` comes back as 1 and an id that is not one would match a row that is.
+  if (!/^[0-9a-f]+$/iu.test(oid)) return null;
+  const out = new Uint8Array(oid.length / 2);
+  for (let i = 0; i < out.length; i += 1) {
+    out[i] = Number.parseInt(oid.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}

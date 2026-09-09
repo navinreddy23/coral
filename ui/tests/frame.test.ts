@@ -12,6 +12,7 @@ import {
   FrameFlag,
   hasFlag,
   oidOf,
+  rowOfOid,
   parentLanesOf,
   RowFlag,
   widestLane,
@@ -221,5 +222,81 @@ describe('paging', () => {
     expect(localRow(frame, 5000)).toBe(904);
     expect(localRow(frame, 4095)).toBeNull();
     expect(localRow(frame, 900_000)).toBeNull();
+  });
+});
+
+describe('finding a commit again', () => {
+  function frameHolding(startRow: number, oids: string[]): Frame {
+    const rowCount = oids.length;
+    const bytes = new Uint8Array(rowCount * 20);
+    oids.forEach((oid, row) => {
+      for (let i = 0; i < 20; i += 1) {
+        bytes[row * 20 + i] = Number.parseInt(oid.slice(i * 2, i * 2 + 2), 16);
+      }
+    });
+    return {
+      startRow,
+      rowCount,
+      totalRows: startRow + rowCount + 500,
+      flags: 0,
+      hashLen: 20,
+      lanes: new Uint16Array(rowCount),
+      rowFlags: new Uint8Array(rowCount),
+      times: new Float64Array(rowCount),
+      parentStart: new Uint32Array(rowCount + 1),
+      parentLanes: new Uint16Array(0),
+      oids: bytes,
+      open: new Uint32Array(rowCount),
+    };
+  }
+
+  const a = 'a'.repeat(40);
+  const b = 'b'.repeat(40);
+  const c = 'c'.repeat(40);
+
+  it('answers with the absolute row, not the one inside the frame', () => {
+    const frame = frameHolding(4096, [a, b, c]);
+    expect(rowOfOid(frame, b)).toBe(4097);
+  });
+
+  it('answers null for a commit the window does not hold, and for no frame', () => {
+    const frame = frameHolding(0, [a, b]);
+    expect(rowOfOid(frame, c)).toBeNull();
+    expect(rowOfOid(null, a)).toBeNull();
+  });
+
+  it('takes an id shorter than the hash, which is how the window writes them', () => {
+    const frame = frameHolding(0, [a, b, c]);
+    expect(rowOfOid(frame, 'cccccccc')).toBe(2);
+  });
+
+  it('refuses an id that is not hex, rather than matching the wrong row', () => {
+    const frame = frameHolding(0, [a, b]);
+    expect(rowOfOid(frame, 'not a hash')).toBeNull();
+    expect(rowOfOid(frame, '')).toBeNull();
+  });
+});
+
+describe('an id that is only partly a hash', () => {
+  it('is refused, because parseInt would read the front of it and stop', () => {
+    // `parseInt('1z', 16)` is 1, so a pair-by-pair reading matched `1z…` against `1a…`.
+    const bytes = new Uint8Array(20);
+    bytes[0] = 0x1a;
+    const frame: Frame = {
+      startRow: 0,
+      rowCount: 1,
+      totalRows: 1,
+      flags: 0,
+      hashLen: 20,
+      lanes: new Uint16Array(1),
+      rowFlags: new Uint8Array(1),
+      times: new Float64Array(1),
+      parentStart: new Uint32Array(2),
+      parentLanes: new Uint16Array(0),
+      oids: bytes,
+      open: new Uint32Array(1),
+    };
+    expect(rowOfOid(frame, '1a')).toBe(0);
+    expect(rowOfOid(frame, '1z')).toBeNull();
   });
 });

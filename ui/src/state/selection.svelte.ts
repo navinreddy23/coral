@@ -1,5 +1,6 @@
 import { commitDetail, compareCommits } from '../ipc/commands';
 
+import { rowOfOid, type Frame } from '../graph/frame';
 import type { ChangedFile, CommitDetail } from '../ipc/types';
 import { messageOf } from '../ipc/error';
 
@@ -105,6 +106,48 @@ export class SelectionState {
     } finally {
       if (token === this.#token) this.loading = false;
     }
+  }
+
+  /**
+   * Puts the selection back on the commit it was made on, after the rows were renumbered.
+   *
+   * Rows are the walk's numbering, not a commit's identity. Anything that writes a commit —
+   * committing, amending, reverting, cherry-picking, rebasing, resetting — shifts every row
+   * under it, so a selection held as a row number silently comes to mark a different commit
+   * from the one the panel beside it is describing.
+   *
+   * Only the loaded window is searched. It is what is in memory, and a commit outside it is
+   * either gone or a long way from where the reader is looking; either way, letting the
+   * selection go beats moving it to a row that merely has the right number.
+   */
+  reanchor(frame: Frame | null): void {
+    if (frame === null) return;
+    const pair = this.pair;
+    if (pair !== null) {
+      const from = rowOfOid(frame, pair.from.oid);
+      const to = rowOfOid(frame, pair.to.oid);
+      if (from === null || to === null) {
+        this.clear();
+        return;
+      }
+      if (from === pair.from.row && to === pair.to.row) return;
+      this.pair = { from: { ...pair.from, row: from }, to: { ...pair.to, row: to } };
+      if (this.#anchor !== null) {
+        this.#anchor = { ...this.#anchor, row: this.#anchor.oid === pair.from.oid ? from : to };
+      }
+      return;
+    }
+
+    const anchor = this.#anchor;
+    if (anchor === null || this.row === null) return;
+    const found = rowOfOid(frame, anchor.oid);
+    if (found === null) {
+      this.clear();
+      return;
+    }
+    if (found === this.row) return;
+    this.row = found;
+    this.#anchor = { ...anchor, row: found };
   }
 
   /** True for a row that is one end of the comparison, so the list can mark both. */
