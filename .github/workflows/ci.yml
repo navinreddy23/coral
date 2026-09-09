@@ -45,7 +45,10 @@ jobs:
 
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-      - run: cargo test --workspace --all-features
+      # --no-fail-fast because cargo otherwise stops at the first test binary that fails,
+      # and on a platform nobody develops on that means one fault per run and a round trip
+      # of a quarter of an hour to find the next.
+      - run: cargo test --workspace --all-features --no-fail-fast
 
       # ts-rs regenerates types.ts during the test run above; it must not have changed.
       - name: Generated bindings are up to date

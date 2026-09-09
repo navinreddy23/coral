@@ -18,6 +18,13 @@ async fn located(repo: &TestRepo) -> (GitRunner, RepoLocation) {
     (runner, loc)
 }
 
+// git reports a worktree's path resolved, and macOS puts temporary directories under /var,
+// which is a symlink to /private/var. The parent is what gets resolved, because the path
+// itself does not exist until git makes it.
+fn under(dir: &tempfile::TempDir, name: &str) -> std::path::PathBuf {
+    std::fs::canonicalize(dir.path()).unwrap().join(name)
+}
+
 fn two_commits() -> TestRepo {
     TestRepo::new()
         .write("a.txt", "a\n")
@@ -53,7 +60,7 @@ fn a_new_worktree_checks_a_commit_out_without_moving_the_current_one() {
     let repo = two_commits();
     let first = repo.git(["rev-parse", "HEAD~1"]);
     let elsewhere = tempfile::tempdir().unwrap();
-    let at = elsewhere.path().join("older");
+    let at = under(&elsewhere, "older");
 
     run(async {
         let (runner, loc) = located(&repo).await;
@@ -79,7 +86,7 @@ fn a_worktree_can_be_given_a_branch_of_its_own() {
     let repo = two_commits();
     let first = repo.git(["rev-parse", "HEAD~1"]);
     let elsewhere = tempfile::tempdir().unwrap();
-    let at = elsewhere.path().join("feature");
+    let at = under(&elsewhere, "feature");
 
     run(async {
         let (runner, loc) = located(&repo).await;
@@ -101,7 +108,7 @@ fn removing_a_worktree_leaves_the_repository_alone() {
     let repo = two_commits();
     let head = repo.git(["rev-parse", "HEAD"]);
     let elsewhere = tempfile::tempdir().unwrap();
-    let at = elsewhere.path().join("scratch");
+    let at = under(&elsewhere, "scratch");
 
     run(async {
         let (runner, loc) = located(&repo).await;
