@@ -414,6 +414,46 @@ describe('a collapsed group', () => {
     expect(tally?.textContent?.trim()).toBe('2');
     expect(container.querySelectorAll('.band .tab')).toHaveLength(0);
   });
+
+  /**
+   * Collapsing a group that holds the tab you are on hid the only mark of where you were, and
+   * nothing else in the strip took it up: two tabs on screen, neither of them current, and the
+   * window below showing a repository named by neither.
+   */
+  function collapsed(active: number): HTMLElement {
+    const tabs = new TabsState();
+    const s = session();
+    s.groups = s.groups.map((g) => ({ ...g, collapsed: true }));
+    s.active = active;
+    tabs.session = s;
+    return render(TabBar, {
+      props: {
+        tabs,
+        onOpen: () => {},
+        onCloseNew: () => {},
+        newTab: false,
+        onAsk: vi.fn(),
+        onPick: () => {},
+      },
+    }).container;
+  }
+
+  it('says it is the one holding the current tab', () => {
+    expect(collapsed(1).querySelector('.band.holding')).not.toBeNull();
+  });
+
+  it('says nothing of the sort when the current tab is outside it', () => {
+    expect(collapsed(3).querySelector('.band.holding')).toBeNull();
+  });
+
+  it('marks it the way the current tab is marked, and not some third way', () => {
+    collapsed(1);
+    const rule = [...document.styleSheets]
+      .flatMap((sheet) => [...(sheet.cssRules ?? [])])
+      .map((r) => r.cssText)
+      .find((text) => /\.band[^{]*\.holding/u.test(text));
+    expect(rule).toMatch(/var\(--brand\)/u);
+  });
 });
 
 describe('the start page and the tabs', () => {

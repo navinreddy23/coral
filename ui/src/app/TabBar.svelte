@@ -365,6 +365,8 @@
       <div
         class="band"
         class:target={joining === group.id}
+        class:holding={group.collapsed &&
+          band.tabs.some((t) => t.id === tabs.session.active)}
         style:--band={laneColour(group.colour)}
         style:--band-soft={laneColour(group.colour, true)}
         role="presentation"
@@ -535,6 +537,15 @@
   .band.target { outline: 2px solid var(--accent); outline-offset: -1px; }
   /* Dropping here takes the tab out of every group, which needs saying while it is happening. */
   .bar.loose { box-shadow: inset 0 -3px 0 var(--accent); }
+  /*
+   * A collapsed group that holds the tab you are on.
+   *
+   * Collapsing hid the only mark of where you were, and nothing else in the strip took it up:
+   * two tabs on screen, neither of them current, and the window below showing a repository
+   * named by neither. The line along the top is the same second cue the current tab carries,
+   * in the same brand colour, so the strip has one vocabulary for "this one".
+   */
+  .band.holding { box-shadow: inset 0 2px 0 var(--brand); }
   .group {
     font: inherit; font-size: var(--text-sm); font-weight: 600; cursor: pointer; white-space: nowrap;
     align-self: center; margin: 0 var(--space-1) 4px var(--space-1);
