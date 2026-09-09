@@ -771,6 +771,25 @@ describe('the shell', () => {
     });
   });
 
+  /**
+   * The list already leaves out a theme entry that would change nothing. These two were the
+   * exception: "Pop the latest stash" with nothing stashed answered "stash@{0} is not a valid
+   * reference", and "Stash changes" with a clean working copy did nothing at all.
+   */
+  it('leaves out the stash commands that have nothing to act on', async () => {
+    const { container } = await shell();
+    await fireEvent.keyDown(window, { key: 'p', ctrlKey: true });
+    const input = await waitFor(() => {
+      const found = container.querySelector('.panel input') as HTMLInputElement | null;
+      if (!found) throw new Error('no palette');
+      return found;
+    });
+    await fireEvent.input(input, { target: { value: 'stash' } });
+    const offered = [...container.querySelectorAll('.panel li')].map((r) => r.textContent ?? '');
+    expect(offered.some((t) => t.includes('Pop the latest stash'))).toBe(false);
+    expect(offered.some((t) => t.includes('Stash changes'))).toBe(false);
+  });
+
   it('turns a pull it cannot fast-forward into the choice it actually is', async () => {
     // The button pulls fast-forward only, which is the safe reading of "bring me up to date".
     // When both sides have moved git refuses, and refusing is right — but it said so by

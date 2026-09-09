@@ -2345,8 +2345,15 @@
       { id: 'pull', label: 'Pull (fast-forward only)', group: 'Remote', run: () => void act({ kind: 'pull', remote: null, mode: 'ffOnly' }) },
       { id: 'pull-rebase', label: 'Pull, rebasing', group: 'Remote', run: () => void act({ kind: 'pull', remote: null, mode: 'rebase' }) },
       { id: 'push', label: 'Push', group: 'Remote', run: () => void act({ kind: 'push', remote: null, setUpstream: true, refspec: null, tags: false, forceWithLease: false, delete: false }) },
-      { id: 'stash', label: 'Stash changes', group: 'Stash', run: () => void act({ kind: 'stashPush', message: null }) },
-      { id: 'pop', label: 'Pop the latest stash', group: 'Stash', run: () => void act({ kind: 'stashApply', index: 0, pop: true }) },
+      // Both only when there is something to act on, like the theme entry below: popping with
+      // nothing stashed answered with git's own `stash@{0}`, and stashing a clean working copy
+      // did nothing at all.
+      ...(worktree.dirty
+        ? [{ id: 'stash', label: 'Stash changes', group: 'Stash', run: () => void act({ kind: 'stashPush', message: null }) } satisfies Command]
+        : []),
+      ...(stashes.list.length > 0
+        ? [{ id: 'pop', label: 'Pop the latest stash', group: 'Stash', run: () => void act({ kind: 'stashApply', index: 0, pop: true }) } satisfies Command]
+        : []),
       { id: 'undo', label: 'Undo', group: 'History', run: () => void act({ kind: 'undo' }) },
       { id: 'redo', label: 'Redo', group: 'History', run: () => void act({ kind: 'redo' }) },
       {
@@ -3444,6 +3451,8 @@
       comparing={selection.pair !== null}
       terminalOpen={terminal.open}
       leftPanel={views.current.sidebar}
+      stashes={stashes.list.length}
+      dirty={worktree.dirty}
       rightPanel={views.current.details}
       rightPanelUsable={!merge.inProgress}
       onAction={toolbarAction}

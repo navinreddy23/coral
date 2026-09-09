@@ -476,6 +476,8 @@ mount(Toolbar, {
     busy: false,
     comparing: false,
     terminalOpen: false,
+    stashes: 2,
+    dirty: true,
     leftPanel: "open",
     rightPanel: true,
     rightPanelUsable: true,

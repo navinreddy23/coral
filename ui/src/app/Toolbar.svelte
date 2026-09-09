@@ -13,6 +13,8 @@
     comparing,
     terminalOpen,
     leftPanel,
+    stashes,
+    dirty,
     rightPanel,
     rightPanelUsable,
     onAction,
@@ -32,6 +34,16 @@
     terminalOpen: boolean;
     /** How much of the left panel is showing, which is what its own button draws. */
     leftPanel: PanelState;
+    /**
+     * How many stashes there are, and whether the working copy has anything in it.
+     *
+     * Both buttons need something to act on. Pop with nothing stashed answered "stash@{0} is
+     * not a valid reference" — git's name for a thing the reader never typed, about a stash
+     * the panel beside the button already says does not exist. Stash with a clean working copy
+     * answered "No local changes to save" and did nothing at all.
+     */
+    stashes: number;
+    dirty: boolean;
     /** The right panel has two states, not three: it holds one thing, so it has no rail. */
     rightPanel: boolean;
     /**
@@ -100,8 +112,20 @@
         hint: 'create one here',
         binding: 'branch.create',
       },
-      { name: 'stash', label: 'Stash', icon: 'stashPush', hint: 'put the working copy aside' },
-      { name: 'pop', label: 'Pop', icon: 'stashPop', hint: 'apply the latest stash and drop it' },
+      {
+        name: 'stash',
+        label: 'Stash',
+        icon: 'stashPush',
+        hint: dirty ? 'put the working copy aside' : 'Nothing to stash',
+        disabled: !dirty,
+      },
+      {
+        name: 'pop',
+        label: 'Pop',
+        icon: 'stashPop',
+        hint: stashes > 0 ? 'apply the latest stash and drop it' : 'Nothing stashed',
+        disabled: stashes === 0,
+      },
       {
         name: 'patch',
         label: 'Patch',
@@ -219,7 +243,7 @@
       {#each group as action (action.name)}
         <button
           class="action"
-          disabled={busy}
+          disabled={busy || action.disabled === true}
           title={tip(action)}
           aria-label={action.label}
           onclick={() => onAction(action.name)}

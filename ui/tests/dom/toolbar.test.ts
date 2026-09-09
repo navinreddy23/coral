@@ -18,6 +18,8 @@ function bar(overrides: Record<string, unknown> = {}) {
       comparing: false,
       terminalOpen: false,
       leftPanel: 'open',
+      stashes: 0,
+      dirty: true,
       rightPanel: true,
       rightPanelUsable: true,
       onAction: vi.fn(),
@@ -237,5 +239,45 @@ describe('where the buttons are', () => {
     expect(steps.some((s) => s.getAttribute('title')?.includes('a-very-long-directory-name'))).toBe(
       true,
     );
+  });
+});
+
+describe('the two buttons that need something to act on', () => {
+  /**
+   * Pressing Pop with nothing stashed answered "stash@{0} is not a valid reference" — git's
+   * own name for a thing the reader never typed, about a stash the panel beside the button
+   * already says does not exist.
+   */
+  function named(container: HTMLElement, label: string): HTMLButtonElement {
+    const found = buttons(container).find((b) => b.getAttribute('aria-label') === label);
+    if (!found) throw new Error(`no ${label} button`);
+    return found;
+  }
+
+  it('will not pop when nothing is stashed', () => {
+    expect(named(bar({ stashes: 0 }).container, 'Pop').disabled).toBe(true);
+    expect(named(bar({ stashes: 2 }).container, 'Pop').disabled).toBe(false);
+  });
+
+  it('says so rather than leaving the reader to guess', () => {
+    const title = named(bar({ stashes: 0 }).container, 'Pop').title;
+    expect(title).toContain('Nothing stashed');
+  });
+
+  it('names which stash it would take when there is one', () => {
+    expect(named(bar({ stashes: 3 }).container, 'Pop').title).toContain('latest');
+  });
+
+  it('will not stash a working copy with nothing in it', () => {
+    // git answers "No local changes to save" and does nothing, which is a button that lies.
+    expect(named(bar({ dirty: false }).container, 'Stash').disabled).toBe(true);
+    expect(named(bar({ dirty: true }).container, 'Stash').disabled).toBe(false);
+    expect(named(bar({ dirty: false }).container, 'Stash').title).toContain('Nothing to stash');
+  });
+
+  it('refuses both while something else is running, as every other button does', () => {
+    const { container } = bar({ busy: true, stashes: 2, dirty: true });
+    expect(named(container, 'Pop').disabled).toBe(true);
+    expect(named(container, 'Stash').disabled).toBe(true);
   });
 });
