@@ -18,16 +18,23 @@ async fn located(repo: &TestRepo) -> (GitRunner, RepoLocation) {
     (runner, loc)
 }
 
-// git reports a worktree's path resolved, and macOS puts temporary directories under /var,
-// which is a symlink to /private/var. The parent is what gets resolved, because the path
-// itself does not exist until git makes it. Windows is left alone: canonicalize answers there
-// with a \\?\ extended path that git never produces, which breaks the same comparison.
+// git reports a path resolved and with forward slashes, and a temporary directory differs from
+// it in two ways at once. macOS puts them under /var, a symlink to /private/var. Windows hands
+// out the 8.3 short name, C:\Users\RUNNER~1, where git says runneradmin. Canonicalising settles
+// both, and the extended prefix Windows adds when it resolves has to come back off, because git
+// never produces one. Separators are left to Path, which compares by component.
+fn resolved(path: &std::path::Path) -> std::path::PathBuf {
+    let full = std::fs::canonicalize(path).expect("resolve");
+    #[cfg(windows)]
+    if let Some(rest) = full.to_string_lossy().strip_prefix(r"\\?\") {
+        return std::path::PathBuf::from(rest);
+    }
+    full
+}
+
+// The parent is what gets resolved, because the worktree path does not exist until git makes it.
 fn under(dir: &tempfile::TempDir, name: &str) -> std::path::PathBuf {
-    #[cfg(unix)]
-    let base = std::fs::canonicalize(dir.path()).unwrap();
-    #[cfg(not(unix))]
-    let base = dir.path().to_path_buf();
-    base.join(name)
+    resolved(dir.path()).join(name)
 }
 
 fn two_commits() -> TestRepo {
@@ -73,7 +80,7 @@ fn a_new_worktree_checks_a_commit_out_without_moving_the_current_one() {
 
         let list = loc.worktrees(&runner).await.unwrap();
         assert_eq!(list.len(), 2, "{list:?}");
-        assert!(list.iter().any(|w| w.path == at.to_string_lossy()));
+        assert!(list.iter().any(|w| std::path::Path::new(&w.path) == at), "{list:?}");
     });
 
     // The new tree holds the older commit, and the original is where it was.
@@ -101,7 +108,7 @@ fn a_worktree_can_be_given_a_branch_of_its_own() {
         let list = loc.worktrees(&runner).await.unwrap();
         let made = list
             .iter()
-            .find(|w| w.path == at.to_string_lossy())
+            .find(|w| std::path::Path::new(&w.path) == at)
             .expect("the new worktree is listed");
         assert_eq!(made.branch.as_deref(), Some("from-commit"));
     });

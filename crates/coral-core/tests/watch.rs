@@ -211,14 +211,17 @@ async fn classifies_worktree_edits_without_naming_paths() {
     let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
     let loc = located(&repo).await;
 
-    // Canonical, because classify strips a prefix lexically and macOS hands out temporary
-    // directories under /var, which is a symlink to /private/var. The location reports the
-    // resolved path, so an unresolved one here belongs to no repository at all. Not on
-    // Windows, where canonicalize answers with a \\?\ extended path git never produces.
-    #[cfg(unix)]
+    // classify strips a prefix lexically, and the location reports the path git resolved, so an
+    // unresolved one here belongs to no repository at all. macOS puts temporary directories under
+    // /var, a symlink to /private/var; Windows hands out the 8.3 short name where git says the
+    // long one. The extended prefix Windows adds when it resolves has to come back off, because
+    // git never produces one.
     let root = std::fs::canonicalize(repo.path()).unwrap();
-    #[cfg(not(unix))]
-    let root = repo.path().to_path_buf();
+    #[cfg(windows)]
+    let root = {
+        let text = root.to_string_lossy().into_owned();
+        std::path::PathBuf::from(text.strip_prefix(r"\\?\").unwrap_or(&text))
+    };
     let c = classify(&loc, &root.join("deep/nested/file.c")).expect("in the worktree");
     assert!(c.worktree);
     assert!(!c.index && !c.refs && !c.ops);
