@@ -148,6 +148,27 @@ fn a_repository_that_has_gone_misses_rather_than_vanishing() {
     assert!(restored.tabs[0].missing, "and marked");
 }
 
+/// A repository can go while its tab is open, and the tab has to say so.
+#[test]
+fn a_repository_that_goes_while_it_is_open_is_marked_without_reloading() {
+    let gone = tempfile::tempdir().unwrap();
+    std::fs::create_dir(gone.path().join(".git")).unwrap();
+
+    let mut s = Session::default();
+    s.open(gone.path().to_path_buf());
+    s.mark_missing();
+    assert!(!s.tabs[0].missing, "it is there to begin with");
+
+    // Moved or deleted underneath the window, which is what a drive going or a folder being
+    // renamed looks like from here.
+    std::fs::remove_dir_all(gone.path().join(".git")).unwrap();
+    s.mark_missing();
+    assert!(
+        s.tabs[0].missing,
+        "and marked without the session being loaded again"
+    );
+}
+
 /// A corrupt session must never stop the application from opening.
 #[test]
 fn a_corrupt_session_loads_as_empty() {

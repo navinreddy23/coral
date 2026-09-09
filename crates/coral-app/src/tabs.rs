@@ -68,10 +68,15 @@ impl Tabs {
         held.session.clone()
     }
 
-    /// What is open, without touching the disk.
+    /// What is open.
+    ///
+    /// Two `exists` per tab before answering, so a repository that was moved or deleted while
+    /// its tab was open is marked as gone rather than going on looking like one that is there.
     #[must_use]
     pub fn read(&self) -> Session {
-        self.held().session.clone()
+        let mut held = self.held();
+        held.session.mark_missing();
+        held.session.clone()
     }
 
     fn held(&self) -> std::sync::MutexGuard<'_, Held> {

@@ -672,6 +672,9 @@
     const path = info.path;
     await Promise.all([refs.load(path), worktree.load(path), merge.load(path)]);
     await graph.open(path);
+    // The session re-checks every tab's directory whenever it is read, so this is what takes
+    // the line back off a tab whose repository was moved away and put back.
+    await tabs.refresh();
   }
 
   /**
@@ -758,6 +761,24 @@
    * Without a diff open there is nothing to act on, and doing something to a file the user
    * cannot see would be worse than doing nothing.
    */
+  /** Whether the repository was gone the last time the window looked. */
+  let wasGone = false;
+
+  /**
+   * Notices a repository going, and coming back.
+   *
+   * The working copy is the first thing to fail when a directory is moved out from under the
+   * window, and until the tabs were asked for again the tab went on looking like a repository
+   * that was there. Both ways round: a folder renamed by mistake and put back would otherwise
+   * leave a tab struck through for the rest of the session.
+   */
+  $effect(() => {
+    const gone = worktree.error?.includes('not a git repository') ?? false;
+    if (gone === wasGone) return;
+    wasGone = gone;
+    void tabs.refresh();
+  });
+
   async function stageOpenFile(stage: boolean) {
     const path = diff.path;
     if (!info || path === null || diff.source === 'commit' || diff.source === 'compare') return;

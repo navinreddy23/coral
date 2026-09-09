@@ -350,7 +350,11 @@ impl Session {
     }
 
     /// Marks tabs whose repository is no longer on disk.
-    fn mark_missing(&mut self) {
+    ///
+    /// Checked whenever the session is read, not only when it is loaded: a repository can be
+    /// moved or deleted while its tab is open, and until this ran again the tab went on
+    /// looking like a repository that was there.
+    pub fn mark_missing(&mut self) {
         for tab in &mut self.tabs {
             tab.missing = !tab.path.join(".git").exists() && !tab.path.join("HEAD").exists();
         }
