@@ -62,6 +62,15 @@ export class MergeState {
    */
   stopped = $state('');
 
+  /**
+   * True when the stop is one that continuing cannot answer.
+   *
+   * Kept as its own answer rather than read back off [`stopped`](#stopped), which has already
+   * been reworded by then — asking the rewritten text whether it is git's original is a
+   * question that can only say no.
+   */
+  nothingToRecord = $state(false);
+
   #path = '';
 
   /** True while git is mid-merge, mid-rebase, or otherwise stopped. */
@@ -89,7 +98,10 @@ export class MergeState {
       const [operation, files] = await Promise.all([repoOperation(path), repoConflicts(path)]);
       this.operation = operation;
       this.files = files;
-      if (operation.state === 'clean') this.stopped = '';
+      if (operation.state === 'clean') {
+        this.stopped = '';
+        this.nothingToRecord = false;
+      }
       if (this.active !== null && !files.some((f) => f.path === this.active)) this.close();
     } catch (e) {
       this.error = messageOf(e);
@@ -229,7 +241,8 @@ export class MergeState {
     this.error = null;
     try {
       const out = await operationStep(this.#path, step);
-      this.stopped = out.completed ? '' : out.message;
+      this.nothingToRecord = !out.completed && emptied(out.message);
+      this.stopped = out.completed ? '' : plainly(out.message);
       await this.#reload();
       return out.completed;
     } catch (e) {
@@ -275,4 +288,25 @@ export function render(blocks: readonly Block[], choices: Record<number, Pick>):
 /** The lines one side of a conflicting region holds. */
 export function sideOf(block: Block & { kind: 'conflict' }, side: Side): readonly string[] {
   return side === 'ours' ? block.ours : side === 'theirs' ? block.theirs : block.base;
+}
+
+/**
+ * A cherry-pick or revert whose change is already here ends up with nothing to record.
+ *
+ * git answers that with two commands to type — `git commit --allow-empty` to keep an empty
+ * commit, or `--skip` to move on. This window has a button for the second, a button for
+ * abandoning the whole thing, and no terminal in the way, so the advice names the one thing
+ * the reader cannot do here and hides the two they can.
+ */
+export function plainly(message: string): string {
+  if (!/is now empty/iu.test(message)) return message;
+  return (
+    'There is nothing left to record: this change is already here. Skip commit moves past it, ' +
+    'and Abort undoes the whole thing.'
+  );
+}
+
+/** True when the stop is one that continuing cannot answer. */
+export function emptied(message: string): boolean {
+  return /is now empty/iu.test(message);
 }

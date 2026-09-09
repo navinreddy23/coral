@@ -185,9 +185,13 @@
     {#if resumable}
       <button
         class="primary"
-        disabled={merge.busy || merge.files.length > 0}
+        disabled={merge.busy || merge.files.length > 0 || merge.nothingToRecord}
         onclick={finish}
-        title={merge.files.length > 0 ? 'Resolve every file first' : 'Continue the operation'}
+        title={merge.files.length > 0
+          ? 'Resolve every file first'
+          : merge.nothingToRecord
+            ? 'There is nothing to record; skip it or abort'
+            : 'Continue the operation'}
       >
         Continue
       </button>
@@ -267,7 +271,11 @@
         </li>
       {/each}
       {#if merge.files.length === 0}
-        <li class="done">Every file is resolved. Continue when you are ready.</li>
+        <li class="done">
+          {merge.nothingToRecord
+            ? 'Nothing is left to record here.'
+            : 'Every file is resolved. Continue when you are ready.'}
+        </li>
       {/if}
     </ul>
 
