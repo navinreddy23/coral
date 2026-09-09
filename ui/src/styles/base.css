@@ -74,6 +74,23 @@ code, .mono { font-family: var(--font-mono); font-variant-ligatures: none; }
 ::-webkit-scrollbar-corner { background: transparent; }
 
 /*
+ * No scrollbars while an overlay has the window.
+ *
+ * WebKitGTK draws a scroller's bar above page content, so the commit list's thumb ran straight
+ * down the middle of every open context menu and of the command palette — a three-pixel rule
+ * across the words, at whatever column the pane's right edge happened to be. No `z-index` on
+ * the overlay reaches it, because the bar is not in the page's stacking order at all. Chrome
+ * orders it correctly, which is why the browser sweep never saw it.
+ *
+ * A bar has nothing to say while a modal is up, so it goes for as long as one is. These are
+ * overlay scrollbars and take no layout space, so nothing moves when they do. Keyed on the
+ * scrim every overlay in this window already draws, so a new one is covered by being built the
+ * way the others are.
+ */
+body:has(.scrim), body:has(.scrim) * { scrollbar-width: none; }
+body:has(.scrim) ::-webkit-scrollbar { display: none; }
+
+/*
  * One switch for every transition and animation in the window.
  *
  * Components ask for motion through `--fast` and `--slow`, so setting both to nothing here

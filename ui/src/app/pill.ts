@@ -50,3 +50,22 @@ export function orderRefs(
 export function pillChars(columnPx: number): number {
   return Math.max(10, Math.floor((columnPx - 62) / 5.9));
 }
+
+/**
+ * The fewest characters worth drawing a name in.
+ *
+ * Below this the pill is clipped to an initial and an ellipsis — "m…", or, for a name whose
+ * first characters are wide, "……" — which costs the same room as a name and says nothing.
+ */
+const WORTH_READING = 5;
+
+/**
+ * Whether a pill in a column this wide should carry its name at all.
+ *
+ * Squeezed narrow — the terminal docked beside the graph, with the detail panel open — the
+ * branch column dropped to "m…", "……", "st…". The mark alone still says a branch or a tag is
+ * here, the colour still says which, and the whole name is a hover away.
+ */
+export function pillNamed(columnPx: number): boolean {
+  return Math.floor((columnPx - 62) / 5.9) >= WORTH_READING;
+}

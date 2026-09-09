@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { componentStyles, tokens } from './stylesheet';
@@ -106,6 +109,28 @@ describe('a glyph in the middle of a sentence', () => {
       if (!/display:\s*inline/u.test(rule)) offenders.push(name);
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('scrollbars while an overlay has the window', () => {
+  /**
+   * WebKitGTK draws a scroller's bar above page content, so the commit list's thumb ran down
+   * the middle of every open context menu and of the command palette — a three-pixel rule
+   * across the words. No `z-index` on the overlay reaches it, because the bar is not in the
+   * page's stacking order at all, and Chrome orders it correctly, so nothing but the real
+   * window ever showed it.
+   */
+  const BASE = readFileSync(resolve(import.meta.dirname, '../src/styles/base.css'), 'utf8');
+
+  it('are taken away for as long as a scrim is up', () => {
+    expect(BASE).toMatch(/body:has\(\.scrim\)[^{]*\{[^}]*scrollbar-width:\s*none/u);
+    expect(BASE).toMatch(/body:has\(\.scrim\)[^{]*::-webkit-scrollbar[^{]*\{[^}]*display:\s*none/u);
+  });
+
+  it('are keyed on the scrim every overlay already draws', () => {
+    // So an overlay added later is covered by being built the way the others are.
+    const wearing = componentStyles().filter((c) => /\.scrim\s*[,{]/u.test(c.css));
+    expect(wearing.length, 'the overlays that draw one').toBeGreaterThan(4);
   });
 });
 

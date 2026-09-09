@@ -69,7 +69,7 @@
   import { SshState } from '../state/ssh.svelte';
   import { elideRef } from './path';
   import { checkoutOf, divergence, remoteOf, withoutRemote } from './refname';
-  import { orderRefs, pillChars } from './pill';
+  import { orderRefs, pillChars, pillNamed } from './pill';
   import { checkoutItems, combineItems, type RevisionActions } from './revision';
   import { count, discardWords } from './discard';
   import { bandWidth, columnWidth, laneToken } from '../graph/column';
@@ -811,7 +811,11 @@
     }
 
     const said = outcomeToast(action.kind, outcome.what, outcome.message, outcome.conflicted);
-    toasts.push(said.kind, said.title, said.detail);
+    const announced = toasts.push(said.kind, said.title, said.detail);
+    // An operation that stopped on conflicts says so until it is dismissed, which is right for
+    // a failure nobody was watching and wrong once the window itself has settled it: the notice
+    // sat in the corner through resolving that merge, committing it and everything after.
+    if (outcome.conflicted) stoppedToast = announced;
 
     // Not for a deletion. A refused delete is refused because the remote will not part with
     // that branch — it is protected, or it is the default one — and neither pulling it nor
@@ -860,6 +864,27 @@
    * Read from the porcelain summary rather than from the exit code, which is the same for a
    * rejection and for a server that would not answer. Only a rejection has a next move.
    */
+  /**
+   * The notice that an operation stopped on conflicts, so it can go when they are settled.
+   *
+   * Deliberately not `$state`. The effect below must run when the operation ends and not when
+   * this is set: the merge state is read after the action returns, so tracking this dismissed
+   * the notice in the same breath as raising it.
+   */
+  let stoppedToast: number | null = null;
+
+  /**
+   * Takes that notice down once nothing is stopped any more.
+   *
+   * A merge can end by being continued, by being aborted, or from the terminal beside it, so
+   * this watches the state rather than the button that changed it.
+   */
+  $effect(() => {
+    if (merge.inProgress || stoppedToast === null) return;
+    toasts.dismiss(stoppedToast);
+    stoppedToast = null;
+  });
+
   /** git's own words for a fast-forward it will not do because both sides have moved. */
   function hasDiverged(message: string | undefined): boolean {
     if (message === undefined) return false;
@@ -3233,6 +3258,9 @@
 
   const refChars = $derived(pillChars(columns.refs));
 
+  /** Whether the column is wide enough for a name to survive being clipped to fit. */
+  const namedPills = $derived(pillNamed(columns.refs));
+
   /**
    * Which host a tracking branch's remote belongs to.
    *
@@ -3720,7 +3748,9 @@
                         <RefMark kind={label.kind.kind} />
                       {/if}
                     </span>
-                    <span class="pill-text">{elideRef(label.short, refChars)}</span>
+                    {#if namedPills}
+                      <span class="pill-text">{elideRef(label.short, refChars)}</span>
+                    {/if}
                   </button>
                 {/each}
                 <!--

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { orderRefs, pillChars } from '../src/app/pill';
+import { orderRefs, pillChars, pillNamed } from '../src/app/pill';
 import type { PlacedRef } from '../src/ipc/commands';
 
 function ref(short: string, kind: PlacedRef['kind']): PlacedRef {
@@ -67,5 +67,28 @@ describe('how much of a name fits', () => {
     // for two letters is a pill saying nothing.
     expect(pillChars(0)).toBe(10);
     expect(pillChars(62)).toBe(10);
+  });
+});
+
+describe('whether a pill carries its name at all', () => {
+  /**
+   * Squeezed narrow — the terminal docked beside the graph with the detail panel open — the
+   * column dropped to "m…", "……", "st…". A pill clipped to an initial and an ellipsis costs
+   * the same room as a name and says nothing; the mark alone still says a branch is here.
+   */
+  it('says no once the name would be clipped to an initial', () => {
+    expect(pillNamed(62)).toBe(false);
+    expect(pillNamed(80)).toBe(false);
+  });
+
+  it('says yes at any width the column can actually be dragged to', () => {
+    expect(pillNamed(120)).toBe(true);
+    expect(pillNamed(190)).toBe(true);
+  });
+
+  it('agrees with itself: where it says yes, there are characters to show', () => {
+    for (const px of [92, 100, 140, 200, 400]) {
+      if (pillNamed(px)) expect(pillChars(px), `${px}px`).toBeGreaterThanOrEqual(5);
+    }
   });
 });

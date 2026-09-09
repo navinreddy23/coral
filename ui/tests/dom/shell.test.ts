@@ -448,6 +448,56 @@ describe('the shell', () => {
     expect(container.querySelector('aside.wip-panel')).toBeNull();
   });
 
+  it('takes down the stopped notice once nothing is stopped', async () => {
+    /*
+     * "merge stopped on conflicts" waits to be dismissed, which is right for a failure nobody
+     * was watching and wrong once the window itself has settled it: the notice sat in the
+     * corner through resolving that merge, committing it, and everything after.
+     */
+    const stopped = {
+      state: 'merge',
+      labels: { ours: 'main', theirs: 'side', swapped: false },
+      progress: null,
+      headName: 'main',
+      stoppedAt: null,
+      interactive: false,
+      resumable: true,
+    };
+    const { container } = await shell({
+      repo_action: { what: 'merge side', conflicted: true, message: 'CONFLICT (content)' },
+      repo_operation: null,
+      repo_conflicts: [],
+    });
+
+    // Merge something, and have it stop.
+    wire({
+      repo_action: { what: 'merge side', conflicted: true, message: 'CONFLICT (content)' },
+      repo_operation: stopped,
+      repo_conflicts: [{ path: 'shared.txt', kind: 'both_modified' }],
+    });
+    // Any action will do: what makes the notice is the outcome saying it stopped.
+    await fireEvent.click(container.querySelector('[aria-label="Fetch"]') as HTMLButtonElement);
+
+    const toast = await waitFor(() => {
+      const found = [...container.querySelectorAll('.toast')].find((t) =>
+        t.textContent?.includes('stopped on conflicts'),
+      );
+      if (!found) throw new Error('no notice yet');
+      return found;
+    });
+    expect(toast).toBeTruthy();
+
+    // Now settle it: the operation is over.
+    wire({ repo_operation: null, repo_conflicts: [] });
+    await fireEvent.keyDown(window, { key: 'r', ctrlKey: true });
+    await waitFor(() => {
+      const still = [...container.querySelectorAll('.toast')].some((t) =>
+        t.textContent?.includes('stopped on conflicts'),
+      );
+      if (still) throw new Error('the notice is still up');
+    });
+  });
+
   it('cycles the left panel from open, to a rail, to gone, and back', async () => {
     // The owner asked for hide or minimise. Three states behind one button, so what matters is
     // that a press always changes something and three of them come back to the start.
