@@ -4,6 +4,12 @@ on:
   push:
   pull_request:
 
+# A second push supersedes the first rather than leaving three runners finishing work nobody
+# is waiting for any more.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -48,6 +54,17 @@ jobs:
       - run: cd ui && npm run check
       - run: cd ui && npm test
       - run: cd ui && npm run build
+
+      # The two guards `just ui-check` runs after the build. Both faults appear only at runtime,
+      # so the built output is searched for them: Svelte's server entry opens a blank window, and
+      # the preview fixtures have shipped in a release once already. The build is the same on all
+      # three platforms, so once is enough.
+      - name: The built interface carries neither the server entry nor the fixtures
+        if: runner.os == 'Linux'
+        working-directory: ui
+        run: |
+          ! grep -rql "is not available on the server" dist/assets
+          ! grep -rql "Ada Lovelace" dist/assets
 
   licenses:
     runs-on: ubuntu-latest
