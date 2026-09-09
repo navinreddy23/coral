@@ -308,6 +308,23 @@ describe('the words that changed inside a line', () => {
     expect(marks.map((m) => m.textContent)).toEqual(['count', 'amount']);
   });
 
+  it('takes the change map away in blame, where it would point at the wrong rows', () => {
+    // The strip's marks, its "you are here" band and its jump all measure against the diff's
+    // rows, and blame puts the whole file in the same scroller instead. On a file long enough
+    // for the diff to be windowed those are different row sets, so the strip says the reader is
+    // somewhere they are not and clicking it goes to the wrong line. History keeps it: the
+    // diff is what it shows beside the commit list.
+    expect(mounted('split').container.querySelector('.overview')).not.toBeNull();
+
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'kernel/sched/core.c';
+    diff.file = fileDiff();
+    diff.setMode('split');
+    diff.setView('blame');
+    const { container } = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+    expect(container.querySelector('.overview')).toBeNull();
+  });
+
   it('takes the mark colour from the line it is on, which a scoped rule could not', () => {
     // The component that draws the mark is its own, so a rule written against `tr.add mark`
     // in this panel would never match it. The tint is handed down as a property instead.

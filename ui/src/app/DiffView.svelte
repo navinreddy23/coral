@@ -549,7 +549,9 @@
     {/if}
   </div>
 
-  {#if diff.mode === 'split' && marks.length > 0}
+  <!-- Not in blame: the marks, the band and the jump below all measure against the diff's
+       rows, and blame puts the whole file in this same scroller instead. -->
+  {#if diff.mode === 'split' && diff.view !== 'blame' && marks.length > 0}
     <button
       class="overview"
       onclick={jump}
