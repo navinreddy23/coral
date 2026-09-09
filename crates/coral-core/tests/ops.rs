@@ -221,8 +221,12 @@ async fn a_stash_that_lands_on_conflicts_has_stopped_rather_than_failed() {
 
     assert!(!outcome.completed);
     assert_eq!(outcome.conflicts, ["a.txt"]);
+    // Not `contains("CONFLICT")`. git 2.43 prints its CONFLICT lines through `--quiet` and
+    // git 2.55 suppresses them, leaving only "The stash entry is kept in case you need it
+    // again." What holds on both is that git says something rather than nothing, and that the
+    // paths come from the repository rather than from git's prose, which is the assertion above.
     assert!(
-        outcome.message.contains("CONFLICT"),
+        !outcome.message.trim().is_empty(),
         "git's own words reach the user: {}",
         outcome.message
     );
