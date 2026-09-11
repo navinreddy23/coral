@@ -39,13 +39,20 @@ function tag(short: string): PlacedRef {
   return { ...ref(short), name: `refs/tags/${short}`, kind: { kind: 'tag', annotated: false } };
 }
 
-function stash(name: string, oid: string, row: number | null = 0, message = '1a2b3c4 a commit') {
+function stash(
+  name: string,
+  oid: string,
+  row: number | null = 0,
+  message = '1a2b3c4 a commit',
+  automatic = true,
+) {
   return {
     index: 0,
     oid,
     branch: 'master',
     message,
     time: 1_756_000_000,
+    automatic,
     name,
     row,
   };
@@ -284,8 +291,8 @@ describe('the stash list', () => {
     // the next one.
     const view = mount({
       stashes: [
-        stash('master@78d0a2d', '78d0a2dd1a00b8e06286b02bac7ca3811a7041fc', 0, 'a half-finished thought'),
-        stash('master@21b55eb', '21b55ebccffb3a1b09c67b16ef4b009cce430e5e', 0, 'the other thing entirely'),
+        stash('master@78d0a2d', '78d0a2dd1a00b8e06286b02bac7ca3811a7041fc', 0, 'a half-finished thought', false),
+        stash('master@21b55eb', '21b55ebccffb3a1b09c67b16ef4b009cce430e5e', 0, 'the other thing entirely', false),
       ],
     });
     expect(view.getByText('a half-finished thought')).toBeTruthy();
@@ -297,10 +304,22 @@ describe('the stash list', () => {
     // what is in it. Two of those side by side cannot be chosen between, which is the only job
     // this list has.
     const view = mount({
-      stashes: [stash('master@78d0a2d', 'a'.repeat(40), 0, 'a half-finished thought')],
+      stashes: [stash('master@78d0a2d', 'a'.repeat(40), 0, 'a half-finished thought', false)],
     });
     expect(view.getByText('a half-finished thought')).toBeTruthy();
     expect(view.queryByText('master@78d0a2d')).toBeNull();
+  });
+
+  it('says which branch a stash git named came off, not the commit it was sitting on', () => {
+    // git's own subject for a stash made with no message is "WIP on master: 1a2b3c4 <subject>",
+    // and the engine hands that over with the branch split off — leaving "1a2b3c4 Revert …",
+    // which in this column reads as though that commit is what was stashed. It is not: it is
+    // what the branch was on at the time.
+    const view = mount({
+      stashes: [stash('master@78d0a2d', 'a'.repeat(40), 0, '1a2b3c4 Revert something', true)],
+    });
+    expect(view.getByText('On master')).toBeTruthy();
+    expect(view.queryByText('1a2b3c4 Revert something')).toBeNull();
   });
 
   it('puts the id back when two stashes were written the same', () => {
@@ -312,8 +331,8 @@ describe('the stash list', () => {
         stash('master@21b55eb', '21b55ebccffb3a1b09c67b16ef4b009cce430e5e'),
       ],
     });
-    expect(view.getByText('1a2b3c4 a commit 78d0a2d')).toBeTruthy();
-    expect(view.getByText('1a2b3c4 a commit 21b55eb')).toBeTruthy();
+    expect(view.getByText('On master 78d0a2d')).toBeTruthy();
+    expect(view.getByText('On master 21b55eb')).toBeTruthy();
   });
 
   it('offers what can be done with one from the dots and from a right-click', () => {
@@ -325,7 +344,7 @@ describe('the stash list', () => {
 
     const dots = view.getByTitle('What can be done with master@78d0a2d');
     void fireEvent.click(dots);
-    void fireEvent.contextMenu(view.getByText('1a2b3c4 a commit'));
+    void fireEvent.contextMenu(view.getByText('On master'));
 
     expect(asked).toEqual(['master@78d0a2d', 'master@78d0a2d']);
   });
@@ -339,7 +358,7 @@ describe('the stash list', () => {
       onSelect: (row: number) => picked.push(row),
     });
 
-    const row = view.getByText('1a2b3c4 a commit').closest('button');
+    const row = view.getByText('On master').closest('button');
     expect(row?.hasAttribute('disabled')).toBe(true);
     void fireEvent.click(row as HTMLElement);
     expect(picked).toEqual([]);

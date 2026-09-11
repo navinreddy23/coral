@@ -506,7 +506,17 @@ message: string,
 /**
  * Seconds since the epoch.
  */
-time: bigint, };
+time: bigint, 
+/**
+ * True when git named the entry, rather than somebody typing a message for it.
+ *
+ * git's own name for a stash made with no message is the commit it was taken from:
+ * "WIP on master: 1a2b3c4 the subject". That names what the branch was sitting on, not
+ * what is in the stash, so a list of them reads as a list of commits somebody stashed —
+ * which is exactly what they are not. Knowing which shape it was is what lets a window
+ * say "On master" instead.
+ */
+automatic: boolean, };
 
 export type Status = { branch: string | null, oid: string | null, upstream: string | null, ahead: bigint, behind: bigint, stashCount: number, entries: Array<StatusEntry>, };
 

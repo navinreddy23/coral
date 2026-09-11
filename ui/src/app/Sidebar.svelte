@@ -286,21 +286,29 @@
   const stashRows = $derived(
     filter.trim() === ''
       ? stashes
-      : stashes.filter((s) => `${s.name} ${s.message}`.toLowerCase().includes(filter.trim().toLowerCase())),
+      : stashes.filter((s) =>
+          `${s.name} ${s.message} ${named(s)}`.toLowerCase().includes(filter.trim().toLowerCase()),
+        ),
   );
 
   /**
    * What to call a stash in the list.
    *
    * Its name is `main@2b36bbb`, which is unique and says nothing: a column of those cannot be
-   * chosen from, and the message is the only part anybody wrote. The name exists because two
-   * stashes taken from the same commit with no message of their own share a subject, so the
-   * short id goes back on only where the messages actually collide.
+   * chosen from, and a message somebody typed is the part worth reading. git's own message is
+   * not that — for a stash made with no message it is the commit the branch was sitting on,
+   * "1a2b3c4 Revert …", which reads in this column as though that commit is the thing in the
+   * stash. Those say the branch instead, which is the true part. The short id goes back on
+   * only where two rows would otherwise read the same.
    */
-  function label(s: { oid: string; name: string; message: string }): string {
-    const text = s.message.trim() === '' ? s.name : s.message;
-    const shared = stashes.filter((other) => other.message === s.message).length > 1;
-    return shared ? `${text} ${s.oid.slice(0, 7)}` : text;
+  function label(s: PlacedStash): string {
+    const shared = stashes.filter((other) => named(other) === named(s)).length > 1;
+    return shared ? `${named(s)} ${s.oid.slice(0, 7)}` : named(s);
+  }
+
+  function named(s: PlacedStash): string {
+    if (!s.automatic && s.message.trim() !== '') return s.message;
+    return s.branch === null ? 'Stashed work' : `On ${s.branch}`;
   }
 
   const total = $derived(
