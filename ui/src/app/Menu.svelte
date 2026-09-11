@@ -34,6 +34,7 @@
 
 <script lang="ts">
   import Icon from './Icon.svelte';
+  import { fitPanel, fitSubmenu } from './placement';
 
   const { x, y, items, onClose }: {
     x: number;
@@ -58,12 +59,40 @@
   $effect(() => {
     if (!panel) return;
     const box = panel.getBoundingClientRect();
-    const margin = 8;
-    fitted = {
-      left: Math.max(margin, Math.min(x, window.innerWidth - box.width - margin)),
-      top: Math.max(margin, Math.min(y, window.innerHeight - box.height - margin)),
-    };
+    fitted = fitPanel(x, y, box, viewport());
   });
+
+  /**
+   * Where the open submenu sits.
+   *
+   * The stylesheet hangs it off the right of its row, which is right until the menu itself is
+   * against the right edge of the window: the panel is fitted there, the submenu that hangs
+   * off it was not, and its rows ran off the window with no way to read or reach them — Reset,
+   * whose three choices differ only in how much they throw away, was exactly that menu.
+   *
+   * Measured from the row rather than from the submenu's own box, so running it again after a
+   * flip reaches the same answer instead of oscillating.
+   */
+  let sub = $state<HTMLDivElement | null>(null);
+  let subFit = $state<{ left: string; top: string } | null>(null);
+  $effect(() => {
+    void open;
+    const el = sub;
+    const row = el?.parentElement ?? null;
+    if (el === null || row === null) {
+      subFit = null;
+      return;
+    }
+    subFit = fitSubmenu(
+      row.getBoundingClientRect(),
+      { width: el.offsetWidth, height: el.offsetHeight },
+      viewport(),
+    );
+  });
+
+  function viewport() {
+    return { width: window.innerWidth, height: window.innerHeight, margin: 8 };
+  }
 
   function choose(item: Extract<MenuItem, { kind: 'item' }>) {
     if (item.disabled) return;
@@ -119,7 +148,13 @@
           <span class="more"><Icon name="chevronRight" size={13} /></span>
         </button>
         {#if open === i}
-          <div class="sub" role="menu">
+          <div
+            class="sub"
+            role="menu"
+            bind:this={sub}
+            style:left={subFit?.left ?? 'calc(100% - 2px)'}
+            style:top={subFit?.top ?? '-5px'}
+          >
             {#each item.items as child, j (j)}
               {#if child.kind === 'item'}
                 <button
