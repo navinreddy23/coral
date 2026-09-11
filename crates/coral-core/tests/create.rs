@@ -50,6 +50,13 @@ async fn a_clone_that_checked_nothing_out_says_so() {
         "{:?}",
         made.notes
     );
+    // And nothing else: "Cloning into '…'" and "done." are on the same stream and say nothing
+    // the window does not already show, so they would only crowd out the line that matters.
+    assert!(
+        made.notes.iter().all(|n| n.starts_with("warning:")),
+        "{:?}",
+        made.notes
+    );
 }
 
 #[tokio::test]

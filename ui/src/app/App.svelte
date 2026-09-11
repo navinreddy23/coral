@@ -3178,9 +3178,14 @@
   });
 
   /** Opens a repository from the start page, and puts the page away. */
-  async function openFromStart(path: string) {
+  async function openFromStart(path: string, notes?: string) {
     showStart = false;
     await tabs.open(path);
+    // Said after the tab is up rather than on the screen that just went away: a clone can
+    // exit 0 and check nothing out, and this is the only word anybody gets about it.
+    if (notes !== undefined && notes !== '') {
+      toasts.push('warn', 'The clone left something to say', notes);
+    }
   }
 
   /**
@@ -3636,7 +3641,7 @@
       start={startPage}
       sshKeys={ssh.keys}
       defaultSshKey={profiles.current.settings.ssh.privateKey ?? ''}
-      onOpen={(path) => void openFromStart(path)}
+      onOpen={(path, notes) => void openFromStart(path, notes)}
       onPickDirectory={pickDirectory}
       onConfirm={confirmThat}
       onClose={tabs.session.tabs.length === 0 ? null : () => (showStart = false)}

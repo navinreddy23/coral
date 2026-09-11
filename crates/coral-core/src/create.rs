@@ -115,6 +115,9 @@ impl Drop for RemoveOnDrop {
     }
 }
 
+/// The prefixes git puts on a line it means somebody to read.
+const NOTEWORTHY: [&str; 4] = ["warning:", "error:", "hint:", "fatal:"];
+
 /// Where a clone landed, and anything git said about it that was not progress.
 ///
 /// A clone can exit 0 and still not check anything out. `notes` is how that reaches the person
@@ -186,7 +189,10 @@ where
                 on_progress(p);
             } else {
                 let text = String::from_utf8_lossy(line).trim().to_owned();
-                if !text.is_empty() {
+                // Only what git marks as worth reading. The rest of this stream is "Cloning
+                // into '…'" and "done.", which say nothing the window does not already show,
+                // and which would push the one line that matters out of a clamped toast.
+                if NOTEWORTHY.iter().any(|p| text.starts_with(p)) {
                     notes.push(text);
                 }
             }
