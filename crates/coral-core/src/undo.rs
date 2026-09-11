@@ -210,6 +210,10 @@ impl RepoLocation {
     /// Refuses when the worktree has changes that the restore would overwrite, because moving
     /// refs underneath uncommitted work silently changes what those changes mean.
     ///
+    /// `label` is the step being taken, and it is the caller's because this serves both
+    /// directions: a redo stopped by the guard used to report "cannot undo", which names a
+    /// button the user did not press.
+    ///
     /// # Errors
     /// [`CoralError::Refused`] if the worktree would lose work; otherwise propagates git
     /// failures.
@@ -219,6 +223,7 @@ impl RepoLocation {
         target: &RefSnapshot,
         from: &RefSnapshot,
         restore: Restore,
+        label: &'static str,
     ) -> Result<(), CoralError> {
         // Only asked of a restore that will touch the files. Keeping the changes overwrites
         // nothing, so refusing over a dirty worktree there would refuse the one case where
@@ -227,7 +232,7 @@ impl RepoLocation {
             let status = self.status(runner).await?;
             if !status.is_clean() && !self.already_holds(runner, target).await? {
                 return Err(CoralError::Refused {
-                    label: "undo",
+                    label,
                     detail: "the worktree has changes; commit or stash them first".to_owned(),
                 });
             }
@@ -376,6 +381,7 @@ impl RepoLocation {
         runner: &GitRunner,
         backwards: bool,
     ) -> Result<String, CoralError> {
+        let verb = if backwards { "undo" } else { "redo" };
         let mut journal = Journal::load(self);
         let picked = if backwards {
             journal.undoable()
@@ -383,8 +389,8 @@ impl RepoLocation {
             journal.redoable()
         };
         let entry = picked.cloned().ok_or_else(|| CoralError::Refused {
-            label: if backwards { "undo" } else { "redo" },
-            detail: format!("nothing to {}", if backwards { "undo" } else { "redo" }),
+            label: verb,
+            detail: format!("nothing to {verb}"),
         })?;
 
         let (target, from) = if backwards {
@@ -398,11 +404,10 @@ impl RepoLocation {
         let now = self.snapshot_refs(runner).await?;
         if let Some(name) = moved_since(&now, from, target) {
             return Err(CoralError::Refused {
-                label: if backwards { "undo" } else { "redo" },
+                label: verb,
                 detail: format!(
-                    "{name} has moved since {}; there is nothing safe to {} here",
-                    entry.label,
-                    if backwards { "undo" } else { "redo" }
+                    "{name} has moved since {}; there is nothing safe to {verb} here",
+                    entry.label
                 ),
             });
         }
@@ -413,7 +418,8 @@ impl RepoLocation {
         } else {
             Restore::Worktree
         };
-        self.restore_refs(runner, target, from, restore).await?;
+        self.restore_refs(runner, target, from, restore, verb)
+            .await?;
 
         if backwards {
             journal.undone += 1;

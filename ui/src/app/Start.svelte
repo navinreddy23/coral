@@ -23,7 +23,8 @@
     /** Asks before something that cannot be undone. Returns whether to go ahead. */
     onConfirm: (title: string, detail: string) => Promise<boolean>;
     /** Opens a repository at a path, in a tab. */
-    onOpen: (path: string) => void;
+    /** `notes` is anything git said about a clone that was not progress and not a failure. */
+    onOpen: (path: string, notes?: string) => void;
     /** Asks for a directory, since the file picker belongs to the window. */
     onPickDirectory: (title: string) => Promise<string | null>;
     /** Null when there is nothing to go back to, and the page is all there is. */
@@ -102,7 +103,9 @@
       history: cloneHistory,
       depth: cloneDepth,
     });
-    if (made !== null) onOpen(made);
+    // The notice goes with it: opening the repository takes this screen away, and a clone
+    // that checked nothing out is exactly the one worth saying something about.
+    if (made !== null) onOpen(made, start.notice ?? undefined);
   }
 
   async function doCreate() {
@@ -172,6 +175,12 @@
 
     {#if start.error}
       <p class="error">{start.error}</p>
+    {/if}
+
+    <!-- Not a failure: git exited 0 and still said something worth reading, which is how a
+         clone that checked nothing out announces itself. -->
+    {#if start.notice}
+      <p class="notice">{start.notice}</p>
     {/if}
 
     {#if start.form === 'clone'}
@@ -431,6 +440,10 @@
   }
   .mono { font-family: var(--font-mono); font-variant-ligatures: none; }
   .error { color: var(--danger); margin: 0 0 var(--space-3); background: var(--bg-0); }
+  .notice {
+    color: var(--warn); margin: 0 0 var(--space-3); background: var(--bg-0);
+    white-space: pre-wrap;
+  }
   .none { color: var(--fg-2); margin: 0; background: var(--bg-0); }
 
   .filter {

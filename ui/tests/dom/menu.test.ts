@@ -32,6 +32,18 @@ function row(view: { container: HTMLElement }, label: string): HTMLElement {
 }
 
 describe('the context menu', () => {
+  it('keeps the whole of a row on the row, since its width is capped', () => {
+    // "Push feature/good-name to origin" beside "the upstream stays where it is" came out as
+    // "Push feature/good-name to ori… the upstream stays wher…", and a menu row carried no
+    // title, so both halves were simply gone.
+    const view = render(Menu, { x: 10, y: 10, items: items(), onClose: vi.fn() });
+    const first = row(view, 'Checkout this commit').closest('button');
+    expect(first?.getAttribute('title')).toBe('Checkout this commit\na1b2c3d4');
+
+    const plain = row(view, 'Drop commit').closest('button');
+    expect(plain?.getAttribute('title')).toBe('Drop commit');
+  });
+
   it('runs the item that was chosen and closes first', async () => {
     const run = vi.fn();
     const onClose = vi.fn();

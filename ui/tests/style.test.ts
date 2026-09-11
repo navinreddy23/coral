@@ -31,6 +31,16 @@ const ALLOWED_LITERALS = new Set([
 ]);
 
 describe('the component stylesheets', () => {
+  it('lets a disabled menu row cut its label before the reason it is disabled', () => {
+    // The hint gives way first everywhere else, which is right when it holds a keystroke. On a
+    // disabled row it holds the only thing the reader does not already know.
+    const css = STYLES.find((s) => s.name === 'Menu.svelte')?.css ?? '';
+    expect(css).toMatch(/\.row:disabled[^{]*\.label[^{]*\{[^}]*flex-shrink:\s*8/u);
+    // Not merely less than the label's: a reason that loses its last four characters is a
+    // reason nobody can read, and these are short by construction.
+    expect(css).toMatch(/\.row:disabled[^{]*\.hint[^{]*\{[^}]*flex-shrink:\s*0/u);
+  });
+
   it('clamps a toast to whole lines, so none of them is sliced across the middle', () => {
     // 4.5em against a 1.4 line height is three lines and a fifth of a fourth, which draws the
     // tops of the next line's letters along the bottom edge and looks like a rendering fault.

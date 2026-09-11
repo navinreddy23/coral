@@ -322,6 +322,35 @@ describe("picking in the merge tool", () => {
     expect(resultText(container)).toBe("one\nwas\nlast");
   });
 
+  it("carries the whole of a take-all label on hover, since the button caps its width", async () => {
+    // "All the incoming change" came out as "All the incoming cha…", which is a control whose
+    // label ends mid-word. The cap has to stay, because a branch name has no length limit, so
+    // whatever it cuts is reachable.
+    const merge = state([conflicted()]);
+    merge.active = "f.txt";
+    merge.blocks = {
+      blocks: [{ kind: "conflict", base: ["w"], ours: ["A"], theirs: ["B"] }],
+    };
+    merge.operation = {
+      state: "cherry_pick",
+      labels: { ours: "feature/good-name", theirs: "the incoming change", swapped: false },
+      progress: null,
+      headName: null,
+      stoppedAt: null,
+      interactive: false,
+      resumable: true,
+      applying: false,
+      prepared: null,
+    };
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+
+    const titles = [...container.querySelectorAll("button")]
+      .filter((b) => (b.textContent ?? "").trim().startsWith("All "))
+      .map((b) => b.getAttribute("title"));
+    expect(titles).toContain("All the incoming change");
+    expect(titles).toContain("All feature/good-name");
+  });
+
   it("takes a whole side of one conflict from its pane heading", async () => {
     const merge = opened();
     const { container } = render(MergeTool, { props: { merge, onDone: noop } });

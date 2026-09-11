@@ -81,6 +81,10 @@ pub async fn clone(
     .await?;
     if !quiet {
         eprintln!();
+        // git can exit 0 and still check nothing out; it says so on stderr among the progress.
+        for note in &made.notes {
+            eprintln!("{note}");
+        }
     }
-    Ok(Made { path: made })
+    Ok(Made { path: made.at })
 }

@@ -38,7 +38,7 @@ function wire(over: Record<string, unknown> = {}) {
     forget_recent: [RECENTS[1]],
     lfs_available: true,
     repo_init: '/home/someone/Work/made',
-    repo_clone: '/home/someone/Work/cloned',
+    repo_clone: { at: '/home/someone/Work/cloned', notes: [] },
     ...over,
   };
   invoke.mockImplementation(async (cmd: string) => {
@@ -237,6 +237,34 @@ describe('the start page', () => {
         blobless: false,
       },
     });
+  });
+
+  it('shows what git said about a clone that exited 0 and checked nothing out', async () => {
+    // git warns "remote HEAD refers to nonexistent ref, unable to checkout" and exits 0. What
+    // arrives is a directory with a .git in it and no files, and the window opened it without
+    // a word.
+    const { view, opened } = await page({
+      repo_clone: {
+        at: '/home/someone/Work/cloned',
+        notes: ['warning: remote HEAD refers to nonexistent ref, unable to checkout'],
+      },
+    });
+    await fireEvent.click(view.getByText('Clone'));
+    await fireEvent.input(view.getByPlaceholderText('https://host/team/thing.git'), {
+      target: { value: 'git@gitlab.com:open-source-23/coral.git' },
+    });
+    await fireEvent.click(view.getByText('Choose…'));
+    await waitFor(() => {
+      if (!view.container.textContent?.includes('/home/someone/Work/coral')) {
+        throw new Error('not yet');
+      }
+    });
+
+    await fireEvent.click(view.getByText('Clone', { selector: '.primary' }));
+    await waitFor(() => {
+      if (opened.length === 0) throw new Error('not yet');
+    });
+    expect(view.container.querySelector('.notice')?.textContent).toContain('unable to checkout');
   });
 
   it('keeps a repository that fails to be made off the list of what was opened', async () => {

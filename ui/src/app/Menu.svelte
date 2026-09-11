@@ -126,6 +126,7 @@
                   class="row"
                   class:danger={child.danger}
                   disabled={child.disabled}
+                  title={child.hint ? `${child.label}\n${child.hint}` : child.label}
                   onclick={() => choose(child)}
                 >
                   <span class="tick">
@@ -143,10 +144,15 @@
         {/if}
       </div>
     {:else}
+      <!--
+        A row caps its width, so a long label or a hint that is a sentence rather than a
+        keystroke can be cut. Whatever the cap takes is on the row itself.
+      -->
       <button
         class="row"
         class:danger={item.danger}
         disabled={item.disabled}
+        title={item.hint ? `${item.label}\n${item.hint}` : item.label}
         onclick={() => choose(item)}
       >
         <span class="tick">{#if item.checked}<Icon name="check" size={12} />{/if}</span>
@@ -207,6 +213,13 @@
     flex: 0 8 auto; min-width: 0; color: var(--fg-2); font-size: var(--text-sm);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  /*
+   * Turned around where the row is disabled. There the hint is not a qualifier, it is the
+   * reason the row cannot be used, and giving way first cut it to "feature/good-…", which is
+   * the half the reader already had from the label.
+   */
+  .row:disabled .label { flex-shrink: 8; }
+  .row:disabled .hint { flex-shrink: 0; }
   .more { flex: 0 0 auto; color: var(--fg-2); display: flex; }
   /* Reserved on every row, ticked or not, so a menu where one item is in force does not
      indent that row alone. */

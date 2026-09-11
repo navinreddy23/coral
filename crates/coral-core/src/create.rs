@@ -115,7 +115,22 @@ impl Drop for RemoveOnDrop {
     }
 }
 
-/// Clones a repository and returns where it landed, reporting progress as git reports it.
+/// The prefixes git puts on a line it means somebody to read.
+const NOTEWORTHY: [&str; 4] = ["warning:", "error:", "hint:", "fatal:"];
+
+/// Where a clone landed, and anything git said about it that was not progress.
+///
+/// A clone can exit 0 and still not check anything out. `notes` is how that reaches the person
+/// who asked for it rather than being thrown away with the progress records.
+#[derive(Debug, serde::Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "types.ts"))]
+#[serde(rename_all = "camelCase")]
+pub struct CloneOutcome {
+    pub at: PathBuf,
+    pub notes: Vec<String>,
+}
+
+/// Clones a repository, reporting progress as git reports it.
 ///
 /// Streamed rather than buffered, so a clone of anything large is not a silent wait. git
 /// writes progress to stderr with carriage returns as separators, which is what
@@ -131,7 +146,7 @@ pub async fn clone<F>(
     runner: &GitRunner,
     what: &Cloned,
     mut on_progress: F,
-) -> Result<PathBuf, CoralError>
+) -> Result<CloneOutcome, CoralError>
 where
     F: FnMut(crate::remote::Progress),
 {
@@ -163,10 +178,23 @@ where
     if let Some(key) = chosen_key(what) {
         cmd = cmd.env("GIT_SSH_COMMAND", crate::ssh::command_for(key));
     }
+    // Progress is most of what git writes here, but not all of it: "remote HEAD refers to
+    // nonexistent ref, unable to checkout" is a warning, git exits 0, and what arrives is a
+    // repository with no files in it. Dropping every line that is not progress made that clone
+    // look exactly like one that worked.
+    let mut notes = Vec::new();
     runner
         .stream_err(cmd, |line| {
             if let Some(p) = crate::remote::parse_progress(line) {
                 on_progress(p);
+            } else {
+                let text = String::from_utf8_lossy(line).trim().to_owned();
+                // Only what git marks as worth reading. The rest of this stream is "Cloning
+                // into '…'" and "done.", which say nothing the window does not already show,
+                // and which would push the one line that matters out of a clamped toast.
+                if NOTEWORTHY.iter().any(|p| text.starts_with(p)) {
+                    notes.push(text);
+                }
             }
             Ok(crate::process::Sink::Continue)
         })
@@ -176,7 +204,7 @@ where
         pin_key(runner, &into, key).await?;
     }
     partial.keep();
-    Ok(into)
+    Ok(CloneOutcome { at: into, notes })
 }
 
 /// The key to authenticate with, ignoring a field somebody left blank.

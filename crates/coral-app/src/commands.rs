@@ -183,7 +183,7 @@ pub async fn repo_clone(
     app: tauri::AppHandle,
     profiles: tauri::State<'_, crate::profile::Profiles>,
     request: CloneRequest,
-) -> Result<String, IpcError> {
+) -> Result<coral_core::create::CloneOutcome, IpcError> {
     let CloneRequest {
         url,
         parent,
@@ -217,8 +217,13 @@ pub async fn repo_clone(
     match cloning.await {
         Ok(made) => {
             logged.finished();
-            crate::profile::stamp_new_repository(&settings, &made).await;
-            Ok(made.display().to_string())
+            // Anything git said that was not progress. A clone can exit 0 and check nothing
+            // out, and the window has no other way to learn that.
+            for note in &made.notes {
+                crate::activity::note(&parent, crate::activity::Level::Warn, note);
+            }
+            crate::profile::stamp_new_repository(&settings, &made.at).await;
+            Ok(made)
         }
         Err(e) if matches!(e, coral_core::CoralError::Cancelled { .. }) => {
             logged.cancelled();

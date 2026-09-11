@@ -69,6 +69,7 @@
   import { SshState } from '../state/ssh.svelte';
   import { laneColour } from './lane';
   import { beside, elideRef } from './path';
+  import { askUntilAccepted } from './prompt';
   import { checkoutOf, divergence, remoteOf, withoutRemote } from './refname';
   import { orderRefs, pillChars, pillNamed } from './pill';
   import {
@@ -1338,9 +1339,11 @@
    * the branch on the remote keeps the name it was pushed under until it is pushed again.
    */
   async function renameBranch(from: string) {
-    const to = await askText('Rename the branch', `${from} becomes:`, from);
-    if (to === null || to.trim() === '' || to === from) return;
-    await act({ kind: 'branchRename', from, to: to.trim() });
+    await askUntilAccepted(
+      from,
+      (initial) => askText('Rename the branch', `${from} becomes:`, initial),
+      async (to) => (to === from ? true : act({ kind: 'branchRename', from, to })),
+    );
   }
 
   /**
@@ -1718,24 +1721,33 @@
   }
 
   async function branchAt(oid: string) {
-    const name = await askText('Create branch here', `At ${oid.slice(0, 8)}.`, '');
-    if (name === null || name.trim() === '') return;
-    await act({ kind: 'branchCreate', name: name.trim(), at: oid, checkout: true });
+    await askUntilAccepted(
+      '',
+      (initial) => askText('Create branch here', `At ${oid.slice(0, 8)}.`, initial),
+      (name) => act({ kind: 'branchCreate', name, at: oid, checkout: true }),
+    );
   }
 
   async function tagAt(oid: string, annotated: boolean) {
-    const name = await askText(
-      annotated ? 'Create annotated tag here' : 'Create tag here',
-      `At ${oid.slice(0, 8)}.`,
+    await askUntilAccepted(
       '',
+      (initial) =>
+        askText(
+          annotated ? 'Create annotated tag here' : 'Create tag here',
+          `At ${oid.slice(0, 8)}.`,
+          initial,
+        ),
+      async (name) => {
+        let message: string | null = null;
+        if (annotated) {
+          message = await askText('Tag message', `For ${name}.`, '');
+          // Cancelled at the message rather than refused at the name: there is nothing to
+          // correct, so the name is not asked for again.
+          if (message === null) return true;
+        }
+        return act({ kind: 'tagCreate', name, at: oid, message });
+      },
     );
-    if (name === null || name.trim() === '') return;
-    let message: string | null = null;
-    if (annotated) {
-      message = await askText('Tag message', `For ${name.trim()}.`, '');
-      if (message === null) return;
-    }
-    await act({ kind: 'tagCreate', name: name.trim(), at: oid, message });
   }
 
   async function worktreeAt(oid: string) {
@@ -2608,19 +2620,21 @@
       case 'panel.left': return cycleSidebar();
       case 'panel.right': return views.set('details', !views.current.details);
       case 'branch': {
-        void (async () => {
-          const { choice, text } = await ask({
-            title: 'New branch',
-            detail: `Created at ${branch ?? 'HEAD'} and checked out.`,
-            asksText: true,
-            placeholder: 'feature/…',
-            initial: '',
-            choices: [{ id: 'create', label: 'Create branch', primary: true }],
-          });
-          if (choice !== null && text !== '') {
-            await act({ kind: 'branchCreate', name: text, at: null, checkout: true });
-          }
-        })();
+        void askUntilAccepted(
+          '',
+          async (initial) => {
+            const { choice, text } = await ask({
+              title: 'New branch',
+              detail: `Created at ${branch ?? 'HEAD'} and checked out.`,
+              asksText: true,
+              placeholder: 'feature/…',
+              initial,
+              choices: [{ id: 'create', label: 'Create branch', primary: true }],
+            });
+            return choice === null ? null : text;
+          },
+          (name) => act({ kind: 'branchCreate', name, at: null, checkout: true }),
+        );
         return;
       }
       default:
@@ -3164,9 +3178,14 @@
   });
 
   /** Opens a repository from the start page, and puts the page away. */
-  async function openFromStart(path: string) {
+  async function openFromStart(path: string, notes?: string) {
     showStart = false;
     await tabs.open(path);
+    // Said after the tab is up rather than on the screen that just went away: a clone can
+    // exit 0 and check nothing out, and this is the only word anybody gets about it.
+    if (notes !== undefined && notes !== '') {
+      toasts.push('warn', 'The clone left something to say', notes);
+    }
   }
 
   /**
@@ -3622,7 +3641,7 @@
       start={startPage}
       sshKeys={ssh.keys}
       defaultSshKey={profiles.current.settings.ssh.privateKey ?? ''}
-      onOpen={(path) => void openFromStart(path)}
+      onOpen={(path, notes) => void openFromStart(path, notes)}
       onPickDirectory={pickDirectory}
       onConfirm={confirmThat}
       onClose={tabs.session.tabs.length === 0 ? null : () => (showStart = false)}

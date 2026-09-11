@@ -336,8 +336,12 @@
               : ''}
           </span>
           <span class="spacer"></span>
-          <button onclick={() => merge.chooseAll('ours')}>All {labels.ours}</button>
-          <button onclick={() => merge.chooseAll('theirs')}>All {labels.theirs}</button>
+          <button title="All {labels.ours}" onclick={() => merge.chooseAll('ours')}
+            >All {labels.ours}</button
+          >
+          <button title="All {labels.theirs}" onclick={() => merge.chooseAll('theirs')}
+            >All {labels.theirs}</button
+          >
           <button class="primary" disabled={merge.busy} onclick={() => merge.apply()}>
             Mark resolved
           </button>
@@ -480,6 +484,7 @@
   }
   .path { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+
   /* Side by side above, the result below: which side to take is a question about the code
      around the conflict, so both sides show the whole file rather than the region alone. */
   .sheets { flex: 3 1 0; display: flex; min-height: 0; border-bottom: 1px solid var(--border-strong); }
@@ -522,10 +527,15 @@
   .whole p { margin: 0 0 var(--space-3); line-height: 1.5; }
   .choices { display: flex; flex-wrap: wrap; gap: var(--space-2); }
   .choices button { font-size: var(--text-base); padding: var(--space-1) var(--space-3); }
-  /* A branch name and a commit subject are both long; neither row must grow to fit them. */
+  /*
+   * A branch name and a commit subject are both long; neither row must grow to fit them. In
+   * characters rather than pixels, and wide enough for the labels that are not names: at 140px
+   * "All the incoming change" stopped at "All the incoming cha…", which is a control whose
+   * label ends mid-word. A name long enough to still be cut has the whole of it on hover.
+   */
   .wholesale button,
   .blocks > .bar > button {
-    max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 24ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .muted { color: var(--fg-2); padding: var(--space-3); font-size: var(--text-base); }
   .abort:hover:not(:disabled) {

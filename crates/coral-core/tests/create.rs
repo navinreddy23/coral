@@ -14,6 +14,52 @@ async fn runner() -> GitRunner {
 }
 
 #[tokio::test]
+async fn a_clone_that_checked_nothing_out_says_so() {
+    // git exits 0 here and warns: "remote HEAD refers to nonexistent ref, unable to checkout".
+    // What arrives is a directory with a .git in it and no files, which looked exactly like a
+    // clone that worked because every line that was not progress was dropped.
+    let source = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let bare = tempfile::tempdir().unwrap();
+    let at = bare.path().join("bare.git");
+    let runner = runner().await;
+    assert!(
+        std::process::Command::new("git")
+            .args(["clone", "--bare", "--quiet"])
+            .arg(source.path())
+            .arg(&at)
+            .status()
+            .unwrap()
+            .success()
+    );
+    // The bare copy's HEAD names a branch the source never had.
+    std::fs::write(at.join("HEAD"), "ref: refs/heads/nowhere\n").unwrap();
+
+    let into = tempfile::tempdir().unwrap();
+    let what = Cloned {
+        url: at.display().to_string(),
+        parent: into.path().to_path_buf(),
+        name: Some("copy".to_owned()),
+        ssh_key: None,
+        depth: None,
+        blobless: false,
+    };
+    let made = clone(&runner, &what, |_| {}).await.unwrap();
+
+    assert!(
+        made.notes.iter().any(|n| n.contains("unable to checkout")),
+        "{:?}",
+        made.notes
+    );
+    // And nothing else: "Cloning into '…'" and "done." are on the same stream and say nothing
+    // the window does not already show, so they would only crowd out the line that matters.
+    assert!(
+        made.notes.iter().all(|n| n.starts_with("warning:")),
+        "{:?}",
+        made.notes
+    );
+}
+
+#[tokio::test]
 async fn creates_a_repository_git_can_open() {
     let dir = tempfile::tempdir().unwrap();
     let runner = runner().await;
@@ -98,7 +144,7 @@ async fn clones_into_the_directory_git_would_have_chosen() {
     // The caller is told where it will land before it lands, so it can say so.
     assert_eq!(what.destination(), dir.path().join(name_from_url(&url)));
 
-    let made = clone(&runner, &what, |_| {}).await.unwrap();
+    let made = clone(&runner, &what, |_| {}).await.unwrap().at;
     assert_eq!(made, what.destination());
     assert!(made.join("a.txt").exists());
 }
@@ -122,7 +168,8 @@ async fn clones_under_the_name_it_was_given() {
         |_| {},
     )
     .await
-    .unwrap();
+    .unwrap()
+    .at;
 
     assert_eq!(made, dir.path().join("called-this"));
     assert!(made.join("a.txt").exists());
@@ -185,7 +232,8 @@ async fn a_clone_given_a_key_keeps_using_it_afterwards() {
         |_| {},
     )
     .await
-    .unwrap();
+    .unwrap()
+    .at;
 
     let loc = RepoLocation::discover(&runner, &made).await.unwrap();
     let scopes = loc
@@ -224,7 +272,8 @@ async fn a_clone_given_no_key_writes_no_command() {
         |_| {},
     )
     .await
-    .unwrap();
+    .unwrap()
+    .at;
 
     let written = std::fs::read_to_string(made.join(".git/config")).unwrap();
     assert!(!written.contains("sshCommand"), "{written}");
@@ -424,7 +473,8 @@ async fn a_shallow_clone_takes_the_tip_and_grafts_the_rest() {
         |_| {},
     )
     .await
-    .unwrap();
+    .unwrap()
+    .at;
 
     assert!(made.join(".git/shallow").exists(), "it is a shallow clone");
     let count = std::process::Command::new("git")
@@ -462,7 +512,8 @@ async fn a_blobless_clone_keeps_the_whole_history() {
         |_| {},
     )
     .await
-    .unwrap();
+    .unwrap()
+    .at;
 
     assert!(
         !made.join(".git/shallow").exists(),
