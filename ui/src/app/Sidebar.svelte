@@ -289,6 +289,20 @@
       : stashes.filter((s) => `${s.name} ${s.message}`.toLowerCase().includes(filter.trim().toLowerCase())),
   );
 
+  /**
+   * What to call a stash in the list.
+   *
+   * Its name is `main@2b36bbb`, which is unique and says nothing: a column of those cannot be
+   * chosen from, and the message is the only part anybody wrote. The name exists because two
+   * stashes taken from the same commit with no message of their own share a subject, so the
+   * short id goes back on only where the messages actually collide.
+   */
+  function label(s: { oid: string; name: string; message: string }): string {
+    const text = s.message.trim() === '' ? s.name : s.message;
+    const shared = stashes.filter((other) => other.message === s.message).length > 1;
+    return shared ? `${text} ${s.oid.slice(0, 7)}` : text;
+  }
+
   const total = $derived(
     groups.local.length + groups.remote.length + groups.tags.length + stashes.length,
   );
@@ -545,7 +559,7 @@
               >
                 <!-- The same gutter every other row keeps, so the four sections line up. -->
                 <span class="tick"></span>
-                <span class="text">{elideRef(stash.name, 24)}</span>
+                <span class="text">{label(stash)}</span>
               </button>
               <button
                 class="dots"

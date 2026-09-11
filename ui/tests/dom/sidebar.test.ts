@@ -39,12 +39,12 @@ function tag(short: string): PlacedRef {
   return { ...ref(short), name: `refs/tags/${short}`, kind: { kind: 'tag', annotated: false } };
 }
 
-function stash(name: string, oid: string, row: number | null = 0) {
+function stash(name: string, oid: string, row: number | null = 0, message = '1a2b3c4 a commit') {
   return {
     index: 0,
     oid,
     branch: 'master',
-    message: 'WIP on master: 1a2b3c4 a commit',
+    message,
     time: 1_756_000_000,
     name,
     row,
@@ -284,12 +284,36 @@ describe('the stash list', () => {
     // the next one.
     const view = mount({
       stashes: [
+        stash('master@78d0a2d', '78d0a2dd1a00b8e06286b02bac7ca3811a7041fc', 0, 'a half-finished thought'),
+        stash('master@21b55eb', '21b55ebccffb3a1b09c67b16ef4b009cce430e5e', 0, 'the other thing entirely'),
+      ],
+    });
+    expect(view.getByText('a half-finished thought')).toBeTruthy();
+    expect(view.getByText('the other thing entirely')).toBeTruthy();
+  });
+
+  it('calls a stash what was written on it, not the name it was given to be unique', () => {
+    // The name is `master@78d0a2d`, which no other entry can have and which says nothing about
+    // what is in it. Two of those side by side cannot be chosen between, which is the only job
+    // this list has.
+    const view = mount({
+      stashes: [stash('master@78d0a2d', 'a'.repeat(40), 0, 'a half-finished thought')],
+    });
+    expect(view.getByText('a half-finished thought')).toBeTruthy();
+    expect(view.queryByText('master@78d0a2d')).toBeNull();
+  });
+
+  it('puts the id back when two stashes were written the same', () => {
+    // Which is why the name existed: stashing twice from one commit with no message gives both
+    // the same subject, and a column of identical rows is no better than a column of ids.
+    const view = mount({
+      stashes: [
         stash('master@78d0a2d', '78d0a2dd1a00b8e06286b02bac7ca3811a7041fc'),
         stash('master@21b55eb', '21b55ebccffb3a1b09c67b16ef4b009cce430e5e'),
       ],
     });
-    expect(view.getByText('master@78d0a2d')).toBeTruthy();
-    expect(view.getByText('master@21b55eb')).toBeTruthy();
+    expect(view.getByText('1a2b3c4 a commit 78d0a2d')).toBeTruthy();
+    expect(view.getByText('1a2b3c4 a commit 21b55eb')).toBeTruthy();
   });
 
   it('offers what can be done with one from the dots and from a right-click', () => {
@@ -301,7 +325,7 @@ describe('the stash list', () => {
 
     const dots = view.getByTitle('What can be done with master@78d0a2d');
     void fireEvent.click(dots);
-    void fireEvent.contextMenu(view.getByText('master@78d0a2d'));
+    void fireEvent.contextMenu(view.getByText('1a2b3c4 a commit'));
 
     expect(asked).toEqual(['master@78d0a2d', 'master@78d0a2d']);
   });
@@ -315,7 +339,7 @@ describe('the stash list', () => {
       onSelect: (row: number) => picked.push(row),
     });
 
-    const row = view.getByText('master@78d0a2d').closest('button');
+    const row = view.getByText('1a2b3c4 a commit').closest('button');
     expect(row?.hasAttribute('disabled')).toBe(true);
     void fireEvent.click(row as HTMLElement);
     expect(picked).toEqual([]);
