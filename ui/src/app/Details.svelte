@@ -59,8 +59,15 @@
   const NODE_FILLS = ['--node-1', '--node-2', '--node-3', '--node-4',
                       '--node-5', '--node-6', '--node-7', '--node-8'];
 
-  function faceOf(name: string): string {
-    return `var(${NODE_FILLS[authorColourIndex(name, NODE_FILLS.length)] ?? '--node-1'})`;
+  /**
+   * Hashed from the email, exactly as the graph hashes it, or the same person came out one
+   * colour in the row and another in the panel that answers it — and the whole point of the
+   * disc is that the eye recognises it. The name is the fallback for a commit with no email,
+   * which is what the graph falls back to too.
+   */
+  function faceOf(who: { name: string; email: string }): string {
+    const identity = who.email.trim().toLowerCase() || who.name;
+    return `var(${NODE_FILLS[authorColourIndex(identity, NODE_FILLS.length)] ?? '--node-1'})`;
   }
 
   async function onCopyOid(oid: string): Promise<void> {
@@ -195,7 +202,7 @@
       so the row you clicked and the panel that answers wear the same mark.
     -->
     <div class="who">
-      <span class="face" style:background={faceOf(detail.commit.author.name)}>
+      <span class="face" style:background={faceOf(detail.commit.author)}>
         {initialsOf(detail.commit.author.name)}
       </span>
       <span class="names">

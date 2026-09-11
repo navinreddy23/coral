@@ -11,6 +11,7 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => undefined })
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 
 import Details from '../../src/app/Details.svelte';
+import { authorColourIndex } from '../../src/graph/initials';
 import type { ChangedFile, CommitDetail } from '../../src/ipc/types';
 
 function detail(files: ChangedFile[] = []): CommitDetail {
@@ -43,6 +44,29 @@ const props = {
 };
 
 describe('the commit panel', () => {
+  it('gives an author the colour the graph gives them', () => {
+    // Both discs are the author's initials on one of eight fills, chosen by hashing who they
+    // are — but the graph hashed the email and this hashed the name, so the same person came
+    // out purple in the row and mustard in the panel that answers it. The point of the disc is
+    // that the eye recognises it without reading a name, and two colours is no colour at all.
+    const d = detail();
+    const { container } = render(Details, { props: { ...props, detail: d } });
+    const face = container.querySelector('.face') as HTMLElement;
+
+    const index = authorColourIndex(d.commit.author.email.trim().toLowerCase(), 8);
+    expect(face.style.background).toBe(`var(--node-${index + 1})`);
+  });
+
+  it('gives an author with no email a colour rather than none', () => {
+    const d = detail();
+    d.commit.author = { ...d.commit.author, email: '  ' };
+    const { container } = render(Details, { props: { ...props, detail: d } });
+    const face = container.querySelector('.face') as HTMLElement;
+
+    const index = authorColourIndex(d.commit.author.name, 8);
+    expect(face.style.background).toBe(`var(--node-${index + 1})`);
+  });
+
   it('gives each term exactly one description', () => {
     // A second dd for the same term flows back into the label column of the two-column grid,
     // where an unbreakable object id sets the width and squeezes the values out.
