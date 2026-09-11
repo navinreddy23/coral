@@ -63,7 +63,7 @@
   const ourRows = $derived(merge.blocks === null ? [] : sideRows(merge.blocks.blocks, 'ours'));
   const theirRows = $derived(merge.blocks === null ? [] : sideRows(merge.blocks.blocks, 'theirs'));
   const outRows = $derived(
-    merge.blocks === null ? [] : outputRows(merge.blocks.blocks, merge.choices),
+    merge.blocks === null ? [] : outputRows(merge.blocks.blocks, merge.choices, labels),
   );
 
   /**
@@ -342,7 +342,14 @@
           <button title="All {labels.theirs}" onclick={() => merge.chooseAll('theirs')}
             >All {labels.theirs}</button
           >
-          <button class="primary" disabled={merge.busy} onclick={() => merge.apply()}>
+          <button
+            class="primary"
+            disabled={merge.busy || !merge.settled}
+            title={merge.settled
+              ? 'Write this file and stage it'
+              : `${merge.untouched} conflict${merge.untouched === 1 ? '' : 's'} still needs a side taken`}
+            onclick={() => merge.apply()}
+          >
             Mark resolved
           </button>
         </div>

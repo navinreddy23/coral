@@ -24,7 +24,8 @@ export interface Take {
  *
  * Lines rather than sides, because a conflict is often settled by keeping one line of theirs
  * and one of yours out of a region that holds several — and the order they go in is part of
- * the answer. An empty list means nobody has taken anything, and the region keeps the base.
+ * the answer. An empty list is a decision too: take nothing, and the region goes. No entry at
+ * all is the region nobody has answered yet.
  */
 export type Pick = Take[];
 
@@ -86,9 +87,23 @@ export class MergeState {
       : 0,
   );
 
+  /** What the two sides are called, which is what the markers on an unanswered region carry. */
+  sideNames = $derived({
+    ours: this.operation?.labels.ours ?? 'ours',
+    theirs: this.operation?.labels.theirs ?? 'theirs',
+  });
+
+  /**
+   * True when every region has an answer, which is what makes the file safe to write.
+   *
+   * Typing the result by hand answers all of them at once: what is in the box is the file.
+   */
+  settled = $derived(this.edited !== null || this.untouched === 0);
+
   /** The file as it will be written: the picks applied, or whatever was typed over them. */
   output = $derived(
-    this.edited ?? (this.blocks === null ? '' : render(this.blocks.blocks, this.choices)),
+    this.edited ??
+      (this.blocks === null ? '' : render(this.blocks.blocks, this.choices, this.sideNames)),
   );
 
   async load(path: string): Promise<void> {
@@ -202,6 +217,15 @@ export class MergeState {
   async apply(): Promise<boolean> {
     const file = this.active;
     if (file === null || this.blocks === null) return false;
+    // Never write a file that still has a question in it. Before this the unanswered regions
+    // were written as the base, which resolved the file to the lines from before either
+    // branch touched them: the merge went through and both sides' work on those lines was
+    // gone, with nothing on screen having said so.
+    if (!this.settled) {
+      const n = this.untouched;
+      this.error = `${n} conflict${n === 1 ? '' : 's'} in this file still needs a side taken.`;
+      return false;
+    }
     // A text file ends with a newline. The picks produce one; a box typed into only does when
     // the person happened to press return last, and dropping it rewrites the final line for
     // everyone who reads the file afterwards.
@@ -256,13 +280,36 @@ export class MergeState {
 }
 
 /**
+ * What an unanswered region is written as: git's own conflict markers.
+ *
+ * Not the base. Taking the lines from before either branch touched them reads as neutral and
+ * is not: it throws away what both sides did there while looking like a resolution. Markers
+ * say the one true thing about the region, which is that nobody has decided it yet.
+ */
+export function markersFor(
+  block: Block & { kind: 'conflict' },
+  labels: { ours: string; theirs: string },
+): string[] {
+  return [
+    `<<<<<<< ${labels.ours}`,
+    ...block.ours,
+    '=======',
+    ...block.theirs,
+    `>>>>>>> ${labels.theirs}`,
+  ];
+}
+
+/**
  * Rebuilds the file from the blocks and the decisions.
  *
- * A region nobody has taken a side on keeps the base: the lines as they were before either
- * branch touched them. That is what the output pane shows for an untouched conflict, and it
- * is the one answer that cannot be said to favour either side.
+ * A region with no entry is one nobody has answered, and it comes out as markers. A region
+ * with an empty entry has been answered — take nothing — and comes out as nothing.
  */
-export function render(blocks: readonly Block[], choices: Record<number, Pick>): string {
+export function render(
+  blocks: readonly Block[],
+  choices: Record<number, Pick>,
+  labels: { ours: string; theirs: string } = { ours: 'ours', theirs: 'theirs' },
+): string {
   const out: string[] = [];
   let conflict = 0;
   for (const block of blocks) {
@@ -270,10 +317,10 @@ export function render(blocks: readonly Block[], choices: Record<number, Pick>):
       out.push(...block.lines);
       continue;
     }
-    const pick = choices[conflict] ?? [];
+    const pick = choices[conflict];
     conflict += 1;
-    if (pick.length === 0) {
-      out.push(...block.base);
+    if (pick === undefined) {
+      out.push(...markersFor(block, labels));
       continue;
     }
     for (const take of pick) {

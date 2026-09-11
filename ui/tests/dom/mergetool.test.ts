@@ -213,11 +213,15 @@ describe("the merge tool", () => {
     expect(theirs?.textContent).toContain("SIDE");
     expect(theirs?.textContent).not.toContain("MAIN");
 
-    // Untouched means the region keeps the base, which is worth saying out loud.
+    // Untouched means the region is still a question, which is worth saying out loud — and
+    // the result shows it as one rather than picking the base to stand in for an answer.
     expect(container.querySelector(".bar")?.textContent).toContain(
       "1 untouched",
     );
-    expect(container.querySelector(".result")?.textContent).toContain("two");
+    const result = container.querySelector(".result")?.textContent ?? "";
+    expect(result).toContain("MAIN");
+    expect(result).toContain("SIDE");
+    expect(result, "the base is not an answer").not.toContain("two");
   });
 
   it("says which commit failed to apply when a step stops on the next one", () => {
@@ -316,10 +320,48 @@ describe("picking in the merge tool", () => {
     expect(resultText(container)).toBe("one\nMAIN b\nlast");
   });
 
-  it("shows the base in the result until somebody takes a side", () => {
+  it("shows an unanswered region as markers rather than as the base", () => {
+    // It used to show the base, and Mark resolved wrote what it showed: a merge could be
+    // finished with the lines from before either branch touched them, which is neither side's
+    // work and looks like a resolution. Now the pane shows what the file would be — a question
+    // — and the button that writes it refuses.
     const merge = opened();
     const { container } = render(MergeTool, { props: { merge, onDone: noop } });
-    expect(resultText(container)).toBe("one\nwas\nlast");
+    expect(resultText(container)).toBe(
+      "one\n<<<<<<< main\nMAIN a\nMAIN b\n=======\nSIDE a\nSIDE b\n>>>>>>> side\nlast",
+    );
+  });
+
+  it("will not mark a file resolved while a region is unanswered", () => {
+    const merge = opened();
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+    const mark = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent?.trim() === "Mark resolved",
+    ) as HTMLButtonElement;
+    expect(mark.disabled, "nothing has been taken yet").toBe(true);
+    expect(mark.title).toContain("still needs a side taken");
+  });
+
+  it("lets a file be marked resolved once every region has an answer", async () => {
+    const merge = opened();
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+    await fireEvent.click(ticks(container, "theirs")[0] as HTMLInputElement);
+    const mark = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent?.trim() === "Mark resolved",
+    ) as HTMLButtonElement;
+    expect(mark.disabled).toBe(false);
+    expect(resultText(container)).toBe("one\nSIDE a\nlast");
+  });
+
+  it("counts a region emptied on purpose as answered", async () => {
+    // Ticking a line and unticking it again says "keep neither side here", which is a decision
+    // and has to be distinguishable from never having looked at the region.
+    const merge = opened();
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+    await fireEvent.click(ticks(container, "ours")[0] as HTMLInputElement);
+    await fireEvent.click(ticks(container, "ours")[0] as HTMLInputElement);
+    expect(merge.settled, "answered, even though it takes nothing").toBe(true);
+    expect(resultText(container)).toBe("one\n(nothing taken)\nlast");
   });
 
   it("carries the whole of a take-all label on hover, since the button caps its width", async () => {

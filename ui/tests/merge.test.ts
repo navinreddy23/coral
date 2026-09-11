@@ -46,22 +46,28 @@ describe("rendering a resolved file", () => {
     expect(render(blocks, { 0: take("base", 0) })).toBe("original\n");
   });
 
-  it("keeps the base where nobody has taken a side", () => {
-    // The lines as they were before either branch touched them: the one answer that cannot
-    // be said to favour either side, and what the result pane shows for an untouched region.
+  it("marks a region nobody has answered rather than quietly taking the base", () => {
+    // This used to write the base: the lines as they were before either branch touched them.
+    // It reads as neutral and is not — it throws away what both branches did there while
+    // looking like a resolution, so a merge could be finished with both sides' work gone and
+    // nothing on screen having said so. Markers say the true thing, which is that the region
+    // is undecided, and nothing will write the file while one is in it.
     const blocks = [conflict(["mine"], ["yours"], ["original"])];
-    expect(render(blocks, {})).toBe("original\n");
+    expect(render(blocks, {}, { ours: "main", theirs: "side" })).toBe(
+      "<<<<<<< main\nmine\n=======\nyours\n>>>>>>> side\n",
+    );
   });
 
-  it("goes back to the base when every line is taken back out", () => {
-    // Unticking both sides is how a region is put back the way it was, which is the same
-    // thing an untouched region does: there is one meaning for "nothing taken".
+  it("takes nothing when every line is taken back out", () => {
+    // Unticking both sides is an answer — keep neither — and it is not the same answer as
+    // never having looked at the region. An entry that is there and empty means the region
+    // goes; no entry at all means nobody has decided.
     const blocks = [
       common("a"),
       conflict(["mine"], ["yours"], ["was"]),
       common("b"),
     ];
-    expect(render(blocks, { 0: [] })).toBe("a\nwas\nb\n");
+    expect(render(blocks, { 0: [] })).toBe("a\nb\n");
   });
 
   it("drops a region with no base when nothing is taken", () => {
@@ -82,15 +88,17 @@ describe("rendering a resolved file", () => {
   });
 
   it("numbers decisions by conflict, not by block", () => {
-    // The second conflict is index 1 even though it is the fourth block, so the first one is
-    // untouched and keeps its base.
+    // The second conflict is index 1 even though it is the fourth block, so the decision lands
+    // on it and the first one is left unanswered.
     const blocks = [
       common("a"),
       conflict(["x"], ["y"], ["was x"]),
       common("b"),
       conflict(["p"], ["q"], ["was p"]),
     ];
-    expect(render(blocks, { 1: take("theirs", 0) })).toBe("a\nwas x\nb\nq\n");
+    expect(render(blocks, { 1: take("theirs", 0) })).toBe(
+      "a\n<<<<<<< ours\nx\n=======\ny\n>>>>>>> theirs\nb\nq\n",
+    );
   });
 });
 
