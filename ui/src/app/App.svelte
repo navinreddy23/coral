@@ -480,6 +480,8 @@
     detail: string;
     /** Whether a line of text is wanted as well as a choice. Stated, never inferred. */
     asksText: boolean;
+    /** How many lines the field holds. More than one makes it a box. Absent means one. */
+    lines?: number;
     placeholder: string;
     initial: string;
     choices: Choice[];
@@ -505,11 +507,17 @@
    * Wraps `ask` because most callers want a string and nothing else, and repeating the choice
    * plumbing at every call site is what makes a dialog inconsistent.
    */
-  async function askText(title: string, detail: string, initial: string): Promise<string | null> {
+  async function askText(
+    title: string,
+    detail: string,
+    initial: string,
+    lines = 1,
+  ): Promise<string | null> {
     const { choice, text } = await ask({
       title,
       detail,
       asksText: true,
+      lines,
       placeholder: '',
       initial,
       choices: [{ id: 'ok', label: 'OK', primary: true }],
@@ -1862,11 +1870,24 @@
     await act({ kind: 'patch', rev: oid, from: null, directory: where });
   }
 
+  /**
+   * Rewrites one commit's message.
+   *
+   * Seeded with the whole message, not the summary the row shows. The field used to be one
+   * line holding the summary and whatever came back replaced the entire message, so rewording
+   * any commit with a body — which on a kernel means every commit, with its explanation and
+   * its Signed-off-by lines — silently threw the body away.
+   */
   async function reword(oid: string, summary: string) {
+    if (!info) return;
+    const whole = await commitDetail(info.path, oid)
+      .then((d) => (d.commit.body === '' ? d.commit.summary : `${d.commit.summary}\n\n${d.commit.body}`))
+      .catch(() => summary);
     const message = await askText(
       'Edit commit message',
       'Everything above this commit is replayed, so their object ids change.',
-      summary,
+      whole,
+      10,
     );
     if (message === null || message.trim() === '') return;
     await act({ kind: 'rewrite', rev: oid, how: 'reword', message: message.trim() });
@@ -4270,6 +4291,7 @@
     title={question.title}
     detail={question.detail}
     asksText={question.asksText}
+    lines={question.lines ?? 1}
     placeholder={question.placeholder}
     initial={question.initial}
     choices={question.choices}

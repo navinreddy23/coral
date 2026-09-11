@@ -89,7 +89,19 @@ function answers(): Record<string, unknown> {
     hosting_status: { host: null, detail: 'no remotes', token: 'none' },
     hosting_pull_requests: [],
     remote_list: [],
-    commit_detail: null,
+    // The whole message, which is what rewording has to start from: a commit with a body is
+    // the normal case, and the summary alone is not the message.
+    commit_detail: {
+      commit: {
+        oid: 'a'.repeat(40),
+        parents: [],
+        author: { name: 'Ada', email: 'ada@example.com', time: 0, offset: 0 },
+        committer: { name: 'Ada', email: 'ada@example.com', time: 0, offset: 0 },
+        summary: 'core: the summary',
+        body: 'Why it was done.\n\nSigned-off-by: Ada <ada@example.com>',
+      },
+      files: [],
+    },
     watch_repo: { complete: true, detail: null },
     unwatch_repo: null,
     session_get: SESSION,
@@ -307,6 +319,24 @@ describe('the commit menu', () => {
     });
   });
 
+  it('offers the whole message when rewording, not just the summary', async () => {
+    // The field held the summary and what came back replaced the entire message, so rewording
+    // any commit with a body — on a kernel, every commit, with its explanation and its
+    // Signed-off-by lines — silently threw the body away.
+    const { container } = await shell();
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Edit commit message'));
+
+    const field = await waitFor(() => {
+      const found = container.querySelector('[role="dialog"] textarea');
+      if (!found) throw new Error('the question offers no box to type in');
+      return found as HTMLTextAreaElement;
+    });
+    expect(field.value).toBe(
+      'core: the summary\n\nWhy it was done.\n\nSigned-off-by: Ada <ada@example.com>',
+    );
+  });
+
   it('sends the message it was given when rewording, and nothing when cancelled', async () => {
     const { container } = await shell();
     await openMenu(container);
@@ -315,11 +345,11 @@ describe('the commit menu', () => {
     // The field has to be there at all: it was gated on a placeholder being set, so every
     // question that wanted text but had no hint to offer rendered none.
     const field = await waitFor(() => {
-      const found = container.querySelector('[role="dialog"] input');
+      const found = container.querySelector('[role="dialog"] textarea');
       if (!found) throw new Error('the question offers no field to type in');
-      return found as HTMLInputElement;
+      return found as HTMLTextAreaElement;
     });
-    await fireEvent.input(field, { target: { value: 'core: say it better' } });
+    await fireEvent.input(field, { target: { value: 'core: say it better\n\nand why' } });
     await confirm(container, true);
 
     await waitFor(() => {
@@ -327,7 +357,7 @@ describe('the commit menu', () => {
         kind: 'rewrite',
         rev: oidOf(frame, 0),
         how: 'reword',
-        message: 'core: say it better',
+        message: 'core: say it better\n\nand why',
       });
     });
   });

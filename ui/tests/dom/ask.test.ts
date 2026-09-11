@@ -43,6 +43,35 @@ describe('asking a question in the window', () => {
     expect(answers).toEqual([{ choice: 'create', text: 'feature/x' }]);
   });
 
+  it('asks for a box when more than one line is wanted, and keeps every line', async () => {
+    // A commit message is a summary and a body. Asked for in a single line, the body could be
+    // neither read nor kept: rewording any commit that had one threw it away.
+    const { answers, container } = ask({ lines: 10, initial: 'summary\n\nbody' });
+    const box = container.querySelector('textarea') as HTMLTextAreaElement;
+    expect(box, 'a box, not a line').not.toBeNull();
+    expect(container.querySelector('input')).toBeNull();
+    expect(box.value).toBe('summary\n\nbody');
+
+    await fireEvent.input(box, { target: { value: 'new summary\n\nnew body\nand more' } });
+    await fireEvent.click(container.querySelector('button.primary') as HTMLButtonElement);
+    expect(answers).toEqual([{ choice: 'create', text: 'new summary\n\nnew body\nand more' }]);
+  });
+
+  it('lets Enter be a newline in a box, and answers on Ctrl+Enter', async () => {
+    const { answers } = ask({ lines: 10, initial: 'summary' });
+    await fireEvent.keyDown(window, { key: 'Enter' });
+    expect(answers, 'Enter types a line, it does not answer').toEqual([]);
+
+    await fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true });
+    expect(answers).toEqual([{ choice: 'create', text: 'summary' }]);
+  });
+
+  it('still answers on a bare Enter when it asked for one line', async () => {
+    const { answers } = ask({ initial: 'feature/x' });
+    await fireEvent.keyDown(window, { key: 'Enter' });
+    expect(answers).toEqual([{ choice: 'create', text: 'feature/x' }]);
+  });
+
   it('will not answer with an empty name', async () => {
     // The button is the only way to say yes, so disabling it is the whole guard.
     const { container } = ask();
