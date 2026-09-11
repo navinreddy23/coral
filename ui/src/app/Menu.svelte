@@ -126,6 +126,7 @@
                   class="row"
                   class:danger={child.danger}
                   disabled={child.disabled}
+                  title={child.hint ? `${child.label}\n${child.hint}` : child.label}
                   onclick={() => choose(child)}
                 >
                   <span class="tick">
@@ -143,10 +144,15 @@
         {/if}
       </div>
     {:else}
+      <!--
+        A row caps its width, so a long label or a hint that is a sentence rather than a
+        keystroke can be cut. Whatever the cap takes is on the row itself.
+      -->
       <button
         class="row"
         class:danger={item.danger}
         disabled={item.disabled}
+        title={item.hint ? `${item.label}\n${item.hint}` : item.label}
         onclick={() => choose(item)}
       >
         <span class="tick">{#if item.checked}<Icon name="check" size={12} />{/if}</span>
