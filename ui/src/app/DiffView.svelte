@@ -125,11 +125,17 @@
    */
   let picked = $state<Set<string>>(new Set());
   let pickedFor = '';
+  let pickedOn: unknown = null;
   $effect(() => {
     const key = `${diff.path ?? ''}\u0000${diff.source}\u0000${diff.mode}`;
-    void diff.file;
-    if (pickedFor !== key) {
+    // The diff object itself, not only the key: staging part of a hunk reloads the same file
+    // in the same mode, and the hunks that come back are different lines under the same
+    // indices. Kept, the bar went on offering to stage a line nobody had picked, and git
+    // answered the patch built from it with "corrupt patch at line 12".
+    const file = diff.file;
+    if (pickedFor !== key || pickedOn !== file) {
       pickedFor = key;
+      pickedOn = file;
       picked = new Set();
     }
   });

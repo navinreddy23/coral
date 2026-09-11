@@ -106,6 +106,27 @@ describe('the diff viewer', () => {
     expect(sheet?.getAttribute('style')).toContain(`${4000 * 17}px`);
   });
 
+  it('forgets which lines were picked when the diff is read again', async () => {
+    // Staging part of a hunk reloads the same file in the same mode, and the hunks that come
+    // back hold different lines under the same indices. Kept, the bar went on offering "Stage
+    // 1 line" for a line nobody had picked, and git answered the patch built from it with
+    // "corrupt patch at line 12".
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'kernel/sched/core.c';
+    diff.source = 'unstaged';
+    diff.file = fileDiff();
+    diff.setMode('inline');
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+
+    await fireEvent.click(view.container.querySelector('button.pick') as HTMLElement);
+    expect(view.getByText('Stage 1 line')).toBeTruthy();
+
+    // The same path, the same mode, a fresh read: the picks belong to the rows that are gone.
+    diff.file = fileDiff();
+    await Promise.resolve();
+    expect(view.queryByText('Stage 1 line')).toBeNull();
+  });
+
   it('shows the hunk header inline, and none side by side', () => {
     const inline = mounted('inline').container;
     const headers = [...inline.querySelectorAll('tr.hunk')];
