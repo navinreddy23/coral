@@ -1332,6 +1332,30 @@ describe('what an action leaves behind', () => {
     });
   });
 
+  /**
+   * The stash stack is a reflog, not a ref. Dropping or applying anything but the top leaves
+   * `refs/stash` exactly where it was, so the "did a ref move" test says no and nothing was
+   * re-read — and the panel went on listing an entry that had been dropped, whose index now
+   * names nothing. Reading it costs one reflog, kernel or not.
+   */
+  it('reads the stash stack again even when no ref moved', async () => {
+    const { container } = await shell({ ...fetched, repo_refs: spikeOn(1) });
+    wire({ ...fetched, repo_refs: spikeOn(1) });
+    invoke.mockClear();
+
+    await fireEvent.click(
+      [...container.querySelectorAll('button.action')].find(
+        (b) => b.getAttribute('aria-label') === 'Fetch',
+      ) as HTMLButtonElement,
+    );
+
+    await waitFor(() => {
+      if (!invoke.mock.calls.some(([cmd]) => cmd === 'repo_stashes')) {
+        throw new Error('the stash stack was never read again');
+      }
+    });
+  });
+
   /** A ref that has not moved must not cost a walk of the whole repository. */
   it('does not rewalk when nothing moved', async () => {
     const { container } = await shell({ ...fetched, repo_refs: spikeOn(1) });

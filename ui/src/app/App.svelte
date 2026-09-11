@@ -992,7 +992,16 @@
       await offerToForce(action, outcome.message);
     }
 
-    await Promise.all([refs.load(path), worktree.load(path), merge.load(path)]);
+    // Stashes always, not only when a ref moved. The stack is a reflog rather than a ref, so
+    // dropping or applying anything but the top leaves `refs/stash` exactly where it was — and
+    // the panel went on listing an entry that had been dropped, whose index now names nothing.
+    // `git stash list` reads one reflog and costs nothing, kernel or not.
+    await Promise.all([
+      refs.load(path),
+      worktree.load(path),
+      merge.load(path),
+      stashes.load(path),
+    ]);
     const after = refSignature();
     if (before !== after) {
       // `forget` first, as the scope rewalk does and for the same reason: a ref moved, so the
