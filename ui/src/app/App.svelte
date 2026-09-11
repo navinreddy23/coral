@@ -702,8 +702,16 @@
     // says the repository is in a state it is no longer in.
     actions.clear();
     const path = info.path;
-    await Promise.all([refs.load(path), worktree.load(path), merge.load(path)]);
+    await Promise.all([worktree.load(path), merge.load(path)]);
+    // The walk first, then the refs and stashes that are placed on it, which is the order the
+    // watcher and the transfer path both take and for the same reason: a ref carries the row
+    // it sits on, and an operation that records a commit renumbers every row under it. Loaded
+    // before the walk, as this did, one commit recorded here moved every pill up a row — the
+    // branch just committed to lost its label entirely and the one below it took somebody
+    // else's commit, and it stayed wrong until something else happened to reload them.
+    graph.forget();
     await graph.open(path);
+    await Promise.all([refs.load(path), stashes.load(path)]);
     // The session re-checks every tab's directory whenever it is read, so this is what takes
     // the line back off a tab whose repository was moved away and put back.
     await tabs.refresh();
@@ -3306,6 +3314,7 @@
     if (await copyText(url)) toasts.push('ok', 'Copied', url);
     else toasts.push('error', 'Could not reach the clipboard');
   }
+
 
   /** Opens the submodule panel and reads the commit it is pinned at. */
   async function openSubmodulePanel(submodule: Submodule) {
