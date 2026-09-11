@@ -207,6 +207,13 @@
     flex: 0 8 auto; min-width: 0; color: var(--fg-2); font-size: var(--text-sm);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  /*
+   * Turned around where the row is disabled. There the hint is not a qualifier, it is the
+   * reason the row cannot be used, and giving way first cut it to "feature/good-…", which is
+   * the half the reader already had from the label.
+   */
+  .row:disabled .label { flex-shrink: 8; }
+  .row:disabled .hint { flex-shrink: 0; }
   .more { flex: 0 0 auto; color: var(--fg-2); display: flex; }
   /* Reserved on every row, ticked or not, so a menu where one item is in force does not
      indent that row alone. */

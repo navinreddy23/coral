@@ -166,7 +166,9 @@ function fastForwardItem(
   return {
     kind: 'item',
     label: `Fast-forward ${head} to ${rev}`,
-    hint: where === 'behind' ? `${head} is already past it` : 'they have diverged',
+    // Not "<branch> is already past it": the label right beside it names the branch, and
+    // repeating it is what pushed the reason out of a menu row on any realistic branch name.
+    hint: where === 'behind' ? 'already past it' : 'they have diverged',
     disabled: true,
     run: () => {},
   };

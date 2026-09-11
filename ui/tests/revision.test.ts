@@ -133,7 +133,9 @@ describe('bringing a revision into the branch', () => {
     const behind = combineItems(null, 'a1b2c3d4', 'master', 'behind', spies());
     const first = behind[0];
     expect(first?.kind === 'item' && first.disabled).toBe(true);
-    expect(first?.kind === 'item' && first.hint).toBe('master is already past it');
+    // Without the branch name, which the label beside it carries: with it, the reason was
+    // elided out of the row on any branch not called "master".
+    expect(first?.kind === 'item' && first.hint).toBe('already past it');
 
     const apart = combineItems(null, 'a1b2c3d4', 'master', 'diverged', spies());
     expect(apart[0]?.kind === 'item' && apart[0].hint).toBe('they have diverged');
