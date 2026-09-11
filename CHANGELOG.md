@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.1.2
+
+Two faults found by driving the window, and the last of the workflows that had never run.
+
+- **The change map sat on top of blame, pointing at the wrong rows.** The strip down the right
+  of a side-by-side diff maps where the changes are and jumps to them. Its marks, its position
+  band and its jump target are all measured against the diff's rows, and blame puts the whole
+  file in the same scroller instead, so on anything long enough for the diff to be windowed the
+  strip said the reader was somewhere they were not. Whether it appeared at all followed the
+  inline-or-side-by-side toggle, which blame does not show, so it turned up according to a
+  setting that was not on screen.
+- **A commit button that could not work would not say why.** With nothing staged it says "Stage
+  something to commit". With files staged and the summary box empty it stayed disabled and read
+  "Commit 2 files", naming what it would have done rather than what was missing.
+- **The nightly kernel scenarios had never once started.** That workflow never built the command
+  line binary, and the scenario script looks for it and exits before the first scenario when it
+  is not there.
+- A watcher test assumed the first notification after a commit carries the ref and index move.
+  The watcher may deliver more than one, and on Windows the file write arrives on its own often
+  enough that the same commit passed on one branch and failed on a tag.
+
 ## 1.1.1
 
 Forty-six fixes and the pipeline that builds them. Coral now ships for five platforms rather

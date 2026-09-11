@@ -22,6 +22,11 @@ jobs:
           key: kernel-clone-v1
 
       - uses: extractions/setup-just@v2
+
+      # The scenarios drive the CLI and refuse to start without it: run.sh looks for
+      # target/release/coral and exits before the first scenario when it is not there. No
+      # webkit packages needed, because coral-cli does not link the shell.
+      - run: cargo build --release -p coral-cli
       # CI hardware is slower than a developer laptop; the scenarios read these to relax the
       # budget assertions rather than fail spuriously.
       - run: just kernel-test
