@@ -31,6 +31,18 @@ const ALLOWED_LITERALS = new Set([
 ]);
 
 describe('the component stylesheets', () => {
+  it('clamps a toast to whole lines, so none of them is sliced across the middle', () => {
+    // 4.5em against a 1.4 line height is three lines and a fifth of a fourth, which draws the
+    // tops of the next line's letters along the bottom edge and looks like a rendering fault.
+    // git reports a paragraph on a conflict, so this clamp is reached often.
+    const css = STYLES.find((s) => s.name === 'Toasts.svelte')?.css ?? '';
+    const rule = /\.detail[^{]*\{([^}]*)\}/u.exec(css);
+    expect(rule).not.toBeNull();
+    const body = rule?.[1] ?? '';
+    expect(body).toMatch(/line-clamp:\s*\d+/u);
+    expect(body).not.toMatch(/max-height/u);
+  });
+
   it('write no colour that is not a token', () => {
     const offenders: string[] = [];
     for (const { name, css } of STYLES) {

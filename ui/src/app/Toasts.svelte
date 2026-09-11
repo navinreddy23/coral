@@ -76,8 +76,14 @@
   .title { margin: 0; font-weight: 600; }
   .detail {
     margin: 2px 0 0; color: var(--fg-1); font-size: var(--text-sm); line-height: 1.4;
-    /* git can report a paragraph; the toast shows the first few lines and no more. */
-    max-height: 4.5em; overflow: hidden; white-space: pre-wrap; word-break: break-word;
+    /*
+     * git can report a paragraph; the toast shows the first few lines and no more. By line
+     * rather than by height, which cut the fourth one across the middle and drew the tops of
+     * its letters along the bottom edge. The clamp also marks itself with an ellipsis, so a
+     * message that goes on says so.
+     */
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3;
+    overflow: hidden; white-space: pre-wrap; word-break: break-word;
   }
   .shut {
     flex: 0 0 auto; display: flex; font: inherit; line-height: 1; cursor: pointer;
