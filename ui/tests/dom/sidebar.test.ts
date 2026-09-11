@@ -19,7 +19,7 @@ import FileTree from '../../src/app/FileTree.svelte';
 import { buildTree } from '../../src/diff/tree';
 import type { PlacedRef } from '../../src/ipc/commands';
 import type { PullRequest } from '../../src/ipc/commands';
-import type { ChangedFile, Submodule } from '../../src/ipc/types';
+import type { ChangedFile, Submodule, Worktree } from '../../src/ipc/types';
 
 function ref(short: string, row: number | null = 0): PlacedRef {
   return {
@@ -65,6 +65,7 @@ function mount(over: Record<string, unknown> = {}) {
       head: 'master',
       stashes: [],
       submodules: [],
+      worktrees: [],
       pullRequests: [],
       pullRequestLabel: 'Pull requests',
       remotes: [],
@@ -78,6 +79,7 @@ function mount(over: Record<string, unknown> = {}) {
       onCollapse: () => {},
       onInitAllSubmodules: () => {},
       onSubmoduleMenu: () => {},
+      onWorktreeMenu: () => {},
       onStashMenu: () => {},
       onRefMenu: () => {},
       detachedHead: null,
@@ -281,6 +283,56 @@ describe('the file tree', () => {
     expect(container.textContent).not.toContain('ice_main.c');
     // The file at the root is not inside it and must stay.
     expect(container.textContent).toContain('README');
+  });
+});
+
+function tree(path: string, over: Partial<Worktree> = {}): Worktree {
+  return { path, head: 'a'.repeat(40), branch: null, locked: false, bare: false, ...over };
+}
+
+describe('the working trees', () => {
+  it('is not there at all for a repository that has only its own', () => {
+    // Every repository has one working tree and it is the one being looked at, so a section
+    // listing nothing but that is a heading with no purpose.
+    expect(mount().container.querySelector('[data-section="worktrees"]')).toBeNull();
+  });
+
+  it('lists a linked one by its directory and what is checked out there', () => {
+    // The window can make a working tree from any commit, and until now that was the end of
+    // it: the tree appeared nowhere, so finding it again or taking it away meant a terminal.
+    const view = mount({ worktrees: [tree('/tmp/kernel-wt', { branch: 'topic' })] });
+    expect(view.getByText('kernel-wt — topic')).toBeTruthy();
+  });
+
+  it('names the commit when the head there is detached', () => {
+    const view = mount({ worktrees: [tree('/tmp/kernel-wt', { head: 'c0ffee1234567890' })] });
+    expect(view.getByText('kernel-wt — c0ffee1')).toBeTruthy();
+  });
+
+  it('offers what can be done with one from the dots and from a right-click', () => {
+    const asked: string[] = [];
+    const view = mount({
+      worktrees: [tree('/tmp/kernel-wt', { branch: 'topic' })],
+      onWorktreeMenu: (_e: MouseEvent, w: Worktree) => asked.push(w.path),
+    });
+
+    void fireEvent.click(view.getByTitle('What can be done with this working tree'));
+    void fireEvent.contextMenu(view.getByText('kernel-wt — topic'));
+
+    expect(asked).toEqual(['/tmp/kernel-wt', '/tmp/kernel-wt']);
+  });
+
+  it('narrows with the filter box, like everything else in the panel', async () => {
+    const { container } = mount({
+      worktrees: [tree('/tmp/kernel-wt', { branch: 'topic' }), tree('/tmp/other-wt')],
+    });
+    const field = container.querySelector('input') as HTMLInputElement;
+    field.value = 'kernel';
+    await fireEvent.input(field);
+
+    const section = container.querySelector('[data-section="worktrees"]');
+    expect(section?.textContent).toContain('kernel-wt');
+    expect(section?.textContent).not.toContain('other-wt');
   });
 });
 

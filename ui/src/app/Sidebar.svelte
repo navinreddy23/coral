@@ -1,7 +1,7 @@
 <script lang="ts">
   import { byVersionDescending } from './version';
   import type { PullRequest } from '../ipc/commands';
-  import type { Remote, Submodule } from '../ipc/types';
+  import type { Remote, Submodule, Worktree } from '../ipc/types';
   import type { IconName } from './icon';
   import type { PlacedRef, RefGroups } from '../state/refs.svelte';
   import type { PlacedStash } from '../ipc/stash';
@@ -15,6 +15,7 @@
     detachedHead,
     stashes,
     submodules,
+    worktrees,
     remotes,
     openSubmodule,
     pullRequests,
@@ -28,6 +29,7 @@
     onStashMenu,
     onInitAllSubmodules,
     onSubmoduleMenu,
+    onWorktreeMenu,
     collapsed,
     onCollapse,
     focusFilter,
@@ -51,6 +53,13 @@
     /** The stash stack. Listed on its own, because `refs/stash` is only ever the top of it. */
     stashes: PlacedStash[];
     submodules: Submodule[];
+    /**
+     * Working trees other than this one.
+     *
+     * Listed because the window can make one and until now could do nothing else with it: it
+     * appeared nowhere, so the only way to find it again or take it away was the terminal.
+     */
+    worktrees: Worktree[];
     /** The configured remotes, so each can carry its own name and menu. */
     remotes: Remote[];
     /** The submodule currently open in this tab, marked in the list. */
@@ -73,6 +82,8 @@
     onRemoteMenu: (event: MouseEvent, remote: string | null) => void;
     /** Fetches a working copy for every submodule that has none. */
     onInitAllSubmodules: () => void;
+    /** Open it, or take it away. Asked for at the dots or by right-clicking. */
+    onWorktreeMenu: (event: MouseEvent, worktree: Worktree) => void;
     /** The dots, or a right-click, on one submodule. */
     onSubmoduleMenu: (event: MouseEvent, submodule: Submodule) => void;
     /**
@@ -201,6 +212,24 @@
     const q = filter.trim().toLowerCase();
     return q ? submodules.filter((s) => s.path.toLowerCase().includes(q)) : submodules;
   });
+
+  const matchingWorktrees = $derived.by(() => {
+    const q = filter.trim().toLowerCase();
+    return q
+      ? worktrees.filter((w) => `${w.path} ${w.branch ?? ''}`.toLowerCase().includes(q))
+      : worktrees;
+  });
+
+  /** The last part of a path, which is what people call a working tree. */
+  function leafOf(path: string): string {
+    const parts = path.split(/[\\/]/u).filter(Boolean);
+    return parts[parts.length - 1] ?? path;
+  }
+
+  /** What is checked out there: the branch, or the commit when the head is detached. */
+  function atOf(w: Worktree): string {
+    return w.branch ?? (w.head === '' ? 'nothing yet' : w.head.slice(0, 7));
+  }
 
   /**
    * Remote branches under the remote they belong to.
@@ -631,6 +660,43 @@
                 <span class="num">#{pr.number}</span>
                 <span class="title">{pr.title}</span>
               </button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
+  {/if}
+
+  <!--
+    Working trees, which are neither refs nor submodules and had nowhere else to be listed. The
+    window can make one from any commit; before this it could do nothing else with it, so one
+    made by mistake could only be found and removed from a terminal.
+  -->
+  {#if worktrees.length > 0}
+    <section data-section="worktrees">
+      <button class="head" onclick={() => onCollapse('worktrees', !collapsed['worktrees'])}>
+        <span class="caret">
+          <Icon name={collapsed['worktrees'] ? 'chevronRight' : 'chevronDown'} size={13} />
+        </span>
+        <span class="icon"><Icon name="folder" size={13} /></span>
+        Working trees
+        <span class="count">{matchingWorktrees.length}</span>
+      </button>
+      {#if !collapsed['worktrees']}
+        <ul>
+          {#each matchingWorktrees as tree (tree.path)}
+            <li oncontextmenu={(e) => onWorktreeMenu(e, tree)}>
+              <div class="row">
+                <span class="ref static" title="{tree.path}&#10;{atOf(tree)}{tree.locked ? '\nlocked, so git is using it' : ''}">
+                  <span class="tick"></span>
+                  <span class="text">{leafOf(tree.path)} — {atOf(tree)}</span>
+                </span>
+                <button
+                  class="dots"
+                  title="What can be done with this working tree"
+                  onclick={(e) => onWorktreeMenu(e, tree)}
+                ><Icon name="more" size={13} /></button>
+              </div>
             </li>
           {/each}
         </ul>

@@ -564,6 +564,20 @@ pub async fn repo_submodules(
     Ok(loc.submodules(&runner).await?)
 }
 
+/// The repository's working trees, its own included, for the sidebar.
+///
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn repo_worktrees(
+    path: String,
+) -> Result<Vec<coral_core::worktree::Worktree>, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc.worktrees(&runner).await?)
+}
+
 /// One file's diff in one commit.
 ///
 /// Fetched per file rather than with the commit: a kernel merge touches thousands of files,

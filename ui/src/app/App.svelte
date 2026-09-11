@@ -124,6 +124,7 @@
   import { ThemeState } from '../state/theme.svelte';
   import { SelectionState } from '../state/selection.svelte';
   import { WorktreeState } from '../state/worktree.svelte';
+  import { WorktreesState } from '../state/worktrees.svelte';
   import Staging from './Staging.svelte';
   import Details from './Details.svelte';
   import Sidebar from './Sidebar.svelte';
@@ -141,6 +142,7 @@
     StatusEntry,
     Submodule,
     SubmoduleRevision,
+    Worktree,
   } from '../ipc/types';
   import { submoduleRevision } from '../ipc/commands';
   import type { PlacedRef } from '../state/refs.svelte';
@@ -154,6 +156,7 @@
   const scope = new ScopeState();
   const selection = new SelectionState();
   const worktree = new WorktreeState();
+  const worktrees = new WorktreesState();
   let showWip = $state(false);
 
   /**
@@ -711,7 +714,7 @@
     // else's commit, and it stayed wrong until something else happened to reload them.
     graph.forget();
     await graph.open(path);
-    await Promise.all([refs.load(path), stashes.load(path)]);
+    await Promise.all([refs.load(path), stashes.load(path), worktrees.load(path)]);
     // The session re-checks every tab's directory whenever it is read, so this is what takes
     // the line back off a tab whose repository was moved away and put back.
     await tabs.refresh();
@@ -2838,6 +2841,7 @@
       await refs.load(info.path);
       await stashes.load(info.path);
       await worktree.load(info.path);
+      void worktrees.load(info.path);
       // A repository can be opened mid-merge, so the tool has to be there on arrival rather
       // than only after an action of ours stopped.
       await merge.load(info.path);
@@ -2853,6 +2857,7 @@
       graph.clear();
       refs.clear();
       worktree.clear();
+      worktrees.clear();
       stashes.clear();
       error = messageOf(e);
     }
@@ -2882,6 +2887,7 @@
     refs.clear();
     scope.clear();
     worktree.clear();
+    worktrees.clear();
     showSubmodule = null;
     submoduleAt = null;
     showWip = false;
@@ -3100,6 +3106,9 @@
     }
     await refs.load(path);
     await stashes.load(path);
+    // A working tree is added and removed under .git, so the watcher is what notices one
+    // appearing or going away.
+    void worktrees.load(path);
     // Only when it actually moved: following HEAD on every commit would drag the view away
     // from whatever the user was reading.
     if (headMark !== wasHead) await focusHead();
@@ -3315,6 +3324,86 @@
     else toasts.push('error', 'Could not reach the clipboard');
   }
 
+  /**
+   * What the dots beside a working tree offer, and what a right-click on its row does.
+   *
+   * Opening one is a tab of its own, not a view inside this one: a linked working tree is a
+   * separate checkout with its own HEAD and its own uncommitted changes, and showing it under
+   * this tab's name would say those belong to this checkout.
+   */
+  function worktreeMenu(event: MouseEvent, tree: Worktree) {
+    event.preventDefault();
+    event.stopPropagation();
+    const at = event.currentTarget instanceof HTMLElement
+      ? event.currentTarget.getBoundingClientRect()
+      : null;
+    menu = {
+      x: at && event.type === 'click' ? at.right : event.clientX,
+      y: at && event.type === 'click' ? at.bottom + 2 : event.clientY,
+      items: [
+        {
+          kind: 'item',
+          label: 'Open it in a tab',
+          run: () => void tabs.open(tree.path),
+        },
+        {
+          kind: 'item',
+          label: 'Copy its path',
+          run: () => void copyUrl(tree.path),
+        },
+        { kind: 'separator' },
+        {
+          kind: 'item',
+          label: 'Remove this working tree…',
+          danger: true,
+          // git refuses while another process holds it, and saying so here beats letting the
+          // refusal come back as a git error under a button that looked available.
+          disabled: tree.locked,
+          hint: tree.locked ? 'git is using it' : undefined,
+          run: () => void removeWorktree(tree),
+        },
+      ],
+    };
+  }
+
+  /**
+   * Takes a working tree away, with the files in it.
+   *
+   * Asked twice over when it holds changes, because those are the one thing here that exists
+   * nowhere else: the commits stay in the repository whatever happens to the tree.
+   */
+  async function removeWorktree(tree: Worktree) {
+    if (!info) return;
+    const { choice } = await ask({
+      title: `Remove the working tree at ${tree.path}?`,
+      detail:
+        'The directory and everything in it goes. The commits stay in the repository: it is ' +
+        'the checkout that is removed, not the history.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'go', label: 'Remove it', danger: true }],
+    });
+    if (choice === null) return;
+    const done = await act({ kind: 'worktreeRemove', path: tree.path, force: false });
+    if (!done) {
+      // git's own refusal, which is what it says when the tree has changes in it or files it
+      // does not track. Forcing is a second question rather than a flag on the first.
+      const { choice: anyway } = await ask({
+        title: 'It has changes in it. Remove it anyway?',
+        detail:
+          'git refused because the working tree holds changes that are recorded nowhere else. ' +
+          'Removing it now throws those away and they cannot be recovered.',
+        asksText: false,
+        placeholder: '',
+        initial: '',
+        choices: [{ id: 'go', label: 'Throw them away', danger: true }],
+      });
+      if (anyway === null) return;
+      await act({ kind: 'worktreeRemove', path: tree.path, force: true });
+    }
+    await worktrees.load(info.path);
+  }
 
   /** Opens the submodule panel and reads the commit it is pinned at. */
   async function openSubmodulePanel(submodule: Submodule) {
@@ -3699,6 +3788,7 @@
           : null}
         stashes={stashes.list}
         submodules={refs.submodules}
+        worktrees={worktrees.linked}
         remotes={remotes.list}
         openSubmodule={tabs.active?.submodule ?? null}
         onSelect={reveal}
@@ -3708,6 +3798,7 @@
         onRefMenu={refMenu}
         onInitAllSubmodules={() => void initSubmodule(null, false)}
         onSubmoduleMenu={submoduleMenu}
+        onWorktreeMenu={worktreeMenu}
         onDropRef={dropRef}
         pullRequests={hosting.pullRequests}
         pullRequestLabel={hosting.view?.host?.kind === 'gitlab' ? 'Merge requests' : 'Pull requests'}

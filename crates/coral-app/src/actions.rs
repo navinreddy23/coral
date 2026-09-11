@@ -127,6 +127,13 @@ pub enum Action {
         /// Create this branch there rather than detaching.
         branch: Option<String>,
     },
+    /// Remove a linked working tree, leaving the repository and its commits alone.
+    WorktreeRemove {
+        /// The working tree's own path, as `git worktree list` reports it.
+        path: String,
+        /// Remove it even though it has changes in it that are recorded nowhere else.
+        force: bool,
+    },
     /// Clone and check out a submodule's working copy, or move it to its branch tip.
     SubmoduleInit {
         /// The submodule's path within the repository. All of them when absent.
@@ -340,6 +347,7 @@ impl Action {
                 RewriteKind::MoveOlder => format!("move {} down", named(rev)),
             },
             Self::WorktreeAdd { path, .. } => format!("worktree at {path}"),
+            Self::WorktreeRemove { path, .. } => format!("remove the worktree at {path}"),
             Self::SubmoduleInit {
                 path: Some(p),
                 remote: true,
@@ -688,6 +696,10 @@ async fn run_tree(
         Action::StashDrop { index } => loc.stash_drop(runner, index).await?,
         Action::WorktreeAdd { path, rev, branch } => {
             loc.worktree_add(runner, std::path::Path::new(&path), &rev, branch.as_deref())
+                .await?;
+        }
+        Action::WorktreeRemove { path, force } => {
+            loc.worktree_remove(runner, std::path::Path::new(&path), force)
                 .await?;
         }
         Action::SubmoduleInit {

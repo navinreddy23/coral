@@ -29,6 +29,7 @@ import type {
   SubmoduleRevision,
   Remote,
   RepoInfo,
+  Worktree,
 } from './types';
 
 /**
@@ -146,6 +147,16 @@ export function commitTree(path: string, rev: string): Promise<string[]> {
 /** The repository's submodules. Empty for a repository that declares none. */
 export function repoSubmodules(path: string): Promise<Submodule[]> {
   return invoke<Submodule[]>('repo_submodules', { path });
+}
+
+/**
+ * The repository's working trees, its own first.
+ *
+ * Always at least one. A repository with only its own tree has nothing to manage, which is
+ * what the panel reads this to decide.
+ */
+export function repoWorktrees(path: string): Promise<Worktree[]> {
+  return invoke<Worktree[]>('repo_worktrees', { path });
 }
 
 /**
@@ -314,6 +325,7 @@ export type Action =
   | { kind: 'reset'; rev: string; mode: 'soft' | 'mixed' | 'hard' }
   | { kind: 'rewrite'; rev: string; how: RewriteKind; message: string | null }
   | { kind: 'worktreeAdd'; path: string; rev: string; branch: string | null }
+  | { kind: 'worktreeRemove'; path: string; force: boolean }
   | { kind: 'submoduleInit'; path: string | null; recursive: boolean; remote: boolean }
   | { kind: 'submoduleSetUrl'; path: string; url: string }
   | { kind: 'submoduleRemove'; path: string; force: boolean }
