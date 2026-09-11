@@ -38,8 +38,14 @@ export class DiffState {
   blame = $state<Blame | null>(null);
   /** The file itself at the revision the blame was taken at, so the two line up. */
   text = $state<string | null>(null);
-  /** The commits that touched this file, newest first, once the history view has asked. */
-  history = $state<Commit[]>([]);
+  /**
+   * The commits that touched this file, newest first, once the history view has asked.
+   *
+   * Null until the read comes back, which is not the same as empty. Walking a kernel file's
+   * history takes ten seconds, and for all of them the pane said "Nothing has touched this
+   * file" — which is a sentence a reader believes.
+   */
+  history = $state<Commit[] | null>(null);
   /** True while there may be older commits than the ones held. */
   moreHistory = $state(false);
   /** The commit whose change to this file is being shown, when it came from the history. */
@@ -186,6 +192,7 @@ export class DiffState {
     const request = this.#request;
     if (request === null) return;
     const side = ++this.#side;
+    this.history = null;
     try {
       // From the commit being looked at, so the list holds the change on screen.
       const rev = revisionOf(request);
@@ -270,7 +277,7 @@ export class DiffState {
     this.atCommit = null;
     this.blame = null;
     this.text = null;
-    this.history = [];
+    this.history = null;
     this.moreHistory = false;
     this.source = request.source;
     this.path = request.path;
@@ -311,7 +318,7 @@ export class DiffState {
     this.#opened = null;
     this.blame = null;
     this.text = null;
-    this.history = [];
+    this.history = null;
     this.moreHistory = false;
     this.atCommit = null;
     this.expanded = false;

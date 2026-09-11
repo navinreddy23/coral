@@ -377,7 +377,7 @@
       the file, which is the question a file history is opened to answer.
     -->
     <ul class="history">
-      {#each diff.history as commit (commit.oid)}
+      {#each diff.history ?? [] as commit (commit.oid)}
         <li>
           <button
             class="entry"
@@ -393,7 +393,9 @@
           </button>
         </li>
       {/each}
-      {#if diff.history.length === 0}
+      {#if diff.history === null}
+        <li class="muted">Reading what has touched this file…</li>
+      {:else if diff.history.length === 0}
         <li class="muted">Nothing has touched this file.</li>
       {:else if diff.moreHistory}
         <li>

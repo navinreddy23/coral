@@ -157,6 +157,23 @@ describe('the file panel', () => {
     expect(called('file_history').at(-1)?.[1]).toMatchObject({ limit: 100 });
   });
 
+  it('says it is still reading rather than that nothing touched the file', async () => {
+    // The pane shows "Nothing has touched this file." for an empty history, and an empty list
+    // was also what it held while the read was in flight. Walking a kernel file's history
+    // takes ten seconds, and for all ten it said a sentence that was not true.
+    let release = (_: unknown) => {};
+    answering({ file_history: new Promise((r) => (release = r)) });
+    const diff = new DiffState(new ViewsState());
+    await diff.open('/repo', 'HEAD', 'a.c');
+
+    const showing = diff.setView('history');
+    expect(diff.history, 'unread, which is not the same as empty').toBeNull();
+
+    release([]);
+    await showing;
+    await vi.waitFor(() => expect(diff.history).toEqual([]));
+  });
+
   it('forgets the blame and the history when another file is opened', async () => {
     answering();
     const diff = new DiffState(new ViewsState());
