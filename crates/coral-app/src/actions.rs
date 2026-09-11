@@ -762,13 +762,26 @@ pub async fn rebase_start(
     let binary = coral_binary()?;
 
     let before = loc.snapshot_refs(&runner).await?;
-    let outcome = loc
-        .rebase_interactive(&runner, &onto, &todo, &binary)
-        .await?;
-    let after = loc.snapshot_refs(&runner).await?;
     // Named the way the menu names it. The journal keeps this text for the life of the entry,
     // so an undo months later read "undid rebase onto <forty characters>~1".
     let what = format!("rebase onto {}", named(&onto));
+    // Logged like every other mutation. It was the one rewrite of history that left no trace
+    // in the record of the session: squashing three commits into one showed nothing at all
+    // between the commit before it and whatever was done next.
+    let logged = crate::activity::started(&path, &what);
+    let outcome = match loc.rebase_interactive(&runner, &onto, &todo, &binary).await {
+        Ok(outcome) => outcome,
+        Err(e) => {
+            logged.failed(&e.to_string());
+            return Err(e.into());
+        }
+    };
+    if outcome.conflicts.is_empty() {
+        logged.finished();
+    } else {
+        logged.stopped();
+    }
+    let after = loc.snapshot_refs(&runner).await?;
     loc.journal_change(&what, before, after, coral_core::undo::Restore::Worktree)?;
 
     Ok(ActionOutcome {
