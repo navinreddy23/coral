@@ -60,6 +60,14 @@ export type Change = "unmodified" | "modified" | "added" | "deleted" | "renamed"
 export type ChangedFile = { path: string, oldPath: string | null, change: FileChange, };
 
 /**
+ * Where a clone landed, and anything git said about it that was not progress.
+ *
+ * A clone can exit 0 and still not check anything out. `notes` is how that reaches the person
+ * who asked for it rather than being thrown away with the progress records.
+ */
+export type CloneOutcome = { at: string, notes: Array<string>, };
+
+/**
  * One commit's metadata, without its tree or diff.
  */
 export type Commit = { oid: string, parents: Array<string>, author: Signature, committer: Signature, 

@@ -174,6 +174,12 @@
       <p class="error">{start.error}</p>
     {/if}
 
+    <!-- Not a failure: git exited 0 and still said something worth reading, which is how a
+         clone that checked nothing out announces itself. -->
+    {#if start.notice}
+      <p class="notice">{start.notice}</p>
+    {/if}
+
     {#if start.form === 'clone'}
       <section class="form">
         <label>
@@ -431,6 +437,10 @@
   }
   .mono { font-family: var(--font-mono); font-variant-ligatures: none; }
   .error { color: var(--danger); margin: 0 0 var(--space-3); background: var(--bg-0); }
+  .notice {
+    color: var(--warn); margin: 0 0 var(--space-3); background: var(--bg-0);
+    white-space: pre-wrap;
+  }
   .none { color: var(--fg-2); margin: 0; background: var(--bg-0); }
 
   .filter {

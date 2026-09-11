@@ -1,4 +1,5 @@
 import { invoke } from './invoke';
+import type { CloneOutcome } from './types';
 
 /** One repository this user has opened before. */
 export interface Recent {
@@ -50,9 +51,14 @@ export interface CloneWanted {
   depth: number;
 }
 
-/** Clones into `parent`, under `name` or under the name in the URL. */
-export function repoClone(wanted: CloneWanted): Promise<string> {
-  return invoke<string>('repo_clone', {
+/**
+ * Clones into `parent`, under `name` or under the name in the URL.
+ *
+ * `notes` is anything git said that was not progress. A clone can exit 0 and check nothing
+ * out — "remote HEAD refers to nonexistent ref" — and this is how that reaches the window.
+ */
+export function repoClone(wanted: CloneWanted): Promise<CloneOutcome> {
+  return invoke<CloneOutcome>('repo_clone', {
     request: {
       url: wanted.url,
       parent: wanted.parent,

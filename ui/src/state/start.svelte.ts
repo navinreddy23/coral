@@ -20,6 +20,8 @@ export class StartState {
   form = $state<StartForm>('none');
   busy = $state(false);
   error = $state<string | null>(null);
+  /** What git said about the last clone that was not progress and not a failure. */
+  notice = $state<string | null>(null);
   /** Null until asked, so the tick box is not offered before the answer arrives. */
   lfs = $state<boolean | null>(null);
 
@@ -71,7 +73,15 @@ export class StartState {
   }
 
   async clone(wanted: CloneWanted): Promise<string | null> {
-    return this.#run(() => repoClone(wanted));
+    this.notice = null;
+    const made = await this.#run(async () => {
+      const outcome = await repoClone(wanted);
+      // git exits 0 on a clone that checked nothing out and only warns. Without this the
+      // window opened a repository with no files in it and said nothing at all.
+      if (outcome.notes.length > 0) this.notice = outcome.notes.join('\n');
+      return outcome.at;
+    });
+    return made;
   }
 
   async #run(action: () => Promise<string>): Promise<string | null> {
