@@ -81,7 +81,7 @@ async fn undoes_a_commit_by_restoring_refs() {
     let after = loc.snapshot_refs(&runner).await.unwrap();
     assert_eq!(repo.git(["rev-list", "--count", "HEAD"]), "2");
 
-    loc.restore_refs(&runner, &before, &after, Restore::Worktree)
+    loc.restore_refs(&runner, &before, &after, Restore::Worktree, "undo")
         .await
         .unwrap();
     assert_eq!(repo.git(["rev-list", "--count", "HEAD"]), "1");
@@ -99,7 +99,7 @@ async fn undoes_a_branch_deletion_by_recreating_the_ref() {
     assert!(repo.git(["branch", "--list", "doomed"]).is_empty());
     let after = loc.snapshot_refs(&runner).await.unwrap();
 
-    loc.restore_refs(&runner, &before, &after, Restore::Worktree)
+    loc.restore_refs(&runner, &before, &after, Restore::Worktree, "undo")
         .await
         .unwrap();
     assert!(
@@ -119,7 +119,7 @@ async fn undoes_a_hard_reset() {
     assert_eq!(repo.git(["rev-list", "--count", "HEAD"]), "1");
     let after = loc.snapshot_refs(&runner).await.unwrap();
 
-    loc.restore_refs(&runner, &before, &after, Restore::Worktree)
+    loc.restore_refs(&runner, &before, &after, Restore::Worktree, "undo")
         .await
         .unwrap();
     assert_eq!(repo.git(["rev-list", "--count", "HEAD"]), "2");
@@ -141,7 +141,7 @@ async fn refuses_to_undo_when_the_worktree_is_dirty() {
 
     std::fs::write(repo.path().join("a.txt"), "uncommitted work\n").unwrap();
     let err = loc
-        .restore_refs(&runner, &before, &after, Restore::Worktree)
+        .restore_refs(&runner, &before, &after, Restore::Worktree, "undo")
         .await
         .unwrap_err();
 
@@ -305,6 +305,31 @@ async fn undoes_a_soft_reset_even_though_it_leaves_the_worktree_dirty() {
     );
 }
 
+/// A redo that the same guard stops says so in its own words.
+#[tokio::test]
+async fn a_redo_the_worktree_blocks_is_refused_as_a_redo() {
+    // The guard lives in `restore_refs`, which serves both directions and labelled every
+    // refusal "undo". Pressing Redo and being told "cannot undo" names the wrong button.
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let repo = repo.write("a.txt", "2\n").commit("second");
+    let (runner, loc) = open(&repo).await;
+
+    let before = loc.snapshot_refs(&runner).await.unwrap();
+    loc.reset(&runner, "HEAD~1", ResetMode::Soft).await.unwrap();
+    let after = loc.snapshot_refs(&runner).await.unwrap();
+    let mut journal = Journal::load(&loc);
+    journal.record(entry("reset to HEAD~1", before, after));
+    journal.save(&loc).unwrap();
+
+    loc.undo_step(&runner, true).await.unwrap();
+    std::fs::write(repo.path().join("a.txt"), "written by hand\n").unwrap();
+
+    let refused = loc.undo_step(&runner, false).await.unwrap_err();
+    assert_eq!(refused.code(), "refused", "{refused}");
+    assert!(refused.to_string().contains("redo"), "{refused}");
+    assert!(!refused.to_string().contains("undo"), "{refused}");
+}
+
 /// And work the user actually wrote still stops it, which is the whole reason for the guard.
 #[tokio::test]
 async fn refuses_when_the_worktree_holds_something_the_undo_would_overwrite() {
@@ -422,7 +447,7 @@ async fn undoing_a_commit_gives_the_work_back_rather_than_destroying_it() {
     .unwrap();
     let after = loc.snapshot_refs(&runner).await.unwrap();
 
-    loc.restore_refs(&runner, &before, &after, Restore::KeepChanges)
+    loc.restore_refs(&runner, &before, &after, Restore::KeepChanges, "undo")
         .await
         .unwrap();
 
@@ -470,7 +495,7 @@ async fn undoing_a_commit_is_allowed_over_later_edits() {
     // Carrying on working after committing, which is the normal thing to do.
     std::fs::write(repo.path().join("later.txt"), "written afterwards\n").unwrap();
 
-    loc.restore_refs(&runner, &before, &after, Restore::KeepChanges)
+    loc.restore_refs(&runner, &before, &after, Restore::KeepChanges, "undo")
         .await
         .unwrap();
 
@@ -499,7 +524,7 @@ async fn undoing_a_merge_still_matches_the_files_to_the_commit() {
     let after = loc.snapshot_refs(&runner).await.unwrap();
     assert!(repo.path().join("only-on-side.txt").exists());
 
-    loc.restore_refs(&runner, &before, &after, Restore::Worktree)
+    loc.restore_refs(&runner, &before, &after, Restore::Worktree, "undo")
         .await
         .unwrap();
 
