@@ -61,6 +61,34 @@ fn the_todo_lists_the_range_oldest_first() {
 }
 
 #[test]
+fn a_todo_across_a_merge_is_refused_rather_than_offered_flattened() {
+    // The list is built with --no-merges, so a range holding one comes back a commit short and
+    // says nothing about it. Starting that rebase rewrites the history into a straight line.
+    // `rewrite_commit` already refused this; the picker and the command line asked for the same
+    // list and were handed it.
+    let repo = TestRepo::new()
+        .write("base.txt", "base\n")
+        .commit("base")
+        .write("a.txt", "a\n")
+        .commit("commit a");
+    repo.git(["checkout", "--quiet", "-b", "side", "HEAD~1"]);
+    let repo = repo.write("side.txt", "side\n").commit("commit side");
+    repo.git(["checkout", "--quiet", "main"]);
+    repo.git(["merge", "--quiet", "--no-ff", "-m", "merge side", "side"]);
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+        // HEAD~2 is the base: the range holds commit a, commit side and the merge, and the
+        // list would come back with the first two.
+        let error = loc.rebase_todo(&runner, "HEAD~2").await.unwrap_err();
+        assert_eq!(error.code(), "refused", "{error}");
+        assert!(error.to_string().contains("merge"), "{error}");
+    });
+}
+
+#[test]
 fn dropping_a_commit_removes_it_and_its_file() {
     let repo = stack();
     let rt = tokio::runtime::Runtime::new().unwrap();

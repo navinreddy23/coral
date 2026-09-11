@@ -160,8 +160,13 @@ impl crate::repo::RepoLocation {
     /// changes their mind, and this is what the picker is populated from before they have
     /// decided anything.
     ///
+    /// A range holding a merge is refused here rather than by each caller. The list is built
+    /// with `--no-merges`, so such a range comes back a commit short and says nothing about it;
+    /// a picker showing "4 of 4 commits kept" over a range of five is worse than no picker.
+    ///
     /// # Errors
-    /// Propagates git failures, including an unknown revision.
+    /// [`CoralError::Refused`] when the range holds a merge. Otherwise propagates git failures,
+    /// including an unknown revision.
     pub async fn rebase_todo(
         &self,
         runner: &crate::process::GitRunner,
@@ -194,6 +199,7 @@ impl crate::repo::RepoLocation {
                 message: None,
             });
         }
+        self.refuse_merges_in(runner, onto, items.len()).await?;
         Ok(Todo { items })
     }
 
@@ -462,8 +468,6 @@ impl crate::repo::RepoLocation {
         let base = format!("{oid}~{}", rewrite.depth());
         let base = self.rev_parse(runner, &base).await?;
         let mut todo = self.rebase_todo(runner, &base).await?;
-        self.refuse_merges_in(runner, &base, todo.items.len())
-            .await?;
 
         let at = todo
             .items
@@ -529,7 +533,7 @@ impl crate::repo::RepoLocation {
             return Ok(());
         }
         Err(CoralError::Refused {
-            label: "rewrite",
+            label: "rebase",
             detail: "there is a merge between this commit and HEAD; replaying the range would \
                      flatten it"
                 .to_owned(),
