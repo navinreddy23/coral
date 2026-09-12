@@ -239,7 +239,13 @@ impl GitCommand {
     }
 }
 
-/// Replaces the password in `scheme://user:password@host/…` with `<redacted>`.
+/// Replaces the credentials in `scheme://user:password@host/…` with `<redacted>`.
+///
+/// With a colon the user half is kept, because a user name is not the secret. Without one the
+/// single field is kept secret instead: URL syntax calls it the user name, but it is the form
+/// GitHub documents for a token — `https://<token>@github.com/owner/repo.git` — and a token
+/// cannot be told apart from a name by looking. Hiding a name costs a log line some detail;
+/// printing a token costs the account.
 fn redact_url_userinfo(s: &str) -> String {
     let Some(scheme_end) = s.find("://") else {
         return s.to_owned();
@@ -249,18 +255,14 @@ fn redact_url_userinfo(s: &str) -> String {
         return s.to_owned();
     };
     let userinfo = &rest[..at];
-    let Some(colon) = userinfo.find(':') else {
-        return s.to_owned();
-    };
     if userinfo.contains('/') {
         return s.to_owned();
     }
-    format!(
-        "{}{}:<redacted>{}",
-        &s[..scheme_end + 3],
-        &userinfo[..colon],
-        &rest[at..]
-    )
+    let kept = match userinfo.find(':') {
+        Some(colon) => &userinfo[..=colon],
+        None => "",
+    };
+    format!("{}{kept}<redacted>{}", &s[..scheme_end + 3], &rest[at..])
 }
 
 pub struct GitOutput {
@@ -1272,6 +1274,25 @@ mod tests {
         assert_eq!(
             redact_url_userinfo("https://github.com/o/r@v1.git"),
             "https://github.com/o/r@v1.git"
+        );
+    }
+
+    #[test]
+    fn a_token_standing_alone_is_a_secret_too() {
+        // The form GitHub's own documentation gives for a token in a remote, and the one a
+        // colon-seeking redaction walked straight past: the whole of it reached the log.
+        assert_eq!(
+            redact_url_userinfo("https://ghp_abc123@github.com/o/r.git"),
+            "https://<redacted>@github.com/o/r.git"
+        );
+        assert_eq!(
+            redact_url_userinfo("https://glpat-abc123@gitlab.com/o/r.git"),
+            "https://<redacted>@gitlab.com/o/r.git"
+        );
+        // A password that is empty is still a password field, and the user half still shows.
+        assert_eq!(
+            redact_url_userinfo("https://user:@github.com/o/r.git"),
+            "https://user:<redacted>@github.com/o/r.git"
         );
     }
 
