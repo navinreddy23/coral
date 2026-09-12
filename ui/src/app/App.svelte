@@ -1980,8 +1980,13 @@
 
   async function worktreeAt(oid: string) {
     // The repository's own parent, which is where working trees for it go: a new one may not
-    // be made inside the repository, and its siblings are where people keep them.
-    const where = await pickDirectory('Where should the new working tree go?', beside(info?.path));
+    // be made inside the repository, and its siblings are where people keep them. Named as an
+    // empty folder because that is what git will take — the picker offers folders that exist,
+    // and every one of them with anything in it is refused.
+    const where = await pickDirectory(
+      'Choose an empty folder for the new working tree',
+      beside(info?.path),
+    );
     if (where === null) return;
     const branch = await askText(
       'Branch for the new working tree',

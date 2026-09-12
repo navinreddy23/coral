@@ -184,3 +184,50 @@ fn a_commit_exports_to_a_patch_file_named_for_its_summary() {
     );
     assert!(body.contains("+++ b/b.txt"), "{body:.600}");
 }
+
+#[test]
+fn a_folder_already_in_use_is_refused_before_a_branch_is_made() {
+    // git makes the branch first and looks at the path second, so this failed with "already
+    // exists" and left the branch behind: no working tree, and a branch nobody asked for.
+    let repo = two_commits();
+    let elsewhere = tempfile::tempdir().unwrap();
+    let taken = under(&elsewhere, "taken");
+    std::fs::create_dir_all(taken.join("something")).unwrap();
+
+    run(async {
+        let (runner, loc) = located(&repo).await;
+        let refused = loc
+            .worktree_add(&runner, &taken, "HEAD", Some("wt/probe"))
+            .await
+            .expect_err("a folder with things in it is not somewhere a working tree can go");
+        assert_eq!(refused.code(), "refused");
+        assert!(
+            refused.to_string().contains("folder of its own"),
+            "{refused}"
+        );
+    });
+
+    assert!(
+        !repo
+            .git(["branch", "--list", "wt/probe"])
+            .contains("wt/probe"),
+        "the branch should not have been made"
+    );
+}
+
+#[test]
+fn an_empty_folder_is_somewhere_a_worktree_can_go() {
+    // Which is what a picker that only offers folders that exist leaves people with.
+    let repo = two_commits();
+    let elsewhere = tempfile::tempdir().unwrap();
+    let empty = under(&elsewhere, "empty");
+    std::fs::create_dir_all(&empty).unwrap();
+
+    run(async {
+        let (runner, loc) = located(&repo).await;
+        loc.worktree_add(&runner, &empty, "HEAD", Some("wt/into-empty"))
+            .await
+            .unwrap();
+    });
+    assert!(empty.join("a.txt").exists());
+}

@@ -97,6 +97,26 @@ pub fn parse_list(stdout: &[u8]) -> Vec<Worktree> {
     out
 }
 
+/// What is already at `path` that a new working tree could not go into.
+///
+/// An empty folder is not one: git is happy to use it, and a picker that only offers existing
+/// folders leaves that as the way to choose where a tree goes.
+fn occupant(path: &Path) -> Option<&'static str> {
+    let Ok(what) = std::fs::metadata(path) else {
+        return None;
+    };
+    if !what.is_dir() {
+        return Some("a file");
+    }
+    let Ok(mut inside) = std::fs::read_dir(path) else {
+        return None;
+    };
+    inside
+        .next()
+        .is_some()
+        .then_some("a folder with things in it")
+}
+
 impl RepoLocation {
     /// Lists the repository's working trees.
     ///
@@ -120,8 +140,8 @@ impl RepoLocation {
     /// out and silently borrowing an existing one would move it under the user.
     ///
     /// # Errors
-    /// Propagates git failures: a path that already exists, or a branch already checked out
-    /// somewhere else.
+    /// [`CoralError::Refused`] when something is already at `path`, and git failures otherwise
+    /// — a branch already checked out somewhere else.
     pub async fn worktree_add(
         &self,
         runner: &GitRunner,
@@ -129,6 +149,18 @@ impl RepoLocation {
         rev: &str,
         branch: Option<&str>,
     ) -> Result<PathBuf, CoralError> {
+        // git makes the branch before it so much as looks at the path, so asking for a folder
+        // that is in use fails with "already exists" and leaves the branch behind: no working
+        // tree, and a branch nobody asked for. Answered here, where nothing has happened yet.
+        if let Some(what) = occupant(path) {
+            return Err(CoralError::Refused {
+                label: "add a working tree",
+                detail: format!(
+                    "{} is {what}. A working tree needs a folder of its own.",
+                    path.display()
+                ),
+            });
+        }
         let mut cmd =
             GitCommand::write("worktree", self.display_path()).args(["worktree", "add", "--quiet"]);
         match branch {
