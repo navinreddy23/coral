@@ -1595,4 +1595,42 @@ describe('moving down the list with the keyboard', () => {
       if (container.querySelector('section.diff')) throw new Error('the panel is still up');
     });
   });
+  it('does not offer to take an untracked file back to a commit it was never in', async () => {
+    // The item read "Discard its changes — back to the last commit" about a file whose only
+    // copy is on disk, and did exactly what the line under it does.
+    const { container } = await shell({
+      repo_status: {
+        entries: [{ path: 'fresh.txt', index: 'unmodified', worktree: 'untracked' }],
+        conflicted: [],
+      },
+    });
+
+    const wip = await waitFor(() => {
+      const found = container.querySelector('button.row.wip');
+      if (!found) throw new Error('no WIP row yet');
+      return found as HTMLButtonElement;
+    });
+    await fireEvent.click(wip);
+
+    // The staging panel's rows, not the commit panel's: both list the file, and only these
+    // carry the menu.
+    const row = await waitFor(() => {
+      const found = [...container.querySelectorAll('aside li')].find(
+        (li) => li.querySelector('div.row') !== null && li.textContent?.includes('fresh.txt'),
+      );
+      if (!found) throw new Error('no staging row yet');
+      return found as HTMLElement;
+    });
+    await fireEvent.contextMenu(row.querySelector('div.row') as HTMLElement);
+
+    const labels = await waitFor(() => {
+      const found = [...document.querySelectorAll('.menu .label')].map((e) =>
+        e.textContent?.trim(),
+      );
+      if (found.length === 0) throw new Error('no menu yet');
+      return found;
+    });
+    expect(labels).toContain('Delete the file');
+    expect(labels).not.toContain('Discard its changes');
+  });
 });

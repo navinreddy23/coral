@@ -2510,14 +2510,21 @@
             disabled: busy,
             run: () => void worktree.stage([entry.path], true),
           },
-      {
-        kind: 'item',
-        label: 'Discard its changes',
-        hint: 'back to the last commit',
-        disabled: busy,
-        danger: true,
-        run: () => void discardChanges([entry]),
-      },
+      // Only for a file git already has a copy of. An untracked one has no last commit to go
+      // back to, so this read "Discard its changes — back to the last commit" about a file
+      // whose only copy is on disk, and did the same thing as the line under it.
+      ...(entry.worktree === 'untracked'
+        ? []
+        : [
+            {
+              kind: 'item' as const,
+              label: 'Discard its changes',
+              hint: 'back to the last commit',
+              disabled: busy,
+              danger: true,
+              run: () => void discardChanges([entry]),
+            },
+          ]),
       {
         kind: 'item',
         label: 'Delete the file',
