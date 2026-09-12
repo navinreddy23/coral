@@ -147,7 +147,7 @@
     if (opened === null || !term) return;
     id = opened.id;
     shell = opened.shell;
-    stop = await terminalListen(
+    const listening = await terminalListen(
       opened.id,
       (text) => term?.write(text),
       () => {
@@ -155,6 +155,15 @@
         void session.stop(path);
       },
     );
+    // The pane can go while the listener is being registered — a tab switch, a repository that
+    // closes underneath it. Checked again here rather than only above: without it the next
+    // line reads `onData` off a disposed terminal and throws, and the listener stays
+    // subscribed, writing into a pane nobody can see.
+    if (!term) {
+      listening();
+      return;
+    }
+    stop = listening;
     term.onData((data) => void terminalWrite(opened.id, data));
     term.focus();
   }
