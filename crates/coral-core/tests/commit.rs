@@ -1,5 +1,6 @@
 //! Reading one commit: what it says, and which files it changed.
 
+use coral_core::commit::Listing;
 use coral_core::process::GitRunner;
 use coral_core::repo::RepoLocation;
 use coral_core::testutil::TestRepo;
@@ -19,7 +20,10 @@ fn a_merge_lists_only_what_it_brought_in() {
     rt.block_on(async {
         let runner = GitRunner::discover().await.unwrap();
         let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
-        let detail = loc.commit_detail(&runner, "HEAD").await.unwrap();
+        let detail = loc
+            .commit_detail(&runner, "HEAD", Listing::Commit)
+            .await
+            .unwrap();
         let paths: Vec<_> = detail.files.iter().map(|f| f.path.to_string()).collect();
         assert_eq!(paths, ["side.txt"]);
     });

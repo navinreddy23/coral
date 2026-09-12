@@ -598,9 +598,23 @@ export function commitStaged(path: string, message: string, amend: boolean): Pro
   return invoke<Status>('commit_staged', { path, message, amend });
 }
 
+/**
+ * How a revision's files are listed.
+ *
+ * Mirrors `commit::Listing` in Rust. A stash made with `-u` keeps its untracked files in a
+ * third parent that a diff against the first never reaches, and only `git stash show` reads
+ * all three. It takes any merge for a stash and answers nonsense for one, so the window says
+ * which it is rather than letting the engine guess.
+ */
+export type Listing = 'commit' | 'stash';
+
 /** Everything the detail panel shows for one commit. */
-export function commitDetail(path: string, rev: string): Promise<CommitDetail> {
-  return invoke<CommitDetail>('commit_detail', { path, rev });
+export function commitDetail(
+  path: string,
+  rev: string,
+  listing: Listing = 'commit',
+): Promise<CommitDetail> {
+  return invoke<CommitDetail>('commit_detail', { path, rev, listing });
 }
 
 /* Commit signing. A key belongs to a repository, not to a person: the app-level settings are

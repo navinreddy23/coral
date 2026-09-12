@@ -308,11 +308,12 @@ pub async fn patch_range_size(
 pub async fn commit_detail(
     path: String,
     rev: String,
+    listing: coral_core::commit::Listing,
 ) -> Result<coral_core::commit::CommitDetail, crate::commands::IpcError> {
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
-    Ok(loc.commit_detail(&runner, &rev).await?)
+    Ok(loc.commit_detail(&runner, &rev, listing).await?)
 }
 
 /// Where a revision stands relative to `HEAD`.

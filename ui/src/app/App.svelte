@@ -83,7 +83,7 @@
   import { bandWidth, columnWidth, laneToken } from '../graph/column';
   import { shortAge } from './age';
   import { initialsOf } from '../graph/initials';
-  import type { Action } from '../ipc/commands';
+  import type { Action, Listing } from '../ipc/commands';
   import {
     DEFAULT_METRICS,
     metricsFor,
@@ -708,13 +708,26 @@
    * Ctrl or Shift, as the reference takes either: what the modifier means here is "and this
    * one too", not a range, so both do the same thing.
    */
+  /**
+   * How the selected row's files are listed.
+   *
+   * A stash keeps what was untracked in a third parent, which the ordinary reader never sees:
+   * the panel said "1 file" about a stash that also carried a whole new one, and dropping it
+   * would have taken that file with nothing on screen having named it.
+   */
+  function listingFor(oid: string): Listing {
+    return stashes.list.some((s) => s.oid === oid) ? 'stash' : 'commit';
+  }
+
   function pick(row: number, event?: MouseEvent) {
     const local = localRow(graph.frame, row);
     if (local === null || !graph.frame || !info) return;
     showWip = false;
     const oid = oidOf(graph.frame, local);
     const second = event !== undefined && (event.ctrlKey || event.metaKey || event.shiftKey);
-    void (second ? selection.compare(info.path, row, oid) : selection.select(info.path, row, oid));
+    void (second
+      ? selection.compare(info.path, row, oid)
+      : selection.select(info.path, row, oid, listingFor(oid)));
   }
 
   /*
@@ -2549,7 +2562,7 @@
     const pair = selection.pair;
     if (!info || pair === null) return;
     diff.close();
-    void selection.select(info.path, pair.to.row, pair.to.oid);
+    void selection.select(info.path, pair.to.row, pair.to.oid, listingFor(pair.to.oid));
   }
 
   /**
@@ -2825,7 +2838,7 @@
    */
   async function revealAt(row: number, oid: string) {
     scrollToRow(row);
-    if (info) void selection.select(info.path, row, oid);
+    if (info) void selection.select(info.path, row, oid, listingFor(oid));
     await graph.ensureRows(row, row);
   }
 

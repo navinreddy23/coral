@@ -232,6 +232,20 @@ pub struct CommitDetail {
     pub files: Vec<ChangedFile>,
 }
 
+/// How a revision's files are listed.
+///
+/// Not a detail of the command: a stash made with `-u` keeps its untracked files in a third
+/// parent, and `git stash show` is the only reader that sees all three. It takes any two- or
+/// three-parent commit for a stash and answers nonsense for a merge, so it is asked for only
+/// by a caller that already knows the revision is one.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Listing {
+    #[default]
+    Commit,
+    Stash,
+}
+
 impl crate::repo::RepoLocation {
     /// Reads one commit and the files it changed.
     ///
@@ -241,6 +255,7 @@ impl crate::repo::RepoLocation {
         &self,
         runner: &crate::process::GitRunner,
         rev: &str,
+        listing: Listing,
     ) -> Result<CommitDetail, crate::error::CoralError> {
         let commits = self
             .log(
@@ -262,7 +277,7 @@ impl crate::repo::RepoLocation {
                 })?;
 
         Ok(CommitDetail {
-            files: self.changed_files(runner, rev).await?,
+            files: self.changed_files(runner, rev, listing).await?,
             commit,
         })
     }
@@ -310,22 +325,33 @@ impl crate::repo::RepoLocation {
         &self,
         runner: &crate::process::GitRunner,
         rev: &str,
+        listing: Listing,
     ) -> Result<Vec<ChangedFile>, crate::error::CoralError> {
-        let out = runner
-            .output(
-                crate::process::GitCommand::read("diff-tree", self.display_path())
-                    .args([
-                        "diff-tree",
-                        "-r",
-                        "-z",
-                        "--name-status",
-                        "-M",
-                        "--no-commit-id",
-                    ])
-                    .args(["--diff-merges=first-parent", "--root"])
-                    .arg(rev),
-            )
-            .await?;
+        let command = match listing {
+            Listing::Commit => crate::process::GitCommand::read("diff-tree", self.display_path())
+                .args([
+                    "diff-tree",
+                    "-r",
+                    "-z",
+                    "--name-status",
+                    "-M",
+                    "--no-commit-id",
+                ])
+                .args(["--diff-merges=first-parent", "--root"]),
+            // A stash keeps what was untracked in a third parent, which a diff against the
+            // first never reaches: the panel listed one file for a stash that also carried a
+            // whole new one, and dropping it would have taken that file with no mention of it.
+            Listing::Stash => {
+                crate::process::GitCommand::read("stash", self.display_path()).args([
+                    "stash",
+                    "show",
+                    "--include-untracked",
+                    "-z",
+                    "--name-status",
+                ])
+            }
+        };
+        let out = runner.output(command.arg(rev)).await?;
         Ok(parse_name_status(&out.stdout))
     }
 }
