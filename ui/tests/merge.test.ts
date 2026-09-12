@@ -4,7 +4,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("../src/ipc/invoke", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
 
-const { MergeState, render } = await import("../src/state/merge.svelte");
+const { MergeState, hasMarkers, render } = await import("../src/state/merge.svelte");
 const commands = await import("../src/ipc/commands");
 import type { Block } from "../src/ipc/types";
 
@@ -414,5 +414,37 @@ describe("stepping an operation on", () => {
     merge.stopped = "error: could not apply 91e605d... local: dummy1 file";
     expect(await merge.step("continue")).toBe(true);
     expect(merge.stopped).toBe("");
+  });
+});
+
+describe('a resolution typed by hand', () => {
+  it('is not settled while a conflict marker is still in it', () => {
+    // Editing by hand answered every region at once, whatever was in the box. Leaving a marker
+    // in wrote it, staged it, and called the file resolved; the next commit carried it.
+    expect(hasMarkers('one\ntwo\n')).toBe(false);
+    expect(hasMarkers('one\n<<<<<<< theirs\ntwo\n')).toBe(true);
+    expect(hasMarkers('one\n=======\ntwo\n')).toBe(true);
+    expect(hasMarkers('one\n>>>>>>> ours\n')).toBe(true);
+    expect(hasMarkers('one\n||||||| base\n')).toBe(true);
+  });
+
+  it('leaves alone a line that only looks like one', () => {
+    // Six is not seven, and a run that carries on is not what git writes.
+    expect(hasMarkers('<<<<<< six of them\n')).toBe(false);
+    expect(hasMarkers('<<<<<<<<in the middle of a word\n')).toBe(false);
+    expect(hasMarkers('  <<<<<<< indented\n')).toBe(false);
+  });
+  it('refuses to write one, and says why', async () => {
+    const merge = new MergeState();
+    merge.blocks = { blocks: [common('top'), conflict(['mine'], ['yours'])] };
+    merge.active = 'f.txt';
+    merge.edited = 'top\n<<<<<<< ours\nmine\n';
+
+    expect(merge.settled).toBe(false);
+    expect(await merge.apply()).toBe(false);
+    expect(merge.error).toContain('conflict marker');
+
+    merge.edited = 'top\nmine\n';
+    expect(merge.settled).toBe(true);
   });
 });

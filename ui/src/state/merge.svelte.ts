@@ -96,9 +96,19 @@ export class MergeState {
   /**
    * True when every region has an answer, which is what makes the file safe to write.
    *
-   * Typing the result by hand answers all of them at once: what is in the box is the file.
+   * Typing the result by hand answers all of them at once — what is in the box is the file —
+   * except when the box still carries one of git's markers. Leaving one in was a resolution as
+   * far as this was concerned: Coral wrote it, staged it, and said the file was settled, and
+   * the next commit carried `<<<<<<<` into the history.
    */
-  settled = $derived(this.edited !== null || this.untouched === 0);
+  settled = $derived(this.edited === null ? this.untouched === 0 : !hasMarkers(this.edited));
+
+  /** Why the file cannot be written yet, for the button that cannot be pressed. */
+  whyNotSettled = $derived(
+    this.edited === null
+      ? `${this.untouched} conflict${this.untouched === 1 ? '' : 's'} still needs a side taken`
+      : 'What you typed still has a conflict marker in it',
+  );
 
   /** The file as it will be written: the picks applied, or whatever was typed over them. */
   output = $derived(
@@ -222,8 +232,11 @@ export class MergeState {
     // branch touched them: the merge went through and both sides' work on those lines was
     // gone, with nothing on screen having said so.
     if (!this.settled) {
-      const n = this.untouched;
-      this.error = `${n} conflict${n === 1 ? '' : 's'} in this file still needs a side taken.`;
+      this.error =
+        this.edited === null
+          ? `${this.untouched} conflict${this.untouched === 1 ? '' : 's'} in this file still ` +
+            'needs a side taken.'
+          : 'What you typed still has a conflict marker in it.';
       return false;
     }
     // A text file ends with a newline. The picks produce one; a box typed into only does when
@@ -277,6 +290,18 @@ export class MergeState {
       this.busy = false;
     }
   }
+}
+
+/**
+ * Whether text still carries one of git's conflict markers.
+ *
+ * Seven of the character at the start of a line, which is what git writes and what every tool
+ * that greps for an unfinished merge looks for. A line that merely begins with them and runs
+ * on is not one of git's, but it is not something to write into a file being called resolved
+ * either.
+ */
+export function hasMarkers(text: string): boolean {
+  return text.split('\n').some((line) => /^(?:<{7}|={7}|>{7}|\|{7})(?:\s|$)/u.test(line));
 }
 
 /**

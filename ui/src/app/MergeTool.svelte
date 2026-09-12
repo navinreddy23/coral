@@ -345,9 +345,7 @@
           <button
             class="primary"
             disabled={merge.busy || !merge.settled}
-            title={merge.settled
-              ? 'Write this file and stage it'
-              : `${merge.untouched} conflict${merge.untouched === 1 ? '' : 's'} still needs a side taken`}
+            title={merge.settled ? 'Write this file and stage it' : merge.whyNotSettled}
             onclick={() => merge.apply()}
           >
             Mark resolved
