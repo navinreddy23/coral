@@ -1097,3 +1097,109 @@ describe('a remote branch with a local of its own name', () => {
     expect(actions()).toEqual([{ kind: 'checkout', rev: 'topic' }]);
   });
 });
+
+/**
+ * `docs/ui-spec.md` says a double-click on a branch pill checks it out, the way every client
+ * this one is meant to feel like does. Nothing did it: both clicks landed on the row.
+ */
+describe('double-clicking a pill', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  function on(short: string, kind: PlacedRef['kind']): PlacedRef {
+    return {
+      name: kind.kind === 'tag' ? `refs/tags/${short}` : `refs/heads/${short}`,
+      short,
+      kind,
+      target: 'a'.repeat(40),
+      peeled: null,
+      upstream: null,
+      ahead: 0,
+      behind: 0,
+      row: 0,
+    };
+  }
+
+  /** The pill drawn on the first row, which is the one the fixture's refs sit on. */
+  function pill(container: HTMLElement): HTMLElement {
+    const found = container.querySelector('button.pill');
+    if (!found) throw new Error('no pill on the row');
+    return found as HTMLElement;
+  }
+
+  function actions(): Record<string, unknown>[] {
+    return invoke.mock.calls
+      .filter(([cmd]) => cmd === 'repo_action')
+      .map(([, args]) => (args as { action: Record<string, unknown> }).action);
+  }
+
+  it('checks out the branch it names', async () => {
+    const { container } = await shell({ repo_refs: [on('topic', { kind: 'local_branch' })] }, true);
+    await fireEvent.dblClick(pill(container));
+
+    await waitFor(() => {
+      if (actions().length === 0) throw new Error('nothing sent');
+    });
+    expect(actions()).toEqual([{ kind: 'checkout', rev: 'topic' }]);
+  });
+
+  it('takes a tracking branch by its own name, as the menu does', async () => {
+    const { container } = await shell(
+      { repo_refs: [on('origin/topic', { kind: 'remote_branch', remote: 'origin' })] },
+      true,
+    );
+    await fireEvent.dblClick(pill(container));
+
+    await waitFor(() => {
+      if (actions().length === 0) throw new Error('nothing sent');
+    });
+    expect(actions()).toEqual([{ kind: 'checkout', rev: 'topic' }]);
+  });
+
+  it('leaves a tag alone, because checking one out detaches HEAD', async () => {
+    const { container } = await shell(
+      { repo_refs: [on('v1.2.0', { kind: 'tag', annotated: false })] },
+      true,
+    );
+    await fireEvent.dblClick(pill(container));
+
+    await new Promise((r) => setTimeout(r, 20));
+    expect(actions()).toEqual([]);
+  });
+
+  it('does nothing on the branch already checked out', async () => {
+    // `open_repo` says HEAD is on `master` in this harness.
+    const { container } = await shell(
+      { repo_refs: [on('master', { kind: 'local_branch' })] },
+      true,
+    );
+    await fireEvent.dblClick(pill(container));
+
+    await new Promise((r) => setTimeout(r, 20));
+    expect(actions()).toEqual([]);
+  });
+
+  it('does nothing in a bare repository, which has nothing to check out into', async () => {
+    const { container } = await shell(
+      {
+        repo_refs: [on('topic', { kind: 'local_branch' })],
+        open_repo: {
+          path: '/repo',
+          gitDir: '/repo',
+          gitVersion: '2.43.0',
+          isBare: true,
+          head: { kind: 'branch', name: 'master' },
+          state: 'clean',
+          commitGraph: true,
+        },
+      },
+      true,
+    );
+    await fireEvent.dblClick(pill(container));
+
+    await new Promise((r) => setTimeout(r, 20));
+    expect(actions()).toEqual([]);
+  });
+});

@@ -1676,6 +1676,20 @@
    * like it does, and the local branch quietly wins. So the choice is put to the user, as
    * GitKraken does: go to the local branch as it stands, or move it onto the remote first.
    */
+  /**
+   * Double-clicking a branch pill checks it out, which `docs/ui-spec.md` promised and nothing
+   * did: the second click only landed on the row the first had already selected.
+   *
+   * Branches only. A tag detaches HEAD, which is a state to arrive at deliberately rather than
+   * by a click that went one too far, and it stays on the menu where it says so.
+   */
+  function checkoutPill(label: PlacedRef) {
+    if (!info || info.isBare || actions.busy || worktree.busy) return;
+    const branch = label.kind.kind === 'local_branch' || label.kind.kind === 'remote_branch';
+    if (!branch || label.short === headName) return;
+    void goTo(label);
+  }
+
   async function goTo(ref: PlacedRef) {
     const name = withoutRemote(ref.short);
     if (ref.kind.kind !== 'remote_branch' || name === '') {
@@ -4340,6 +4354,7 @@
                     ondragleave={() => (dragOver === label.short ? (dragOver = null) : null)}
                     ondrop={(e) => dropOnPill(e, label.short)}
                     onclick={(e) => pick(row, e)}
+                    ondblclick={() => checkoutPill(label)}
                   >
                     <!-- The cap says what the ref is; for a tracking branch that is the host
                          it came from, which is more than "a branch" says. -->
