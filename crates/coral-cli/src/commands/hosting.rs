@@ -112,6 +112,12 @@ pub async fn login(path: &Path, secret: secrecy::SecretString) -> Result<Done, C
         label: "sign in",
         detail: view.detail.unwrap_or_else(|| "no host".to_owned()),
     })?;
+    // Tried before it is kept, so a typo or an expired token does not replace one that works.
+    Client::new(secret.clone())
+        .map_err(|e| refused("sign in", &e))?
+        .check(&host)
+        .await
+        .map_err(|e| refused("sign in", &e))?;
     token::store(&host, &account(), &secret).map_err(|e| refused("sign in", &e))?;
     Ok(Done {
         what: format!("stored a token for {}, for every profile", host.origin),

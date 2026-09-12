@@ -33,6 +33,17 @@ pub enum HostingError {
     NoToken,
 }
 
+impl HostingError {
+    /// Whether the host itself refused, rather than not answering at all.
+    ///
+    /// What a sign-in needs to know before it keeps a token: a refusal is the host saying the
+    /// secret is no good, and a network that is down says nothing about it.
+    #[must_use]
+    pub const fn is_refusal(&self) -> bool {
+        matches!(self, Self::Api { .. })
+    }
+}
+
 impl Host {
     /// Identifies the provider behind a remote URL, accepting both `https://` and
     /// `git@host:owner/repo.git` (scp-like) forms.

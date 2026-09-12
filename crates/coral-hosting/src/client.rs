@@ -56,6 +56,26 @@ impl Client {
         }
     }
 
+    /// Whether the host will answer for this repository with this token.
+    ///
+    /// For a caller about to keep the token: a secret stored without being tried is one the
+    /// window then reports as working, and the sign-in dialog said "Signed in" about a string
+    /// the host had never seen. Listing the proposals is the check, because that is the whole
+    /// of what the token is for here.
+    ///
+    /// Only a refusal from the host counts against a token. A network that is down is no
+    /// evidence about the secret, and refusing it would mean nobody can sign in until they are
+    /// online.
+    ///
+    /// # Errors
+    /// [`HostingError::Api`] when the host refuses the request.
+    pub async fn check(&self, host: &Host) -> Result<(), HostingError> {
+        match self.pull_requests(host).await {
+            Err(e) if e.is_refusal() => Err(e),
+            Ok(_) | Err(_) => Ok(()),
+        }
+    }
+
     /// Opens a new proposal.
     ///
     /// # Errors
