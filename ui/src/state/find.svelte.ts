@@ -22,6 +22,9 @@ export class FindState {
   /** Which query the held matches answer, so a stale reply cannot replace a newer one. */
   #token = 0;
   #timer: ReturnType<typeof setTimeout> | null = null;
+  /** Whether a search is out with the engine, and the newest query waiting behind it. */
+  #running = false;
+  #queued: { repo: string; query: string } | null = null;
 
   /** The rows that matched, for the list to mark. */
   rows = $derived(new Set(this.matches.map((m) => m.row)));
@@ -44,6 +47,7 @@ export class FindState {
     this.#token += 1;
     if (this.#timer !== null) clearTimeout(this.#timer);
     this.#timer = null;
+    this.#queued = null;
     this.query = '';
     this.matches = [];
     this.at = 0;
@@ -62,6 +66,7 @@ export class FindState {
     if (this.#timer !== null) clearTimeout(this.#timer);
     if (query.trim() === '') {
       this.#token += 1;
+      this.#queued = null;
       this.matches = [];
       this.at = 0;
       this.searching = false;
@@ -71,9 +76,25 @@ export class FindState {
     this.#timer = setTimeout(() => void this.run(repo, query), 250);
   }
 
-  /** Searches now, for Enter and for the tests. */
+  /**
+   * Searches now, for Enter and for the tests.
+   *
+   * One at a time, latest wins. The debounce only collapses keystrokes closer together than a
+   * quarter of a second; someone typing a phrase with a pause in the middle sent one search per
+   * pause, and a search of the kernel is a walk of 1.8 million commits. Thirteen of them were
+   * once in flight at once for one typed phrase, and the answer to the last had to wait behind
+   * the twelve nobody wanted. The engine has no way to call one off, so the queue is held here
+   * and everything but the newest is dropped before it is ever asked for.
+   */
   async run(repo: string, query: string): Promise<void> {
+    if (this.#running) {
+      this.#queued = { repo, query };
+      this.#token += 1;
+      this.searching = true;
+      return;
+    }
     const token = ++this.#token;
+    this.#running = true;
     this.searching = true;
     this.error = null;
     try {
@@ -86,7 +107,14 @@ export class FindState {
       this.error = messageOf(e);
       this.matches = [];
     } finally {
-      if (token === this.#token) this.searching = false;
+      this.#running = false;
+      const next = this.#queued;
+      this.#queued = null;
+      if (next !== null) {
+        void this.run(next.repo, next.query);
+      } else if (token === this.#token) {
+        this.searching = false;
+      }
     }
   }
 
