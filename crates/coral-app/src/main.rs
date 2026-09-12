@@ -158,6 +158,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         graph::commit_tree,
         graph::apply_part,
         actions::repo_action,
+        actions::repo_journal,
         remotes::remote_list,
         remotes::remote_edit,
         remotes::commit_url,

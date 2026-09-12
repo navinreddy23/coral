@@ -83,7 +83,7 @@
   import { bandWidth, columnWidth, laneToken } from '../graph/column';
   import { shortAge } from './age';
   import { initialsOf } from '../graph/initials';
-  import type { Action, Listing } from '../ipc/commands';
+  import type { Action, JournalView, Listing } from '../ipc/commands';
   import {
     DEFAULT_METRICS,
     metricsFor,
@@ -104,6 +104,7 @@
     pickDirectory,
     pickGitProgram,
     pickRepository,
+    repoJournal,
   } from '../ipc/commands';
   import { GraphState } from '../state/graph.svelte';
   import { RefsState } from '../state/refs.svelte';
@@ -760,6 +761,24 @@
     wasBusy = busy;
   });
 
+  /**
+   * What undo and redo would act on, read after anything that could have moved the journal.
+   *
+   * The journal is a file beside the repository, so nothing else in the window knows whether
+   * either button has work to do.
+   */
+  let journal = $state<JournalView>({ undo: null, redo: null });
+
+  async function readJournal(path: string) {
+    try {
+      journal = await repoJournal(path);
+    } catch {
+      // A repository that cannot be read has no journal to offer; the buttons stay off rather
+      // than the window carrying an error nobody asked about.
+      journal = { undo: null, redo: null };
+    }
+  }
+
   /** Reloads everything after an operation finished, since it may have moved any of it. */
   async function reloadAll() {
     if (!info) return;
@@ -778,6 +797,7 @@
     graph.forget();
     await graph.open(path);
     await Promise.all([refs.load(path), stashes.load(path), worktrees.load(path)]);
+    void readJournal(path);
     // The session re-checks every tab's directory whenever it is read, so this is what takes
     // the line back off a tab whose repository was moved away and put back.
     await tabs.refresh();
@@ -3024,6 +3044,7 @@
       // left soloed is already narrowed by the time the rows arrive; this is only what the
       // panel draws with — which row carries the struck eye, and whether the banner is up.
       void scope.load(info.path);
+      void readJournal(info.path);
       // Before the walk rather than after it. The branch list needs a row per ref, and the
       // engine answers from whatever walk it has, so this fills the panel in a moment instead
       // of leaving it saying the kernel has no branches for the six seconds the real walk
@@ -3083,6 +3104,7 @@
     // The loading screen asks whether there is a frame, so leaving one up is also what kept it
     // from appearing.
     info = null;
+    journal = { undo: null, redo: null };
     graph.clear();
     stashes.clear();
     refs.clear();
@@ -3880,6 +3902,7 @@
       leftPanel={views.current.sidebar}
       stashes={stashes.list.length}
       dirty={worktree.dirty}
+      {journal}
       rightPanel={views.current.details}
       rightPanelUsable={!merge.inProgress}
       onAction={toolbarAction}

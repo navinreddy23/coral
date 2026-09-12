@@ -608,6 +608,19 @@ export function commitStaged(path: string, message: string, amend: boolean): Pro
  */
 export type Listing = 'commit' | 'stash';
 
+/**
+ * What undo and redo would do next.
+ *
+ * Mirrors `actions::JournalView` in Rust. The journal is a file beside the repository, so the
+ * window has no other way to know whether either button has anything to act on.
+ */
+export type JournalView = { undo: string | null; redo: string | null };
+
+/** The two ends of the undo journal, for the buttons that offer them. */
+export function repoJournal(path: string): Promise<JournalView> {
+  return invoke<JournalView>('repo_journal', { path });
+}
+
 /** Everything the detail panel shows for one commit. */
 export function commitDetail(
   path: string,

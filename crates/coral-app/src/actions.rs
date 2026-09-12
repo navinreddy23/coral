@@ -396,6 +396,36 @@ impl Action {
     }
 }
 
+/// What undo and redo would do next, so the two buttons can say.
+///
+/// Nothing else in the window knows: the journal is a file beside the repository and the
+/// toolbar offered both buttons whatever was in it, so pressing one on a fresh repository
+/// answered "cannot redo: nothing to redo" from a control that had looked available.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JournalView {
+    /// What undo would reverse, named as it was recorded. None when there is nothing.
+    pub undo: Option<String>,
+    /// What redo would replay. None when nothing has been undone.
+    pub redo: Option<String>,
+}
+
+/// Reads the journal's two ends.
+///
+/// # Errors
+/// Propagates git failures from finding the repository.
+#[tauri::command]
+pub async fn repo_journal(path: String) -> Result<JournalView, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    let journal = coral_core::undo::Journal::load(&loc);
+    Ok(JournalView {
+        undo: journal.undoable().map(|e| e.label.clone()),
+        redo: journal.redoable().map(|e| e.label.clone()),
+    })
+}
+
 /// Runs one action against a repository.
 ///
 /// Every mutation is bracketed by a ref snapshot so undo works without each operation having

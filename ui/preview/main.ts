@@ -478,6 +478,7 @@ mount(Toolbar, {
     terminalOpen: false,
     stashes: 2,
     dirty: true,
+    journal: { undo: null, redo: null },
     leftPanel: "open",
     rightPanel: true,
     rightPanelUsable: true,
