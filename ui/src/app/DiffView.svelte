@@ -345,6 +345,14 @@
       </div>
     {/if}
 
+    <!--
+      The free space sits here rather than in the file name, so that what follows is pushed to
+      the right and what precedes it stays put. Everything after this comes and goes with the
+      view: choosing Blame took the layout toggle away and slid the three tabs a quarter of the
+      header to the right, out from under the pointer that had just chosen one of them.
+    -->
+    <span class="spread"></span>
+
     {#if diff.view === 'diff'}
       <div class="toggle" role="group" aria-label="Diff layout">
         <button class:on={diff.mode === 'inline'} onclick={() => diff.setMode('inline')}>
@@ -650,9 +658,10 @@
   /* Normal weight. The file name is a label on the diff, not a heading over it, and mono at
      twelve pixels already reads heavier than the interface font beside it. */
   .path {
-    flex: 1; min-width: 0; font-size: var(--text-base); font-weight: 400; color: var(--fg-1);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    flex: 0 1 auto; min-width: 3em; font-size: var(--text-base); font-weight: 400;
+    color: var(--fg-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  .spread { flex: 1 1 auto; min-width: var(--space-2); }
   .tally {
     flex: 0 0 auto; font-size: var(--text-sm); display: flex; gap: var(--space-2);
     font-family: var(--font-mono); font-variant-ligatures: none; font-variant-numeric: tabular-nums;

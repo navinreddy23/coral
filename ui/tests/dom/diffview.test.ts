@@ -107,6 +107,33 @@ describe('the diff viewer', () => {
     expect(sheet?.getAttribute('style')).toContain(`${4000 * 17}px`);
   });
 
+  it('keeps Diff, Blame and History in one place as the view changes', () => {
+    // Everything that comes and goes with the view — the layout toggle, whole file, the step
+    // arrows — has to sit after the free space, or choosing Blame slides the three tabs a
+    // quarter of the header to the right, out from under the pointer that just chose one.
+    const where = (view: 'diff' | 'blame') => {
+      const diff = new DiffState(new ViewsState());
+      diff.path = 'kernel/sched/core.c';
+      diff.file = fileDiff();
+      diff.setView(view);
+      const { container } = render(DiffView, {
+        props: { diff, onClose: () => {}, onPart: () => {} },
+      });
+      const header = container.querySelector('header');
+      const kids = [...(header?.children ?? [])];
+      const tabs = kids.findIndex((e) => e.getAttribute('aria-label') === 'What to show about this file');
+      return { tabs, spread: kids.findIndex((e) => e.classList.contains('spread')) };
+    };
+
+    const asDiff = where('diff');
+    const asBlame = where('blame');
+    expect(asDiff.tabs).toBeGreaterThanOrEqual(0);
+    expect(asBlame.tabs).toBe(asDiff.tabs);
+    // And the free space is what everything after them is pushed against.
+    expect(asDiff.spread).toBe(asDiff.tabs + 1);
+    expect(asBlame.spread).toBe(asBlame.tabs + 1);
+  });
+
   it('will not offer to blame a binary file', async () => {
     // git answers for one all the same, treating its bytes as lines, and the pane painted four
     // kilobytes of replacement characters. The diff beside it already says "Binary file".
