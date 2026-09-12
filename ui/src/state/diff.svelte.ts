@@ -235,8 +235,8 @@ export class DiffState {
     const rev = revisionOf(request);
     try {
       const [blame, text] = await Promise.all([
-        fileBlame(request.repo, rev, request.path),
-        fileText(request.repo, rev, request.path),
+        fileBlame(request.repo, rev, request.path, request.oldPath),
+        fileText(request.repo, rev, request.path, request.oldPath),
       ]);
       if (side !== this.#side) return;
       this.blame = blame;

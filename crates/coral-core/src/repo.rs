@@ -669,21 +669,67 @@ impl RepoLocation {
         runner: &GitRunner,
         rev: &str,
         path: &str,
+        was: Option<&str>,
     ) -> Result<Vec<u8>, CoralError> {
+        let named = self.named_at(runner, rev, path, was).await?;
         let out = runner
             .output(
                 GitCommand::read("show", self.display_path())
                     .arg("show")
-                    .arg(format!("{rev}:{path}")),
+                    .arg(format!("{rev}:{named}")),
             )
             .await?;
         Ok(out.stdout)
+    }
+
+    /// Which of the two names the file goes by at `rev`.
+    ///
+    /// The current one unless the revision predates the rename, which is the case a reader
+    /// reaches by stepping back through a file's history.
+    async fn named_at<'a>(
+        &self,
+        runner: &GitRunner,
+        rev: &str,
+        path: &'a str,
+        was: Option<&'a str>,
+    ) -> Result<&'a str, CoralError> {
+        match was {
+            Some(old) if old != path && !self.holds_path(runner, rev, path).await? => Ok(old),
+            _ => Ok(path),
+        }
+    }
+
+    /// Whether `rev` has a blob at `path`.
+    ///
+    /// `rev-parse --verify --quiet` answers with an exit code and nothing on stdout, and the
+    /// runner treats a non-zero exit as an error, so the absence is read from the output being
+    /// empty rather than from the failure.
+    async fn holds_path(
+        &self,
+        runner: &GitRunner,
+        rev: &str,
+        path: &str,
+    ) -> Result<bool, CoralError> {
+        let out = runner
+            .output(
+                GitCommand::read("cat-file", self.display_path())
+                    .args(["cat-file", "-t"])
+                    .arg(format!("{rev}:{path}")),
+            )
+            .await;
+        Ok(out.is_ok())
     }
 
     /// Attributes each line of a file to the commit that last changed it.
     ///
     /// Streams rather than buffers: `--incremental` emits chunks as it resolves them, which is
     /// what lets the UI paint a long file progressively.
+    ///
+    /// `was` is the name the file had before a rename, when the caller knows of one. Blame
+    /// takes one path and one revision, and at a revision from before the rename the current
+    /// name is not in the tree: reading a file's history and stepping back through it answered
+    /// "no such path <current name> in <forty characters>" as soon as the reader asked who
+    /// wrote a line.
     ///
     /// # Errors
     /// Propagates git failures and [`CoralError::Protocol`] on malformed output.
@@ -692,10 +738,12 @@ impl RepoLocation {
         runner: &GitRunner,
         rev: &str,
         path: &str,
+        was: Option<&str>,
     ) -> Result<crate::blame::Blame, CoralError> {
+        let named = self.named_at(runner, rev, path, was).await?;
         let cmd = GitCommand::read("blame", self.display_path())
             .args(["blame", "--porcelain", "--incremental", rev, "--"])
-            .arg(path);
+            .arg(named);
 
         let mut parser = crate::blame::BlameParser::default();
         runner

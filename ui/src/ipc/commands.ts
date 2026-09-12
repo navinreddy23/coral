@@ -204,9 +204,20 @@ export function fileDiff(
   return invoke<FileDiff | null>('file_diff', { path, rev, file, oldFile, options });
 }
 
-/** Who last changed each line of a file, and in which commit. */
-export function fileBlame(path: string, rev: string, file: string): Promise<Blame> {
-  return invoke<Blame>('file_blame', { path, rev, file });
+/**
+ * Who last changed each line of a file, and in which commit.
+ *
+ * `oldFile` is the name it had before a rename. Blame takes one path and one revision, and at
+ * a revision from before the rename the current name is not in the tree: stepping back through
+ * a file's history and asking who wrote a line answered "no such path" without it.
+ */
+export function fileBlame(
+  path: string,
+  rev: string,
+  file: string,
+  oldFile: string | null = null,
+): Promise<Blame> {
+  return invoke<Blame>('file_blame', { path, rev, file, oldFile });
 }
 
 /** What to do with part of a file's changes. */
@@ -255,8 +266,14 @@ export function compareFileDiff(
 }
 
 /** One file's contents at one revision, for the blame view to put its chunks beside. */
-export function fileText(path: string, rev: string, file: string): Promise<string> {
-  return invoke<string>('file_text', { path, rev, file });
+export function fileText(
+  path: string,
+  rev: string,
+  file: string,
+  /** The name it had before a rename, for a revision from before it. */
+  oldFile: string | null = null,
+): Promise<string> {
+  return invoke<string>('file_text', { path, rev, file, oldFile });
 }
 
 /** The commits that touched one file, newest first, following it across renames. */

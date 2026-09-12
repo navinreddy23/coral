@@ -677,12 +677,13 @@ pub async fn file_blame(
     path: String,
     rev: String,
     file: String,
+    old_file: Option<String>,
 ) -> Result<coral_core::blame::Blame, crate::commands::IpcError> {
     tracing::info!(path, rev, file, "file_blame");
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
-    Ok(loc.blame(&runner, &rev, &file).await?)
+    Ok(loc.blame(&runner, &rev, &file, old_file.as_deref()).await?)
 }
 
 /// What to do with part of a file's changes.
@@ -818,11 +819,14 @@ pub async fn file_text(
     path: String,
     rev: String,
     file: String,
+    old_file: Option<String>,
 ) -> Result<String, crate::commands::IpcError> {
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
-    let bytes = loc.file_at(&runner, &rev, &file).await?;
+    let bytes = loc
+        .file_at(&runner, &rev, &file, old_file.as_deref())
+        .await?;
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
