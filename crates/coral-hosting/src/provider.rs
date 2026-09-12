@@ -85,10 +85,18 @@ impl Host {
             "http" => "http",
             _ => "https",
         };
+        // The port belongs to the origin for the same reason the scheme does, and only then: a
+        // remote cloned over ssh on 2222 says nothing about where the instance serves its API,
+        // while an http remote on 8929 says exactly that. `Url::port` is already None for a
+        // scheme's own port, so 443 never appears.
+        let port = match (url.scheme(), url.port()) {
+            ("http" | "https", Some(port)) => format!(":{port}"),
+            _ => String::new(),
+        };
 
         Ok(Self {
             kind,
-            origin: format!("{scheme}://{host}"),
+            origin: format!("{scheme}://{host}{port}"),
             owner,
             repo,
         })
@@ -169,6 +177,38 @@ mod tests {
                 .unwrap()
                 .origin,
             "http://gitlab.internal"
+        );
+    }
+
+    #[test]
+    fn an_instance_on_its_own_port_keeps_it() {
+        // Dropped, every request went to 443 on a host that serves nothing there, and the
+        // panel read it as a repository with no proposals rather than as a wrong address.
+        assert_eq!(
+            Host::detect("https://gitlab.internal:8929/t/a.git")
+                .unwrap()
+                .origin,
+            "https://gitlab.internal:8929"
+        );
+        assert_eq!(
+            Host::detect("http://github.internal:8080/t/a.git")
+                .unwrap()
+                .commit_url("abc"),
+            "http://github.internal:8080/t/a/commit/abc"
+        );
+        // The scheme's own port is not part of an origin anybody writes down.
+        assert_eq!(
+            Host::detect("https://gitlab.internal:443/t/a.git")
+                .unwrap()
+                .origin,
+            "https://gitlab.internal"
+        );
+        // An ssh port is about ssh. The API is served where it is served.
+        assert_eq!(
+            Host::detect("ssh://git@gitlab.internal:2222/t/a.git")
+                .unwrap()
+                .origin,
+            "https://gitlab.internal"
         );
     }
 
