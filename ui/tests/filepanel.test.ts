@@ -19,6 +19,7 @@ const EMPTY_DIFF = {
   added: 0,
   removed: 0,
   tooLarge: false,
+  mode: null,
   hunks: [],
 };
 

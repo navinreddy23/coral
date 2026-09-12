@@ -132,6 +132,13 @@ added: number | null, removed: number | null,
  */
 hunks: Array<Hunk>, 
 /**
+ * The two file modes, when the commit changed them. None when it did not.
+ *
+ * A mode-only change has no hunks at all, so without this the panel had a file listed as
+ * modified and nothing whatever to say about it.
+ */
+mode: ModeChange | null, 
+/**
  * Set when the file was not read because it exceeds the size guard.
  */
 tooLarge: boolean, };
@@ -186,6 +193,14 @@ export type Line = { kind: LineKind, text: string, oldNo: number | null, newNo: 
 noNewline: boolean, };
 
 export type LineKind = "context" | "add" | "remove";
+
+/**
+ * The file mode on each side of a change that touched it.
+ *
+ * Kept as git writes it — six octal digits — because that is what a reader recognises and
+ * there is nothing here to compute with.
+ */
+export type ModeChange = { old: string, new: string, };
 
 /**
  * The result of an operation that may stop for conflicts.

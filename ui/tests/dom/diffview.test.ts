@@ -28,6 +28,7 @@ function fileDiff(): FileDiff {
     added: 1,
     removed: 1,
     tooLarge: false,
+  mode: null,
     hunks: [
       {
         header: '@@ -1,3 +1,3 @@',
@@ -458,5 +459,29 @@ describe('the words that changed inside a line', () => {
     expect(marked, 'only the side that lacks it').toHaveLength(1);
     expect(marked[0]?.classList.contains('remove')).toBe(true);
     expect(marked[0]?.querySelector('.nonl')?.getAttribute('title')).toContain('No newline');
+  });
+  it('says what a mode-only change did, since it has no lines to show', async () => {
+    // "No line changes." was the whole of what a file listed as modified had to say.
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'f.sh';
+    diff.file = {
+      ...fileDiff(),
+      hunks: [],
+      added: 0,
+      removed: 0,
+      mode: { old: '100644', new: '100755' },
+    };
+    const { container } = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+    const said = container.textContent ?? '';
+    expect(said).toContain('No line changes.');
+    expect(said).toContain('100644');
+    expect(said).toContain('100755');
+  });
+  it('tells an empty new file apart from a file nothing happened to', async () => {
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'empty.txt';
+    diff.file = { ...fileDiff(), change: 'added', hunks: [], added: 0, removed: 0 };
+    const { container } = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+    expect(container.textContent).toContain('A new file with nothing in it.');
   });
 });

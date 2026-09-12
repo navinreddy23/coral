@@ -184,8 +184,25 @@ pub struct FileDiff {
     pub removed: Option<u32>,
     /// Empty for a binary file, a pure rename, or a mode-only change.
     pub hunks: Vec<Hunk>,
+    /// The two file modes, when the commit changed them. None when it did not.
+    ///
+    /// A mode-only change has no hunks at all, so without this the panel had a file listed as
+    /// modified and nothing whatever to say about it.
+    pub mode: Option<ModeChange>,
     /// Set when the file was not read because it exceeds the size guard.
     pub too_large: bool,
+}
+
+/// The file mode on each side of a change that touched it.
+///
+/// Kept as git writes it — six octal digits — because that is what a reader recognises and
+/// there is nothing here to compute with.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "types.ts"))]
+#[serde(rename_all = "camelCase")]
+pub struct ModeChange {
+    pub old: String,
+    pub new: String,
 }
 
 impl FileDiff {
@@ -249,6 +266,7 @@ pub fn parse_numstat(input: &[u8]) -> Result<Vec<FileDiff>, CoralError> {
             added,
             removed,
             hunks: Vec::new(),
+            mode: None,
             too_large: false,
         });
     }
@@ -339,9 +357,24 @@ pub fn apply_patch(
                 "patch has more file sections than the numstat listing",
             ));
         };
+        file.mode = parse_mode(&section);
         file.hunks = parse_hunks(section)?;
     }
     Ok(())
+}
+
+/// `old mode 100644` / `new mode 100755`, which git writes before anything else in a section.
+fn parse_mode(section: &[&[u8]]) -> Option<ModeChange> {
+    let read = |prefix: &[u8]| {
+        section
+            .iter()
+            .find_map(|l| l.strip_prefix(prefix))
+            .map(|m| m.trim().to_str_lossy().into_owned())
+    };
+    match (read(b"old mode "), read(b"new mode ")) {
+        (Some(old), Some(new)) => Some(ModeChange { old, new }),
+        _ => None,
+    }
 }
 
 /// Yields each `diff --git ...` section as a slice of lines.

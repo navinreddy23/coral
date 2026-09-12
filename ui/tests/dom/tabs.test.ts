@@ -119,6 +119,7 @@ function wire() {
           added: 1,
           removed: 0,
           tooLarge: false,
+          mode: null,
           hunks: [],
         };
       case 'terminal_open':

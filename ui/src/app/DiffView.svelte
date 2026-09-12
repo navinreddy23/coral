@@ -7,6 +7,7 @@
   import { shortAge } from './age';
   import { initialsOf } from '../graph/initials';
   import type { DiffState } from '../state/diff.svelte';
+  import type { FileDiff } from '../ipc/types';
 
   const { diff, onClose, onPart }: {
     diff: DiffState;
@@ -28,6 +29,18 @@
    * a DOM row here; past this it is not a diff anyone is reading, it is a scroll bar.
    */
   const LIMIT = 6000;
+
+  /**
+   * What to say about a file the panel has no lines for.
+   *
+   * Three different things end here — a rename that moved nothing, a file added with nothing
+   * in it, a change that touched only the mode — and "No line changes." was all three.
+   */
+  function emptyDiffSays(file: FileDiff): string {
+    if (file.oldPath) return `Renamed from ${file.oldPath}.`;
+    if (file.change === 'added') return 'A new file with nothing in it.';
+    return 'No line changes.';
+  }
 
   /**
    * What git says about a file whose last line has no newline after it.
@@ -485,8 +498,18 @@
         there is nothing here to read line by line; staging it adds everything inside.
       </p>
     {:else if diff.file.hunks.length === 0}
+      <!--
+        A mode-only change has no hunks at all, so this was the whole of what a file listed as
+        modified had to say for itself: "No line changes." about a file that had changed.
+      -->
       <p class="muted">
-        {diff.file.oldPath ? `Renamed from ${diff.file.oldPath}.` : 'No line changes.'}
+        {emptyDiffSays(diff.file)}
+        {#if diff.file.mode}
+          <span class="modes"
+            >The file mode went from <code>{diff.file.mode.old}</code> to
+            <code>{diff.file.mode.new}</code>.</span
+          >
+        {/if}
       </p>
     {:else if diff.mode === 'inline'}
       <table class="lines" bind:this={table}>
@@ -727,6 +750,11 @@
     color: var(--fg-1); padding: var(--space-1);
   }
   .deeper:hover { background: var(--bg-3); color: var(--fg-0); }
+
+  .modes code {
+    font-family: var(--font-mono); font-size: var(--text-sm);
+    background: var(--bg-2); border-radius: var(--radius-1); padding: 0 4px;
+  }
 
   /* Set apart from the line it is about: it is git's note, not part of the file. */
   .nonl {

@@ -361,6 +361,7 @@ impl RepoLocation {
             added: None,
             removed: None,
             hunks: Vec::new(),
+            mode: None,
             too_large: false,
         };
         crate::diff::apply_patch(std::slice::from_mut(&mut file), &out.stdout, options)?;

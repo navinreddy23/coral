@@ -243,6 +243,7 @@ fn a_selection_of_nothing_produces_an_empty_patch() {
         binary: false,
         added: Some(1),
         removed: Some(0),
+        mode: None,
         hunks: vec![coral_core::diff::Hunk {
             header: "@@ -1,1 +1,2 @@".into(),
             old_start: 1,
@@ -285,6 +286,7 @@ fn asking_for_a_hunk_that_does_not_exist_is_an_error() {
         binary: false,
         added: Some(0),
         removed: Some(0),
+        mode: None,
         hunks: vec![],
         too_large: false,
     };

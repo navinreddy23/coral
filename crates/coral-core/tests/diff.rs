@@ -636,6 +636,7 @@ fn a_patch_past_the_guard_is_reported_without_its_hunks() {
         added: Some(1),
         removed: Some(0),
         hunks: Vec::new(),
+        mode: None,
         too_large: false,
     }];
     let patch = vec![b'x'; coral_core::diff::LARGE_PATCH_BYTES + 1];
@@ -657,6 +658,7 @@ fn the_guard_can_be_turned_off_for_a_reader_who_asked() {
         added: Some(1),
         removed: Some(1),
         hunks: Vec::new(),
+        mode: None,
         too_large: false,
     }];
 
@@ -674,4 +676,36 @@ fn the_guard_can_be_turned_off_for_a_reader_who_asked() {
     coral_core::diff::apply_patch(&mut files, patch.as_bytes(), options).unwrap();
     assert!(!files[0].too_large, "the reader asked for it");
     assert_eq!(files[0].hunks.len(), 1, "and the hunks came back");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_mode_only_change_says_which_modes() {
+    // Without the two modes the panel had a file listed as modified and "No line changes." to
+    // say about it, which is true and explains nothing.
+    let repo = TestRepo::new().write("f.sh", "echo hi\n").commit("base");
+    std::fs::set_permissions(
+        repo.path().join("f.sh"),
+        std::os::unix::fs::PermissionsExt::from_mode(0o755),
+    )
+    .unwrap();
+
+    let runner = coral_core::process::GitRunner::discover().await.unwrap();
+    let loc = coral_core::repo::RepoLocation::discover(&runner, repo.path())
+        .await
+        .unwrap();
+    let files = loc
+        .diff(
+            &runner,
+            false,
+            &[],
+            coral_core::diff::DiffOptions::default(),
+        )
+        .await
+        .unwrap();
+
+    let mode = files[0].mode.as_ref().expect("the modes are reported");
+    assert_eq!(mode.old, "100644");
+    assert_eq!(mode.new, "100755");
+    assert!(files[0].hunks.is_empty(), "and there are no lines to show");
 }
