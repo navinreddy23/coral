@@ -81,6 +81,17 @@ impl RepoLocation {
     /// # Errors
     /// [`CoralError::NotARepository`] if `path` is not inside a git repository.
     pub async fn discover(runner: &GitRunner, path: &Path) -> Result<Self, CoralError> {
+        // Somebody pointing at a repository often points at its `.git`, and a file chooser that
+        // shows hidden entries puts that one click away. git will not name a work tree from
+        // inside one: `--show-toplevel` exits "this operation must be run in a work tree", and
+        // that was the whole answer — a tab called `.git` reporting a failure about a directory
+        // the user did not mean. The repository is the one holding it. A bare repository is
+        // named for itself rather than `.git`, and a linked worktree's git dir is deeper, so
+        // neither arrives here.
+        let path = match path.file_name() {
+            Some(name) if name == ".git" => path.parent().unwrap_or(path),
+            _ => path,
+        };
         let out = runner
             .output(
                 GitCommand::read("rev-parse", path)
