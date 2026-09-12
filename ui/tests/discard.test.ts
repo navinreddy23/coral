@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { count, discardWords, untrackedWords } from '../src/app/discard';
+import { count, discardWords, partWords, untrackedWords } from '../src/app/discard';
 
 /** `u` untracked files, named the way git lists loose ones. */
 const files = (u: number) => Array.from({ length: u }, (_, i) => `new${i}.txt`);
@@ -116,5 +116,30 @@ describe('a directory nobody has added', () => {
 
   it('says nothing about directories when there are none', () => {
     expect(discardWords(0, ['a.txt'], 'main').detail).not.toContain('directory');
+  });
+});
+
+describe('discarding part of a file', () => {
+  it('names where the change goes back to, which is the index', () => {
+    // A file with something staged goes back to that, not to the commit. Promising the commit
+    // said the question would throw away a staged change it does not touch.
+    const staged = partWords('crlf.txt', 2, true);
+    expect(staged.what).toBe('2 lines');
+    expect(staged.detail).toContain('goes back to what is staged for it');
+    expect(staged.detail).not.toContain('what is committed');
+
+    const only = partWords('crlf.txt', 2, false);
+    expect(only.detail).toContain('goes back to what is committed');
+  });
+
+  it('calls a whole hunk a hunk rather than counting its lines', () => {
+    expect(partWords('a.txt', 0, false).what).toBe('this hunk');
+    expect(partWords('a.txt', 1, false).what).toBe('1 line');
+  });
+
+  it('says the change is in no commit either way, because it is not', () => {
+    for (const staged of [true, false]) {
+      expect(partWords('a.txt', 0, staged).detail).toContain('nothing to bring it back from');
+    }
   });
 });

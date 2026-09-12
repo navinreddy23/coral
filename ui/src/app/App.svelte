@@ -79,7 +79,7 @@
     type ResetModes,
     type RevisionActions,
   } from './revision';
-  import { count, discardWords } from './discard';
+  import { count, discardWords, partWords } from './discard';
   import { bandWidth, columnWidth, laneToken } from '../graph/column';
   import { shortAge } from './age';
   import { initialsOf } from '../graph/initials';
@@ -2640,11 +2640,14 @@
     if (!info || file === null) return;
 
     if (part === 'discard') {
-      const what = lines.length === 0 ? 'this hunk' : count(lines.length, 'line');
+      const { what, detail } = partWords(
+        file,
+        lines.length,
+        worktree.staged.some((e) => e.path === file),
+      );
       const { choice } = await ask({
         title: `Discard ${what}?`,
-        detail: `${file}\n\nThe change goes back to what is committed. It is not in any commit, ` +
-          'so there is nothing to bring it back from.',
+        detail,
         asksText: false,
         placeholder: '',
         initial: '',

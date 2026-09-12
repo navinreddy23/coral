@@ -99,3 +99,28 @@ function detailOf(
   parts.push('This cannot be undone.');
   return parts.join(' ');
 }
+
+/**
+ * The question for throwing away part of a file.
+ *
+ * Where the change goes back to is the index, and the index is the last commit only while
+ * nothing is staged for this file. Worded as "what is committed" whichever it was, the question
+ * promised to throw away a staged change that the discard does not touch, and the honest answer
+ * to that question is no.
+ */
+export function partWords(
+  path: string,
+  /** How many lines were picked. None of them means the whole hunk. */
+  lines: number,
+  /** Whether the file also has something staged, which is then what it goes back to. */
+  alsoStaged: boolean,
+): { what: string; detail: string } {
+  const what = lines === 0 ? 'this hunk' : count(lines, 'line');
+  const backTo = alsoStaged ? 'what is staged for it' : 'what is committed';
+  return {
+    what,
+    detail:
+      `${path}\n\nThe change goes back to ${backTo}. It is not in any commit, so there is ` +
+      'nothing to bring it back from.',
+  };
+}
