@@ -65,6 +65,16 @@ pub struct RepoInfo {
     pub commit_graph: bool,
 }
 
+/// Whether a repository is still at `at`.
+///
+/// Cheap and synchronous, for lists of paths recorded earlier: [`RepoLocation::discover`] runs
+/// git and walks upward, which would report the parent of a directory someone deleted. A
+/// worktree has `.git`, a bare repository has `HEAD` in the directory itself.
+#[must_use]
+pub fn present(at: &Path) -> bool {
+    at.join(".git").exists() || at.join("HEAD").exists()
+}
+
 impl RepoLocation {
     /// Resolves `path` to a repository.
     ///

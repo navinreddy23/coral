@@ -1,5 +1,5 @@
 use coral_core::process::GitRunner;
-use coral_core::repo::{Head, OpState, RepoLocation};
+use coral_core::repo::{Head, OpState, RepoLocation, present};
 use coral_core::testutil::TestRepo;
 
 async fn runner() -> GitRunner {
@@ -130,4 +130,19 @@ async fn detects_an_in_progress_merge() {
     let r = runner().await;
     let loc = RepoLocation::discover(&r, fixture.path()).await.unwrap();
     assert_eq!(loc.op_state(), OpState::Merge);
+}
+
+#[test]
+fn a_repository_that_has_gone_is_not_present() {
+    let fixture = TestRepo::new().write("a.txt", "hello\n").commit("first");
+    assert!(present(fixture.path()));
+
+    // A bare repository has no .git, and the start page lists those too.
+    let bare = fixture.path().join("bare.git");
+    fixture.git(["clone", "--quiet", "--bare", ".", bare.to_str().unwrap()]);
+    assert!(present(&bare));
+
+    std::fs::remove_dir_all(&bare).unwrap();
+    assert!(!present(&bare));
+    assert!(!present(&fixture.path().join("never-existed")));
 }

@@ -356,7 +356,7 @@ impl Session {
     /// looking like a repository that was there.
     pub fn mark_missing(&mut self) {
         for tab in &mut self.tabs {
-            tab.missing = !tab.path.join(".git").exists() && !tab.path.join("HEAD").exists();
+            tab.missing = !coral_core::repo::present(&tab.path);
         }
     }
 

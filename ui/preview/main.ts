@@ -415,9 +415,9 @@ mount(Ask, {
 const start = new StartState();
 const NOW = Math.floor(Date.now() / 1000);
 start.recents = [
-  { path: "/home/dev/projects/coral", name: "coral", opened: NOW - 600 },
-  { path: "/home/dev/projects/linux", name: "linux", opened: NOW - 86_400 },
-  { path: "/home/dev/projects/notes", name: "notes", opened: NOW - 9 * 86_400 },
+  { path: "/home/dev/projects/coral", name: "coral", opened: NOW - 600, missing: false },
+  { path: "/home/dev/projects/linux", name: "linux", opened: NOW - 86_400, missing: false },
+  { path: "/home/dev/projects/notes", name: "notes", opened: NOW - 9 * 86_400, missing: true },
 ];
 mount(Start, {
   target: panel("Start page", "460px"),

@@ -329,11 +329,15 @@
     {:else}
       <ul class="recents">
         {#each start.shown as repo (repo.path)}
-          <li>
-            <button class="repo" onclick={() => onOpen(repo.path)} title={repo.path}>
+          <li class:gone={repo.missing}>
+            <button
+              class="repo"
+              onclick={() => onOpen(repo.path)}
+              title={repo.missing ? `Nothing is at ${repo.path} any more` : repo.path}
+            >
               <span class="repo-name">{repo.name}</span>
               <span class="repo-path mono">{elidePath(repo.path, 72)}</span>
-              <span class="repo-when">{when(repo.opened)}</span>
+              <span class="repo-when">{repo.missing ? 'Not found' : when(repo.opened)}</span>
             </button>
             <button
               class="forget"
@@ -487,5 +491,10 @@
     visibility: hidden;
   }
   .recents li:hover .forget { visibility: visible; }
+  /* The same mark the tab strip puts on a tab whose repository has gone, so the row says so
+     before it is clicked rather than after, in an error. */
+  .gone .repo-name { text-decoration: line-through; color: var(--fg-2); }
+  .gone .repo-path { text-decoration: line-through; }
+  .gone .repo-when { color: var(--danger); }
   .forget:hover { color: var(--danger); }
 </style>
