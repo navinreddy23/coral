@@ -193,7 +193,24 @@ impl RepoLocation {
                 "--untracked-files=all",
             ]))
             .await?;
-        Ok(hash(&out.stdout))
+        let mut bytes = out.stdout;
+        // Status names the paths that differ and the blobs the index and HEAD hold for them,
+        // and nothing about what is in the file now. A second edit to a file already listed as
+        // modified therefore produced identical output: the change was narrowed away as noise,
+        // and the window went on showing the diff of the first edit for as long as the file
+        // stayed open. The diff itself is what it shows, so the diff is what it follows.
+        //
+        // Cheap where it has to be: a build writing under an ignored directory adds nothing to
+        // either, so the storm this narrowing exists to absorb still costs one status walk.
+        if self.workdir.is_some() {
+            let diff = runner
+                .output(
+                    GitCommand::read("diff", self.display_path()).args(["diff", "--no-ext-diff"]),
+                )
+                .await?;
+            bytes.extend_from_slice(&diff.stdout);
+        }
+        Ok(hash(&bytes))
     }
 
     /// Drops from `change` everything that turns out not to have changed, updating `seen`.
