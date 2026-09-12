@@ -398,3 +398,132 @@ async fn stages_a_hunk_without_changing_bytes_it_was_not_asked_to() {
     assert_eq!(bytes(":nonl.txt"), b"no newline at end, changed");
     assert_eq!(bytes(":crlf.txt"), b"a\r\nB\r\nc\r\n");
 }
+
+#[tokio::test]
+async fn unstages_a_single_line_out_of_several() {
+    // The window offers "Unstage 1 line" beside "Unstage hunk", and every use of it was
+    // refused: the patch was written with the unselected additions left out and the unselected
+    // removals kept, which describes the side the index does not hold.
+    let repo = TestRepo::new().write("f.txt", "a\nz\n").commit("base");
+    let repo = repo.write("f.txt", "a\nfirst\nsecond\nthird\nz\n");
+    let (runner, loc) = open(&repo).await;
+    loc.stage(&runner, &["f.txt"]).await.unwrap();
+
+    let staged = loc
+        .diff(&runner, true, &[], DiffOptions::default())
+        .await
+        .unwrap();
+    let f = &staged[0];
+    let second = f.hunks[0]
+        .lines
+        .iter()
+        .position(|l| l.text == "second")
+        .unwrap();
+
+    let patch = build_patch(
+        f,
+        &[(0, Selection::Lines(vec![second]))],
+        Direction::Unstage,
+    )
+    .unwrap();
+    loc.apply_to_index(&runner, &patch, Direction::Unstage)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        staged_content(&repo, "f.txt"),
+        "a\nfirst\nthird\nz",
+        "only the line asked for came back out of the index"
+    );
+}
+
+#[tokio::test]
+async fn unstages_a_single_removal_out_of_several() {
+    let repo = TestRepo::new()
+        .write("f.txt", "keep\ndrop me\nalso drop\ntail\n")
+        .commit("base");
+    let repo = repo.write("f.txt", "keep\ntail\n");
+    let (runner, loc) = open(&repo).await;
+    loc.stage(&runner, &["f.txt"]).await.unwrap();
+
+    let staged = loc
+        .diff(&runner, true, &[], DiffOptions::default())
+        .await
+        .unwrap();
+    let f = &staged[0];
+    let first = f.hunks[0]
+        .lines
+        .iter()
+        .position(|l| l.text == "drop me")
+        .unwrap();
+
+    let patch = build_patch(f, &[(0, Selection::Lines(vec![first]))], Direction::Unstage).unwrap();
+    loc.apply_to_index(&runner, &patch, Direction::Unstage)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        staged_content(&repo, "f.txt"),
+        "keep\ndrop me\ntail",
+        "the line whose removal was taken back is in the index again"
+    );
+}
+
+#[tokio::test]
+async fn discards_a_single_line_out_of_several() {
+    let repo = TestRepo::new().write("f.txt", "a\nz\n").commit("base");
+    let repo = repo.write("f.txt", "a\nfirst\nsecond\nthird\nz\n");
+
+    let files = unstaged_diff(&repo).await;
+    let f = &files[0];
+    let second = f.hunks[0]
+        .lines
+        .iter()
+        .position(|l| l.text == "second")
+        .unwrap();
+
+    let patch = build_patch(
+        f,
+        &[(0, Selection::Lines(vec![second]))],
+        Direction::Discard,
+    )
+    .unwrap();
+    let (runner, loc) = open(&repo).await;
+    loc.apply_to_index(&runner, &patch, Direction::Discard)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("f.txt")).unwrap(),
+        "a\nfirst\nthird\nz\n",
+        "the one line went, and the two beside it stayed"
+    );
+}
+
+#[tokio::test]
+async fn discards_a_single_removal_out_of_several() {
+    let repo = TestRepo::new()
+        .write("f.txt", "keep\ndrop me\nalso drop\ntail\n")
+        .commit("base");
+    let repo = repo.write("f.txt", "keep\ntail\n");
+
+    let files = unstaged_diff(&repo).await;
+    let f = &files[0];
+    let first = f.hunks[0]
+        .lines
+        .iter()
+        .position(|l| l.text == "drop me")
+        .unwrap();
+
+    let patch = build_patch(f, &[(0, Selection::Lines(vec![first]))], Direction::Discard).unwrap();
+    let (runner, loc) = open(&repo).await;
+    loc.apply_to_index(&runner, &patch, Direction::Discard)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("f.txt")).unwrap(),
+        "keep\ndrop me\ntail\n",
+        "the line whose deletion was undone is back, the other is still gone"
+    );
+}

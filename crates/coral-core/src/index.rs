@@ -138,16 +138,26 @@ fn render_hunk(
     let mut old_count: u32 = 0;
     let mut new_count: u32 = 0;
 
+    let reversed = direction != Direction::Stage;
     for (i, line) in hunk.lines.iter().enumerate() {
         let selected = selection.includes(i);
         let (marker, counts_old, counts_new) = match (line.kind, selected) {
             (LineKind::Add, true) => (b'+', false, true),
             (LineKind::Remove, true) => (b'-', true, false),
-            // An unselected addition never happened, so it is absent from both sides.
-            (LineKind::Add, false) => continue,
-            // Context, and an unselected removal, are both present on both sides: declining to
-            // stage a removal means the line is still there afterwards.
-            (LineKind::Context, _) | (LineKind::Remove, false) => (b' ', true, true),
+            // An unselected line belongs in the patch only when the side git will match it
+            // against already holds it, and which side that is depends on the direction.
+            //
+            // Staging applies forwards, against the index: a removal is still in it and is
+            // context, an addition never reached it and is left out. Unstaging and discarding
+            // apply in reverse, against the side the diff calls new — the index and the working
+            // tree — and the two swap over. Emitted the other way round, the patch describes a
+            // file that does not exist, and git refused every line-by-line unstage and discard
+            // with "patch does not apply".
+            (LineKind::Add, false) if !reversed => continue,
+            (LineKind::Remove, false) if reversed => continue,
+            (LineKind::Context, _) | (LineKind::Add | LineKind::Remove, false) => {
+                (b' ', true, true)
+            }
         };
 
         body.push(marker);
