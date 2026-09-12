@@ -69,7 +69,7 @@
   import { SshState } from '../state/ssh.svelte';
   import { laneColour } from './lane';
   import { beside, elideRef } from './path';
-  import { askUntilAccepted } from './prompt';
+  import { askUntilAccepted, nameWasRefused } from './prompt';
   import { checkoutOf, divergence, remoteOf, withoutRemote } from './refname';
   import { orderRefs, pillChars, pillNamed } from './pill';
   import {
@@ -1483,7 +1483,7 @@
     await askUntilAccepted(
       from,
       (initial) => askText('Rename the branch', `${from} becomes:`, initial),
-      async (to) => (to === from ? true : act({ kind: 'branchRename', from, to })),
+      async (to) => (to === from ? true : settled(await act({ kind: 'branchRename', from, to }))),
     );
   }
 
@@ -1917,11 +1917,22 @@
     };
   }
 
+  /**
+   * Whether a name dialog is finished with, given how the work it asked for went.
+   *
+   * Only a name git refused is worth asking about again. Creating a branch here also switches
+   * to it, so it can fail over a file in the way — and the dialog reopening on that said the
+   * name was wrong and left no name that would work.
+   */
+  function settled(ok: boolean): boolean {
+    return ok || !nameWasRefused(actions.report?.text);
+  }
+
   async function branchAt(oid: string) {
     await askUntilAccepted(
       '',
       (initial) => askText('Create branch here', `At ${oid.slice(0, 8)}.`, initial),
-      (name) => act({ kind: 'branchCreate', name, at: oid, checkout: true }),
+      async (name) => settled(await act({ kind: 'branchCreate', name, at: oid, checkout: true })),
     );
   }
 
@@ -1942,7 +1953,7 @@
           // correct, so the name is not asked for again.
           if (message === null) return true;
         }
-        return act({ kind: 'tagCreate', name, at: oid, message });
+        return settled(await act({ kind: 'tagCreate', name, at: oid, message }));
       },
     );
   }
@@ -2858,7 +2869,8 @@
             });
             return choice === null ? null : text;
           },
-          (name) => act({ kind: 'branchCreate', name, at: null, checkout: true }),
+          async (name) =>
+            settled(await act({ kind: 'branchCreate', name, at: null, checkout: true })),
         );
         return;
       }

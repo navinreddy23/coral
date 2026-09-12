@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { askUntilAccepted } from '../src/app/prompt';
+import { askUntilAccepted, nameWasRefused } from '../src/app/prompt';
 
 describe('asking for a name git has the last word on', () => {
   it('asks again with the refused name still in the box', async () => {
@@ -51,5 +51,27 @@ describe('asking for a name git has the last word on', () => {
     const run = vi.fn(async () => true);
     await askUntilAccepted('', async () => '  spaced  ', run);
     expect(run).toHaveBeenCalledWith('spaced');
+  });
+});
+
+describe('which failures are worth a second name', () => {
+  it('reads git refusing the name', () => {
+    expect(nameWasRefused("fatal: 'bad name' is not a valid branch name")).toBe(true);
+    expect(nameWasRefused("fatal: 'bad tag' is not a valid tag name.")).toBe(true);
+    expect(nameWasRefused("fatal: a branch named 'main' already exists")).toBe(true);
+    expect(nameWasRefused("fatal: tag 'v1' already exists")).toBe(true);
+  });
+
+  it('does not read a failure no other name would fix', () => {
+    // Creating a branch here switches to it, so a file in the way stops it. Asking for the
+    // name again would offer a fix that is not one.
+    expect(
+      nameWasRefused(
+        'Your local changes to the following files would be overwritten by checkout:\n  long.txt',
+      ),
+    ).toBe(false);
+    expect(nameWasRefused('fatal: not a git repository')).toBe(false);
+    expect(nameWasRefused(undefined)).toBe(false);
+    expect(nameWasRefused(null)).toBe(false);
   });
 });
