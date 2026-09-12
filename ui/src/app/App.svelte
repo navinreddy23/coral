@@ -2672,13 +2672,17 @@
   /** Deleting a file cannot be undone, so it is asked about by name. */
   async function confirmDelete(entry: StatusEntry) {
     const untracked = entry.worktree === 'untracked';
+    // A file staged as added is in the index and in no commit, so the sentence about the last
+    // commit still having it is not true of one: staging a new file and then deleting it was
+    // reassured about a copy that does not exist.
+    const inACommit = !untracked && entry.index !== 'added';
     const { choice } = await ask({
       title: `Delete ${entry.path}?`,
-      detail: untracked
-        ? 'The file is removed from the working tree. It is in no commit, so there is nothing ' +
-          'to bring it back from.'
-        : 'The file is removed from the working tree and its deletion staged. Committing that ' +
-          'makes it permanent; until then the last commit still has it.',
+      detail: inACommit
+        ? 'The file is removed from the working tree and its deletion staged. Committing that ' +
+          'makes it permanent; until then the last commit still has it.'
+        : 'The file is removed from the working tree. It is in no commit, so there is nothing ' +
+          'to bring it back from.',
       asksText: false,
       placeholder: '',
       initial: '',

@@ -1633,4 +1633,48 @@ describe('moving down the list with the keyboard', () => {
     expect(labels).toContain('Delete the file');
     expect(labels).not.toContain('Discard its changes');
   });
+
+  it('does not promise a last commit for a file that is only staged', async () => {
+    // Staged as added is in the index and in no commit. The question said the last commit
+    // still had it, which is the sentence for a file that has been committed once.
+    const { container } = await shell({
+      repo_status: {
+        entries: [{ path: 'fresh.txt', index: 'added', worktree: 'unmodified' }],
+        conflicted: [],
+      },
+    });
+
+    const wip = await waitFor(() => {
+      const found = container.querySelector('button.row.wip');
+      if (!found) throw new Error('no WIP row yet');
+      return found as HTMLButtonElement;
+    });
+    await fireEvent.click(wip);
+
+    const row = await waitFor(() => {
+      const found = [...container.querySelectorAll('aside li')].find(
+        (li) => li.querySelector('div.row') !== null && li.textContent?.includes('fresh.txt'),
+      );
+      if (!found) throw new Error('no staging row yet');
+      return found as HTMLElement;
+    });
+    await fireEvent.contextMenu(row.querySelector('div.row') as HTMLElement);
+
+    const item = await waitFor(() => {
+      const found = [...document.querySelectorAll('.menu .label')].find(
+        (e) => e.textContent?.trim() === 'Delete the file',
+      );
+      if (!found) throw new Error('no menu yet');
+      return found.closest('button') as HTMLButtonElement;
+    });
+    await fireEvent.click(item);
+
+    const dialog = await waitFor(() => {
+      const found = document.querySelector('[role="dialog"]');
+      if (!found) throw new Error('no question yet');
+      return found as HTMLElement;
+    });
+    expect(dialog.textContent).toContain('nothing to bring it back from');
+    expect(dialog.textContent).not.toContain('last commit still has it');
+  });
 });
