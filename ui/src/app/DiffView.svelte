@@ -310,7 +310,14 @@
     {#if diff.source !== 'compare'}
       <div class="toggle" role="group" aria-label="What to show about this file">
         <button class:on={diff.view === 'diff'} onclick={() => diff.setView('diff')}>Diff</button>
-        <button class:on={diff.view === 'blame'} onclick={() => diff.setView('blame')}>Blame</button>
+        <!-- Blame reads the file as lines, which a binary has none of: git answers for one all
+             the same and the pane painted four kilobytes of replacement characters. -->
+        <button
+          class:on={diff.view === 'blame'}
+          disabled={diff.file?.binary === true}
+          title={diff.file?.binary === true ? 'A binary file has no lines to blame' : 'Blame'}
+          onclick={() => diff.setView('blame')}>Blame</button
+        >
         <button class:on={diff.view === 'history'} onclick={() => diff.setView('history')}>
           History
         </button>
@@ -399,7 +406,9 @@
           </button>
         </li>
       {/each}
-      {#if diff.history === null}
+      {#if diff.sideError}
+        <li class="error">{diff.sideError}</li>
+      {:else if diff.history === null}
         <li class="muted">Reading what has touched this file…</li>
       {:else if diff.history.length === 0}
         <li class="muted">Nothing has touched this file.</li>
@@ -413,7 +422,9 @@
 
   <div class="scroll" bind:this={scroller} onscroll={onScroll} bind:clientHeight={viewport}>
     {#if diff.view === 'blame'}
-      {#if diff.blame === null || diff.text === null}
+      {#if diff.sideError}
+        <p class="error">{diff.sideError}</p>
+      {:else if diff.blame === null || diff.text === null}
         <p class="muted">Working out who wrote each line…</p>
       {:else}
         <table class="lines blame">

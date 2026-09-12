@@ -42,6 +42,17 @@ export class DiffState {
   loading = $state(false);
   error = $state<string | null>(null);
 
+  /**
+   * What went wrong reading the blame or the history, which is not what went wrong reading the
+   * diff.
+   *
+   * Kept apart because they are different questions about the same file and either can fail on
+   * its own. Sharing one field, a blame git refused — of a submodule pointer, say — left the
+   * blame pane on "Working out who wrote each line…" for ever, because that pane asks whether
+   * the answer has arrived and never whether it can, and put git's complaint under the diff
+   * instead, where nothing had gone wrong.
+   */
+  sideError = $state<string | null>(null);
 
   /** Who last changed each line, once the blame view has asked for it. */
   blame = $state<Blame | null>(null);
@@ -119,10 +130,14 @@ export class DiffState {
    * Except for a comparison of two commits, which is always the change itself: blame and
    * history are about one file's past, and opening a comparison while the panel was left on
    * the history tab showed a file's history beside a range's diff, with nothing selected in
-   * the list. The remembered choice is left alone, so it comes back with the next file.
+   * the list. And except for a binary file, which has no lines to attribute: the pane painted
+   * four kilobytes of replacement characters for one. The remembered choice is left alone in
+   * both cases, so it comes back with the next file.
    */
   get view(): FileView {
-    return this.source === 'compare' ? 'diff' : this.#views.current.fileView;
+    if (this.source === 'compare') return 'diff';
+    const remembered = this.#views.current.fileView;
+    return remembered === 'blame' && this.file?.binary === true ? 'diff' : remembered;
   }
 
   setView(view: FileView): void {
@@ -171,6 +186,7 @@ export class DiffState {
    * repository, so neither is read until the view that shows it is asked for.
    */
   async #sideLoad(): Promise<void> {
+    this.sideError = null;
     if (this.view === 'blame') await this.#loadBlame();
     else if (this.view === 'history') await this.#loadHistory();
   }
@@ -181,6 +197,7 @@ export class DiffState {
     const side = ++this.#side;
     this.blame = null;
     this.text = null;
+    this.sideError = null;
     // A commit's blame is of the file as that commit left it; the working tree's is of HEAD,
     // since a line nobody has committed has nobody to attribute it to.
     const rev = revisionOf(request);
@@ -193,7 +210,7 @@ export class DiffState {
       this.blame = blame;
       this.text = text;
     } catch (e) {
-      if (side === this.#side) this.error = messageOf(e);
+      if (side === this.#side) this.sideError = messageOf(e);
     }
   }
 
@@ -210,7 +227,7 @@ export class DiffState {
       this.history = got;
       this.moreHistory = got.length >= this.#historyLimit;
     } catch (e) {
-      if (side === this.#side) this.error = messageOf(e);
+      if (side === this.#side) this.sideError = messageOf(e);
     }
   }
 
@@ -328,6 +345,7 @@ export class DiffState {
     this.file = null;
     this.path = null;
     this.error = null;
+    this.sideError = null;
     this.loading = false;
     this.source = 'commit';
     this.#opened = null;

@@ -106,6 +106,33 @@ describe('the diff viewer', () => {
     expect(sheet?.getAttribute('style')).toContain(`${4000 * 17}px`);
   });
 
+  it('will not offer to blame a binary file', async () => {
+    // git answers for one all the same, treating its bytes as lines, and the pane painted four
+    // kilobytes of replacement characters. The diff beside it already says "Binary file".
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'logo.bin';
+    diff.file = { ...fileDiff(), path: 'logo.bin', binary: true, hunks: [] };
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+
+    const blame = [...view.container.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Blame',
+    ) as HTMLButtonElement;
+    expect(blame.disabled).toBe(true);
+    expect(blame.title).toContain('no lines to blame');
+  });
+
+  it('shows a blame that failed rather than waiting on it for ever', () => {
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'vendor/sub';
+    diff.file = fileDiff();
+    diff.setView('blame');
+    diff.sideError = 'fatal: no such path vendor/sub in HEAD';
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+
+    expect(view.container.textContent).toContain('no such path vendor/sub');
+    expect(view.container.textContent).not.toContain('Working out who wrote each line');
+  });
+
   it('forgets which lines were picked when the diff is read again', async () => {
     // Staging part of a hunk reloads the same file in the same mode, and the hunks that come
     // back hold different lines under the same indices. Kept, the bar went on offering "Stage

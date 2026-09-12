@@ -177,6 +177,24 @@ describe('the file panel', () => {
     expect(called('file_diff').at(-1)?.[1]).toMatchObject({ file: 'a.c', oldFile: null });
   });
 
+  it('keeps a blame failure out of the diff, and a diff failure out of the blame', async () => {
+    // A submodule pointer has no lines, so git refuses to blame it. The refusal used to land in
+    // the field the diff reads, which left the blame pane on "Working out who wrote each line…"
+    // for ever and put git's complaint under a diff where nothing had gone wrong.
+    invoke.mockImplementation((name: string) => {
+      if (name === 'file_blame' || name === 'file_text') {
+        return Promise.reject(new Error('fatal: no such path vendor/sub in HEAD'));
+      }
+      return Promise.resolve(name === 'file_diff' ? EMPTY_DIFF : null);
+    });
+    const diff = new DiffState(new ViewsState());
+    await diff.open('/repo', 'HEAD', 'vendor/sub');
+    await diff.setView('blame');
+
+    await vi.waitFor(() => expect(diff.sideError).toContain('no such path'));
+    expect(diff.error, 'the diff itself was fine').toBeNull();
+  });
+
   it('says it is still reading rather than that nothing touched the file', async () => {
     // The pane shows "Nothing has touched this file." for an empty history, and an empty list
     // was also what it held while the read was in flight. Walking a kernel file's history
