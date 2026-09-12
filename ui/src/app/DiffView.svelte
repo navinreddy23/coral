@@ -875,8 +875,15 @@
     border-right: 1px solid var(--border); box-sizing: border-box;
     font-variant-numeric: tabular-nums;
   }
+  /*
+   * Clipped, and saying so. The rows are a fixed height so the sheet can hold a file of any
+   * length, which rules out wrapping, and the columns are capped so a long line cannot push
+   * the other pane off the window. That leaves the text cut at the column edge, and without
+   * the ellipsis nothing said it had been: a five-thousand-character line looked like a line
+   * that ended there. The inline view scrolls sideways and is where such a line is read.
+   */
   .cell {
-    white-space: pre; overflow: hidden; padding: 0 var(--space-2);
+    white-space: pre; overflow: hidden; text-overflow: ellipsis; padding: 0 var(--space-2);
     color: var(--fg-0); background: var(--bg-0);
   }
   .cell.add { background: var(--add-bg); box-shadow: inset 2px 0 0 var(--ok); --word-mark: var(--add-word); }

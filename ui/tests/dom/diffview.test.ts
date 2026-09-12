@@ -484,4 +484,16 @@ describe('the words that changed inside a line', () => {
     const { container } = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
     expect(container.textContent).toContain('A new file with nothing in it.');
   });
+  it('shows that a line too long for the column was cut', () => {
+    // The rows are a fixed height so the sheet can hold a file of any length, which rules out
+    // wrapping, and the columns are capped so one long line cannot push the other pane off the
+    // window. Without the ellipsis a five-thousand-character line looked like a short one.
+    view('split');
+    const rules = [...document.styleSheets]
+      .flatMap((sheet) => [...(sheet.cssRules ?? [])])
+      .map((r) => r.cssText);
+    const cell = rules.find((text) => text.includes('white-space: pre') && text.includes('.cell'));
+    expect(cell, 'the side-by-side cell').toBeDefined();
+    expect(cell).toMatch(/text-overflow:\s*ellipsis/u);
+  });
 });
