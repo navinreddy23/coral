@@ -623,3 +623,55 @@ fn comparing_backwards_reads_as_the_reverse() {
         assert_eq!(backward[0].change, FileChange::Deleted);
     });
 }
+
+#[test]
+fn a_patch_past_the_guard_is_reported_without_its_hunks() {
+    // One generated file the size of a kernel header dump costs a visible pause to parse, so
+    // the panel is told the size rather than made to wait for it.
+    let mut files = vec![coral_core::diff::FileDiff {
+        path: "huge.txt".into(),
+        old_path: None,
+        change: coral_core::diff::FileChange::Added,
+        binary: false,
+        added: Some(1),
+        removed: Some(0),
+        hunks: Vec::new(),
+        too_large: false,
+    }];
+    let patch = vec![b'x'; coral_core::diff::LARGE_PATCH_BYTES + 1];
+    coral_core::diff::apply_patch(&mut files, &patch, coral_core::diff::DiffOptions::default())
+        .unwrap();
+    assert!(files[0].too_large);
+    assert!(files[0].hunks.is_empty());
+}
+
+#[test]
+fn the_guard_can_be_turned_off_for_a_reader_who_asked() {
+    // Saying only that the contents were not read left no way to ever see such a file, so the
+    // panel can ask again with the guard down and take the one-off parse knowingly.
+    let mut files = vec![coral_core::diff::FileDiff {
+        path: "huge.txt".into(),
+        old_path: None,
+        change: coral_core::diff::FileChange::Modified,
+        binary: false,
+        added: Some(1),
+        removed: Some(1),
+        hunks: Vec::new(),
+        too_large: false,
+    }];
+
+    let context = format!(" {}\n", "x".repeat(1000));
+    let rows = coral_core::diff::LARGE_PATCH_BYTES / context.len() + 1;
+    let mut patch = format!(
+        "diff --git a/huge.txt b/huge.txt\n--- a/huge.txt\n+++ b/huge.txt\n@@ -1,{} +1,{} @@\n-one\n+ONE\n",
+        rows + 1,
+        rows + 1
+    );
+    patch.push_str(&context.repeat(rows));
+    assert!(patch.len() > coral_core::diff::LARGE_PATCH_BYTES);
+
+    let options = coral_core::diff::DiffOptions::default().guarding_large(false);
+    coral_core::diff::apply_patch(&mut files, patch.as_bytes(), options).unwrap();
+    assert!(!files[0].too_large, "the reader asked for it");
+    assert_eq!(files[0].hunks.len(), 1, "and the hunks came back");
+}

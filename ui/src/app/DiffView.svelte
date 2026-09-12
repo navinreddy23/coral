@@ -456,7 +456,15 @@
     {:else if diff.file.binary}
       <p class="muted">Binary file — no textual diff.</p>
     {:else if diff.file.tooLarge}
-      <p class="muted">The file is past the size guard, so its contents were not read.</p>
+      <!--
+        The guard is there because one generated file the size of a kernel header dump costs a
+        visible pause to parse, not because the change is unreadable. Saying only that the
+        contents were not read left no way to ever see such a file.
+      -->
+      <p class="muted">
+        The file is past the size guard, so its contents were not read.
+        <button class="anyway" onclick={() => void diff.readAnyway()}>Read it anyway</button>
+      </p>
     {:else if isDirectory}
       <!--
         git collapses an untracked directory to one entry — `? notes/` — rather than listing
@@ -706,6 +714,15 @@
     color: var(--fg-1); padding: var(--space-1);
   }
   .deeper:hover { background: var(--bg-3); color: var(--fg-0); }
+
+  /* Beside the sentence it answers, not across the panel: `.deeper` is sized for the narrow
+     history column and here it would be a button the width of the diff. */
+  .anyway {
+    font: inherit; font-size: var(--text-sm); cursor: pointer; margin-left: var(--space-2);
+    background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-1);
+    color: var(--fg-1); padding: var(--space-1) var(--space-2);
+  }
+  .anyway:hover { background: var(--bg-3); color: var(--fg-0); }
 
   /* Who wrote each line, named once per run rather than once per line. */
   .blame .author {

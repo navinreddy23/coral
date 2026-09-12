@@ -410,4 +410,20 @@ describe('the words that changed inside a line', () => {
     const { container } = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
     expect(container.querySelectorAll('mark')).toHaveLength(0);
   });
+
+  it('offers a way past the size guard, and asks again without it', async () => {
+    // The comment on the guard in core promises "the UI offers an explicit load", and for a
+    // while it did not: the panel said the contents were not read and stopped there.
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'huge.txt';
+    diff.file = { ...fileDiff(), hunks: [], tooLarge: true };
+    const { container, getByText } = render(DiffView, {
+      props: { diff, onClose: () => {}, onPart: () => {} },
+    });
+    expect(container.textContent).toContain('past the size guard');
+
+    const asked = vi.spyOn(diff, 'readAnyway').mockResolvedValue(undefined);
+    await fireEvent.click(getByText('Read it anyway'));
+    expect(asked).toHaveBeenCalledOnce();
+  });
 });

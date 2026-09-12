@@ -173,6 +173,21 @@ export function submoduleRevision(
 }
 
 /**
+ * How to ask for the patch: how much of the file, whether whitespace counts, and whether the
+ * size guard still applies.
+ *
+ * Mirrors `graph::ReadOptions` in Rust. One argument rather than three, because every command
+ * that reads a patch carries all of them and a row of bare booleans says nothing about which
+ * is which.
+ */
+export type ReadOptions = {
+  wholeFile: boolean;
+  ignoreWhitespace: boolean;
+  /** False once the reader has been shown the size guard and asked for the contents anyway. */
+  guardLarge: boolean;
+};
+
+/**
  * Hunks for one file in one commit, or null when the commit did not touch it.
  *
  * One file at a time: a large merge touches thousands, and their patches together are far
@@ -184,17 +199,9 @@ export function fileDiff(
   file: string,
   /** The name it had before, when the commit renamed it. Null otherwise. */
   oldFile: string | null,
-  wholeFile: boolean,
-  ignoreWhitespace: boolean,
+  options: ReadOptions,
 ): Promise<FileDiff | null> {
-  return invoke<FileDiff | null>('file_diff', {
-    path,
-    rev,
-    file,
-    oldFile,
-    wholeFile,
-    ignoreWhitespace,
-  });
+  return invoke<FileDiff | null>('file_diff', { path, rev, file, oldFile, options });
 }
 
 /** Who last changed each line of a file, and in which commit. */
@@ -242,18 +249,9 @@ export function compareFileDiff(
   file: string,
   /** The name it had at `from`, when it was renamed between the two. Null otherwise. */
   oldFile: string | null,
-  wholeFile: boolean,
-  ignoreWhitespace: boolean,
+  options: ReadOptions,
 ): Promise<FileDiff | null> {
-  return invoke<FileDiff | null>('compare_file_diff', {
-    path,
-    from,
-    to,
-    file,
-    oldFile,
-    wholeFile,
-    ignoreWhitespace,
-  });
+  return invoke<FileDiff | null>('compare_file_diff', { path, from, to, file, oldFile, options });
 }
 
 /** One file's contents at one revision, for the blame view to put its chunks beside. */
@@ -282,16 +280,9 @@ export function worktreeDiff(
   path: string,
   staged: boolean,
   file: string,
-  wholeFile: boolean,
-  ignoreWhitespace: boolean,
+  options: ReadOptions,
 ): Promise<FileDiff | null> {
-  return invoke<FileDiff | null>('worktree_diff', {
-    path,
-    staged,
-    file,
-    wholeFile,
-    ignoreWhitespace,
-  });
+  return invoke<FileDiff | null>('worktree_diff', { path, staged, file, options });
 }
 
 /**

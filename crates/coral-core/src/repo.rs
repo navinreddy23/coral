@@ -302,7 +302,7 @@ impl RepoLocation {
         crate::diff::apply_name_status(&mut files, &names.stdout)?;
 
         let patch = runner.output(base(&options.flags())).await?;
-        crate::diff::apply_patch(&mut files, &patch.stdout)?;
+        crate::diff::apply_patch(&mut files, &patch.stdout, options)?;
         crate::diff::recount(&mut files, options);
         Ok(files)
     }
@@ -363,7 +363,7 @@ impl RepoLocation {
             hunks: Vec::new(),
             too_large: false,
         };
-        crate::diff::apply_patch(std::slice::from_mut(&mut file), &out.stdout)?;
+        crate::diff::apply_patch(std::slice::from_mut(&mut file), &out.stdout, options)?;
         if !binary {
             let added = file
                 .hunks
@@ -461,7 +461,7 @@ impl RepoLocation {
         crate::diff::apply_name_status(&mut files, &names.stdout)?;
 
         let patch = runner.output(base(&options.flags())).await?;
-        crate::diff::apply_patch(&mut files, &patch.stdout)?;
+        crate::diff::apply_patch(&mut files, &patch.stdout, options)?;
         crate::diff::recount(&mut files, options);
         Ok(files)
     }

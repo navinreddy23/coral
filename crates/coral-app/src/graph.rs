@@ -612,8 +612,7 @@ pub async fn file_diff(
     rev: String,
     file: String,
     old_file: Option<String>,
-    whole_file: bool,
-    ignore_whitespace: bool,
+    options: ReadOptions,
 ) -> Result<Option<coral_core::diff::FileDiff>, crate::commands::IpcError> {
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
@@ -623,7 +622,7 @@ pub async fn file_diff(
             &runner,
             &rev,
             &both(&file, old_file.as_deref()),
-            options(whole_file, ignore_whitespace),
+            options.into(),
         )
         .await?;
     Ok(files.into_iter().next())
@@ -641,11 +640,27 @@ fn both<'a>(file: &'a str, old: Option<&'a str>) -> Vec<&'a str> {
     }
 }
 
-/// How to ask for the patch: how much of the file, and whether whitespace counts.
-fn options(whole_file: bool, ignore_whitespace: bool) -> coral_core::diff::DiffOptions {
-    coral_core::diff::DiffOptions::default()
-        .whole_file(whole_file)
-        .ignoring_whitespace(ignore_whitespace)
+/// How to ask for the patch: how much of the file, whether whitespace counts, and whether the
+/// size guard still applies.
+///
+/// One argument rather than three, because every command that reads a patch carries all of
+/// them and a row of bare booleans at a call site says nothing about which is which.
+#[derive(Clone, Copy, Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadOptions {
+    whole_file: bool,
+    ignore_whitespace: bool,
+    /// False once the reader has been shown the size guard and asked for the contents anyway.
+    guard_large: bool,
+}
+
+impl From<ReadOptions> for coral_core::diff::DiffOptions {
+    fn from(read: ReadOptions) -> Self {
+        Self::default()
+            .whole_file(read.whole_file)
+            .ignoring_whitespace(read.ignore_whitespace)
+            .guarding_large(read.guard_large)
+    }
 }
 
 /// Who last changed each line of a file, and in which commit.
@@ -776,8 +791,7 @@ pub async fn compare_file_diff(
     to: String,
     file: String,
     old_file: Option<String>,
-    whole_file: bool,
-    ignore_whitespace: bool,
+    options: ReadOptions,
 ) -> Result<Option<coral_core::diff::FileDiff>, crate::commands::IpcError> {
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
@@ -788,7 +802,7 @@ pub async fn compare_file_diff(
             &from,
             &to,
             &both(&file, old_file.as_deref()),
-            options(whole_file, ignore_whitespace),
+            options.into(),
         )
         .await?;
     Ok(files.into_iter().next())
@@ -857,19 +871,13 @@ pub async fn worktree_diff(
     path: String,
     staged: bool,
     file: String,
-    whole_file: bool,
-    ignore_whitespace: bool,
+    options: ReadOptions,
 ) -> Result<Option<coral_core::diff::FileDiff>, crate::commands::IpcError> {
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
     let files = loc
-        .diff(
-            &runner,
-            staged,
-            &[file.as_str()],
-            options(whole_file, ignore_whitespace),
-        )
+        .diff(&runner, staged, &[file.as_str()], options.into())
         .await?;
     if let Some(found) = files.into_iter().next() {
         return Ok(Some(found));
@@ -880,9 +888,7 @@ pub async fn worktree_diff(
     if staged {
         return Ok(None);
     }
-    Ok(loc
-        .untracked_diff(&runner, &file, options(whole_file, ignore_whitespace))
-        .await?)
+    Ok(loc.untracked_diff(&runner, &file, options.into()).await?)
 }
 
 #[cfg(test)]

@@ -39,10 +39,26 @@ pub enum Whitespace {
 }
 
 /// How to ask git for a patch.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DiffOptions {
     pub context: Context,
     pub whitespace: Whitespace,
+    /// Whether a patch past [`LARGE_PATCH_BYTES`] is reported without its hunks.
+    ///
+    /// On by default, because one generated file the size of a kernel header dump costs a
+    /// visible pause to parse. Off when the reader has been shown the guard and asked for the
+    /// contents anyway, which is the only way to ever see such a file.
+    pub guard_large: bool,
+}
+
+impl Default for DiffOptions {
+    fn default() -> Self {
+        Self {
+            context: Context::default(),
+            whitespace: Whitespace::default(),
+            guard_large: true,
+        }
+    }
 }
 
 impl DiffOptions {
@@ -65,6 +81,13 @@ impl DiffOptions {
         let mut out = vec!["--no-color", "-p", self.context.flag()];
         out.extend_from_slice(self.whitespace_flags());
         out
+    }
+
+    /// Reads a patch of any size, however long it takes to parse.
+    #[must_use]
+    pub const fn guarding_large(mut self, yes: bool) -> Self {
+        self.guard_large = yes;
+        self
     }
 
     #[must_use]
@@ -298,8 +321,12 @@ pub fn recount(files: &mut [FileDiff], options: DiffOptions) {
 /// # Errors
 /// [`CoralError::Protocol`] if a hunk header does not parse, or if the patch has more file
 /// sections than the authoritative listing.
-pub fn apply_patch(files: &mut [FileDiff], patch: &[u8]) -> Result<(), CoralError> {
-    if patch.len() > LARGE_PATCH_BYTES {
+pub fn apply_patch(
+    files: &mut [FileDiff],
+    patch: &[u8],
+    options: DiffOptions,
+) -> Result<(), CoralError> {
+    if options.guard_large && patch.len() > LARGE_PATCH_BYTES {
         for f in files.iter_mut() {
             f.too_large = true;
         }

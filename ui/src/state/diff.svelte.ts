@@ -6,6 +6,7 @@ import {
   fileText,
   worktreeDiff,
 } from '../ipc/commands';
+import type { ReadOptions } from '../ipc/commands';
 import type { Blame, Commit, FileDiff } from '../ipc/types';
 import type { DiffMode, FileView, ViewsState } from './views.svelte';
 import { messageOf } from '../ipc/error';
@@ -103,6 +104,29 @@ export class DiffState {
     const before = this.wholeFile;
     this.#views.set('diff', mode);
     if (this.wholeFile !== before) void this.#reread();
+  }
+
+  /**
+   * Whether a patch past the size guard is read anyway.
+   *
+   * Not remembered between files, like the expanded view: asking for one enormous file is not
+   * a standing instruction to parse the next one too.
+   */
+  unguarded = $state(false);
+
+  /** Reads the open file again with the size guard off. */
+  async readAnyway(): Promise<void> {
+    this.unguarded = true;
+    await this.#reread();
+  }
+
+  /** How the next read is asked for: the view's settings, plus whether the guard still holds. */
+  get #reading(): ReadOptions {
+    return {
+      wholeFile: this.wholeFile,
+      ignoreWhitespace: this.ignoreWhitespace,
+      guardLarge: !this.unguarded,
+    };
   }
 
   /**
@@ -291,7 +315,7 @@ export class DiffState {
     this.#request = request;
     const token = ++this.#token;
     try {
-      const got = await read(request, this.wholeFile, this.ignoreWhitespace);
+      const got = await read(request, this.#reading);
       if (token !== this.#token) return;
       this.file = got;
       this.error = got === null ? absentFor(request.source) : null;
@@ -306,6 +330,7 @@ export class DiffState {
     this.#request = request;
     this.#opened = request;
     this.#historyLimit = HISTORY_PAGE;
+    this.unguarded = false;
     this.atCommit = null;
     this.blame = null;
     this.text = null;
@@ -317,7 +342,7 @@ export class DiffState {
     this.error = null;
     this.loading = true;
     try {
-      const got = await read(request, this.wholeFile, this.ignoreWhitespace);
+      const got = await read(request, this.#reading);
       // Clicking down a long file list must not let an earlier, slower read win.
       if (token !== this.#token) return;
       this.file = got;
@@ -355,6 +380,7 @@ export class DiffState {
     this.moreHistory = false;
     this.atCommit = null;
     this.expanded = false;
+    this.unguarded = false;
   }
 }
 
@@ -374,11 +400,7 @@ function wholeFileFor(mode: DiffMode): boolean {
   return mode === 'split';
 }
 
-function read(
-  request: Request,
-  wholeFile: boolean,
-  ignoreWhitespace: boolean,
-): Promise<FileDiff | null> {
+function read(request: Request, options: ReadOptions): Promise<FileDiff | null> {
   if (request.source === 'compare') {
     return compareFileDiff(
       request.repo,
@@ -386,27 +408,13 @@ function read(
       request.to,
       request.path,
       request.oldPath,
-      wholeFile,
-      ignoreWhitespace,
+      options,
     );
   }
   if (request.source === 'commit') {
-    return fileDiff(
-      request.repo,
-      request.rev,
-      request.path,
-      request.oldPath,
-      wholeFile,
-      ignoreWhitespace,
-    );
+    return fileDiff(request.repo, request.rev, request.path, request.oldPath, options);
   }
-  return worktreeDiff(
-    request.repo,
-    request.source === 'staged',
-    request.path,
-    wholeFile,
-    ignoreWhitespace,
-  );
+  return worktreeDiff(request.repo, request.source === 'staged', request.path, options);
 }
 
 /** What to say when the side being shown has nothing in it for that file. */

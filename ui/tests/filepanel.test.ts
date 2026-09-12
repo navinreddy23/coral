@@ -97,11 +97,11 @@ describe('the file panel', () => {
     answering();
     const diff = new DiffState(new ViewsState());
     await diff.open('/repo', 'HEAD', 'a.c');
-    expect(called('file_diff')[0]?.[1]).toMatchObject({ ignoreWhitespace: false });
+    expect(called('file_diff')[0]?.[1]).toMatchObject({ options: { ignoreWhitespace: false } });
 
     diff.setIgnoreWhitespace(true);
     await vi.waitFor(() => expect(called('file_diff')).toHaveLength(2));
-    expect(called('file_diff')[1]?.[1]).toMatchObject({ ignoreWhitespace: true });
+    expect(called('file_diff')[1]?.[1]).toMatchObject({ options: { ignoreWhitespace: true } });
 
     // Setting it to what it already is costs nothing.
     diff.setIgnoreWhitespace(true);
@@ -224,5 +224,22 @@ describe('the file panel', () => {
     expect(diff.blame).toBeNull();
     expect(diff.text).toBeNull();
     await second;
+  });
+  it('reads a file past the size guard only when the reader asks, and only that file', async () => {
+    // `LARGE_PATCH_BYTES` in core says "the UI offers an explicit load", and for a while it
+    // did not: the panel reported the size and had no way past it.
+    const huge = { ...EMPTY_DIFF, path: 'huge.txt', tooLarge: true };
+    answering({ file_diff: huge });
+    const diff = new DiffState(new ViewsState());
+    await diff.open('/repo', 'HEAD', 'huge.txt');
+    expect(called('file_diff')[0]?.[1]).toMatchObject({ options: { guardLarge: true } });
+
+    await diff.readAnyway();
+    expect(called('file_diff')[1]?.[1]).toMatchObject({ options: { guardLarge: false } });
+
+    // Asking for one enormous file is not a standing instruction to parse the next one.
+    await diff.open('/repo', 'HEAD', 'a.c');
+    expect(diff.unguarded).toBe(false);
+    expect(called('file_diff')[2]?.[1]).toMatchObject({ options: { guardLarge: true } });
   });
 });
