@@ -353,6 +353,19 @@ impl RepoLocation {
     }
 }
 
+/// Adds `-m <n>` when a mainline was named.
+///
+/// A merge has two sides and undoing or replaying it means keeping one of them, so git refuses
+/// both `revert` and `cherry-pick` on a merge unless told which — and the refusal, "is a merge
+/// but no -m option was given", is a sentence about git's command line rather than about the
+/// repository. Naming the side is the caller's decision; passing it on is this.
+fn with_mainline(cmd: GitCommand, mainline: Option<u32>) -> GitCommand {
+    match mainline {
+        Some(n) => cmd.args(["-m", &n.to_string()]),
+        None => cmd,
+    }
+}
+
 /// git's output as a terminal would have shown it.
 ///
 /// Progress is redrawn with carriage returns rather than newlines: rebase writes
@@ -469,9 +482,11 @@ impl RepoLocation {
         runner: &GitRunner,
         revs: &[&str],
         commit: bool,
+        mainline: Option<u32>,
     ) -> Result<OpOutcome, CoralError> {
         let mut cmd = GitCommand::write("cherry-pick", self.display_path())
             .args(["cherry-pick", "--no-edit"]);
+        cmd = with_mainline(cmd, mainline);
         if !commit {
             // The changes land in the index and the working tree and stop there, so they can be
             // amended, split, or added to something else before anything is recorded. git still
@@ -484,12 +499,19 @@ impl RepoLocation {
 
     /// Records commits that undo `revs`.
     ///
+    /// `mainline` names which parent's line of development to keep, counting from one. It is
+    /// required for a merge commit and refused for any other, which is git's rule.
+    ///
     /// # Errors
     /// Propagates git failures that left no conflict behind.
-    pub async fn revert(&self, runner: &GitRunner, revs: &[&str]) -> Result<OpOutcome, CoralError> {
-        let cmd = GitCommand::write("revert", self.display_path())
-            .args(["revert", "--no-edit"])
-            .args(revs);
+    pub async fn revert(
+        &self,
+        runner: &GitRunner,
+        revs: &[&str],
+        mainline: Option<u32>,
+    ) -> Result<OpOutcome, CoralError> {
+        let cmd = GitCommand::write("revert", self.display_path()).args(["revert", "--no-edit"]);
+        let cmd = with_mainline(cmd, mainline).args(revs);
         self.run_stoppable(runner, cmd).await
     }
 

@@ -75,9 +75,18 @@ pub enum Action {
         /// Whether to record the result. False leaves it staged, for someone who wants to
         /// change it, split it, or fold it into something else first.
         commit: bool,
+        /// Which parent's line to treat as the mainline, counting from one.
+        ///
+        /// A merge has two sides, so replaying or undoing one means keeping one of them. git
+        /// requires this for a merge and refuses it for anything else.
+        #[serde(default)]
+        mainline: Option<u32>,
     },
     Revert {
         revs: Vec<String>,
+        /// Which parent's line to keep, counting from one. See [`Action::CherryPick`].
+        #[serde(default)]
+        mainline: Option<u32>,
     },
     StashPush {
         message: Option<String>,
@@ -318,7 +327,7 @@ impl Action {
                 _ => format!("merge {}", named(rev)),
             },
             Self::Rebase { onto } => format!("rebase onto {}", named(onto)),
-            Self::CherryPick { revs, commit } => {
+            Self::CherryPick { revs, commit, .. } => {
                 let what = shortened(revs);
                 if *commit {
                     format!("cherry-pick {what}")
@@ -326,7 +335,7 @@ impl Action {
                     format!("cherry-pick {what} without committing")
                 }
             }
-            Self::Revert { revs } => format!("revert {}", shortened(revs)),
+            Self::Revert { revs, .. } => format!("revert {}", shortened(revs)),
             Self::StashPush { .. } => "stash".to_owned(),
             Self::StashApply { pop: true, .. } => "stash pop".to_owned(),
             Self::StashApply { .. } => "stash apply".to_owned(),
@@ -628,14 +637,18 @@ async fn run_refs(
             let out = loc.rebase(runner, &onto, true).await?;
             return Ok(Done::from(&out));
         }
-        Action::CherryPick { revs, commit } => {
+        Action::CherryPick {
+            revs,
+            commit,
+            mainline,
+        } => {
             let refs: Vec<&str> = revs.iter().map(String::as_str).collect();
-            let out = loc.cherry_pick(runner, &refs, commit).await?;
+            let out = loc.cherry_pick(runner, &refs, commit, mainline).await?;
             return Ok(Done::from(&out));
         }
-        Action::Revert { revs } => {
+        Action::Revert { revs, mainline } => {
             let refs: Vec<&str> = revs.iter().map(String::as_str).collect();
-            let out = loc.revert(runner, &refs).await?;
+            let out = loc.revert(runner, &refs, mainline).await?;
             return Ok(Done::from(&out));
         }
         Action::Reset { rev, mode } => loc.reset(runner, &rev, mode.into()).await?,

@@ -1272,7 +1272,7 @@
       kind: 'item',
       label: 'Revert commit',
       disabled: busy,
-      run: () => void act({ kind: 'revert', revs: [oid] }),
+      run: () => void revertCommit(oid),
     });
 
     // What the graph is drawn from, which is a different question from what can be done to the
@@ -1641,7 +1641,50 @@
    * this branch now, while stopping short leaves it staged so it can be changed, split, or
    * folded into something else first.
    */
+  /**
+   * Which of a merge's parents to treat as the mainline, or null when the user backed out.
+   *
+   * A merge has two sides, so undoing or replaying one means saying which side to keep. git
+   * requires it and, asked without one, answers "is a merge but no -m option was given" —
+   * a sentence about its command line rather than about the repository, which is what the
+   * window used to hand over. Undefined for anything that is not a merge, where git refuses
+   * the option instead.
+   */
+  async function mainlineFor(oid: string, verb: string): Promise<number | null | undefined> {
+    if (!info) return undefined;
+    const parents = await commitDetail(info.path, oid)
+      .then((d) => d.commit.parents)
+      .catch(() => []);
+    if (parents.length < 2) return undefined;
+
+    const { choice } = await ask({
+      title: `Which side should the ${verb} keep?`,
+      detail:
+        'This is a merge, so it has more than one line of history behind it. The side you ' +
+        'keep is the one the change is measured against; the other side is what is undone ' +
+        'or replayed.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: parents.map((p, i) => ({
+        id: String(i + 1),
+        label: `${i === 0 ? 'The branch it was merged into' : 'The branch that came in'} — ${p.slice(0, 7)}`,
+        primary: i === 0,
+      })),
+    });
+    return choice === null ? null : Number(choice);
+  }
+
+  /** Undoes one commit, asking which side to keep when it is a merge. */
+  async function revertCommit(oid: string) {
+    const mainline = await mainlineFor(oid, 'revert');
+    if (mainline === null) return;
+    await act({ kind: 'revert', revs: [oid], mainline });
+  }
+
   async function cherryPick(oid: string) {
+    const mainline = await mainlineFor(oid, 'cherry pick');
+    if (mainline === null) return;
     const { choice } = await ask({
       title: 'Commit the cherry picked changes?',
       detail:
@@ -1657,7 +1700,7 @@
       ],
     });
     if (choice === null) return;
-    await act({ kind: 'cherryPick', revs: [oid], commit: choice === 'yes' });
+    await act({ kind: 'cherryPick', revs: [oid], commit: choice === 'yes', mainline });
   }
 
   /**
@@ -1704,7 +1747,7 @@
         {
           kind: 'item',
           label: 'Revert commit',
-          run: () => void act({ kind: 'revert', revs: [oid] }),
+          run: () => void revertCommit(oid),
         },
         { kind: 'separator' },
         {

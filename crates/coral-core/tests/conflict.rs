@@ -259,7 +259,10 @@ async fn a_cherry_pick_labels_the_incoming_side_with_the_commit() {
     let repo = repo.write("f.txt", "main\n").commit("ours");
     let (runner, loc) = open(&repo).await;
 
-    let stopped = loc.cherry_pick(&runner, &["side"], true).await.unwrap();
+    let stopped = loc
+        .cherry_pick(&runner, &["side"], true, None)
+        .await
+        .unwrap();
     assert!(!stopped.completed);
 
     let op = loc.operation(&runner).await.unwrap();
@@ -293,7 +296,7 @@ async fn a_revert_names_the_incoming_side_as_the_commit_it_undoes() {
     let repo = repo.write("f.txt", "water\n").commit("a page about water");
     let (runner, loc) = open(&repo).await;
 
-    let stopped = loc.revert(&runner, &[&undone]).await.unwrap();
+    let stopped = loc.revert(&runner, &[&undone], None).await.unwrap();
     assert!(!stopped.completed, "it conflicts with the commit after it");
 
     let op = loc.operation(&runner).await.unwrap();
@@ -526,7 +529,9 @@ async fn the_message_git_prepared_for_the_next_commit_is_readable() {
         "nothing is pending yet"
     );
 
-    loc.cherry_pick(&runner, &[&picked], false).await.unwrap();
+    loc.cherry_pick(&runner, &[&picked], false, None)
+        .await
+        .unwrap();
 
     let op = loc.operation(&runner).await.unwrap();
     assert_eq!(op.prepared.as_deref(), Some("a change worth picking"));

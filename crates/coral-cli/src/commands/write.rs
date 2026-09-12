@@ -173,7 +173,7 @@ pub async fn rebase(path: &Path, onto: String, update_refs: bool) -> Result<OpOu
 pub async fn cherry_pick(path: &Path, revs: Vec<String>) -> Result<OpOutcome, CoralError> {
     journaled(path, "cherry-pick", |r, l| async move {
         let picks: Vec<&str> = revs.iter().map(String::as_str).collect();
-        l.cherry_pick(&r, &picks, true).await
+        l.cherry_pick(&r, &picks, true, None).await
     })
     .await
 }
@@ -185,7 +185,7 @@ pub async fn cherry_pick(path: &Path, revs: Vec<String>) -> Result<OpOutcome, Co
 pub async fn revert(path: &Path, revs: Vec<String>) -> Result<OpOutcome, CoralError> {
     journaled(path, "revert", |r, l| async move {
         let targets: Vec<&str> = revs.iter().map(String::as_str).collect();
-        l.revert(&r, &targets).await
+        l.revert(&r, &targets, None).await
     })
     .await
 }

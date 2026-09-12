@@ -623,13 +623,70 @@ async fn cherry_picks_and_reverts() {
     repo.git(["checkout", "--quiet", "main"]);
 
     let (runner, loc) = open(&repo).await;
-    let out = loc.cherry_pick(&runner, &[&picked], true).await.unwrap();
+    let out = loc
+        .cherry_pick(&runner, &[&picked], true, None)
+        .await
+        .unwrap();
     assert!(out.completed);
     assert!(repo.path().join("b.txt").exists());
 
-    let out = loc.revert(&runner, &["HEAD"]).await.unwrap();
+    let out = loc.revert(&runner, &["HEAD"], None).await.unwrap();
     assert!(out.completed);
     assert!(!repo.path().join("b.txt").exists(), "the revert undid it");
+}
+
+#[tokio::test]
+async fn reverts_a_merge_when_told_which_side_to_keep() {
+    // A merge has two sides, so undoing it means keeping one. Asked without a mainline git
+    // refuses with "is a merge but no -m option was given", which is a sentence about its
+    // command line rather than about the repository — and that is what the window handed over.
+    let repo = TestRepo::new().write("a.txt", "base\n").commit("base");
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo.write("b.txt", "from side\n").commit("side work");
+    repo.git(["checkout", "--quiet", "main"]);
+    repo.git(["merge", "--quiet", "--no-ff", "-m", "merge side", "side"]);
+    assert!(repo.path().join("b.txt").exists());
+
+    let (runner, loc) = open(&repo).await;
+    assert!(
+        loc.revert(&runner, &["HEAD"], None).await.is_err(),
+        "git refuses a merge with no mainline named"
+    );
+
+    let out = loc.revert(&runner, &["HEAD"], Some(1)).await.unwrap();
+    assert!(out.completed);
+    assert!(
+        !repo.path().join("b.txt").exists(),
+        "keeping the first parent undoes what the other side brought"
+    );
+}
+
+#[tokio::test]
+async fn cherry_picks_a_merge_when_told_which_side_to_keep() {
+    let repo = TestRepo::new().write("a.txt", "base\n").commit("base");
+    let base = repo.git(["rev-parse", "HEAD"]);
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo.write("b.txt", "from side\n").commit("side work");
+    repo.git(["checkout", "--quiet", "main"]);
+    let repo = repo.write("c.txt", "on main\n").commit("main work");
+    repo.git(["merge", "--quiet", "--no-ff", "-m", "merge side", "side"]);
+    let merge = repo.git(["rev-parse", "HEAD"]);
+    repo.git(["checkout", "--quiet", "-b", "elsewhere", &base]);
+
+    let (runner, loc) = open(&repo).await;
+    assert!(
+        loc.cherry_pick(&runner, &[&merge], true, None)
+            .await
+            .is_err(),
+        "git refuses a merge with no mainline named"
+    );
+
+    let out = loc
+        .cherry_pick(&runner, &[&merge], true, Some(1))
+        .await
+        .unwrap();
+    assert!(out.completed);
+    assert!(repo.path().join("b.txt").exists());
 }
 
 #[tokio::test]
@@ -644,7 +701,10 @@ async fn cherry_picks_without_committing_when_asked() {
     let before = repo.git(["rev-parse", "HEAD"]);
 
     let (runner, loc) = open(&repo).await;
-    let out = loc.cherry_pick(&runner, &[&picked], false).await.unwrap();
+    let out = loc
+        .cherry_pick(&runner, &[&picked], false, None)
+        .await
+        .unwrap();
 
     assert!(out.completed);
     assert!(repo.path().join("b.txt").exists(), "the change is on disk");
@@ -668,7 +728,10 @@ async fn a_conflicting_cherry_pick_stops_and_says_which_file() {
     let repo = repo.write("a.txt", "from main\n").commit("main work");
 
     let (runner, loc) = open(&repo).await;
-    let out = loc.cherry_pick(&runner, &[&picked], true).await.unwrap();
+    let out = loc
+        .cherry_pick(&runner, &[&picked], true, None)
+        .await
+        .unwrap();
 
     assert!(!out.completed, "it stopped");
     assert_eq!(out.conflicts, vec!["a.txt".to_owned()]);
@@ -689,7 +752,9 @@ async fn a_conflicting_cherry_pick_can_be_resolved_and_continued() {
     let repo = repo.write("a.txt", "from main\n").commit("main work");
 
     let (runner, loc) = open(&repo).await;
-    loc.cherry_pick(&runner, &[&picked], true).await.unwrap();
+    loc.cherry_pick(&runner, &[&picked], true, None)
+        .await
+        .unwrap();
 
     std::fs::write(repo.path().join("a.txt"), "settled\n").unwrap();
     loc.stage(&runner, &["a.txt"]).await.unwrap();
@@ -714,7 +779,9 @@ async fn a_conflicting_cherry_pick_can_be_abandoned() {
     let before = repo.git(["rev-parse", "HEAD"]);
 
     let (runner, loc) = open(&repo).await;
-    loc.cherry_pick(&runner, &[&picked], true).await.unwrap();
+    loc.cherry_pick(&runner, &[&picked], true, None)
+        .await
+        .unwrap();
     loc.op(&runner, OpAction::Abort).await.unwrap();
 
     assert_eq!(repo.git(["rev-parse", "HEAD"]), before);

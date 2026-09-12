@@ -80,6 +80,7 @@ async fn a_label_never_carries_a_full_object_id() {
         &path,
         app::actions::Action::Revert {
             revs: vec![full.clone()],
+            mainline: None,
         },
     )
     .await
