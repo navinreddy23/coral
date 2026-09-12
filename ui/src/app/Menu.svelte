@@ -23,11 +23,21 @@
         disabled?: boolean;
         /** Marks a destructive choice, which is drawn in the danger colour. */
         danger?: boolean;
+        /**
+         * Whether the item needs a checkout to work.
+         *
+         * A bare repository has none, and git refuses every one of these in it: checkout,
+         * merge, rebase, cherry-pick, reset, revert, and everything that rewrites history.
+         * Offering an operation git will refuse is what the caller strips with this.
+         */
+        worktree?: boolean;
         run: () => void;
       }
     | {
         kind: 'submenu';
         label: string;
+        /** As on an item: the whole submenu goes when there is no checkout. */
+        worktree?: boolean;
         items: MenuItem[];
       };
 </script>

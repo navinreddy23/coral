@@ -47,7 +47,12 @@ export function checkoutItems(
   for (const ref of here) {
     if (ref.kind.kind === 'local_branch') {
       if (ref.short === head) continue;
-      out.push({ kind: 'item', label: `Checkout ${ref.short}`, run: () => on.goTo(ref) });
+      out.push({
+        kind: 'item',
+        label: `Checkout ${ref.short}`,
+        worktree: true,
+        run: () => on.goTo(ref),
+      });
     } else if (ref.kind.kind === 'remote_branch') {
       const name = withoutRemote(ref.short);
       // Not when the local branch of that name is on this very row and already offered above:
@@ -59,6 +64,7 @@ export function checkoutItems(
         kind: 'item',
         label: `Checkout ${name}`,
         hint: `tracking ${ref.short}`,
+        worktree: true,
         run: () => on.goTo(ref),
       });
     } else if (ref.kind.kind === 'tag') {
@@ -66,6 +72,7 @@ export function checkoutItems(
         kind: 'item',
         label: `Checkout ${ref.short}`,
         hint: 'detaches HEAD',
+        worktree: true,
         run: () => on.checkout(ref.short),
       });
     }
@@ -97,18 +104,21 @@ export function combineItems(
       kind: 'item',
       label: `Merge ${rev} into ${head}`,
       disabled: on.busy,
+      worktree: true,
       run: () => on.merge(rev, false),
     },
     {
       kind: 'item',
       label: `Rebase ${head} onto ${rev}`,
       disabled: on.busy,
+      worktree: true,
       run: () => on.rebase(rev),
     },
     {
       kind: 'item',
       label: `Rebase ${head} onto ${rev}, interactively`,
       disabled: on.busy,
+      worktree: true,
       run: () => on.rebaseInteractively(rev),
     },
   ];
@@ -139,6 +149,7 @@ function fastForwardItem(
       label: `Fast-forward ${head} to ${rev}`,
       hint: 'never a merge commit',
       disabled: on.busy,
+      worktree: true,
       run: () => on.merge(rev, true),
     };
   }
@@ -148,6 +159,7 @@ function fastForwardItem(
       label: `Fast-forward ${ref.short} to ${head}`,
       hint: 'without checking it out',
       disabled: on.busy,
+      worktree: true,
       run: () => on.fastForwardBranch(ref.short, head),
     };
   }
@@ -160,6 +172,7 @@ function fastForwardItem(
       hint: 'replaces the tag',
       danger: true,
       disabled: on.busy,
+      worktree: true,
       run: () => on.moveTag(ref.short, head),
     };
   }
@@ -170,6 +183,7 @@ function fastForwardItem(
     // repeating it is what pushed the reason out of a menu row on any realistic branch name.
     hint: where === 'behind' ? 'already past it' : 'they have diverged',
     disabled: true,
+    worktree: true,
     run: () => {},
   };
 }
@@ -194,6 +208,7 @@ export function resetItem(branch: string, on: ResetModes, busy: boolean): MenuIt
   return {
     kind: 'submenu',
     label: `Reset ${branch} to this commit`,
+    worktree: true,
     items: [
       {
         kind: 'item',

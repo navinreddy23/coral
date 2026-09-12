@@ -1219,6 +1219,29 @@
     moveTag: (name, to) => void moveTag(name, to),
   });
 
+  /**
+   * The menu as a bare repository can actually use it.
+   *
+   * A bare repository has no checkout, and git refuses every operation that needs one:
+   * checkout, merge, rebase, cherry-pick, reset, revert and every rewrite. Half the branch
+   * menu was offered in one and answered "this operation must be run in a work tree" — the
+   * same fault the ancestry lookup already guards against for a different reason.
+   *
+   * Stripped rather than disabled: a dozen greyed rows say nothing a reader can act on, and
+   * the separators around them would be left framing nothing.
+   */
+  function withAWorktree(items: MenuItem[]): MenuItem[] {
+    if (info?.isBare !== true) return items;
+    const kept = items.filter((i) => i.kind === 'separator' || i.worktree !== true);
+    // Separators that now sit against each other, or at either end, frame nothing.
+    return kept.filter((item, i) => {
+      if (item.kind !== 'separator') return true;
+      const before = kept.slice(0, i).some((o) => o.kind !== 'separator');
+      const after = kept.slice(i + 1).some((o) => o.kind !== 'separator');
+      return before && after && kept[i - 1]?.kind !== 'separator';
+    });
+  }
+
   function checkoutsFor(row: number): MenuItem[] {
     const out = checkoutItems(refs.byRow.get(row) ?? [], headName, revisionActions);
     return out.length === 0 ? out : [...out, { kind: 'separator' }];
@@ -1298,7 +1321,14 @@
 
     if (!current) {
       const [label, hint] = checkoutOf(ref);
-      items.push({ kind: 'item', label, hint, disabled: busy, run: () => void goTo(ref) });
+      items.push({
+        kind: 'item',
+        label,
+        hint,
+        disabled: busy,
+        worktree: true,
+        run: () => void goTo(ref),
+      });
     }
 
     if (ref.kind.kind === 'local_branch' && hosting.available) {
@@ -1321,12 +1351,18 @@
     const oid = ref.peeled ?? ref.target;
     items.push({ kind: 'separator' });
     items.push({ kind: 'item', label: 'Create branch here', run: () => void branchAt(oid) });
-    items.push({ kind: 'item', label: 'Cherry pick commit…', run: () => void cherryPick(oid) });
+    items.push({
+      kind: 'item',
+      label: 'Cherry pick commit…',
+      worktree: true,
+      run: () => void cherryPick(oid),
+    });
     items.push(resetItem(head, resetModes(oid, head), busy));
     items.push({
       kind: 'item',
       label: 'Revert commit',
       disabled: busy,
+      worktree: true,
       run: () => void revertCommit(oid),
     });
 
@@ -1787,6 +1823,7 @@
           kind: 'item',
           label: 'Checkout this commit',
           hint: `${short}, detached`,
+          worktree: true,
           run: () => void act({ kind: 'checkout', rev: oid }),
         },
         { kind: 'item', label: 'Create worktree from this commit', run: () => void worktreeAt(oid) },
@@ -1796,12 +1833,14 @@
         {
           kind: 'item',
           label: 'Cherry pick commit…',
+          worktree: true,
           run: () => void cherryPick(oid),
         },
         resetItem(branch, resetModes(oid, branch), actions.busy),
         {
           kind: 'item',
           label: 'Revert commit',
+          worktree: true,
           run: () => void revertCommit(oid),
         },
         { kind: 'separator' },
@@ -1809,23 +1848,32 @@
           kind: 'item',
           label: 'Interactive rebase from this commit',
           hint: `${short} and newer`,
+          worktree: true,
           run: () => info && void rebase.load(info.path, `${oid}~1`),
         },
-        { kind: 'item', label: 'Edit commit message', run: () => void reword(oid, summary) },
+        {
+          kind: 'item',
+          label: 'Edit commit message',
+          worktree: true,
+          run: () => void reword(oid, summary),
+        },
         {
           kind: 'item',
           label: 'Drop commit',
           danger: true,
+          worktree: true,
           run: () => void confirmDrop(oid, summary),
         },
         {
           kind: 'item',
           label: 'Move commit up',
+          worktree: true,
           run: () => void act({ kind: 'rewrite', rev: oid, how: 'moveNewer', message: null }),
         },
         {
           kind: 'item',
           label: 'Move commit down',
+          worktree: true,
           run: () => void act({ kind: 'rewrite', rev: oid, how: 'moveOlder', message: null }),
         },
         { kind: 'separator' },
@@ -1837,6 +1885,7 @@
           label: 'Apply a patch file…',
           hint: 'onto this branch',
           disabled: actions.busy,
+          worktree: true,
           run: () => void applyPatch(),
         },
         { kind: 'separator' },
@@ -4445,7 +4494,7 @@
 {/if}
 
 {#if menu}
-  <Menu x={menu.x} y={menu.y} items={menu.items} onClose={() => (menu = null)} />
+  <Menu x={menu.x} y={menu.y} items={withAWorktree(menu.items)} onClose={() => (menu = null)} />
 {/if}
 
 <Toasts {toasts} />

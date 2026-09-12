@@ -198,3 +198,33 @@ describe('resetting a branch to a commit', () => {
     expect(item.items.every((i) => i.kind === 'item' && i.disabled === true)).toBe(true);
   });
 });
+
+describe('what needs a checkout to work', () => {
+  const on = {
+    goTo: vi.fn(),
+    checkout: vi.fn(),
+    merge: vi.fn(),
+    rebase: vi.fn(),
+    rebaseInteractively: vi.fn(),
+    fastForwardBranch: vi.fn(),
+    moveTag: vi.fn(),
+    busy: false,
+  };
+
+  it('marks every item a bare repository cannot run', () => {
+    // git answers "this operation must be run in a work tree" to all of these, and a bare
+    // repository was offered them anyway.
+    const items = combineItems(null, 'abc1234', 'main', 'ahead', on);
+    expect(items.every((i) => i.kind === 'item' && i.worktree === true)).toBe(true);
+
+    const reset = resetItem('main', { soft: vi.fn(), mixed: vi.fn(), hard: vi.fn() }, false);
+    expect(reset.kind === 'submenu' && reset.worktree).toBe(true);
+  });
+
+  it('leaves alone the ones that work without one', () => {
+    // Copying a name, soloing a branch and creating one are all fine in a bare repository, so
+    // nothing here may be stripped by mistake.
+    const items = checkoutItems([], 'main', on);
+    expect(items).toHaveLength(0);
+  });
+});
