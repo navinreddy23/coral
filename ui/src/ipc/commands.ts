@@ -182,10 +182,19 @@ export function fileDiff(
   path: string,
   rev: string,
   file: string,
+  /** The name it had before, when the commit renamed it. Null otherwise. */
+  oldFile: string | null,
   wholeFile: boolean,
   ignoreWhitespace: boolean,
 ): Promise<FileDiff | null> {
-  return invoke<FileDiff | null>('file_diff', { path, rev, file, wholeFile, ignoreWhitespace });
+  return invoke<FileDiff | null>('file_diff', {
+    path,
+    rev,
+    file,
+    oldFile,
+    wholeFile,
+    ignoreWhitespace,
+  });
 }
 
 /** Who last changed each line of a file, and in which commit. */
@@ -231,6 +240,8 @@ export function compareFileDiff(
   from: string,
   to: string,
   file: string,
+  /** The name it had at `from`, when it was renamed between the two. Null otherwise. */
+  oldFile: string | null,
   wholeFile: boolean,
   ignoreWhitespace: boolean,
 ): Promise<FileDiff | null> {
@@ -239,6 +250,7 @@ export function compareFileDiff(
     from,
     to,
     file,
+    oldFile,
     wholeFile,
     ignoreWhitespace,
   });
@@ -313,8 +325,8 @@ export type Action =
   | { kind: 'branchRename'; from: string; to: string }
   | { kind: 'merge'; rev: string; mode: 'auto' | 'noFf' | 'ffOnly' | 'squash' }
   | { kind: 'rebase'; onto: string }
-  | { kind: 'cherryPick'; revs: string[]; commit: boolean }
-  | { kind: 'revert'; revs: string[] }
+  | { kind: 'cherryPick'; revs: string[]; commit: boolean; mainline?: number }
+  | { kind: 'revert'; revs: string[]; mainline?: number }
   | { kind: 'stashPush'; message: string | null }
   | { kind: 'stashApply'; index: number; pop: boolean }
   | { kind: 'stashDrop'; index: number }

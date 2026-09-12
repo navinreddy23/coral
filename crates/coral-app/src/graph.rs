@@ -593,6 +593,7 @@ pub async fn file_diff(
     path: String,
     rev: String,
     file: String,
+    old_file: Option<String>,
     whole_file: bool,
     ignore_whitespace: bool,
 ) -> Result<Option<coral_core::diff::FileDiff>, crate::commands::IpcError> {
@@ -603,11 +604,23 @@ pub async fn file_diff(
         .commit_diff(
             &runner,
             &rev,
-            &[file.as_str()],
+            &both(&file, old_file.as_deref()),
             options(whole_file, ignore_whitespace),
         )
         .await?;
     Ok(files.into_iter().next())
+}
+
+/// The paths to ask git about: the file, plus the name it had before, when it was renamed.
+///
+/// git pairs a deletion with an addition to see a rename, so asking for the new name alone
+/// leaves it nothing to pair and it reports the file as freshly added — every line of it. A
+/// kernel file moved with a one-line edit came out as four thousand additions.
+fn both<'a>(file: &'a str, old: Option<&'a str>) -> Vec<&'a str> {
+    match old {
+        Some(was) if was != file => vec![file, was],
+        _ => vec![file],
+    }
 }
 
 /// How to ask for the patch: how much of the file, and whether whitespace counts.
@@ -744,6 +757,7 @@ pub async fn compare_file_diff(
     from: String,
     to: String,
     file: String,
+    old_file: Option<String>,
     whole_file: bool,
     ignore_whitespace: bool,
 ) -> Result<Option<coral_core::diff::FileDiff>, crate::commands::IpcError> {
@@ -755,7 +769,7 @@ pub async fn compare_file_diff(
             &runner,
             &from,
             &to,
-            &[file.as_str()],
+            &both(&file, old_file.as_deref()),
             options(whole_file, ignore_whitespace),
         )
         .await?;

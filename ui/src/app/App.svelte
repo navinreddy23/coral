@@ -2438,17 +2438,25 @@
     await worktree.delete(untracked ? [] : [entry.path], untracked ? [entry.path] : []);
   }
 
-  /** Opens one of the selected commit's files in the diff viewer, or one of the pair's. */
+  /**
+   * Opens one of the selected commit's files in the diff viewer, or one of the pair's.
+   *
+   * The name it had before goes with it. git sees a rename by pairing a deletion with an
+   * addition, so asking for the new name alone leaves it nothing to pair and it answers with
+   * the whole file as added — which for a file moved with a one-line edit is every line of it.
+   */
   function openFile(file: string) {
     if (!info) return;
     const pair = selection.pair;
     if (pair !== null) {
-      void diff.openCompare(info.path, pair.from.oid, pair.to.oid, file);
+      const was = selection.compared.find((f) => f.path === file)?.oldPath ?? null;
+      void diff.openCompare(info.path, pair.from.oid, pair.to.oid, file, was);
       return;
     }
     const rev = selection.detail?.commit.oid;
     if (rev === undefined) return;
-    void diff.open(info.path, rev, file);
+    const was = selection.detail?.files.find((f) => f.path === file)?.oldPath ?? null;
+    void diff.open(info.path, rev, file, was);
   }
 
   /** Drops the comparison and goes back to the newer of the two on its own. */

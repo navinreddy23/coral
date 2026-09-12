@@ -157,6 +157,26 @@ describe('the file panel', () => {
     expect(called('file_history').at(-1)?.[1]).toMatchObject({ limit: 100 });
   });
 
+  it('asks about the name a renamed file had before, as well as the one it has', async () => {
+    // git sees a rename by pairing a deletion with an addition. Given the new name alone it has
+    // nothing to pair, so it answers with the whole file as added: a file moved with a one-line
+    // edit came out as every line of it.
+    answering();
+    const diff = new DiffState(new ViewsState());
+    await diff.open('/repo', 'HEAD', 'renamed.txt', 'was-called.txt');
+    expect(called('file_diff').at(-1)?.[1]).toMatchObject({
+      file: 'renamed.txt',
+      oldFile: 'was-called.txt',
+    });
+  });
+
+  it('sends no old name for a file that was not renamed', async () => {
+    answering();
+    const diff = new DiffState(new ViewsState());
+    await diff.open('/repo', 'HEAD', 'a.c');
+    expect(called('file_diff').at(-1)?.[1]).toMatchObject({ file: 'a.c', oldFile: null });
+  });
+
   it('says it is still reading rather than that nothing touched the file', async () => {
     // The pane shows "Nothing has touched this file." for an empty history, and an empty list
     // was also what it held while the read was in flight. Walking a kernel file's history

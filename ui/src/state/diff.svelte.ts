@@ -24,6 +24,14 @@ interface Request {
   /** The newer of the two, when comparing. */
   to: string;
   path: string;
+  /**
+   * The name the file had before, when this change renamed it.
+   *
+   * Asked for alongside the new name, because git sees a rename by pairing a deletion with an
+   * addition: given the new name alone it has nothing to pair, and reports the whole file as
+   * added. A file moved with a one-line edit came out as every line of it.
+   */
+  oldPath: string | null;
 }
 
 /** The file currently open in the diff viewer. */
@@ -33,6 +41,7 @@ export class DiffState {
   path = $state<string | null>(null);
   loading = $state(false);
   error = $state<string | null>(null);
+
 
   /** Who last changed each line, once the blame view has asked for it. */
   blame = $state<Blame | null>(null);
@@ -212,17 +221,23 @@ export class DiffState {
   #opened: Request | null = null;
 
   /** Opens one file's diff from a commit. A second call supersedes the first. */
-  async open(repo: string, rev: string, path: string): Promise<void> {
+  async open(repo: string, rev: string, path: string, oldPath: string | null = null): Promise<void> {
     await this.#load(
-      { repo, source: 'commit', rev, to: '', path },
+      { repo, source: 'commit', rev, to: '', path, oldPath },
       'This commit did not change that file.',
     );
   }
 
   /** Opens one file's diff between two commits. */
-  async openCompare(repo: string, from: string, to: string, path: string): Promise<void> {
+  async openCompare(
+    repo: string,
+    from: string,
+    to: string,
+    path: string,
+    oldPath: string | null = null,
+  ): Promise<void> {
     await this.#load(
-      { repo, source: 'compare', rev: from, to, path },
+      { repo, source: 'compare', rev: from, to, path, oldPath },
       'That file is the same in both commits.',
     );
   }
@@ -235,7 +250,7 @@ export class DiffState {
    */
   async openWorking(repo: string, staged: boolean, path: string): Promise<void> {
     await this.#load(
-      { repo, source: staged ? 'staged' : 'unstaged', rev: '', to: '', path },
+      { repo, source: staged ? 'staged' : 'unstaged', rev: '', to: '', path, oldPath: null },
       absent(staged),
     );
   }
@@ -352,12 +367,20 @@ function read(
       request.rev,
       request.to,
       request.path,
+      request.oldPath,
       wholeFile,
       ignoreWhitespace,
     );
   }
   if (request.source === 'commit') {
-    return fileDiff(request.repo, request.rev, request.path, wholeFile, ignoreWhitespace);
+    return fileDiff(
+      request.repo,
+      request.rev,
+      request.path,
+      request.oldPath,
+      wholeFile,
+      ignoreWhitespace,
+    );
   }
   return worktreeDiff(
     request.repo,
