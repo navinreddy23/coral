@@ -163,8 +163,21 @@ enum Marker {
 }
 
 /// Markers are exactly seven characters, optionally followed by a space and a label.
+///
+/// A file with CRLF endings keeps its carriage return on every line, and git writes its markers
+/// into such a file the same way: the separator arrives as `=======\r`. Read as content, it
+/// took the whole incoming side with it — the pane showed nothing on that side, and taking
+/// either side wrote a file with the other one's lines missing or a stray marker left in it.
 fn marker(line: &BString) -> Option<Marker> {
-    let m = |p: &[u8]| line.starts_with(p) && (line.len() == 7 || line.get(7) == Some(&b' '));
+    let m = |p: &[u8]| {
+        line.starts_with(p)
+            && match line.get(7) {
+                None | Some(&b' ') => true,
+                // Only as the end of the line, never inside one.
+                Some(&b'\r') => line.len() == 8,
+                Some(_) => false,
+            }
+    };
     if m(b"<<<<<<<") {
         Some(Marker::Start)
     } else if m(b"|||||||") {

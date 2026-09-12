@@ -568,3 +568,36 @@ async fn a_prepared_message_of_nothing_but_comments_is_no_message() {
 
     assert_eq!(loc.operation(&runner).await.unwrap().prepared, None);
 }
+
+/// A file with CRLF endings keeps its carriage return on the marker lines too.
+///
+/// The separator arrives as `=======\r`, which read as content swallowed the whole incoming
+/// side: the pane said there was nothing on it, and resolving wrote a file with one side's
+/// lines missing or a stray marker left in the middle of it.
+#[test]
+fn a_marker_survives_the_carriage_return_of_a_crlf_file() {
+    let input = b"one\r\n<<<<<<< ours\r\nMAIN\r\n||||||| base\r\ntwo\r\n=======\r\nSIDE\r\n>>>>>>> theirs\r\none\r\n";
+    let blocks = Blocks::parse(input).unwrap();
+
+    assert_eq!(blocks.conflict_count(), 1);
+    assert_eq!(
+        blocks.blocks[1],
+        Block::Conflict {
+            base: vec!["two\r".into()],
+            ours: vec!["MAIN\r".into()],
+            theirs: vec!["SIDE\r".into()],
+        }
+    );
+
+    // And the file it renders back keeps every one of those endings.
+    assert_eq!(blocks.render_taking(Take::Theirs), "one\r\nSIDE\r\none\r\n");
+    assert_eq!(blocks.render_taking(Take::Ours), "one\r\nMAIN\r\none\r\n");
+}
+
+/// Seven characters and a carriage return is a marker; seven and anything else is content.
+#[test]
+fn a_carriage_return_does_not_make_content_into_a_marker() {
+    let input = b"=======\rstill content\n";
+    let blocks = Blocks::parse(input).unwrap();
+    assert_eq!(blocks.conflict_count(), 0);
+}
