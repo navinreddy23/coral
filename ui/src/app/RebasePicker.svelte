@@ -92,10 +92,9 @@
     {/if}
 
     <footer>
-      {#if rebase.invalid}
-        <span class="warn">
-          The first commit has nothing above it to fold into.
-        </span>
+      {#if rebase.whyNotReady !== null}
+        <!-- The reason itself, since there is more than one and the button only goes grey. -->
+        <span class="warn">{rebase.whyNotReady}</span>
       {/if}
       <span class="spacer"></span>
       <button onclick={() => rebase.close()}>Cancel</button>
