@@ -174,10 +174,12 @@ async function confirm(container: HTMLElement, take: boolean): Promise<void> {
     return found as HTMLElement;
   });
   const buttons = [...dialog.querySelectorAll('button')] as HTMLButtonElement[];
-  const primary = buttons.find((b) => b.className.includes('primary'));
   const cancel = buttons.find((b) => b.className.includes('cancel'));
-  const target = take ? primary : cancel;
-  if (!target) throw new Error(`no ${take ? 'primary' : 'cancel'} button`);
+  // Whichever button answers it, marked primary or marked danger: the most destructive ones
+  // are deliberately neither Enter's nor the eye's default.
+  const going = buttons.find((b) => b !== cancel);
+  const target = take ? going : cancel;
+  if (!target) throw new Error(`no ${take ? 'answering' : 'cancel'} button`);
   await fireEvent.click(target);
 }
 
@@ -304,6 +306,32 @@ describe('the commit menu', () => {
     await waitFor(() => {
       expect(lastAction()).toEqual({ kind: 'reset', rev: oidOf(frame, 0), mode: 'hard' });
     });
+  });
+
+  it('will not let Enter answer the hard reset', async () => {
+    // Enter is what people press to make a dialog go away, and the panel's own note says a
+    // dialog reading "cannot be recovered" must not be one of them. This is the one button in
+    // the window that throws away work nothing can bring back.
+    const { container } = await shell();
+    await openMenu(container);
+
+    const submenu = itemNamed(container, 'Reset master to this commit').closest('.wrap');
+    if (submenu) await fireEvent.mouseEnter(submenu);
+    await fireEvent.click(itemNamed(container, 'Hard — discard everything since'));
+    await waitFor(() => {
+      if (!container.querySelector('[role="dialog"]')) throw new Error('no question yet');
+    });
+
+    await fireEvent.keyDown(window, { key: 'Enter' });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(lastAction()).toBeUndefined();
+    // Still up, waiting for an answer rather than dismissed by the same key.
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+
+    // Escape is how a dialog goes away, and it takes nothing with it.
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(lastAction()).toBeUndefined();
   });
 
   it('does not ask before a soft reset, which discards nothing', async () => {

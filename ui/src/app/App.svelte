@@ -2169,7 +2169,11 @@
       asksText: false,
       placeholder: '',
       initial: '',
-      choices: [{ id: 'reset', label: 'Discard and reset', primary: true, danger: true }],
+      // Not the Enter key's. The panel's own note puts it plainly: a dialog that reads "cannot
+      // be recovered" must not be one Enter answers, because Enter is what people press to make
+      // a dialog go away. This is the one button in the window that throws away work nothing
+      // can bring back.
+      choices: [{ id: 'reset', label: 'Discard and reset', danger: true }],
     });
     if (choice === null) return;
     await act({ kind: 'reset', rev: oid, mode: 'hard' });
@@ -3740,7 +3744,9 @@
       asksText: false,
       placeholder: '',
       initial: '',
-      choices: [{ id: 'go', label: 'Delete it', primary: true, danger: true }],
+      // Not primary, for the reason the hard reset is not: this is forced, so a submodule with
+      // work in it loses that work and no copy of it exists anywhere else.
+      choices: [{ id: 'go', label: 'Delete it', danger: true }],
     });
     if (choice === null) return;
     // Forced: a submodule with local edits refuses otherwise, and the user has just been told
