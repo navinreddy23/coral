@@ -426,4 +426,37 @@ describe('the words that changed inside a line', () => {
     await fireEvent.click(getByText('Read it anyway'));
     expect(asked).toHaveBeenCalledOnce();
   });
+  it('says which side has no newline at the end of the file', async () => {
+    // git marks it and the panel dropped the flag, so a change that only added a trailing
+    // newline drew "gamma" removed and "gamma" added with nothing saying what differs.
+    const diff = new DiffState(new ViewsState());
+    diff.setMode('inline');
+    diff.path = 'nonewline.txt';
+    diff.file = {
+      ...fileDiff(),
+      hunks: [
+        {
+          header: '@@ -1,3 +1,3 @@',
+          oldStart: 1,
+          oldLines: 3,
+          newStart: 1,
+          newLines: 3,
+          lines: [
+            line('context', 'alpha', 1, 1),
+            line('context', 'beta', 2, 2),
+            { ...line('remove', 'gamma', 3, null), noNewline: true },
+            line('add', 'gamma', null, 3),
+          ],
+        },
+      ],
+    };
+    const { container } = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+
+    const marked = [...container.querySelectorAll('tbody tr')].filter((r) =>
+      r.querySelector('.nonl'),
+    );
+    expect(marked, 'only the side that lacks it').toHaveLength(1);
+    expect(marked[0]?.classList.contains('remove')).toBe(true);
+    expect(marked[0]?.querySelector('.nonl')?.getAttribute('title')).toContain('No newline');
+  });
 });

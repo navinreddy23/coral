@@ -29,6 +29,14 @@
    */
   const LIMIT = 6000;
 
+  /**
+   * What git says about a file whose last line has no newline after it.
+   *
+   * The diff carries the flag and the panel dropped it, so a commit that only added a trailing
+   * newline drew "gamma" removed and "gamma" added with nothing on screen saying what differs.
+   */
+  const NO_NEWLINE = 'No newline at end of file';
+
   const total = $derived(
     (diff.file?.hunks ?? []).reduce((n, h) => n + h.lines.length, 0),
   );
@@ -518,7 +526,9 @@
                       ><span class="sign">{sign[line.kind]}</span><CodeLine
                         text={line.text}
                         spans={words.get(line) ?? null}
-                      /></button
+                      />{#if line.noNewline}<span class="nonl" title={NO_NEWLINE}
+                        >no newline</span
+                      >{/if}</button
                     >
                   </td>
                 {:else}
@@ -526,7 +536,8 @@
                     ><span class="sign">{sign[line.kind]}</span><CodeLine
                       text={line.text}
                       spans={words.get(line) ?? null}
-                    /></td
+                    />{#if line.noNewline}<span class="nonl" title={NO_NEWLINE}>no newline</span
+                      >{/if}</td
                   >
                 {/if}
               </tr>
@@ -548,14 +559,16 @@
                 ><CodeLine
                   text={row.left?.text ?? ''}
                   spans={row.left ? words.get(row.left) ?? null : null}
-                /></span
+                />{#if row.left?.noNewline}<span class="nonl" title={NO_NEWLINE}>no newline</span
+                  >{/if}</span
               >
               <span class="no">{row.right?.newNo ?? ''}</span>
               <span class="cell {row.right ? row.right.kind : 'blank'}"
                 ><CodeLine
                   text={row.right?.text ?? ''}
                   spans={row.right ? words.get(row.right) ?? null : null}
-                /></span
+                />{#if row.right?.noNewline}<span class="nonl" title={NO_NEWLINE}>no newline</span
+                  >{/if}</span
               >
             </div>
           {/each}
@@ -714,6 +727,13 @@
     color: var(--fg-1); padding: var(--space-1);
   }
   .deeper:hover { background: var(--bg-3); color: var(--fg-0); }
+
+  /* Set apart from the line it is about: it is git's note, not part of the file. */
+  .nonl {
+    margin-left: var(--space-2); padding: 0 4px; border-radius: var(--radius-1);
+    background: var(--bg-2); color: var(--fg-2); font-size: var(--text-sm);
+    user-select: none; white-space: nowrap;
+  }
 
   /* Beside the sentence it answers, not across the panel: `.deeper` is sized for the narrow
      history column and here it would be a button the width of the diff. */
