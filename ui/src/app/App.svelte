@@ -167,7 +167,6 @@
    * makes the first commit" — which was the first thing a stranger read, pointing at a panel
    * that was showing something else.
    */
-  const stagingShowing = $derived(showWip || (graph.totalRows === 0 && worktree.dirty));
   const tabs = new TabsState();
   let showHelp = $state(false);
 
@@ -391,6 +390,21 @@
   /** Bumped to ask the branch panel for the caret; see the prop's own note. */
   let filterTick = $state(0);
   const merge = new MergeState();
+
+  /**
+   * Whether the panel on the right is the staging one.
+   *
+   * The third case is an operation that has stopped with nothing conflicted — the `edit` step
+   * of an interactive rebase, which exists so the commit can be changed before it is replayed.
+   * There is nothing for the merge tool to settle there, and the panel that does the changing
+   * was hidden along with everything else, so the one step git stops for could not be finished
+   * without a terminal.
+   */
+  const stagingShowing = $derived(
+    showWip ||
+      (graph.totalRows === 0 && worktree.dirty) ||
+      (merge.inProgress && merge.files.length === 0),
+  );
   /**
    * The message git prepared, put in the box the one time it appears.
    *
@@ -4213,12 +4227,16 @@
     </div>
     </div>
     <!--
-      Not while a merge is stopped. The tool that settles it is the only thing worth looking at
-      until it is settled, and the panel beside it can only offer a commit to select — so it
-      spent half the window saying "select a commit" while the two sides being merged were
-      squeezed into a column too narrow to read, with the button that takes a side clipped.
+      Not while there is a conflict to settle. The tool that settles it is the only thing worth
+      looking at until it is settled, and the panel beside it can only offer a commit to select
+      — so it spent half the window saying "select a commit" while the two sides being merged
+      were squeezed into a column too narrow to read, with the button that takes a side clipped.
+
+      An operation stopped with nothing conflicted is the other case, and there the panel is
+      the point: `edit` stops a rebase so the commit can be changed, and with this hidden the
+      staging panel that changes it was unreachable.
     -->
-    {#if views.current.details && !merge.inProgress}
+    {#if views.current.details && (!merge.inProgress || merge.files.length === 0)}
       <Splitter
         label="Resize the detail panel"
         value={panes.widths.details}

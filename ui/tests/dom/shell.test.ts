@@ -448,6 +448,32 @@ describe('the shell', () => {
     expect(container.querySelector('aside.wip-panel')).toBeNull();
   });
 
+  it('gives the panel back when a stopped operation has nothing conflicted', async () => {
+    // `edit` in an interactive rebase stops precisely so the commit can be changed, and there
+    // is nothing for the merge tool to settle. Hidden along with everything else, the panel
+    // that does the changing was unreachable: the one step git stops for could not be finished
+    // without a terminal.
+    const { container } = await shell({
+      repo_operation: {
+        state: 'rebase',
+        labels: { ours: 'main', theirs: 'topic', swapped: true },
+        progress: { done: 2, total: 3 },
+        headName: null,
+        stoppedAt: null,
+        interactive: true,
+        resumable: true,
+      },
+      repo_conflicts: [],
+    });
+
+    await waitFor(() => {
+      if (!container.textContent?.includes('rebase in progress')) throw new Error('not yet');
+    });
+    await waitFor(() => {
+      if (!container.querySelector('aside.wip-panel')) throw new Error('no staging panel');
+    });
+  });
+
   it('shows the working copy at once in a repository with nothing committed', async () => {
     // The graph says "the panel on the right makes the first commit", and that was the first
     // sentence a stranger read — pointing at a panel showing "a commit's author, message and
