@@ -274,6 +274,21 @@ describe('the file tree', () => {
     expect(opened).toEqual(['drivers/net/ethernet/intel/ice/ice_main.c']);
   });
 
+  it('keeps its rows inside the panel, indent and all', async () => {
+    // The indent is padding on a row that is already the full width. Counted outside the row,
+    // as it was, every row was wider than the panel by its own indent: the panel got a sideways
+    // scrollbar whatever was in the tree, and one stray scroll carried the commit message and
+    // the object ids off the left edge with it.
+    const { container } = render(FileTree, {
+      props: { nodes: buildTree(files), openPath: null, onOpenFile: () => {} },
+    });
+    const row = container.querySelector('button.dir') as HTMLElement;
+    expect(getComputedStyle(row).boxSizing).toBe('border-box');
+    // And the name is its own element, so it is what gives when the row runs out of room:
+    // ellipsis on the row itself does nothing to a flex item that will not shrink.
+    expect(row.querySelector('.name')?.textContent).toContain('drivers/net');
+  });
+
   it('hides the contents of a directory when it is collapsed', async () => {
     const { container } = render(FileTree, {
       props: { nodes: buildTree(files), openPath: null, onOpenFile: () => {} },
