@@ -355,4 +355,32 @@ describe('two repositories in two tabs', () => {
     expect(panes).toHaveLength(2);
     expect(panes.filter((p) => !p.hidden)).toHaveLength(1);
   });
+  it('stops showing the last repository the moment its tab is left', async () => {
+    // Opening a repository is a read, and on a kernel-sized one it is long enough to stand and
+    // look at. The rows used to be dropped only when that read came back, so the tab, the
+    // crumb and the branch said one repository while the list, the lanes and "1,482,171
+    // commits" were still the one just left. The loading screen asks whether there are rows,
+    // so leaving them up is what kept it from appearing.
+    const { container } = await shell();
+    await waitFor(() => {
+      if (!container.textContent?.includes('alpha commit')) throw new Error('not alpha yet');
+    });
+
+    // Beta's repository read never comes back, which is the window the fault lived in.
+    const answering = invoke.getMockImplementation();
+    if (!answering) throw new Error('no stub');
+    invoke.mockImplementation(async (cmd: string, args: Record<string, unknown> = {}) => {
+      if (cmd === 'open_repo' && String(args['path'] ?? '') === B) {
+        return new Promise(() => {});
+      }
+      return answering(cmd, args);
+    });
+
+    await switchTo(container, 'beta');
+    await waitFor(() => {
+      if (container.textContent?.includes('alpha commit')) throw new Error('alpha still up');
+    });
+    expect(container.querySelectorAll('li.row')).toHaveLength(0);
+    expect(container.textContent).toContain('Reading the repository');
+  });
 });

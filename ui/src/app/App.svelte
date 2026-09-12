@@ -3006,6 +3006,15 @@
     // Everything the panels show belongs to the repository being left. Left up, it is another
     // repository's branches and another repository's changes under the new one's name — and it
     // is what the loading screen exists to replace.
+    //
+    // The rows go with them, and so does what was read about the repository itself. Both were
+    // replaced only once the new repository had been read, and on a kernel-sized one that read
+    // is long enough to stand and look at: the tab and the crumb said rpi-linux while the
+    // list, the lanes, the branch and "1,482,171 commits" were still the repository just left.
+    // The loading screen asks whether there is a frame, so leaving one up is also what kept it
+    // from appearing.
+    info = null;
+    graph.clear();
     stashes.clear();
     refs.clear();
     scope.clear();
