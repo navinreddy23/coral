@@ -263,6 +263,16 @@ export class DiffState {
     }
   }
 
+  /**
+   * Why there is nothing to show, when nothing has gone wrong.
+   *
+   * A file that this commit did not touch, or that is the same in both, is an answer rather
+   * than a failure — and the "view all files" tree is mostly such files. Held apart from
+   * {@link error} because the two read as the same thing in the pane otherwise, and a sentence
+   * in alarm red says something is broken.
+   */
+  empty = $state<string | null>(null);
+
   /** What is being shown, so the header can say whether it is a commit or the working tree. */
   source = $state<'commit' | 'unstaged' | 'staged' | 'compare'>('commit');
 
@@ -326,9 +336,11 @@ export class DiffState {
       const got = await read(request, this.#reading);
       if (token !== this.#token) return;
       this.file = got;
-      this.error = got === null ? absentFor(request.source) : null;
+      this.empty = got === null ? absentFor(request.source) : null;
+      this.error = null;
     } catch (e) {
       if (token !== this.#token) return;
+      this.empty = null;
       this.error = messageOf(e);
     }
   }
@@ -349,6 +361,7 @@ export class DiffState {
     this.path = request.path;
     this.file = null;
     this.error = null;
+    this.empty = null;
     this.loading = true;
     try {
       const got = await read(request, this.#reading);
@@ -356,7 +369,7 @@ export class DiffState {
       if (token !== this.#token) return;
       this.file = got;
       if (got === null) {
-        this.error = absent;
+        this.empty = absent;
       } else if (got.change === 'unmerged') {
         // git has no patch for a path with conflict stages: it prints `* Unmerged path` and
         // counts nothing. Showing that as an empty diff says the file is unchanged, which is
@@ -379,6 +392,7 @@ export class DiffState {
     this.file = null;
     this.path = null;
     this.error = null;
+    this.empty = null;
     this.sideError = null;
     this.loading = false;
     this.source = 'commit';

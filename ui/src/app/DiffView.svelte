@@ -480,6 +480,9 @@
       <p class="muted">Loading…</p>
     {:else if diff.error}
       <p class="error">{diff.error}</p>
+    {:else if diff.empty}
+      <!-- Not red: the file is simply not part of this change, which is an answer. -->
+      <p class="muted">{diff.empty}</p>
     {:else if !diff.file}
       <p class="muted">Nothing to show.</p>
     {:else if diff.file.binary}

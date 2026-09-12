@@ -134,6 +134,20 @@ describe('the diff viewer', () => {
     expect(asBlame.spread).toBe(asBlame.tabs + 1);
   });
 
+  it('says a file this commit did not touch in its ordinary voice', () => {
+    // The "all files" tree is mostly files the commit did not touch, and opening one is a
+    // reasonable thing to do. It answered in the same alarm red as a git failure.
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'README';
+    diff.empty = 'This commit did not change that file.';
+    const { container } = render(DiffView, {
+      props: { diff, onClose: () => {}, onPart: () => {} },
+    });
+
+    expect(container.querySelector('.error')).toBeNull();
+    expect(container.querySelector('.muted')?.textContent).toContain('did not change that file');
+  });
+
   it('will not offer to blame a binary file', async () => {
     // git answers for one all the same, treating its bytes as lines, and the pane painted four
     // kilobytes of replacement characters. The diff beside it already says "Binary file".
