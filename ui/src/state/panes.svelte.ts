@@ -59,6 +59,47 @@ export function fitColumns(
   };
 }
 
+/**
+ * How much of the window the commit list is aimed at keeping.
+ *
+ * The message column's target plus the floors of the two columns beside it: below this the
+ * list has room for the graph and nothing else.
+ */
+export const LIST_FLOOR_PX = MESSAGE_FLOOR_PX + PANE_LIMITS.refs.min + PANE_LIMITS.graph.min;
+
+/**
+ * The side panels as the window can actually afford to draw them.
+ *
+ * The same rule as [`fitColumns`], a level up. Both are dragged widths that knew nothing about
+ * the window holding them, and at the window's own minimum size they kept every pixel: the
+ * commit list was left with none, showing a column of graph nodes with no summary, no date and
+ * no object id beside any of them.
+ *
+ * A panel the window is not showing is passed as zero and stays zero. Like the column fit,
+ * this is a target rather than a contract — the panels have floors of their own, and the rail
+ * and the drag handles are not in the arithmetic.
+ *
+ * The stored widths are untouched, so widening the window puts them back as they were.
+ */
+export function fitPanels(
+  want: { sidebar: number; details: number },
+  windowWidth: number,
+): { sidebar: number; details: number } {
+  const both = want.sidebar + want.details;
+  const room = windowWidth - LIST_FLOOR_PX;
+  if (windowWidth <= 0 || both <= room) return { ...want };
+  const scale = Math.max(0, room) / both;
+  return {
+    sidebar: fitted('sidebar', want.sidebar, scale),
+    details: fitted('details', want.details, scale),
+  };
+}
+
+function fitted(key: PaneKey, want: number, scale: number): number {
+  if (want === 0) return 0;
+  return Math.max(PANE_LIMITS[key].min, Math.round(want * scale));
+}
+
 const STORAGE_KEY = 'coral.panes';
 
 export function clampPane(key: PaneKey, px: number): number {

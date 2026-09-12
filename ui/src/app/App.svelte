@@ -12,7 +12,7 @@
   } from '../graph/frame';
   import GraphCanvas from '../graph/GraphCanvas.svelte';
   import Splitter from './Splitter.svelte';
-  import { fitColumns, PANE_LIMITS, PanesState } from '../state/panes.svelte';
+  import { fitColumns, fitPanels, PANE_LIMITS, PanesState } from '../state/panes.svelte';
   import DiffView from './DiffView.svelte';
   import { DiffState } from '../state/diff.svelte';
   import { HostingState } from '../state/hosting.svelte';
@@ -404,6 +404,19 @@
     showWip ||
       (graph.totalRows === 0 && worktree.dirty) ||
       (merge.inProgress && merge.files.length === 0),
+  );
+
+  /*
+   * Whether the panel on the right is up at all.
+   *
+   * Not while there is a conflict to settle: the tool that settles it takes the main pane, and
+   * the panel beside it can only offer a commit to select. An operation stopped with nothing
+   * conflicted is the other case, and there the panel is the point — `edit` stops a rebase so
+   * the commit can be changed, and with this hidden the staging panel that changes it was
+   * unreachable.
+   */
+  const detailsShowing = $derived(
+    views.current.details && (!merge.inProgress || merge.files.length === 0),
   );
   /**
    * The message git prepared, put in the box the one time it appears.
@@ -3566,6 +3579,20 @@
   /** The two fixed columns as the pane can actually afford to draw them. */
   const columns = $derived(fitColumns(panes.widths, paneWidth));
 
+  /** The window's own width, which is what the side panels have to fit inside. */
+  let frameWidth = $state(0);
+
+  /** The two side panels as the window can actually afford to draw them. */
+  const panels = $derived(
+    fitPanels(
+      {
+        sidebar: views.current.sidebar === 'open' ? panes.widths.sidebar : 0,
+        details: detailsShowing ? panes.widths.details : 0,
+      },
+      frameWidth,
+    ),
+  );
+
   /**
    * Whether there is room for the dimmed body preview after the summary.
    *
@@ -3877,10 +3904,11 @@
     >
     <div
       class="body"
+      bind:clientWidth={frameWidth}
       style:--refs-col="{columns.refs}px"
       style:--graph-col="{columns.graph}px"
-      style:--sidebar-w="{panes.widths.sidebar}px"
-      style:--details-w="{panes.widths.details}px"
+      style:--sidebar-w="{panels.sidebar}px"
+      style:--details-w="{panels.details}px"
     >
     {#if views.current.sidebar === 'rail'}
       <Rail
@@ -4241,17 +4269,7 @@
       </div>
     </div>
     </div>
-    <!--
-      Not while there is a conflict to settle. The tool that settles it is the only thing worth
-      looking at until it is settled, and the panel beside it can only offer a commit to select
-      — so it spent half the window saying "select a commit" while the two sides being merged
-      were squeezed into a column too narrow to read, with the button that takes a side clipped.
-
-      An operation stopped with nothing conflicted is the other case, and there the panel is
-      the point: `edit` stops a rebase so the commit can be changed, and with this hidden the
-      staging panel that changes it was unreachable.
-    -->
-    {#if views.current.details && (!merge.inProgress || merge.files.length === 0)}
+    {#if detailsShowing}
       <Splitter
         label="Resize the detail panel"
         value={panes.widths.details}
