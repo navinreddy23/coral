@@ -287,7 +287,15 @@ describe('the file tree', () => {
 });
 
 function tree(path: string, over: Partial<Worktree> = {}): Worktree {
-  return { path, head: 'a'.repeat(40), branch: null, locked: false, bare: false, ...over };
+  return {
+    path,
+    head: 'a'.repeat(40),
+    branch: null,
+    locked: false,
+    bare: false,
+    main: false,
+    ...over,
+  };
 }
 
 describe('the working trees', () => {
@@ -296,6 +304,7 @@ describe('the working trees', () => {
     // listing nothing but that is a heading with no purpose.
     expect(mount().container.querySelector('[data-section="worktrees"]')).toBeNull();
   });
+
 
   it('lists a linked one by its directory and what is checked out there', () => {
     // The window can make a working tree from any commit, and until now that was the end of

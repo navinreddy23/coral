@@ -613,4 +613,13 @@ locked: boolean,
 /**
  * True when the main worktree of a bare repository, which has no files of its own.
  */
-bare: boolean, };
+bare: boolean, 
+/**
+ * True for the repository's own working tree, which is the one that cannot be removed.
+ *
+ * git lists it first and marks it no other way. Telling it apart by comparing its path
+ * with the path the repository was opened at does not work: inside a submodule git reports
+ * the gitdir under `.git/modules/…` rather than the checkout, so the submodule listed
+ * itself as a linked tree and offered to remove it.
+ */
+main: boolean, };

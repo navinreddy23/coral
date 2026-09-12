@@ -26,6 +26,13 @@ pub struct Worktree {
     pub locked: bool,
     /// True when the main worktree of a bare repository, which has no files of its own.
     pub bare: bool,
+    /// True for the repository's own working tree, which is the one that cannot be removed.
+    ///
+    /// git lists it first and marks it no other way. Telling it apart by comparing its path
+    /// with the path the repository was opened at does not work: inside a submodule git reports
+    /// the gitdir under `.git/modules/…` rather than the checkout, so the submodule listed
+    /// itself as a linked tree and offered to remove it.
+    pub main: bool,
 }
 
 /// Parses `git worktree list --porcelain`.
@@ -50,12 +57,15 @@ pub fn parse_list(stdout: &[u8]) -> Vec<Worktree> {
         match key {
             b"worktree" => {
                 out.extend(current.take());
+                // git lists the main working tree first, always.
+                let first = out.is_empty();
                 current = Some(Worktree {
                     path: value,
                     head: String::new(),
                     branch: None,
                     locked: false,
                     bare: false,
+                    main: first,
                 });
             }
             b"HEAD" => {

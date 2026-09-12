@@ -61,6 +61,26 @@ fn the_porcelain_listing_survives_a_path_with_spaces_in_it() {
 }
 
 #[test]
+fn only_the_first_tree_listed_is_the_repositorys_own() {
+    // git marks the main working tree no other way than by listing it first, and telling it
+    // apart by its path does not work: inside a submodule git reports the gitdir under
+    // `.git/modules/…` rather than the checkout, so a path comparison found no match and the
+    // submodule listed its own tree as a linked one, offering to remove it.
+    let out = b"worktree /repo/.git/modules/vendor/sub
+HEAD abc
+branch refs/heads/main
+
+                worktree /tmp/wt
+HEAD def
+detached
+
+";
+    let list = parse_list(out);
+    assert!(list[0].main, "the first listed is the repository's own");
+    assert!(!list[1].main, "and everything after it is linked");
+}
+
+#[test]
 fn a_record_without_a_trailing_blank_line_is_still_read() {
     let list = parse_list(b"worktree /a\nHEAD abc\nbranch refs/heads/main");
     assert_eq!(list.len(), 1);

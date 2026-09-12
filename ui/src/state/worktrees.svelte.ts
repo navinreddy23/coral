@@ -12,21 +12,18 @@ export class WorktreesState {
   all = $state<Worktree[]>([]);
   error = $state<string | null>(null);
 
-  /**
-   * Which repository is wanted, so an answer for the one being left can be dropped.
-   *
-   * State rather than a plain field because `linked` is derived from it: the list has to
-   * change when the window moves to another repository, not only when git answers.
-   */
-  #path = $state('');
+  /** Which repository is wanted, so an answer for the one being left can be dropped. */
+  #path = '';
 
   /**
-   * The trees other than the one this window is looking at.
+   * The trees other than the repository's own.
    *
    * The main tree is always in git's listing and is the only one that cannot be removed, so
-   * offering it in a list whose one action is "remove" would be offering nothing.
+   * offering it in a list whose one action is "remove" would be offering nothing. git's own
+   * ordering says which it is: comparing paths does not, because inside a submodule git reports
+   * the gitdir under `.git/modules/…` rather than the checkout, and the submodule listed itself.
    */
-  linked = $derived(this.all.filter((w) => w.path !== this.#path && !w.bare));
+  linked = $derived(this.all.filter((w) => !w.main && !w.bare));
 
   async load(path: string): Promise<void> {
     this.#path = path;
