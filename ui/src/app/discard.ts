@@ -63,7 +63,7 @@ function detailOf(tracked: number, untracked: number, branch: string | null): st
   if (untracked > 0) {
     parts.push(
       `${count(untracked, 'file')} ${untracked === 1 ? 'is' : 'are'} not tracked by git,` +
-        ' so deleting them removes the only copy there is.',
+        ` so deleting ${untracked === 1 ? 'it' : 'them'} removes the only copy there is.`,
     );
   }
   parts.push('This cannot be undone.');

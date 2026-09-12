@@ -59,6 +59,14 @@ describe('what discarding says it will cost', () => {
     expect(detail(0, 3)).toContain('the only copy there is');
   });
 
+  it('agrees with itself about how many there are', () => {
+    // "1 file is not tracked by git, so deleting them removes the only copy" — the count and
+    // the verb were made to agree and the pronoun was not.
+    expect(detail(0, 1)).toContain('so deleting it removes');
+    expect(detail(0, 1)).not.toContain('deleting them');
+    expect(detail(0, 2)).toContain('so deleting them removes');
+  });
+
   it('always ends by saying it cannot be undone', () => {
     for (const [t, u] of [[1, 0], [0, 1], [2, 3], [0, 0]] as const) {
       expect(detail(t, u).endsWith('This cannot be undone.'), `${t}/${u}`).toBe(true);
