@@ -564,6 +564,24 @@ pub async fn repo_submodules(
     Ok(loc.submodules(&runner).await?)
 }
 
+/// The commit a submodule's working copy is sitting on, described.
+///
+/// Read from inside the submodule: the superproject records an object id and nothing else, so
+/// the message and the date live only over there. Null when it has no working copy yet.
+///
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn submodule_revision(
+    path: String,
+    submodule: String,
+) -> Result<Option<coral_core::submodule::SubmoduleRevision>, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc.submodule_revision(&runner, &submodule).await?)
+}
+
 /// The repository's working trees, its own included, for the sidebar.
 ///
 /// # Errors
