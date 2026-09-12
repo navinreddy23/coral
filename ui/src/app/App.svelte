@@ -328,6 +328,25 @@
 
   let findField = $state<HTMLInputElement | null>(null);
 
+  /**
+   * Shows the first match as soon as a search settles.
+   *
+   * The field said "1 of 500" while the reader was left wherever they had been, so the match it
+   * was counting was never on screen — and stepping forward from it went to the second, which
+   * left the first reachable only by going round all five hundred.
+   *
+   * A plain variable rather than state: the effect follows the matches, and the marker only
+   * stops it from revealing the same set twice.
+   */
+  let revealedFor: unknown = null;
+  $effect(() => {
+    const matches = find.matches;
+    if (matches === revealedFor) return;
+    revealedFor = matches;
+    const row = find.current;
+    if (row !== null) void reveal(row);
+  });
+
   /** Steps to the next match, or the previous one, and scrolls it into view. */
   async function stepFind(direction: 1 | -1) {
     const row = find.step(direction);
