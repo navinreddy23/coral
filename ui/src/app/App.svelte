@@ -1866,6 +1866,15 @@
   async function commitMenu(event: MouseEvent, row: number, oid: string) {
     event.preventDefault();
     pick(row);
+    // A stash sits on a row of its own but is not a commit on this branch, so most of what
+    // follows is a rewrite the engine would refuse — and "Drop commit" beside "Move commit up"
+    // reads as an offer to throw the stash away with a wholly different meaning. It gets the
+    // menu its row in the panel gets, which is the one that fits it.
+    const stash = stashes.list.find((s) => s.oid === oid);
+    if (stash !== undefined) {
+      stashMenu(event, stash);
+      return;
+    }
     const short = oid.slice(0, 8);
     const branch = headName ?? 'HEAD';
     const summary = visibleMeta.get(row)?.summary ?? '';

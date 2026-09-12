@@ -1242,3 +1242,60 @@ describe('what undo and redo say they will do', () => {
     });
   });
 });
+
+/**
+ * A stash has a row in the graph like anything else, and the menu on it was the commit menu:
+ * drop the commit, move it up, edit its message, rebase from it. None of that means anything
+ * for a stash, and "Drop commit" beside them reads as the one thing that does.
+ */
+describe('the menu on a stash row', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  const stash = {
+    index: 0,
+    name: 'stash@{0}',
+    oid: frameOids[0],
+    message: 'WIP on main',
+    branch: 'main',
+    time: 1_756_000_000,
+    row: 0,
+  };
+
+  it('offers what a stash can do, and nothing that rewrites the branch', async () => {
+    const { container } = await shell({ repo_stashes: [stash] });
+    // The stack is a second read that lands after the rows; a menu opened in between knows of
+    // no stash at all. The panel's own section is what says it has arrived.
+    await waitFor(() => {
+      if (!container.textContent?.includes('WIP on main')) throw new Error('no stash yet');
+    });
+    const labels = await openMenu(container);
+
+    expect(labels).toContain('Apply it, and keep it');
+    expect(labels).toContain('Pop it');
+    expect(labels).toContain('Drop it…');
+    for (const gone of [
+      'Drop commit',
+      'Move commit up',
+      'Move commit down',
+      'Edit commit message',
+      'Interactive rebase from this commit',
+      'Revert commit',
+    ]) {
+      expect(labels).not.toContain(gone);
+    }
+  });
+
+  it('still gives an ordinary commit its own menu', async () => {
+    // The row the stash is on is the only one that changes.
+    const { container } = await shell({ repo_stashes: [{ ...stash, oid: 'f'.repeat(40), row: 5 }] });
+    await waitFor(() => {
+      if (!container.querySelector('li.row')) throw new Error('no rows yet');
+    });
+    const labels = await openMenu(container);
+    expect(labels).toContain('Drop commit');
+    expect(labels).not.toContain('Pop it');
+  });
+});
