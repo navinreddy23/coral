@@ -705,6 +705,21 @@
   }
 
   /*
+   * The file panel is about one commit, so it goes when the selection leaves that commit.
+   *
+   * The arrow keys move the selection while the panel covers the commit list, and walking off
+   * a commit with a file open left "huge.txt +200000" beside a merge whose own file list said
+   * none — a diff attributed, by everything on screen, to a commit it is not in. A comparison
+   * and the working tree are not about a selected commit and are left alone.
+   */
+  $effect(() => {
+    const oid = selection.detail?.commit.oid ?? null;
+    if (diff.source === 'commit' && diff.openedAt !== null && oid !== diff.openedAt) {
+      diff.close();
+    }
+  });
+
+  /*
    * A working-tree action supersedes whatever the line along the bottom last said.
    *
    * Staging, discarding and committing do not go through `actions`, so a failed checkout sat

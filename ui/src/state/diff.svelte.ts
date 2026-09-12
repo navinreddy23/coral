@@ -72,6 +72,14 @@ export class DiffState {
   /** The commit whose change to this file is being shown, when it came from the history. */
   atCommit = $state<string | null>(null);
 
+  /**
+   * The commit the panel was opened on, null for the working tree or a comparison.
+   *
+   * So the window can tell that the selection has moved off it. Not the revision being read:
+   * picking a commit out of the file's history reads that one and leaves this alone.
+   */
+  openedAt = $state<string | null>(null);
+
   #token = 0;
   #side = 0;
   #views: ViewsState;
@@ -332,6 +340,7 @@ export class DiffState {
     this.#historyLimit = HISTORY_PAGE;
     this.unguarded = false;
     this.atCommit = null;
+    this.openedAt = request.source === 'commit' ? request.rev : null;
     this.blame = null;
     this.text = null;
     this.history = null;
@@ -379,6 +388,7 @@ export class DiffState {
     this.history = null;
     this.moreHistory = false;
     this.atCommit = null;
+    this.openedAt = null;
     this.expanded = false;
     this.unguarded = false;
   }

@@ -130,13 +130,15 @@ function signingScopes() {
 
 function wire(over: Record<string, unknown> = {}) {
   const table = answers(over);
-  invoke.mockImplementation(async (cmd: string) => {
+  invoke.mockImplementation(async (cmd: string, args: Record<string, unknown>) => {
     if (!(cmd in table)) throw new Error(`unstubbed command ${cmd}`);
     // An answer that is an error is one the engine refuses to give, which is a case the window
     // has to survive as much as any other.
     const answer = table[cmd];
     if (answer instanceof Error) throw answer;
-    return answer;
+    // A function answers about what was asked, for a command whose reply has to differ per
+    // revision: one commit_detail for every commit would make two rows indistinguishable.
+    return typeof answer === 'function' ? answer(args) : answer;
   });
 }
 
@@ -1547,5 +1549,50 @@ describe('moving down the list with the keyboard', () => {
     const rows = [...container.querySelectorAll('li.row')];
     await fireEvent.click(rows[1]?.querySelector('button.hit') as HTMLButtonElement);
     expect(rows[1]?.classList.contains('selected')).toBe(true);
+  });
+  it('closes the file panel when the selection walks off the commit it came from', async () => {
+    // The arrow keys move the selection while the panel covers the commit list, and the panel
+    // kept showing the file it was opened on: a diff of "huge.txt +200000" beside a commit
+    // whose own file list said none, with nothing on screen naming the commit it is from.
+    const { container } = await shell({
+      commit_detail: (args: { rev: string }) => ({
+        commit: {
+          oid: args.rev,
+          parents: [],
+          author: { name: 'Ada', email: 'ada@example.com', time: 0, offset: 0 },
+          committer: { name: 'Ada', email: 'ada@example.com', time: 0, offset: 0 },
+          summary: 'core: the summary',
+          body: '',
+        },
+        files: [{ path: 'huge.txt', oldPath: null, change: 'added' }],
+      }),
+      file_diff: {
+        path: 'huge.txt',
+        oldPath: null,
+        change: 'added',
+        binary: false,
+        added: 200_000,
+        removed: 0,
+        tooLarge: true,
+        hunks: [],
+      },
+    });
+
+    const rows = [...container.querySelectorAll('li.row')];
+    await fireEvent.click(rows[0]?.querySelector('button.hit') as HTMLButtonElement);
+    const file = await waitFor(() => {
+      const found = container.querySelector('button.file');
+      if (!found) throw new Error('no file list yet');
+      return found;
+    });
+    await fireEvent.click(file);
+    await waitFor(() => {
+      if (!container.querySelector('section.diff')) throw new Error('no file panel yet');
+    });
+
+    await fireEvent.keyDown(window, { key: 'ArrowDown' });
+    await waitFor(() => {
+      if (container.querySelector('section.diff')) throw new Error('the panel is still up');
+    });
   });
 });
