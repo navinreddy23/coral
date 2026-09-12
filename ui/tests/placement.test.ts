@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import { fitPanel, fitSubmenu } from '../src/app/placement';
@@ -67,5 +69,29 @@ describe('fitting a submenu against its row', () => {
 
   it('leaves one that ends on the margin where it is', () => {
     expect(fitSubmenu(row(400, 640, 600), { width: 220, height: 297 }, view).top).toBe('-5px');
+  });
+});
+
+describe('what a menu row gives up when it will not fit', () => {
+  /**
+   * The hint repeats what the row already says and is on the tooltip either way; the label is
+   * the row. Shrunk in proportion, as they were, "Fast-forward renamed-branch to main" came
+   * out as "Fast-forward renamed-branch to m…" beside a hint that still had room — on the rows
+   * that decide how much gets thrown away.
+   */
+  it('gives the label a floor the hint does not have', () => {
+    const css = readFileSync(
+      new URL('../src/app/Menu.svelte', import.meta.url),
+      'utf8',
+    );
+    const hint = css.slice(css.indexOf('.hint {'), css.indexOf('.hint {') + 200);
+    expect(css, 'a usable row keeps a readable label').toMatch(
+      /\.row:not\(:disabled\) \.label \{ min-width: min\(/,
+    );
+    expect(hint, 'the hint has no floor, so it goes first').toMatch(/min-width:\s*0/);
+    expect(hint, 'and it gives way faster than the label').toMatch(/flex:\s*0\s+8\s/);
+    expect(css, 'except where the hint is the reason the row is off').toMatch(
+      /\.row:disabled \.hint \{ flex-shrink: 0; \}/,
+    );
   });
 });

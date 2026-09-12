@@ -255,6 +255,15 @@
    */
   .row:disabled .label { flex-shrink: 8; }
   .row:disabled .hint { flex-shrink: 0; }
+  /*
+   * And where the row can be used, the hint gives way until there is none of it left before
+   * the label loses a character. Shrunk in proportion, as they were, "Fast-forward
+   * renamed-branch to main" came out as "Fast-forward renamed-branch to m…" beside a hint that
+   * still had room — on the rows that decide how much gets thrown away. A floor rather than
+   * `flex-shrink: 0`, so a label longer than the menu still ends in an ellipsis rather than
+   * pushing the panel wider than the window.
+   */
+  .row:not(:disabled) .label { min-width: min(100%, 24ch); }
   .more { flex: 0 0 auto; color: var(--fg-2); display: flex; }
   /* Reserved on every row, ticked or not, so a menu where one item is in force does not
      indent that row alone. */
