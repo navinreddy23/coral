@@ -476,6 +476,8 @@
   const startPage = new StartState();
   const find = new FindState();
   let showStart = $state(false);
+  /** Whether the start page is what the window is showing, asked for or for want of a tab. */
+  const onStart = $derived(showStart || tabs.session.tabs.length === 0);
   let showRemotes = $state<{ focus: string | null } | null>(null);
   const activity = new ActivityState();
   const experimental = new ExperimentalState();
@@ -3868,7 +3870,7 @@
   -->
   <TitleStrip
     {tabs}
-    newTab={showStart || tabs.session.tabs.length === 0}
+    newTab={onStart}
     profile={profiles.current}
     provisional={graph.provisional}
     dark={theme.current === 'dark'}
@@ -3917,13 +3919,18 @@
        panel that covers what somebody was reading to tell them to wait is worse than one. -->
   <Transfer {transfer} />
 
-  {#if graph.transportWarning}
-    <p class="banner">{graph.transportWarning}</p>
-  {/if}
-  {#if error}
-    <p class="banner error">{error}</p>
-  {:else if graph.error}
-    <p class="banner error">{graph.error}</p>
+  <!-- Both belong to the repository in the tab, and the start page is not showing it: a page
+       offering repositories to open under "not a git repository" reads as a complaint about
+       the list. -->
+  {#if !onStart}
+    {#if graph.transportWarning}
+      <p class="banner">{graph.transportWarning}</p>
+    {/if}
+    {#if error}
+      <p class="banner error">{error}</p>
+    {:else if graph.error}
+      <p class="banner error">{graph.error}</p>
+    {/if}
   {/if}
 
   <!--
@@ -3972,7 +3979,7 @@
     there — and a window with no repository in it is no longer an empty grey rectangle that
     says nothing about what to do next.
   -->
-  {#if showStart || tabs.session.tabs.length === 0}
+  {#if onStart}
     <Start
       start={startPage}
       sshKeys={ssh.keys}
