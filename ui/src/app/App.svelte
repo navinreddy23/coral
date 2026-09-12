@@ -2153,7 +2153,7 @@
     const untracked = entries.filter((e) => e.worktree === 'untracked').map((e) => e.path);
     const tracked = entries.filter((e) => e.worktree !== 'untracked').map((e) => e.path);
 
-    const words = discardWords(tracked.length, untracked.length, headName);
+    const words = discardWords(tracked.length, untracked, headName);
     const { choice } = await ask({
       title: 'Discard changes?',
       detail: words.detail,
