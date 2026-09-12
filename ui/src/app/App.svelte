@@ -245,8 +245,11 @@
     // commit and re-scrolls to where the list already is, which at thirty key repeats a second
     // is the panel flickering and the list twitching under a key that is doing nothing.
     if (next === at) return;
-    pick(next);
-    scrollToRow(next);
+    // Through `reveal`, because a jump lands outside the window of rows the graph holds and
+    // selecting a row the frame does not have does nothing at all: Home and End scrolled a
+    // million rows and left the panel on the commit that was selected before. A step of one is
+    // already loaded, so the wait costs it nothing.
+    void reveal(next);
   }
 
   function onKey(event: KeyboardEvent) {
