@@ -819,7 +819,12 @@ impl GitRunner {
                 label: cmd.label,
                 code,
                 argv,
-                stderr: scrubbed(&tail),
+                // Through the same reading the buffered path gets. Everything streamed is a
+                // network command, which writes its progress to stderr and its reason at the
+                // end — the case `why_it_failed` exists for, and the one path that was not
+                // asking it: a pull refused over local changes reported three lines of
+                // counting objects and never said which file was in the way.
+                stderr: scrubbed(&why_it_failed(&tail)),
             },
             None => CoralError::GitSignal {
                 label: cmd.label,
