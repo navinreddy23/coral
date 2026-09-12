@@ -1097,6 +1097,12 @@
       await Promise.all([refs.load(path), stashes.load(path)]);
     }
 
+    // The journal is a file beside the repository, so nothing else in the window notices that
+    // an action moved it. Left unread until the next thing that reloads everything, undo and
+    // redo described the repository as it was two actions ago: the button named one operation
+    // in its tooltip and then undid a different one.
+    void readJournal(path);
+
     // A checkout moves HEAD, and leaving the view where it was is the commonest way to end up
     // reading the branch that was just left.
     if (action.kind === 'checkout') {
@@ -2689,8 +2695,15 @@
       ...(stashes.list.length > 0
         ? [{ id: 'pop', label: 'Pop the latest stash', group: 'Stash', run: () => void act({ kind: 'stashApply', index: 0, pop: true }) } satisfies Command]
         : []),
-      { id: 'undo', label: 'Undo', group: 'History', run: () => void act({ kind: 'undo' }) },
-      { id: 'redo', label: 'Redo', group: 'History', run: () => void act({ kind: 'redo' }) },
+      // Named for what they would act on, and offered only when there is one, for the reason
+      // above: "Undo" alone says nothing about which of the last twenty operations it means,
+      // and on a repository nothing has happened in it answered with a git error.
+      ...(journal.undo === null
+        ? []
+        : [{ id: 'undo', label: `Undo ${journal.undo}`, group: 'History', run: () => void act({ kind: 'undo' }) } satisfies Command]),
+      ...(journal.redo === null
+        ? []
+        : [{ id: 'redo', label: `Redo ${journal.redo}`, group: 'History', run: () => void act({ kind: 'redo' }) } satisfies Command]),
       {
         id: 'theme',
         label: theme.current === 'dark' ? 'Switch to the light theme' : 'Switch to the dark theme',

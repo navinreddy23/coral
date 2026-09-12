@@ -1203,3 +1203,42 @@ describe('double-clicking a pill', () => {
     expect(actions()).toEqual([]);
   });
 });
+
+/**
+ * Undo and redo describe a file beside the repository, and every action can move it.
+ *
+ * The buttons carry the name of what they would act on. Read once and left, that name was the
+ * one from two actions ago: the tooltip said "create branch topic/checkme" and the button
+ * undid a checkout.
+ */
+describe('what undo and redo say they will do', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  function on(short: string, kind: PlacedRef['kind']): PlacedRef {
+    return {
+      name: kind.kind === 'tag' ? `refs/tags/${short}` : `refs/heads/${short}`,
+      short,
+      kind,
+      target: 'a'.repeat(40),
+      peeled: null,
+      upstream: null,
+      ahead: 0,
+      behind: 0,
+      row: 0,
+    };
+  }
+
+  it('is read again after an action that could have moved it', async () => {
+    const { container } = await shell({ repo_refs: [on('topic', { kind: 'local_branch' })] }, true);
+    const readsBefore = invoke.mock.calls.filter(([cmd]) => cmd === 'repo_journal').length;
+
+    await fireEvent.dblClick(container.querySelector('button.pill') as HTMLElement);
+    await waitFor(() => {
+      const now = invoke.mock.calls.filter(([cmd]) => cmd === 'repo_journal').length;
+      if (now <= readsBefore) throw new Error('the journal was not read again');
+    });
+  });
+});
