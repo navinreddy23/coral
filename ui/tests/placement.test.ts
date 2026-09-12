@@ -85,9 +85,10 @@ describe('what a menu row gives up when it will not fit', () => {
       'utf8',
     );
     const hint = css.slice(css.indexOf('.hint {'), css.indexOf('.hint {') + 200);
-    expect(css, 'a usable row keeps a readable label').toMatch(
-      /\.row:not\(:disabled\) \.label \{ min-width: min\(/,
+    expect(css, 'a usable row does not give up label characters at all').toMatch(
+      /\.row:not\(:disabled\) \.label \{ flex-shrink: 0; \}/,
     );
+    expect(css, 'but one longer than the menu still ellipsizes').toMatch(/max-width: 100%/);
     expect(hint, 'the hint has no floor, so it goes first').toMatch(/min-width:\s*0/);
     expect(hint, 'and it gives way faster than the label').toMatch(/flex:\s*0\s+8\s/);
     expect(css, 'except where the hint is the reason the row is off').toMatch(
