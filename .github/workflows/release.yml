@@ -232,7 +232,7 @@ jobs:
           mv SHA256SUMS.txt dist/
 
       # gh is on every runner, so publishing adds no third-party action to the release path.
-      - name: Publish a draft release
+      - name: Publish the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -240,6 +240,15 @@ jobs:
           tag='${{ github.ref_name }}'
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" dist/* --clobber
+            # A release that was already there keeps whatever visibility it has: drafting
+            # something people may have seen is worse than leaving it alone. The title and the
+            # notes are this job's to set either way, and only the branch that creates one used
+            # to set them. The first release cut from a real tag went out with neither, because
+            # one had been published under the owner's account seven minutes before this job
+            # ran, while the bundles were still building.
+            gh release edit "$tag" \
+              --title "Coral ${{ needs.meta.outputs.version }}" \
+              --notes-file NOTES.md
           else
             gh release create "$tag" dist/* \
               --draft \
