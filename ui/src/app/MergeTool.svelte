@@ -149,14 +149,14 @@
   );
 
   function supportsBlocks(file: ConflictedFile): boolean {
-    return !file.binary && !file.deleteModify && !file.filtered;
+    return !file.binary && !file.deleteModify && !file.lfs;
   }
 
   /** Why this file cannot be settled region by region, in words rather than a flag. */
   function whyWhole(file: ConflictedFile): string {
     if (file.binary) return `${file.path} is binary, so there are no lines to pick between.`;
-    if (file.filtered) {
-      return `${file.path} is kept outside the repository, by Git LFS or another filter. What is stored here is a short pointer to it, not the file, so take one side whole.`;
+    if (file.lfs) {
+      return `${file.path} is kept outside the repository by Git LFS. What is stored here is a short pointer to it, not the file, so take one side whole.`;
     }
     const gone = sidesOf(file);
     if (!gone.ours) {

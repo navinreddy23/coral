@@ -178,6 +178,41 @@ async fn a_binary_file_reports_no_counts_and_no_hunks() {
     assert!(f.hunks.is_empty());
 }
 
+/// A path Git LFS holds has no lines of its own to show.
+///
+/// LFS keeps a pointer of three lines in the repository and the asset outside it, so its diff
+/// is two changed lines of pointer. Staging one of them left the index holding a pointer with
+/// no object named in it: it commits, and the file is gone from every clone after it.
+#[tokio::test]
+async fn a_path_git_lfs_holds_reports_no_counts_and_no_hunks() {
+    let repo = TestRepo::new();
+    // The attribute is what decides, so the driver itself is stood down; see the same fixture
+    // in tests/conflict.rs.
+    repo.git(["config", "filter.lfs.process", ""]);
+    repo.git(["config", "filter.lfs.clean", "cat"]);
+    repo.git(["config", "filter.lfs.smudge", "cat"]);
+    let repo = repo
+        .write(".gitattributes", "*.png filter=lfs\n")
+        .write("logo.png", "oid 0\nsize 1\n")
+        .write("plain.txt", "one\ntwo\n")
+        .commit("base");
+    let repo = repo
+        .write("logo.png", "oid 9\nsize 9\n")
+        .write("plain.txt", "one\nTWO\n");
+    repo.git(["add", "--all"]);
+
+    let files = staged(&repo).await;
+    let find = |p: &str| files.iter().find(|f| f.path == p).expect(p);
+
+    let asset = find("logo.png");
+    assert!(asset.binary);
+    assert_eq!((asset.added, asset.removed), (None, None));
+    assert!(asset.hunks.is_empty());
+    // And an ordinary file in the same diff still carries its lines.
+    assert_eq!(find("plain.txt").added, Some(1));
+    assert!(!find("plain.txt").hunks.is_empty());
+}
+
 /// A mode change carries no hunks; the file must still be reported.
 #[cfg(unix)]
 #[tokio::test]

@@ -117,10 +117,10 @@ binary: boolean,
  */
 deleteModify: boolean, 
 /**
- * The repository stores this path through a filter driver, so what the index holds is
- * not the file. Whole-file choices only, for the same reason a binary file gets them.
+ * Git LFS holds this path, so what the index has is a pointer, not the file. Whole-file
+ * choices only, for the same reason a binary file gets them.
  */
-filtered: boolean, };
+lfs: boolean, };
 
 /**
  * What happened to a file between two trees.

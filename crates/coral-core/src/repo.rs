@@ -325,6 +325,22 @@ impl RepoLocation {
         let patch = runner.output(base(&options.flags())).await?;
         crate::diff::apply_patch(&mut files, &patch.stdout, options)?;
         crate::diff::recount(&mut files, options);
+
+        // What the repository holds for a path in Git LFS is a pointer of three lines, so its
+        // diff is two changed lines of pointer. Staging one of them left the index holding a
+        // pointer with no object named in it at all.
+        let lfs = self
+            .in_lfs(runner, files.iter().map(|f| f.path.as_slice()))
+            .await?;
+        for file in files
+            .iter_mut()
+            .filter(|f| lfs.contains(&f.path.to_string()))
+        {
+            file.binary = true;
+            file.added = None;
+            file.removed = None;
+            file.hunks.clear();
+        }
         Ok(files)
     }
 

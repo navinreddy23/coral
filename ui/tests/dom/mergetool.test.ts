@@ -41,7 +41,7 @@ function conflicted(over: Partial<ConflictedFile> = {}): ConflictedFile {
     kind: "both_modified",
     binary: false,
     deleteModify: false,
-    filtered: false,
+    lfs: false,
     ...over,
   };
 }
@@ -144,7 +144,7 @@ describe("the merge tool", () => {
     // Git LFS stores a pointer of three lines and keeps the asset outside the repository.
     // Offered as text, the pane invited a resolution taking one side's object and the other's
     // size, which names nothing: the commit went out and every clone after it had no file.
-    const merge = state([conflicted({ path: "logo.png", filtered: true })]);
+    const merge = state([conflicted({ path: "logo.png", lfs: true })]);
     const { container } = render(MergeTool, { props: { merge, onDone: noop } });
     const file = container.querySelector("button.file") as HTMLButtonElement;
     expect(file.textContent).toContain("whole file");

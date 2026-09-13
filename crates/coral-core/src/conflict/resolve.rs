@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use bstr::BString;
 
 use super::blocks::Take;
@@ -19,16 +17,16 @@ pub struct ConflictedFile {
     pub binary: bool,
     /// One side deleted the file, so keeping or deleting is the only meaningful choice.
     pub delete_modify: bool,
-    /// The repository stores this path through a filter driver, so what the index holds is
-    /// not the file. Whole-file choices only, for the same reason a binary file gets them.
-    pub filtered: bool,
+    /// Git LFS holds this path, so what the index has is a pointer, not the file. Whole-file
+    /// choices only, for the same reason a binary file gets them.
+    pub lfs: bool,
 }
 
 impl ConflictedFile {
     /// True when the file can be resolved block by block rather than only wholesale.
     #[must_use]
     pub const fn supports_blocks(&self) -> bool {
-        !self.binary && !self.delete_modify && !self.filtered
+        !self.binary && !self.delete_modify && !self.lfs
     }
 }
 
@@ -43,21 +41,6 @@ pub enum Resolution {
     Delete,
     /// Write this exact content, which is what the merge tool's editable output produces.
     Content(BString),
-}
-
-/// Reads `git check-attr -z`: `<path>\0<attribute>\0<value>\0` for each path asked about.
-///
-/// Any value but git's own two words for "no driver here" names one.
-fn driven(out: &[u8]) -> HashSet<String> {
-    let mut fields = out.split(|b| *b == 0);
-    let mut named = HashSet::new();
-    while let (Some(path), Some(_attr), Some(value)) = (fields.next(), fields.next(), fields.next())
-    {
-        if !matches!(value, b"unspecified" | b"unset") {
-            named.insert(String::from_utf8_lossy(path).into_owned());
-        }
-    }
-    named
 }
 
 impl RepoLocation {
@@ -86,44 +69,17 @@ impl RepoLocation {
                 kind,
                 binary,
                 delete_modify,
-                filtered: false,
+                lfs: false,
             });
         }
 
-        let filtered = self.filtered(runner, &out).await?;
+        let lfs = self
+            .in_lfs(runner, out.iter().map(|f| f.path.as_bytes()))
+            .await?;
         for file in &mut out {
-            file.filtered = filtered.contains(&file.path);
+            file.lfs = lfs.contains(&file.path);
         }
         Ok(out)
-    }
-
-    /// Which of these paths git converts through a filter driver on its way to the worktree.
-    ///
-    /// Git LFS is the one that matters. It keeps a pointer of three lines in the repository
-    /// and the asset in the worktree, so offering those three lines as a conflict invites a
-    /// resolution that takes one side's object and the other's size. That names nothing: the
-    /// commit is made, it is pushed, and every clone after it has no file there at all.
-    async fn filtered(
-        &self,
-        runner: &GitRunner,
-        files: &[ConflictedFile],
-    ) -> Result<HashSet<String>, CoralError> {
-        if files.is_empty() {
-            return Ok(HashSet::new());
-        }
-        let mut paths = Vec::new();
-        for file in files {
-            paths.extend_from_slice(file.path.as_bytes());
-            paths.push(0);
-        }
-        let out = runner
-            .output(
-                GitCommand::read("check-attr", self.display_path())
-                    .args(["check-attr", "-z", "--stdin", "filter"])
-                    .stdin_bytes(paths),
-            )
-            .await?;
-        Ok(driven(&out.stdout))
     }
 
     /// Whether a conflicted path's content is binary, judged by git rather than by us.

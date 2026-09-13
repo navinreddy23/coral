@@ -724,12 +724,16 @@ async fn a_resolved_file_is_expanded_by_the_smudge_filter() {
 /// pane invited a resolution taking one side's object and the other's size. That pointer names
 /// nothing: it commits, it pushes, and the next clone has no file there at all.
 #[tokio::test]
-async fn a_path_kept_behind_a_filter_has_no_blocks_to_pick_between() {
-    // A driver this machine does not have, so the fixture behaves like any other text and the
-    // test does not depend on git-lfs being installed. The attribute is what decides: it is
-    // what tells git the worktree form and the stored form are not the same thing.
-    let repo = TestRepo::new()
-        .write(".gitattributes", "*.png filter=bigfiles\n")
+async fn a_path_git_lfs_holds_has_no_blocks_to_pick_between() {
+    let repo = TestRepo::new();
+    // The attribute is what decides, so the driver itself is stood down: the fixture then
+    // behaves like any other text whether or not this machine has git-lfs installed. An empty
+    // `process` is what overrides the one `git lfs install` writes globally.
+    repo.git(["config", "filter.lfs.process", ""]);
+    repo.git(["config", "filter.lfs.clean", "cat"]);
+    repo.git(["config", "filter.lfs.smudge", "cat"]);
+    let repo = repo
+        .write(".gitattributes", "*.png filter=lfs\n")
         .write("logo.png", "oid 0\nsize 1\n")
         .write("notes.txt", "one\n")
         .commit("base");
@@ -744,19 +748,15 @@ async fn a_path_kept_behind_a_filter_has_no_blocks_to_pick_between() {
         .write("logo.png", "oid 9\nsize 9\n")
         .write("notes.txt", "MAIN\n")
         .commit("main");
-    std::process::Command::new("git")
-        .current_dir(repo.path())
-        .args(["merge", "side"])
-        .output()
-        .unwrap();
+    repo.command(["merge", "side"]).output().unwrap();
 
     let (runner, loc) = open(&repo).await;
     let files = loc.conflicts(&runner).await.unwrap();
     let find = |p: &str| files.iter().find(|f| f.path == p).expect(p);
 
-    assert!(find("logo.png").filtered);
+    assert!(find("logo.png").lfs);
     assert!(!find("logo.png").supports_blocks());
     // And an ordinary file in the same merge is still settled region by region.
-    assert!(!find("notes.txt").filtered);
+    assert!(!find("notes.txt").lfs);
     assert!(find("notes.txt").supports_blocks());
 }

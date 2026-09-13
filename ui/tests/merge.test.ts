@@ -384,7 +384,7 @@ describe("stepping an operation on", () => {
         kind: "both_modified",
         binary: false,
         deleteModify: false,
-        filtered: false,
+        lfs: false,
       },
     ]);
     return merge;
