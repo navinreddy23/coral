@@ -102,11 +102,19 @@ pub enum Command {
     CherryPick {
         #[arg(required = true)]
         revs: Vec<String>,
+        /// Which parent of a merge to measure the change against, counting from one. A merge
+        /// needs one; git refuses a number the commit has no parent for.
+        #[arg(long)]
+        mainline: Option<u32>,
     },
     /// Record commits that undo others.
     Revert {
         #[arg(required = true)]
         revs: Vec<String>,
+        /// Which parent of a merge to keep, counting from one. A merge needs one; git refuses
+        /// a number the commit has no parent for.
+        #[arg(long)]
+        mainline: Option<u32>,
     },
     /// Move the current branch, and optionally the index and worktree.
     Reset {
@@ -667,10 +675,12 @@ async fn dispatch_write(command: Command, repo: &std::path::Path) -> output::Ren
         Command::Rebase { onto, update_refs } => {
             output::render_op(&commands::write::rebase(repo, onto, update_refs).await)
         }
-        Command::CherryPick { revs } => {
-            output::render_op(&commands::write::cherry_pick(repo, revs).await)
+        Command::CherryPick { revs, mainline } => {
+            output::render_op(&commands::write::cherry_pick(repo, revs, mainline).await)
         }
-        Command::Revert { revs } => output::render_op(&commands::write::revert(repo, revs).await),
+        Command::Revert { revs, mainline } => {
+            output::render_op(&commands::write::revert(repo, revs, mainline).await)
+        }
         Command::Reset { rev, mode } => {
             output::render(&commands::write::reset(repo, rev, mode).await)
         }

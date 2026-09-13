@@ -499,8 +499,8 @@ impl RepoLocation {
 
     /// Records commits that undo `revs`.
     ///
-    /// `mainline` names which parent's line of development to keep, counting from one. It is
-    /// required for a merge commit and refused for any other, which is git's rule.
+    /// `mainline` names which parent's line of development to keep, counting from one. git
+    /// requires one for a merge commit and refuses a number the commit has no parent for.
     ///
     /// # Errors
     /// Propagates git failures that left no conflict behind.
