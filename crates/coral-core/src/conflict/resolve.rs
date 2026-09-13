@@ -111,7 +111,8 @@ impl RepoLocation {
                 } else {
                     Take::Theirs
                 };
-                self.write_side(runner, path, take).await?;
+                let content = self.side(runner, path, take).await?;
+                self.write_worktree(path, &content)?;
             }
             Resolution::Content(content) => {
                 self.write_worktree(path, content)?;
@@ -124,35 +125,82 @@ impl RepoLocation {
                     .args(["add", "--"])
                     .arg(path),
             )
-            .await
-            .map(|_| ())
+            .await?;
+        self.checkout_form(runner, path).await;
+        Ok(())
     }
 
-    /// Writes one whole side of a conflict into the worktree.
+    /// One whole side of a conflict, as the index holds it.
     ///
     /// `git checkout --ours` is deliberately not used. During a rebase it means the opposite of
     /// what the user picked, because stage 2 is the branch being rebased onto rather than their
-    /// own work; writing the stage blob directly keeps the caller's choice honest whatever the
+    /// own work; reading the stage blob directly keeps the caller's choice honest whatever the
     /// operation.
-    async fn write_side(
+    async fn side(
         &self,
         runner: &GitRunner,
         path: &str,
         take: Take,
-    ) -> Result<(), CoralError> {
+    ) -> Result<BString, CoralError> {
         let stages = self.stage_blobs(runner, path).await?;
         let content = match take {
             Take::Ours => stages.ours,
             Take::Theirs => stages.theirs,
             Take::Base => stages.base,
         };
-        let Some(content) = content else {
-            return Err(CoralError::Refused {
-                label: "resolve",
-                detail: format!("{path} has no content on that side; delete it instead"),
-            });
-        };
-        self.write_worktree(path, &content)
+        content.ok_or_else(|| CoralError::Refused {
+            label: "resolve",
+            detail: format!("{path} has no content on that side; delete it instead"),
+        })
+    }
+
+    /// Leaves the worktree copy as a checkout would have written it.
+    ///
+    /// The bytes just staged are the repository's own: no line endings converted, no smudge
+    /// filter run over them. Written out as they are they leave an LF file in a
+    /// `core.autocrlf` checkout, and under Git LFS a pointer of a few lines where the asset
+    /// should be. Neither is ever reported, because cleaning those bytes again gives back
+    /// exactly what the index holds, so git calls the worktree clean and the file stays wrong
+    /// until something else checks it out.
+    ///
+    /// The file is removed first because `checkout-index` returns without doing anything when
+    /// the index's stat information already matches what is on disk, which it does: `git add`
+    /// recorded it a moment ago. `-u` has git record the new stat itself, and without it every
+    /// resolved file is reported modified with an empty diff from then on.
+    async fn checkout_form(&self, runner: &GitRunner, path: &str) {
+        let full = self.display_path().join(path);
+        if let Err(e) = std::fs::remove_file(&full) {
+            tracing::warn!(error = %e, path, "could not replace the resolved file");
+            return;
+        }
+        if let Err(e) = runner
+            .output(
+                GitCommand::write("checkout-index", self.display_path())
+                    .args(["checkout-index", "-u", "-f", "--"])
+                    .arg(path),
+            )
+            .await
+        {
+            // A smudge filter that fails is git's own business: it warns and writes the blob
+            // unconverted. Reaching here means git could not write the file at all, and
+            // nothing is there now, so put back what the index holds rather than a hole.
+            tracing::warn!(error = %e, path, "git would not write the resolved file back");
+            self.write_index_form(runner, path, &full).await;
+        }
+    }
+
+    async fn write_index_form(&self, runner: &GitRunner, path: &str, full: &std::path::Path) {
+        let read = runner
+            .output(
+                GitCommand::read("cat-file", self.display_path())
+                    .args(["cat-file", "blob"])
+                    .arg(format!(":0:{path}")),
+            )
+            .await;
+        let put_back = read.and_then(|o| std::fs::write(full, o.stdout).map_err(CoralError::from));
+        if let Err(e) = put_back {
+            tracing::warn!(error = %e, path, "could not restore the resolved file");
+        }
     }
 
     fn write_worktree(&self, path: &str, content: &BString) -> Result<(), CoralError> {

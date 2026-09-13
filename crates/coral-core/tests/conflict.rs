@@ -601,3 +601,119 @@ fn a_carriage_return_does_not_make_content_into_a_marker() {
     let blocks = Blocks::parse(input).unwrap();
     assert_eq!(blocks.conflict_count(), 0);
 }
+
+/// A checkout where the worktree form of a file is not the form the repository stores it in.
+///
+/// `core.autocrlf` is the everyday case and the one Windows clones get by default.
+fn crlf_conflict() -> TestRepo {
+    let r = TestRepo::new();
+    r.git(["config", "core.autocrlf", "true"]);
+    let r = r
+        .write("note.txt", "alpha\r\nbeta\r\ngamma\r\n")
+        .commit("base");
+
+    r.git(["checkout", "--quiet", "-b", "side"]);
+    let r = r
+        .write("note.txt", "alpha\r\nSIDE\r\ngamma\r\n")
+        .commit("side");
+
+    r.git(["checkout", "--quiet", "main"]);
+    let r = r
+        .write("note.txt", "alpha\r\nMAIN\r\ngamma\r\n")
+        .commit("main");
+
+    std::process::Command::new("git")
+        .current_dir(r.path())
+        .args(["merge", "side"])
+        .output()
+        .unwrap();
+    r
+}
+
+/// The resolved file belongs to the worktree, not to the repository.
+///
+/// Stage blobs carry the repository's own form: no line endings converted, no smudge filter
+/// run. Written out as they are, an `autocrlf` checkout was left with one LF file among its
+/// CRLF ones, and git never said so, because cleaning it again gives back what the index
+/// holds.
+#[tokio::test]
+async fn a_resolved_file_is_written_in_the_form_the_checkout_uses() {
+    let repo = crlf_conflict();
+    let (runner, loc) = open(&repo).await;
+
+    loc.resolve(&runner, "note.txt", &Resolution::TakeTheirs)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        std::fs::read(repo.path().join("note.txt")).unwrap(),
+        b"alpha\r\nSIDE\r\ngamma\r\n"
+    );
+    // Staged, and nothing left over in the worktree. `git add` records the length of the file
+    // it read, so a file rewritten behind its back is reported modified for ever after.
+    assert_eq!(repo.git(["status", "--porcelain"]), "M  note.txt");
+}
+
+/// The same for the merge tool's own output, which is assembled from those stage blobs and so
+/// arrives with the repository's line endings on every line.
+#[tokio::test]
+async fn an_edited_resolution_is_converted_for_the_worktree_too() {
+    let repo = crlf_conflict();
+    let (runner, loc) = open(&repo).await;
+
+    loc.resolve(
+        &runner,
+        "note.txt",
+        &Resolution::Content("alpha\nBY HAND\ngamma\n".into()),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        std::fs::read(repo.path().join("note.txt")).unwrap(),
+        b"alpha\r\nBY HAND\r\ngamma\r\n"
+    );
+    assert_eq!(repo.git(["status", "--porcelain"]), "M  note.txt");
+}
+
+/// A smudge filter stands between the index and the worktree the same way, and Git LFS is the
+/// one nearly every repository with large files uses: the index holds a pointer of a few
+/// lines, the worktree holds the asset. Resolving used to leave the pointer on disk.
+///
+/// Stood in for here by a filter of two `sed` commands rather than by git-lfs itself, which is
+/// not installed everywhere; unix only, because the filter is a shell command.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_resolved_file_is_expanded_by_the_smudge_filter() {
+    let repo = TestRepo::new();
+    repo.git(["config", "filter.puff.clean", "sed s/xxxxxxxxxx/@/g"]);
+    repo.git(["config", "filter.puff.smudge", "sed s/@/xxxxxxxxxx/g"]);
+    let repo = repo
+        .write(".gitattributes", "*.big filter=puff\n")
+        .write("asset.big", "xxxxxxxxxx one\n")
+        .commit("base");
+
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo.write("asset.big", "xxxxxxxxxx side\n").commit("side");
+    repo.git(["checkout", "--quiet", "main"]);
+    let repo = repo.write("asset.big", "xxxxxxxxxx main\n").commit("main");
+    std::process::Command::new("git")
+        .current_dir(repo.path())
+        .args(["merge", "side"])
+        .output()
+        .unwrap();
+
+    // The index really does hold the short form, or the test proves nothing.
+    assert_eq!(repo.git(["cat-file", "blob", ":3:asset.big"]), "@ side");
+
+    let (runner, loc) = open(&repo).await;
+    loc.resolve(&runner, "asset.big", &Resolution::TakeTheirs)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("asset.big")).unwrap(),
+        "xxxxxxxxxx side\n"
+    );
+    assert_eq!(repo.git(["status", "--porcelain"]), "M  asset.big");
+}
