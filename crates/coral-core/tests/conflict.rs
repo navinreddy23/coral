@@ -946,3 +946,29 @@ async fn a_file_past_the_size_a_patch_is_shown_at_is_taken_whole() {
             .ends_with("side\n")
     );
 }
+
+/// The file can be gone from the worktree by the time a side is picked.
+///
+/// Someone deletes the conflicted file in their editor and then chooses in the window. Taking
+/// a side goes through the index, and the file is laid down from there, so the answer is the
+/// same as if it had still been on disk.
+#[tokio::test]
+async fn a_side_can_be_taken_for_a_file_no_longer_on_disk() {
+    let repo = conflicted();
+    std::fs::remove_file(repo.path().join("f.txt")).unwrap();
+
+    let (runner, loc) = open(&repo).await;
+    loc.resolve(&runner, "f.txt", &Resolution::TakeTheirs)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("f.txt")).unwrap(),
+        "one\nSIDE\nthree\nfour\nSIDE5\n"
+    );
+    assert!(
+        !repo
+            .git(["status", "--porcelain", "--", "f.txt"])
+            .starts_with("MD")
+    );
+}

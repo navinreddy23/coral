@@ -406,9 +406,16 @@ impl RepoLocation {
     /// resolved file is reported modified with an empty diff from then on.
     async fn checkout_form(&self, runner: &GitRunner, path: &str) {
         let full = self.display_path().join(path);
-        if let Err(e) = std::fs::remove_file(&full) {
-            tracing::warn!(error = %e, path, "could not replace the resolved file");
-            return;
+        // Taken away rather than overwritten, so a symlink is replaced rather than written
+        // through. Already gone is fine: the user may have deleted the conflicted file before
+        // choosing a side, and `checkout-index` puts it back either way.
+        match std::fs::remove_file(&full) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => {
+                tracing::warn!(error = %e, path, "could not replace the resolved file");
+                return;
+            }
         }
         if let Err(e) = runner
             .output(
