@@ -66,9 +66,9 @@ const GITLINK: &str = "160000";
 const SYMLINK: &str = "120000";
 
 /// What the index records for one stage of a conflicted path.
-struct Staged {
+pub(super) struct Staged {
     mode: String,
-    oid: String,
+    pub(super) oid: String,
 }
 
 impl Staged {
@@ -175,7 +175,7 @@ impl RepoLocation {
     ///
     /// One read for all of them, narrowed to the paths asked about so git is not made to walk
     /// a 96,000-file index to answer about three.
-    async fn unmerged(
+    pub(super) async fn unmerged(
         &self,
         runner: &GitRunner,
         paths: &[String],
@@ -202,7 +202,7 @@ impl RepoLocation {
     /// Asked before any of them is read, because the answer decides whether to read them at
     /// all: the three stages of a conflicted 120 MB asset were loaded whole and all at once to
     /// look at 8000 bytes of each, and the window held the third of a gigabyte that took.
-    async fn sizes(
+    pub(super) async fn sizes(
         &self,
         runner: &GitRunner,
         stages: &HashMap<String, Vec<Staged>>,

@@ -223,6 +223,16 @@ impl RepoLocation {
         runner: &GitRunner,
         path: &str,
     ) -> Result<Blocks, CoralError> {
+        // Asked before the stages are read, because reading them is the cost this avoids: a
+        // conflicted 120 MB asset was loaded three times over, written to three temp files,
+        // and run through merge-file to answer "0 conflicts".
+        if self.past_the_patch_size(runner, path).await? {
+            return Err(CoralError::Refused {
+                label: "show conflict",
+                detail: format!("{path} is too large to lay out region by region"),
+            });
+        }
+
         let stages = self.stage_blobs(runner, path).await?;
         if stages.ours.is_none() && stages.theirs.is_none() {
             return Err(CoralError::Refused {
@@ -272,6 +282,23 @@ impl RepoLocation {
             Err(e) => return Err(e),
         };
         Blocks::parse(&stdout)
+    }
+
+    /// Whether any stage of this path is bigger than the size a patch is shown at.
+    async fn past_the_patch_size(
+        &self,
+        runner: &GitRunner,
+        path: &str,
+    ) -> Result<bool, CoralError> {
+        let listed = self.unmerged(runner, &[path.to_owned()]).await?;
+        let sizes = self.sizes(runner, &listed).await?;
+        Ok(listed.get(path).is_some_and(|stages| {
+            stages.iter().any(|staged| {
+                sizes
+                    .get(&staged.oid)
+                    .is_some_and(|n| *n > crate::diff::LARGE_PATCH_BYTES as u64)
+            })
+        }))
     }
 
     /// Re-runs merge-file accepting its conflict count as success.

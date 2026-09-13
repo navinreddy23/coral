@@ -936,6 +936,9 @@ async fn a_file_past_the_size_a_patch_is_shown_at_is_taken_whole() {
 
     assert_eq!(files[0].whole, Some(Whole::TooLarge));
     assert!(!files[0].supports_blocks());
+    // And asking for its blocks anyway is refused rather than answered by reading it: the
+    // same file used to come back as "0 conflicts" after being loaded three times over.
+    assert!(loc.conflict_blocks(&runner, "big.txt").await.is_err());
     // Still resolvable, and the file that lands is the side asked for.
     loc.resolve(&runner, "big.txt", &Resolution::TakeTheirs)
         .await
