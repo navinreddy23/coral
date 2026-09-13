@@ -231,10 +231,20 @@ impl RepoLocation {
             overrides.format.map(SigningFormat::config_value),
         )
         .await?;
-        self.config_put(runner, at, &program_key, overrides.program.as_deref())
-            .await?;
-        self.config_put(runner, at, "user.signingkey", overrides.key.as_deref())
-            .await?;
+        self.config_put(
+            runner,
+            at,
+            &program_key,
+            overrides.program.as_deref().and_then(some_unless_empty),
+        )
+        .await?;
+        self.config_put(
+            runner,
+            at,
+            "user.signingkey",
+            overrides.key.as_deref().and_then(some_unless_empty),
+        )
+        .await?;
         self.config_put(
             runner,
             at,
@@ -299,6 +309,13 @@ const fn bool_str(on: bool) -> &'static str {
     if on { "true" } else { "false" }
 }
 
+/// An override of nothing is no override, so the key is cleared rather than set to nothing.
+///
+/// git runs what `gpg.ssh.program` names without looking at it first, so an empty value is not
+/// "use the default": it is a program whose name is the empty string, and every signed commit
+/// then fails with `cannot run : No such file or directory`, a sentence naming nothing anyone
+/// can act on. One was written into a global config this way and sat there breaking ssh
+/// signing for every repository that asked for it.
 fn some_unless_empty(value: &str) -> Option<&str> {
     if value.is_empty() { None } else { Some(value) }
 }
