@@ -39,9 +39,8 @@ function conflicted(over: Partial<ConflictedFile> = {}): ConflictedFile {
   return {
     path: "f.txt",
     kind: "both_modified",
-    binary: false,
+    whole: null,
     deleteModify: false,
-    lfs: false,
     ...over,
   };
 }
@@ -119,7 +118,7 @@ describe("the merge tool", () => {
   });
 
   it("offers only whole-file choices for a binary conflict", async () => {
-    const merge = state([conflicted({ binary: true })]);
+    const merge = state([conflicted({ whole: "binary" })]);
     const { container } = render(MergeTool, { props: { merge, onDone: noop } });
     const file = container.querySelector("button.file") as HTMLButtonElement;
     expect(file.textContent).toContain("whole file");
@@ -144,7 +143,7 @@ describe("the merge tool", () => {
     // Git LFS stores a pointer of three lines and keeps the asset outside the repository.
     // Offered as text, the pane invited a resolution taking one side's object and the other's
     // size, which names nothing: the commit went out and every clone after it had no file.
-    const merge = state([conflicted({ path: "logo.png", lfs: true })]);
+    const merge = state([conflicted({ path: "logo.png", whole: "lfs" })]);
     const { container } = render(MergeTool, { props: { merge, onDone: noop } });
     const file = container.querySelector("button.file") as HTMLButtonElement;
     expect(file.textContent).toContain("whole file");
@@ -152,6 +151,26 @@ describe("the merge tool", () => {
     await fireEvent.click(file);
     expect(container.querySelector(".whole")?.textContent).toContain("Git LFS");
     expect(container.querySelector(".conflict")).toBeNull();
+  });
+
+  it("offers the two commits for a conflicted submodule", async () => {
+    // The pane used to show a red "sub is not conflicted" over a region view that never
+    // stopped loading, and the only thing left enabled was Abort.
+    const merge = state([conflicted({ path: "sub", whole: "submodule" })]);
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+    const file = container.querySelector("button.file") as HTMLButtonElement;
+    expect(file.textContent).toContain("whole file");
+
+    await fireEvent.click(file);
+    expect(container.querySelector(".whole")?.textContent).toContain("submodule");
+    expect(container.querySelector(".conflict")).toBeNull();
+    const choices = [...container.querySelectorAll(".choices button")].map(
+      (b) => b.textContent?.trim(),
+    );
+    expect(choices).toEqual([
+      "Keep what is on main",
+      "Take the version from side",
+    ]);
   });
 
   it("explains a file deleted on this side and changed by the commit, and offers the two ways out", async () => {

@@ -109,18 +109,14 @@ export type ConflictKind = "both_modified" | "both_added" | "both_deleted" | "ad
  */
 export type ConflictedFile = { path: string, kind: ConflictKind, 
 /**
- * Binary files offer only whole-file choices; there are no blocks to pick between.
+ * Why there is nothing to pick between, when there is nothing. `None` is the ordinary
+ * text file, settled region by region.
  */
-binary: boolean, 
+whole: Whole | null, 
 /**
  * One side deleted the file, so keeping or deleting is the only meaningful choice.
  */
-deleteModify: boolean, 
-/**
- * Git LFS holds this path, so what the index has is a pointer, not the file. Whole-file
- * choices only, for the same reason a binary file gets them.
- */
-lfs: boolean, };
+deleteModify: boolean, };
 
 /**
  * What happened to a file between two trees.
@@ -613,6 +609,11 @@ export type TodoItem = { step: Step, oid: string, summary: string,
  * The replacement message for a [`Step::Reword`]. Never written to the todo file.
  */
 message: string | null, };
+
+/**
+ * Why a conflicted path has no lines of its own to choose between.
+ */
+export type Whole = "binary" | "lfs" | "submodule";
 
 /**
  * One working tree attached to the repository, the main one included.

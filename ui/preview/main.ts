@@ -158,16 +158,14 @@ merge.files = [
   {
     path: "ui/src/graph/render.ts",
     kind: "both_modified",
-    binary: false,
+    whole: null,
     deleteModify: false,
-    lfs: false,
   },
   {
     path: "assets/logo.png",
     kind: "both_added",
-    binary: true,
+    whole: "binary",
     deleteModify: false,
-    lfs: false,
   },
 ];
 merge.active = "ui/src/graph/render.ts";

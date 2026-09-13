@@ -259,7 +259,7 @@ describe("arriving at a stopped operation", () => {
     files: {
       path: string;
       kind: string;
-      binary: boolean;
+      whole: string | null;
       deleteModify: boolean;
     }[],
   ) {
@@ -299,7 +299,7 @@ describe("arriving at a stopped operation", () => {
   const conflicted = (path: string) => ({
     path,
     kind: "both_modified",
-    binary: false,
+    whole: null,
     deleteModify: false,
   });
 
@@ -337,13 +337,13 @@ describe("arriving at a stopped operation", () => {
   });
 
   it("does not read blocks for a file that has none", async () => {
-    // Binary, or on one side only: the whole-file choices are all there is, and the read
-    // would be parsing a blob to show nothing.
+    // Binary, in Git LFS, a submodule, or on one side only: the whole-file choices are all
+    // there is, and the read would be parsing a blob to show nothing.
     wire([
       {
         path: "logo.png",
         kind: "both_modified",
-        binary: true,
+        whole: "binary",
         deleteModify: false,
       },
     ]);
@@ -382,9 +382,8 @@ describe("stepping an operation on", () => {
       {
         path: "dummy.txt",
         kind: "both_modified",
-        binary: false,
+        whole: null,
         deleteModify: false,
-        lfs: false,
       },
     ]);
     return merge;

@@ -2,7 +2,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use coral_core::CoralError;
-use coral_core::conflict::{Blocks, ConflictedFile, Operation, Resolution};
+use coral_core::conflict::{Blocks, ConflictedFile, Operation, Resolution, Whole};
 use coral_core::process::GitRunner;
 use coral_core::repo::RepoLocation;
 
@@ -27,12 +27,12 @@ impl crate::output::Human for ConflictList {
             s.push_str("\n  no conflicts");
         }
         for f in &self.files {
-            let extra = if f.binary {
-                " [binary]"
-            } else if f.delete_modify {
-                " [deleted on one side]"
-            } else {
-                ""
+            let extra = match f.whole {
+                Some(Whole::Binary) => " [binary]",
+                Some(Whole::Lfs) => " [in git lfs]",
+                Some(Whole::Submodule) => " [submodule]",
+                None if f.delete_modify => " [deleted on one side]",
+                None => "",
             };
             let _ = write!(s, "\n  {:<20?} {}{extra}", f.kind, f.path);
         }

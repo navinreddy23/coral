@@ -1,7 +1,7 @@
 //! The conflict engine. The central claim under test is that blocks are rebuilt from the index
 //! stages, so what the user sees does not depend on their `merge.conflictStyle`.
 
-use coral_core::conflict::{Block, Blocks, Resolution, Take};
+use coral_core::conflict::{Block, Blocks, Resolution, Take, Whole};
 use coral_core::process::GitRunner;
 use coral_core::repo::{OpState, RepoLocation};
 use coral_core::status::ConflictKind;
@@ -754,9 +754,64 @@ async fn a_path_git_lfs_holds_has_no_blocks_to_pick_between() {
     let files = loc.conflicts(&runner).await.unwrap();
     let find = |p: &str| files.iter().find(|f| f.path == p).expect(p);
 
-    assert!(find("logo.png").lfs);
+    assert_eq!(find("logo.png").whole, Some(Whole::Lfs));
     assert!(!find("logo.png").supports_blocks());
     // And an ordinary file in the same merge is still settled region by region.
-    assert!(!find("notes.txt").lfs);
+    assert_eq!(find("notes.txt").whole, None);
     assert!(find("notes.txt").supports_blocks());
+}
+
+/// A conflicted submodule is a choice between two commits, not between two files.
+///
+/// Its index stages are commits, so reading them as content got nothing back: the pane said
+/// the submodule was not conflicted, showed a region view that never finished loading, and
+/// the only offer left was to delete it. A merge that conflicted in a submodule could not be
+/// finished in the window at all.
+#[tokio::test]
+async fn a_conflicted_submodule_is_settled_by_taking_one_of_the_two_commits() {
+    let inner = TestRepo::new().write("lib.txt", "base").commit("base");
+    let base = inner.git(["rev-parse", "HEAD"]);
+    inner.git(["checkout", "--quiet", "-b", "left"]);
+    let inner = inner.write("lib.txt", "left").commit("left");
+    let left = inner.git(["rev-parse", "HEAD"]);
+    inner.git(["checkout", "--quiet", "-b", "right", &base]);
+    let inner = inner.write("lib.txt", "right").commit("right");
+    let right = inner.git(["rev-parse", "HEAD"]);
+    inner.git(["checkout", "--quiet", "--detach", &base]);
+
+    let repo = TestRepo::new().write("a.txt", "a").commit("first");
+    repo.git([
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "add",
+        inner.path().to_str().unwrap(),
+        "sub",
+    ]);
+    let repo = repo.commit("add the submodule");
+
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    repo.git(["-C", "sub", "checkout", "--quiet", &left]);
+    let repo = repo.commit("side moves it");
+    repo.git(["checkout", "--quiet", "main"]);
+    repo.git(["-C", "sub", "checkout", "--quiet", &right]);
+    let repo = repo.commit("main moves it");
+    repo.command(["merge", "side"]).output().unwrap();
+
+    let (runner, loc) = open(&repo).await;
+    let files = loc.conflicts(&runner).await.unwrap();
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0].whole, Some(Whole::Submodule));
+    assert!(!files[0].supports_blocks());
+
+    loc.resolve(&runner, "sub", &Resolution::TakeTheirs)
+        .await
+        .unwrap();
+
+    // The index points at the incoming commit, and the submodule's own checkout is on it, so
+    // the superproject does not go on calling the submodule modified.
+    assert_eq!(repo.git(["rev-parse", ":sub"]), left);
+    assert_eq!(repo.git(["-C", "sub", "rev-parse", "HEAD"]), left);
+    assert_eq!(repo.git(["status", "--porcelain"]), "M  sub");
+    assert!(loc.conflicts(&runner).await.unwrap().is_empty());
 }
