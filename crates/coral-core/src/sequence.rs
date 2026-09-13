@@ -278,9 +278,9 @@ impl crate::repo::RepoLocation {
             .env(
                 "GIT_SEQUENCE_EDITOR",
                 format!(
-                    "'{}' rebase-editor --todo '{}'",
-                    coral_binary.display(),
-                    path.display()
+                    "{} rebase-editor --todo {}",
+                    crate::process::shell_word(&coral_binary.display().to_string()),
+                    crate::process::shell_word(&path.display().to_string()),
                 ),
             )
             .args(["rebase", "--interactive", "--no-autosquash"])

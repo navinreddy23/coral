@@ -239,6 +239,19 @@ impl GitCommand {
     }
 }
 
+/// One word for a shell, however the word is spelt.
+///
+/// Several of the values handed to git are shell syntax rather than argv: `GIT_EDITOR`,
+/// `GIT_SEQUENCE_EDITOR`, `GIT_SSH_COMMAND` and a `!`-prefixed `credential.helper` are all run
+/// through a shell. Inside single quotes every character is itself, so the apostrophe is the
+/// only one to deal with: close the quoting, escape it, open it again. Without this a path
+/// holding one — a home directory belonging to anyone called O'Brien, a project directory
+/// called `Bob's game` — ended the quoting early and left git a line it could not parse.
+#[must_use]
+pub fn shell_word(word: &str) -> String {
+    format!("'{}'", word.replace('\'', r"'\''"))
+}
+
 /// Replaces the credentials in `scheme://user:password@host/…` with `<redacted>`.
 ///
 /// With a colon the user half is kept, because a user name is not the secret. Without one the
@@ -1491,6 +1504,31 @@ fn is_progress(line: &str) -> bool {
         || bare.starts_with("Total ")
         || bare.starts_with("Unpacking objects:")
         || bare.starts_with("Updating files:")
+}
+
+#[cfg(test)]
+mod word_tests {
+    use super::shell_word;
+
+    /// Several values handed to git are shell syntax rather than argv: the sequence editor,
+    /// the ssh command, a `!`-prefixed credential helper. A path holding an apostrophe ended
+    /// the quoting early and left git a line the shell could not parse.
+    #[test]
+    fn a_word_survives_an_apostrophe_in_it() {
+        assert_eq!(shell_word("/home/dev/bin/coral"), "'/home/dev/bin/coral'");
+        assert_eq!(
+            shell_word("/home/o'brien/bin/coral"),
+            concat!("'/home/o'", "\\", "''brien/bin/coral'")
+        );
+    }
+
+    /// Everything else inside single quotes is itself, and stays itself.
+    #[test]
+    fn nothing_else_is_touched() {
+        let awkward = "a \"b\" $c \\d `e` *f*";
+        assert_eq!(shell_word(awkward), format!("'{awkward}'"));
+        assert_eq!(shell_word(""), "''");
+    }
 }
 
 #[cfg(test)]

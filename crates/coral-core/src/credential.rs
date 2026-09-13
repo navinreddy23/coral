@@ -330,21 +330,10 @@ pub fn helper_args(coral_binary: &std::path::Path, session: &str) -> Vec<String>
         "-c".to_owned(),
         format!(
             "credential.helper=!{} credential-helper --session {}",
-            quoted(&coral_binary.display().to_string()),
-            quoted(session)
+            crate::process::shell_word(&coral_binary.display().to_string()),
+            crate::process::shell_word(session)
         ),
     ]
-}
-
-/// One word for the shell git hands the helper line to.
-///
-/// Inside single quotes every character is itself, so the apostrophe is the only one that has
-/// to be dealt with: it is closed, escaped, and opened again. Without this, Coral installed
-/// under a path holding one — a home directory belonging to anyone called O'Brien — made a
-/// helper line the shell could not parse, and every fetch, push and clone that needed a
-/// credential failed saying it could not read a username for the remote.
-fn quoted(word: &str) -> String {
-    format!("'{}'", word.replace('\'', r"'\''"))
 }
 
 /// How the running front end presents itself to git as a credential helper.

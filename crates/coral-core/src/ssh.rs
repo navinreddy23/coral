@@ -92,24 +92,48 @@ pub struct SshKey {
 /// `/dev/null` because there is no such device on Windows; OpenSSH has understood it since 8.4.
 #[must_use]
 pub fn command_for(private_key: &str) -> String {
-    format!("ssh -F none -i '{private_key}' -o IdentitiesOnly=yes")
+    format!(
+        "ssh -F none -i {} -o IdentitiesOnly=yes",
+        crate::process::shell_word(private_key)
+    )
 }
 
 /// Reads the key back out of a `core.sshCommand`, or `None` when it names none.
 #[must_use]
 pub fn key_in_command(command: &str) -> Option<String> {
     let rest = command.split("-i").nth(1)?.trim_start();
-    let (quote, rest) = match rest.as_bytes().first()? {
-        b'\'' => ('\'', &rest[1..]),
-        b'"' => ('"', &rest[1..]),
-        _ => (' ', rest),
+    let key = match rest.as_bytes().first()? {
+        b'\'' => unquoted(&rest[1..]),
+        b'"' => rest[1..].split('"').next().unwrap_or_default().to_owned(),
+        _ => rest.split(' ').next().unwrap_or_default().to_owned(),
     };
-    let end = rest.find(quote).unwrap_or(rest.len());
-    let key = rest[..end].trim();
+    let key = key.trim();
     if key.is_empty() {
         None
     } else {
         Some(key.to_owned())
+    }
+}
+
+/// A single-quoted shell word, back to the path it spells.
+///
+/// An apostrophe inside one is written `'\''` — quoting closed, escaped, opened again — so a
+/// quote is the end of the word only when that is not what follows it.
+fn unquoted(mut rest: &str) -> String {
+    let mut out = String::new();
+    loop {
+        let Some(at) = rest.find('\'') else {
+            out.push_str(rest);
+            return out;
+        };
+        out.push_str(&rest[..at]);
+        match rest[at..].strip_prefix(r"'\''") {
+            Some(after) => {
+                out.push('\'');
+                rest = after;
+            }
+            None => return out,
+        }
     }
 }
 
