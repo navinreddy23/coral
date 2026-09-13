@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use bstr::ByteSlice;
 
@@ -290,8 +290,8 @@ impl RepoLocation {
         runner.output(remove.arg("--").arg(path)).await?;
 
         // The clone itself, which neither of the above touches.
-        let module = self.git_path("modules").join(path);
-        if module.exists() {
+        let modules = self.git_path("modules");
+        if let Some(module) = module_dir(&modules, path).filter(|m| m.exists()) {
             std::fs::remove_dir_all(&module)?;
         }
         Ok(())
@@ -337,5 +337,44 @@ impl RepoLocation {
             cmd = cmd.arg("--").arg(p);
         }
         runner.output(cmd).await.map(|_| ())
+    }
+}
+
+/// Where a submodule's own clone lives, or `None` if the path does not name somewhere under
+/// `.git/modules`.
+///
+/// The path is read out of `.gitmodules`, which is content of the repository and so written by
+/// whoever it was cloned from. `Path::join` takes an absolute argument as the whole answer and
+/// keeps a `..` as a step upwards, so without this the directory about to be deleted outright
+/// could be any directory at all. git refuses such a path a step earlier, and this does not
+/// depend on it having done so.
+fn module_dir(modules: &Path, path: &str) -> Option<PathBuf> {
+    let full = modules.join(path);
+    full.starts_with(modules)
+        .then_some(full)
+        .filter(|f| !f.components().any(|c| c == std::path::Component::ParentDir))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Path, PathBuf, module_dir};
+
+    #[test]
+    fn a_submodule_clone_lives_under_the_modules_directory() {
+        let modules = Path::new("/r/.git/modules");
+        assert_eq!(
+            module_dir(modules, "vendor/lib"),
+            Some(PathBuf::from("/r/.git/modules/vendor/lib"))
+        );
+    }
+
+    #[test]
+    fn a_path_that_climbs_out_names_nowhere() {
+        let modules = Path::new("/r/.git/modules");
+        // `.gitmodules` is content of the repository, so both of these are things a clone can
+        // arrive carrying, and both used to name a directory outside it.
+        assert_eq!(module_dir(modules, "../../../etc"), None);
+        assert_eq!(module_dir(modules, "/etc"), None);
+        assert_eq!(module_dir(modules, "vendor/../../.."), None);
     }
 }
