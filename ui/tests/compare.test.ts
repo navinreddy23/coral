@@ -118,7 +118,9 @@ describe('comparing two commits', () => {
       to: 'n'.repeat(40),
       file: 'one.txt',
     });
-    expect(diff.error).toBe('That file is the same in both commits.');
+    // An answer, not a failure: the pane says so in its ordinary voice.
+    expect(diff.empty).toBe('That file is the same in both commits.');
+    expect(diff.error).toBeNull();
   });
 
   it('picking one commit again ends the comparison', async () => {

@@ -1,7 +1,7 @@
 //! The conflict engine. The central claim under test is that blocks are rebuilt from the index
 //! stages, so what the user sees does not depend on their `merge.conflictStyle`.
 
-use coral_core::conflict::{Block, Blocks, Resolution, Take};
+use coral_core::conflict::{Block, Blocks, Resolution, Take, Whole};
 use coral_core::process::GitRunner;
 use coral_core::repo::{OpState, RepoLocation};
 use coral_core::status::ConflictKind;
@@ -259,7 +259,10 @@ async fn a_cherry_pick_labels_the_incoming_side_with_the_commit() {
     let repo = repo.write("f.txt", "main\n").commit("ours");
     let (runner, loc) = open(&repo).await;
 
-    let stopped = loc.cherry_pick(&runner, &["side"], true).await.unwrap();
+    let stopped = loc
+        .cherry_pick(&runner, &["side"], true, None)
+        .await
+        .unwrap();
     assert!(!stopped.completed);
 
     let op = loc.operation(&runner).await.unwrap();
@@ -293,7 +296,7 @@ async fn a_revert_names_the_incoming_side_as_the_commit_it_undoes() {
     let repo = repo.write("f.txt", "water\n").commit("a page about water");
     let (runner, loc) = open(&repo).await;
 
-    let stopped = loc.revert(&runner, &[&undone]).await.unwrap();
+    let stopped = loc.revert(&runner, &[&undone], None).await.unwrap();
     assert!(!stopped.completed, "it conflicts with the commit after it");
 
     let op = loc.operation(&runner).await.unwrap();
@@ -526,7 +529,9 @@ async fn the_message_git_prepared_for_the_next_commit_is_readable() {
         "nothing is pending yet"
     );
 
-    loc.cherry_pick(&runner, &[&picked], false).await.unwrap();
+    loc.cherry_pick(&runner, &[&picked], false, None)
+        .await
+        .unwrap();
 
     let op = loc.operation(&runner).await.unwrap();
     assert_eq!(op.prepared.as_deref(), Some("a change worth picking"));
@@ -562,4 +567,411 @@ async fn a_prepared_message_of_nothing_but_comments_is_no_message() {
     .unwrap();
 
     assert_eq!(loc.operation(&runner).await.unwrap().prepared, None);
+}
+
+/// A file with CRLF endings keeps its carriage return on the marker lines too.
+///
+/// The separator arrives as `=======\r`, which read as content swallowed the whole incoming
+/// side: the pane said there was nothing on it, and resolving wrote a file with one side's
+/// lines missing or a stray marker left in the middle of it.
+#[test]
+fn a_marker_survives_the_carriage_return_of_a_crlf_file() {
+    let input = b"one\r\n<<<<<<< ours\r\nMAIN\r\n||||||| base\r\ntwo\r\n=======\r\nSIDE\r\n>>>>>>> theirs\r\none\r\n";
+    let blocks = Blocks::parse(input).unwrap();
+
+    assert_eq!(blocks.conflict_count(), 1);
+    assert_eq!(
+        blocks.blocks[1],
+        Block::Conflict {
+            base: vec!["two\r".into()],
+            ours: vec!["MAIN\r".into()],
+            theirs: vec!["SIDE\r".into()],
+        }
+    );
+
+    // And the file it renders back keeps every one of those endings.
+    assert_eq!(blocks.render_taking(Take::Theirs), "one\r\nSIDE\r\none\r\n");
+    assert_eq!(blocks.render_taking(Take::Ours), "one\r\nMAIN\r\none\r\n");
+}
+
+/// Seven characters and a carriage return is a marker; seven and anything else is content.
+#[test]
+fn a_carriage_return_does_not_make_content_into_a_marker() {
+    let input = b"=======\rstill content\n";
+    let blocks = Blocks::parse(input).unwrap();
+    assert_eq!(blocks.conflict_count(), 0);
+}
+
+/// A checkout where the worktree form of a file is not the form the repository stores it in.
+///
+/// `core.autocrlf` is the everyday case and the one Windows clones get by default.
+fn crlf_conflict() -> TestRepo {
+    let r = TestRepo::new();
+    r.git(["config", "core.autocrlf", "true"]);
+    let r = r
+        .write("note.txt", "alpha\r\nbeta\r\ngamma\r\n")
+        .commit("base");
+
+    r.git(["checkout", "--quiet", "-b", "side"]);
+    let r = r
+        .write("note.txt", "alpha\r\nSIDE\r\ngamma\r\n")
+        .commit("side");
+
+    r.git(["checkout", "--quiet", "main"]);
+    let r = r
+        .write("note.txt", "alpha\r\nMAIN\r\ngamma\r\n")
+        .commit("main");
+
+    std::process::Command::new("git")
+        .current_dir(r.path())
+        .args(["merge", "side"])
+        .output()
+        .unwrap();
+    r
+}
+
+/// The resolved file belongs to the worktree, not to the repository.
+///
+/// Stage blobs carry the repository's own form: no line endings converted, no smudge filter
+/// run. Written out as they are, an `autocrlf` checkout was left with one LF file among its
+/// CRLF ones, and git never said so, because cleaning it again gives back what the index
+/// holds.
+#[tokio::test]
+async fn a_resolved_file_is_written_in_the_form_the_checkout_uses() {
+    let repo = crlf_conflict();
+    let (runner, loc) = open(&repo).await;
+
+    loc.resolve(&runner, "note.txt", &Resolution::TakeTheirs)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        std::fs::read(repo.path().join("note.txt")).unwrap(),
+        b"alpha\r\nSIDE\r\ngamma\r\n"
+    );
+    // Staged, and nothing left over in the worktree. `git add` records the length of the file
+    // it read, so a file rewritten behind its back is reported modified for ever after.
+    assert_eq!(repo.git(["status", "--porcelain"]), "M  note.txt");
+}
+
+/// The same for the merge tool's own output, which is assembled from those stage blobs and so
+/// arrives with the repository's line endings on every line.
+#[tokio::test]
+async fn an_edited_resolution_is_converted_for_the_worktree_too() {
+    let repo = crlf_conflict();
+    let (runner, loc) = open(&repo).await;
+
+    loc.resolve(
+        &runner,
+        "note.txt",
+        &Resolution::Content("alpha\nBY HAND\ngamma\n".into()),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        std::fs::read(repo.path().join("note.txt")).unwrap(),
+        b"alpha\r\nBY HAND\r\ngamma\r\n"
+    );
+    assert_eq!(repo.git(["status", "--porcelain"]), "M  note.txt");
+}
+
+/// A smudge filter stands between the index and the worktree the same way, and Git LFS is the
+/// one nearly every repository with large files uses: the index holds a pointer of a few
+/// lines, the worktree holds the asset. Resolving used to leave the pointer on disk.
+///
+/// Stood in for here by a filter of two `sed` commands rather than by git-lfs itself, which is
+/// not installed everywhere; unix only, because the filter is a shell command.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_resolved_file_is_expanded_by_the_smudge_filter() {
+    let repo = TestRepo::new();
+    repo.git(["config", "filter.puff.clean", "sed s/xxxxxxxxxx/@/g"]);
+    repo.git(["config", "filter.puff.smudge", "sed s/@/xxxxxxxxxx/g"]);
+    let repo = repo
+        .write(".gitattributes", "*.big filter=puff\n")
+        .write("asset.big", "xxxxxxxxxx one\n")
+        .commit("base");
+
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo.write("asset.big", "xxxxxxxxxx side\n").commit("side");
+    repo.git(["checkout", "--quiet", "main"]);
+    let repo = repo.write("asset.big", "xxxxxxxxxx main\n").commit("main");
+    std::process::Command::new("git")
+        .current_dir(repo.path())
+        .args(["merge", "side"])
+        .output()
+        .unwrap();
+
+    // The index really does hold the short form, or the test proves nothing.
+    assert_eq!(repo.git(["cat-file", "blob", ":3:asset.big"]), "@ side");
+
+    let (runner, loc) = open(&repo).await;
+    loc.resolve(&runner, "asset.big", &Resolution::TakeTheirs)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("asset.big")).unwrap(),
+        "xxxxxxxxxx side\n"
+    );
+    assert_eq!(repo.git(["status", "--porcelain"]), "M  asset.big");
+}
+
+/// A path git keeps outside the repository is not a path with lines to pick between.
+///
+/// Git LFS stores a pointer of three lines and holds the asset elsewhere. Offered as text, the
+/// pane invited a resolution taking one side's object and the other's size. That pointer names
+/// nothing: it commits, it pushes, and the next clone has no file there at all.
+#[tokio::test]
+async fn a_path_git_lfs_holds_has_no_blocks_to_pick_between() {
+    let repo = TestRepo::new();
+    // The attribute is what decides, so the driver itself is stood down: the fixture then
+    // behaves like any other text whether or not this machine has git-lfs installed. An empty
+    // `process` is what overrides the one `git lfs install` writes globally.
+    repo.git(["config", "filter.lfs.process", ""]);
+    repo.git(["config", "filter.lfs.clean", "cat"]);
+    repo.git(["config", "filter.lfs.smudge", "cat"]);
+    let repo = repo
+        .write(".gitattributes", "*.png filter=lfs\n")
+        .write("logo.png", "oid 0\nsize 1\n")
+        .write("notes.txt", "one\n")
+        .commit("base");
+
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo
+        .write("logo.png", "oid 5\nsize 5\n")
+        .write("notes.txt", "SIDE\n")
+        .commit("side");
+    repo.git(["checkout", "--quiet", "main"]);
+    let repo = repo
+        .write("logo.png", "oid 9\nsize 9\n")
+        .write("notes.txt", "MAIN\n")
+        .commit("main");
+    repo.command(["merge", "side"]).output().unwrap();
+
+    let (runner, loc) = open(&repo).await;
+    let files = loc.conflicts(&runner).await.unwrap();
+    let find = |p: &str| files.iter().find(|f| f.path == p).expect(p);
+
+    assert_eq!(find("logo.png").whole, Some(Whole::Lfs));
+    assert!(!find("logo.png").supports_blocks());
+    // And an ordinary file in the same merge is still settled region by region.
+    assert_eq!(find("notes.txt").whole, None);
+    assert!(find("notes.txt").supports_blocks());
+}
+
+/// A conflicted submodule is a choice between two commits, not between two files.
+///
+/// Its index stages are commits, so reading them as content got nothing back: the pane said
+/// the submodule was not conflicted, showed a region view that never finished loading, and
+/// the only offer left was to delete it. A merge that conflicted in a submodule could not be
+/// finished in the window at all.
+#[tokio::test]
+async fn a_conflicted_submodule_is_settled_by_taking_one_of_the_two_commits() {
+    let inner = TestRepo::new().write("lib.txt", "base").commit("base");
+    let base = inner.git(["rev-parse", "HEAD"]);
+    inner.git(["checkout", "--quiet", "-b", "left"]);
+    let inner = inner.write("lib.txt", "left").commit("left");
+    let left = inner.git(["rev-parse", "HEAD"]);
+    inner.git(["checkout", "--quiet", "-b", "right", &base]);
+    let inner = inner.write("lib.txt", "right").commit("right");
+    let right = inner.git(["rev-parse", "HEAD"]);
+    inner.git(["checkout", "--quiet", "--detach", &base]);
+
+    let repo = TestRepo::new().write("a.txt", "a").commit("first");
+    repo.git([
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "add",
+        inner.path().to_str().unwrap(),
+        "sub",
+    ]);
+    let repo = repo.commit("add the submodule");
+
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    repo.git(["-C", "sub", "checkout", "--quiet", &left]);
+    let repo = repo.commit("side moves it");
+    repo.git(["checkout", "--quiet", "main"]);
+    repo.git(["-C", "sub", "checkout", "--quiet", &right]);
+    let repo = repo.commit("main moves it");
+    repo.command(["merge", "side"]).output().unwrap();
+
+    let (runner, loc) = open(&repo).await;
+    let files = loc.conflicts(&runner).await.unwrap();
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0].whole, Some(Whole::Submodule));
+    assert!(!files[0].supports_blocks());
+
+    loc.resolve(&runner, "sub", &Resolution::TakeTheirs)
+        .await
+        .unwrap();
+
+    // The index points at the incoming commit, and the submodule's own checkout is on it, so
+    // the superproject does not go on calling the submodule modified.
+    assert_eq!(repo.git(["rev-parse", ":sub"]), left);
+    assert_eq!(repo.git(["-C", "sub", "rev-parse", "HEAD"]), left);
+    assert_eq!(repo.git(["status", "--porcelain"]), "M  sub");
+    assert!(loc.conflicts(&runner).await.unwrap().is_empty());
+}
+
+/// A conflicted symlink points somewhere; it is not a file with a line in it.
+///
+/// Its stages hold the path pointed at. Written out as content they made a file where the
+/// link was, and while the old link was still in place the write went through it: the new
+/// target landed inside whatever the old one pointed at, that file was left modified, and
+/// `git add` then recorded the link unchanged — so the side asked for was not the side staged.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_conflicted_symlink_is_repointed_rather_than_written_through() {
+    fn relink(at: &std::path::Path, to: &str) {
+        std::fs::remove_file(at.join("link")).unwrap();
+        std::os::unix::fs::symlink(to, at.join("link")).unwrap();
+    }
+
+    let repo = TestRepo::new()
+        .write("targets/ours", "OURS")
+        .write("targets/theirs", "THEIRS")
+        .write("targets/base", "BASE");
+    std::os::unix::fs::symlink("targets/base", repo.path().join("link")).unwrap();
+    let repo = repo.commit("base");
+
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    relink(repo.path(), "targets/theirs");
+    let repo = repo.commit("side points it elsewhere");
+    repo.git(["checkout", "--quiet", "main"]);
+    relink(repo.path(), "targets/ours");
+    let repo = repo.commit("main points it elsewhere");
+    repo.command(["merge", "side"]).output().unwrap();
+
+    let (runner, loc) = open(&repo).await;
+    let files = loc.conflicts(&runner).await.unwrap();
+    assert_eq!(files[0].whole, Some(Whole::Symlink));
+    assert!(!files[0].supports_blocks());
+
+    loc.resolve(&runner, "link", &Resolution::TakeTheirs)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        std::fs::read_link(repo.path().join("link")).unwrap(),
+        std::path::Path::new("targets/theirs")
+    );
+    assert_eq!(
+        repo.git(["ls-files", "-s", "link"]).split(' ').next(),
+        Some("120000")
+    );
+    // Nothing else was touched: the file the old link pointed at still says what it said.
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("targets/ours")).unwrap(),
+        "OURS"
+    );
+    assert_eq!(repo.git(["status", "--porcelain"]), "M  link");
+}
+
+/// Taking a side keeps the mode git recorded for it, executable bit included.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_resolved_file_keeps_the_mode_of_the_side_taken() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let repo = TestRepo::new().write("run.sh", "base\n");
+    std::fs::set_permissions(
+        repo.path().join("run.sh"),
+        std::fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    let repo = repo.commit("base");
+
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo.write("run.sh", "side\n").commit("side");
+    repo.git(["checkout", "--quiet", "main"]);
+    let repo = repo.write("run.sh", "main\n").commit("main");
+    repo.command(["merge", "side"]).output().unwrap();
+
+    let (runner, loc) = open(&repo).await;
+    loc.resolve(&runner, "run.sh", &Resolution::TakeTheirs)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("run.sh")).unwrap(),
+        "side\n"
+    );
+    assert_eq!(
+        repo.git(["ls-files", "-s", "run.sh"]).split(' ').next(),
+        Some("100755")
+    );
+    let mode = std::fs::metadata(repo.path().join("run.sh"))
+        .unwrap()
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o111, 0o111, "still executable on disk");
+}
+
+/// A file too big to lay out as lines is taken whole, and is never read to find that out.
+///
+/// The three stages were loaded whole and all at once to look at 8000 bytes of each, so
+/// opening a merge that conflicted in a 120 MB asset made the window hold a third of a
+/// gigabyte. The size is asked for first now, and the bound is the one a patch is shown at.
+#[tokio::test]
+async fn a_file_past_the_size_a_patch_is_shown_at_is_taken_whole() {
+    let big = "a line of perfectly ordinary text\n".repeat(200_000);
+    assert!(big.len() > coral_core::diff::LARGE_PATCH_BYTES);
+
+    let repo = TestRepo::new().write("big.txt", &big).commit("base");
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo
+        .write("big.txt", &format!("{big}side\n"))
+        .commit("side");
+    repo.git(["checkout", "--quiet", "main"]);
+    let repo = repo
+        .write("big.txt", &format!("{big}main\n"))
+        .commit("main");
+    repo.command(["merge", "side"]).output().unwrap();
+
+    let (runner, loc) = open(&repo).await;
+    let files = loc.conflicts(&runner).await.unwrap();
+
+    assert_eq!(files[0].whole, Some(Whole::TooLarge));
+    assert!(!files[0].supports_blocks());
+    // And asking for its blocks anyway is refused rather than answered by reading it: the
+    // same file used to come back as "0 conflicts" after being loaded three times over.
+    assert!(loc.conflict_blocks(&runner, "big.txt").await.is_err());
+    // Still resolvable, and the file that lands is the side asked for.
+    loc.resolve(&runner, "big.txt", &Resolution::TakeTheirs)
+        .await
+        .unwrap();
+    assert!(
+        std::fs::read_to_string(repo.path().join("big.txt"))
+            .unwrap()
+            .ends_with("side\n")
+    );
+}
+
+/// The file can be gone from the worktree by the time a side is picked.
+///
+/// Someone deletes the conflicted file in their editor and then chooses in the window. Taking
+/// a side goes through the index, and the file is laid down from there, so the answer is the
+/// same as if it had still been on disk.
+#[tokio::test]
+async fn a_side_can_be_taken_for_a_file_no_longer_on_disk() {
+    let repo = conflicted();
+    std::fs::remove_file(repo.path().join("f.txt")).unwrap();
+
+    let (runner, loc) = open(&repo).await;
+    loc.resolve(&runner, "f.txt", &Resolution::TakeTheirs)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("f.txt")).unwrap(),
+        "one\nSIDE\nthree\nfour\nSIDE5\n"
+    );
+    assert!(
+        !repo
+            .git(["status", "--porcelain", "--", "f.txt"])
+            .starts_with("MD")
+    );
 }

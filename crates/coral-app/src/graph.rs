@@ -308,11 +308,12 @@ pub async fn patch_range_size(
 pub async fn commit_detail(
     path: String,
     rev: String,
+    listing: coral_core::commit::Listing,
 ) -> Result<coral_core::commit::CommitDetail, crate::commands::IpcError> {
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
-    Ok(loc.commit_detail(&runner, &rev).await?)
+    Ok(loc.commit_detail(&runner, &rev, listing).await?)
 }
 
 /// Where a revision stands relative to `HEAD`.
@@ -564,6 +565,38 @@ pub async fn repo_submodules(
     Ok(loc.submodules(&runner).await?)
 }
 
+/// The commit a submodule's working copy is sitting on, described.
+///
+/// Read from inside the submodule: the superproject records an object id and nothing else, so
+/// the message and the date live only over there. Null when it has no working copy yet.
+///
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn submodule_revision(
+    path: String,
+    submodule: String,
+) -> Result<Option<coral_core::submodule::SubmoduleRevision>, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc.submodule_revision(&runner, &submodule).await?)
+}
+
+/// The repository's working trees, its own included, for the sidebar.
+///
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn repo_worktrees(
+    path: String,
+) -> Result<Vec<coral_core::worktree::Worktree>, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc.worktrees(&runner).await?)
+}
+
 /// One file's diff in one commit.
 ///
 /// Fetched per file rather than with the commit: a kernel merge touches thousands of files,
@@ -579,8 +612,8 @@ pub async fn file_diff(
     path: String,
     rev: String,
     file: String,
-    whole_file: bool,
-    ignore_whitespace: bool,
+    old_file: Option<String>,
+    options: ReadOptions,
 ) -> Result<Option<coral_core::diff::FileDiff>, crate::commands::IpcError> {
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
@@ -589,18 +622,46 @@ pub async fn file_diff(
         .commit_diff(
             &runner,
             &rev,
-            &[file.as_str()],
-            options(whole_file, ignore_whitespace),
+            &both(&file, old_file.as_deref()),
+            options.into(),
         )
         .await?;
     Ok(files.into_iter().next())
 }
 
-/// How to ask for the patch: how much of the file, and whether whitespace counts.
-fn options(whole_file: bool, ignore_whitespace: bool) -> coral_core::diff::DiffOptions {
-    coral_core::diff::DiffOptions::default()
-        .whole_file(whole_file)
-        .ignoring_whitespace(ignore_whitespace)
+/// The paths to ask git about: the file, plus the name it had before, when it was renamed.
+///
+/// git pairs a deletion with an addition to see a rename, so asking for the new name alone
+/// leaves it nothing to pair and it reports the file as freshly added — every line of it. A
+/// kernel file moved with a one-line edit came out as four thousand additions.
+fn both<'a>(file: &'a str, old: Option<&'a str>) -> Vec<&'a str> {
+    match old {
+        Some(was) if was != file => vec![file, was],
+        _ => vec![file],
+    }
+}
+
+/// How to ask for the patch: how much of the file, whether whitespace counts, and whether the
+/// size guard still applies.
+///
+/// One argument rather than three, because every command that reads a patch carries all of
+/// them and a row of bare booleans at a call site says nothing about which is which.
+#[derive(Clone, Copy, Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadOptions {
+    whole_file: bool,
+    ignore_whitespace: bool,
+    /// False once the reader has been shown the size guard and asked for the contents anyway.
+    guard_large: bool,
+}
+
+impl From<ReadOptions> for coral_core::diff::DiffOptions {
+    fn from(read: ReadOptions) -> Self {
+        Self::default()
+            .whole_file(read.whole_file)
+            .ignoring_whitespace(read.ignore_whitespace)
+            .guarding_large(read.guard_large)
+    }
 }
 
 /// Who last changed each line of a file, and in which commit.
@@ -616,12 +677,13 @@ pub async fn file_blame(
     path: String,
     rev: String,
     file: String,
+    old_file: Option<String>,
 ) -> Result<coral_core::blame::Blame, crate::commands::IpcError> {
     tracing::info!(path, rev, file, "file_blame");
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
-    Ok(loc.blame(&runner, &rev, &file).await?)
+    Ok(loc.blame(&runner, &rev, &file, old_file.as_deref()).await?)
 }
 
 /// What to do with part of a file's changes.
@@ -730,8 +792,8 @@ pub async fn compare_file_diff(
     from: String,
     to: String,
     file: String,
-    whole_file: bool,
-    ignore_whitespace: bool,
+    old_file: Option<String>,
+    options: ReadOptions,
 ) -> Result<Option<coral_core::diff::FileDiff>, crate::commands::IpcError> {
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
@@ -741,8 +803,8 @@ pub async fn compare_file_diff(
             &runner,
             &from,
             &to,
-            &[file.as_str()],
-            options(whole_file, ignore_whitespace),
+            &both(&file, old_file.as_deref()),
+            options.into(),
         )
         .await?;
     Ok(files.into_iter().next())
@@ -757,11 +819,14 @@ pub async fn file_text(
     path: String,
     rev: String,
     file: String,
+    old_file: Option<String>,
 ) -> Result<String, crate::commands::IpcError> {
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
-    let bytes = loc.file_at(&runner, &rev, &file).await?;
+    let bytes = loc
+        .file_at(&runner, &rev, &file, old_file.as_deref())
+        .await?;
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
@@ -811,19 +876,13 @@ pub async fn worktree_diff(
     path: String,
     staged: bool,
     file: String,
-    whole_file: bool,
-    ignore_whitespace: bool,
+    options: ReadOptions,
 ) -> Result<Option<coral_core::diff::FileDiff>, crate::commands::IpcError> {
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
     let files = loc
-        .diff(
-            &runner,
-            staged,
-            &[file.as_str()],
-            options(whole_file, ignore_whitespace),
-        )
+        .diff(&runner, staged, &[file.as_str()], options.into())
         .await?;
     if let Some(found) = files.into_iter().next() {
         return Ok(Some(found));
@@ -834,9 +893,7 @@ pub async fn worktree_diff(
     if staged {
         return Ok(None);
     }
-    Ok(loc
-        .untracked_diff(&runner, &file, options(whole_file, ignore_whitespace))
-        .await?)
+    Ok(loc.untracked_diff(&runner, &file, options.into()).await?)
 }
 
 #[cfg(test)]

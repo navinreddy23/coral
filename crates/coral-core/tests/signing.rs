@@ -209,6 +209,47 @@ fn a_repository_key_overrides_the_app_level_one() {
     });
 }
 
+/// An override of nothing clears the key rather than setting it to nothing.
+///
+/// git runs what `gpg.ssh.program` names without looking at it first, so an empty value is a
+/// program whose name is the empty string: every signed commit then fails with `cannot run :
+/// No such file or directory`. One was written into a global config that way and sat there
+/// breaking ssh signing for every repository that asked for it.
+#[test]
+fn an_empty_override_is_no_override_at_all() {
+    let (repo, home) = hermetic();
+    let app_path = home.path().join("gitconfig");
+    let app = AppConfig(Some(&app_path));
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+        loc.set_signing_local(
+            &runner,
+            &SigningOverrides {
+                program: Some(String::new()),
+                key: Some(String::new()),
+                ..SigningOverrides::default()
+            },
+            SigningFormat::Ssh,
+        )
+        .await
+        .unwrap();
+
+        // Exit 1 from `--get-all` is git saying the key is not there at all, which is the
+        // difference that matters: present and empty is a program named "".
+        let asked = repo
+            .command(["config", "--local", "--get-all", "gpg.ssh.program"])
+            .output()
+            .unwrap();
+        assert_eq!(asked.status.code(), Some(1), "the key is absent");
+        let scopes = loc.signing_scopes(&runner, app).await.unwrap();
+        assert_eq!(scopes.local.program, None);
+        assert_eq!(scopes.local.key, None);
+    });
+}
+
 #[test]
 fn clearing_an_override_goes_back_to_inheriting() {
     // Not to whatever it happened to inherit at the time: the difference between "off" and

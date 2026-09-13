@@ -9,6 +9,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+use crate::commands::IpcError;
 use crate::session::Session;
 
 /// The open session, and the file it came from.
@@ -98,18 +99,42 @@ pub fn session_get(tabs: tauri::State<'_, Tabs>) -> Session {
     tabs.read()
 }
 
+/// Opens a repository in a tab, or focuses the tab that already has it.
+///
+/// # Errors
+/// Never; async commands that borrow state have to answer with a `Result`.
 #[tauri::command]
-#[must_use]
-pub fn tab_open(
+pub async fn tab_open(
     tabs: tauri::State<'_, Tabs>,
     recents: tauri::State<'_, crate::recent::Recents>,
     path: String,
-) -> Session {
+) -> Result<Session, IpcError> {
+    // A file chooser hands back whatever directory was open when the button was pressed, which
+    // is often somewhere inside the repository rather than its root. Taken as given, that is a
+    // tab named for a subdirectory showing the whole repository, and a second tab for the same
+    // repository as soon as it is opened again by its root.
+    let Some(root) = root_of(&path).await else {
+        // No repository there. The tab is still made, because it is what carries the reason on
+        // screen, but nothing goes on the list of repositories to open again.
+        return Ok(tabs.opened(&path));
+    };
     // Recorded here rather than wherever a repository is read, because this is the moment the
     // user chose one. Reloading after a commit is not choosing, and neither is stepping into a
     // submodule.
-    recents.opened(&path);
-    tabs.opened(&path)
+    recents.opened(&root);
+    Ok(tabs.opened(&root))
+}
+
+/// The root of the repository `path` is in, however far inside it the path points.
+///
+/// `None` when there is no repository above it, which is how a tab that can only report a
+/// failure is told apart from one worth remembering.
+pub async fn root_of(path: &str) -> Option<String> {
+    let runner = coral_core::process::GitRunner::discover().await.ok()?;
+    let loc = coral_core::repo::RepoLocation::discover(&runner, Path::new(path))
+        .await
+        .ok()?;
+    Some(loc.display_path().to_string_lossy().into_owned())
 }
 
 #[tauri::command]

@@ -29,6 +29,7 @@ import type {
   SubmoduleRevision,
   Remote,
   RepoInfo,
+  Worktree,
 } from './types';
 
 /**
@@ -149,6 +150,16 @@ export function repoSubmodules(path: string): Promise<Submodule[]> {
 }
 
 /**
+ * The repository's working trees, its own first.
+ *
+ * Always at least one. A repository with only its own tree has nothing to manage, which is
+ * what the panel reads this to decide.
+ */
+export function repoWorktrees(path: string): Promise<Worktree[]> {
+  return invoke<Worktree[]>('repo_worktrees', { path });
+}
+
+/**
  * The commit a submodule is pinned at, described.
  *
  * Read from inside the submodule, because that is the only place the message lives: the
@@ -162,6 +173,21 @@ export function submoduleRevision(
 }
 
 /**
+ * How to ask for the patch: how much of the file, whether whitespace counts, and whether the
+ * size guard still applies.
+ *
+ * Mirrors `graph::ReadOptions` in Rust. One argument rather than three, because every command
+ * that reads a patch carries all of them and a row of bare booleans says nothing about which
+ * is which.
+ */
+export type ReadOptions = {
+  wholeFile: boolean;
+  ignoreWhitespace: boolean;
+  /** False once the reader has been shown the size guard and asked for the contents anyway. */
+  guardLarge: boolean;
+};
+
+/**
  * Hunks for one file in one commit, or null when the commit did not touch it.
  *
  * One file at a time: a large merge touches thousands, and their patches together are far
@@ -171,15 +197,27 @@ export function fileDiff(
   path: string,
   rev: string,
   file: string,
-  wholeFile: boolean,
-  ignoreWhitespace: boolean,
+  /** The name it had before, when the commit renamed it. Null otherwise. */
+  oldFile: string | null,
+  options: ReadOptions,
 ): Promise<FileDiff | null> {
-  return invoke<FileDiff | null>('file_diff', { path, rev, file, wholeFile, ignoreWhitespace });
+  return invoke<FileDiff | null>('file_diff', { path, rev, file, oldFile, options });
 }
 
-/** Who last changed each line of a file, and in which commit. */
-export function fileBlame(path: string, rev: string, file: string): Promise<Blame> {
-  return invoke<Blame>('file_blame', { path, rev, file });
+/**
+ * Who last changed each line of a file, and in which commit.
+ *
+ * `oldFile` is the name it had before a rename. Blame takes one path and one revision, and at
+ * a revision from before the rename the current name is not in the tree: stepping back through
+ * a file's history and asking who wrote a line answered "no such path" without it.
+ */
+export function fileBlame(
+  path: string,
+  rev: string,
+  file: string,
+  oldFile: string | null = null,
+): Promise<Blame> {
+  return invoke<Blame>('file_blame', { path, rev, file, oldFile });
 }
 
 /** What to do with part of a file's changes. */
@@ -220,22 +258,22 @@ export function compareFileDiff(
   from: string,
   to: string,
   file: string,
-  wholeFile: boolean,
-  ignoreWhitespace: boolean,
+  /** The name it had at `from`, when it was renamed between the two. Null otherwise. */
+  oldFile: string | null,
+  options: ReadOptions,
 ): Promise<FileDiff | null> {
-  return invoke<FileDiff | null>('compare_file_diff', {
-    path,
-    from,
-    to,
-    file,
-    wholeFile,
-    ignoreWhitespace,
-  });
+  return invoke<FileDiff | null>('compare_file_diff', { path, from, to, file, oldFile, options });
 }
 
 /** One file's contents at one revision, for the blame view to put its chunks beside. */
-export function fileText(path: string, rev: string, file: string): Promise<string> {
-  return invoke<string>('file_text', { path, rev, file });
+export function fileText(
+  path: string,
+  rev: string,
+  file: string,
+  /** The name it had before a rename, for a revision from before it. */
+  oldFile: string | null = null,
+): Promise<string> {
+  return invoke<string>('file_text', { path, rev, file, oldFile });
 }
 
 /** The commits that touched one file, newest first, following it across renames. */
@@ -259,16 +297,9 @@ export function worktreeDiff(
   path: string,
   staged: boolean,
   file: string,
-  wholeFile: boolean,
-  ignoreWhitespace: boolean,
+  options: ReadOptions,
 ): Promise<FileDiff | null> {
-  return invoke<FileDiff | null>('worktree_diff', {
-    path,
-    staged,
-    file,
-    wholeFile,
-    ignoreWhitespace,
-  });
+  return invoke<FileDiff | null>('worktree_diff', { path, staged, file, options });
 }
 
 /**
@@ -302,8 +333,8 @@ export type Action =
   | { kind: 'branchRename'; from: string; to: string }
   | { kind: 'merge'; rev: string; mode: 'auto' | 'noFf' | 'ffOnly' | 'squash' }
   | { kind: 'rebase'; onto: string }
-  | { kind: 'cherryPick'; revs: string[]; commit: boolean }
-  | { kind: 'revert'; revs: string[] }
+  | { kind: 'cherryPick'; revs: string[]; commit: boolean; mainline?: number }
+  | { kind: 'revert'; revs: string[]; mainline?: number }
   | { kind: 'stashPush'; message: string | null }
   | { kind: 'stashApply'; index: number; pop: boolean }
   | { kind: 'stashDrop'; index: number }
@@ -314,6 +345,7 @@ export type Action =
   | { kind: 'reset'; rev: string; mode: 'soft' | 'mixed' | 'hard' }
   | { kind: 'rewrite'; rev: string; how: RewriteKind; message: string | null }
   | { kind: 'worktreeAdd'; path: string; rev: string; branch: string | null }
+  | { kind: 'worktreeRemove'; path: string; force: boolean }
   | { kind: 'submoduleInit'; path: string | null; recursive: boolean; remote: boolean }
   | { kind: 'submoduleSetUrl'; path: string; url: string }
   | { kind: 'submoduleRemove'; path: string; force: boolean }
@@ -583,9 +615,36 @@ export function commitStaged(path: string, message: string, amend: boolean): Pro
   return invoke<Status>('commit_staged', { path, message, amend });
 }
 
+/**
+ * How a revision's files are listed.
+ *
+ * Mirrors `commit::Listing` in Rust. A stash made with `-u` keeps its untracked files in a
+ * third parent that a diff against the first never reaches, and only `git stash show` reads
+ * all three. It takes any merge for a stash and answers nonsense for one, so the window says
+ * which it is rather than letting the engine guess.
+ */
+export type Listing = 'commit' | 'stash';
+
+/**
+ * What undo and redo would do next.
+ *
+ * Mirrors `actions::JournalView` in Rust. The journal is a file beside the repository, so the
+ * window has no other way to know whether either button has anything to act on.
+ */
+export type JournalView = { undo: string | null; redo: string | null };
+
+/** The two ends of the undo journal, for the buttons that offer them. */
+export function repoJournal(path: string): Promise<JournalView> {
+  return invoke<JournalView>('repo_journal', { path });
+}
+
 /** Everything the detail panel shows for one commit. */
-export function commitDetail(path: string, rev: string): Promise<CommitDetail> {
-  return invoke<CommitDetail>('commit_detail', { path, rev });
+export function commitDetail(
+  path: string,
+  rev: string,
+  listing: Listing = 'commit',
+): Promise<CommitDetail> {
+  return invoke<CommitDetail>('commit_detail', { path, rev, listing });
 }
 
 /* Commit signing. A key belongs to a repository, not to a person: the app-level settings are

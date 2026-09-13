@@ -235,3 +235,24 @@ fn a_refusal_says_what_to_do_about_it() {
     );
     assert!(describe_failure(500, b"<html>").contains("500"));
 }
+
+#[test]
+fn only_the_host_refusing_counts_against_a_token() {
+    // What sign-in keeps a token on. It used to keep every token it was handed and ask the
+    // host afterwards, so the window reported "Signed in" about a string the host had never
+    // seen. Asking first is only right if an unreachable host does not read as a rejection:
+    // nobody could sign in offline, and a token that works would be thrown away.
+    let refusal = coral_hosting::HostingError::Api {
+        status: 401,
+        detail: "the token was rejected".to_owned(),
+    };
+    assert!(refusal.is_refusal());
+
+    for quiet in [
+        coral_hosting::HostingError::Transport("dns failure".to_owned()),
+        coral_hosting::HostingError::Malformed("not json".to_owned()),
+        coral_hosting::HostingError::NoToken,
+    ] {
+        assert!(!quiet.is_refusal(), "{quiet}");
+    }
+}

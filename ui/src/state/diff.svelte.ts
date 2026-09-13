@@ -6,6 +6,7 @@ import {
   fileText,
   worktreeDiff,
 } from '../ipc/commands';
+import type { ReadOptions } from '../ipc/commands';
 import type { Blame, Commit, FileDiff } from '../ipc/types';
 import type { DiffMode, FileView, ViewsState } from './views.svelte';
 import { messageOf } from '../ipc/error';
@@ -24,6 +25,14 @@ interface Request {
   /** The newer of the two, when comparing. */
   to: string;
   path: string;
+  /**
+   * The name the file had before, when this change renamed it.
+   *
+   * Asked for alongside the new name, because git sees a rename by pairing a deletion with an
+   * addition: given the new name alone it has nothing to pair, and reports the whole file as
+   * added. A file moved with a one-line edit came out as every line of it.
+   */
+  oldPath: string | null;
 }
 
 /** The file currently open in the diff viewer. */
@@ -34,16 +43,42 @@ export class DiffState {
   loading = $state(false);
   error = $state<string | null>(null);
 
+  /**
+   * What went wrong reading the blame or the history, which is not what went wrong reading the
+   * diff.
+   *
+   * Kept apart because they are different questions about the same file and either can fail on
+   * its own. Sharing one field, a blame git refused — of a submodule pointer, say — left the
+   * blame pane on "Working out who wrote each line…" for ever, because that pane asks whether
+   * the answer has arrived and never whether it can, and put git's complaint under the diff
+   * instead, where nothing had gone wrong.
+   */
+  sideError = $state<string | null>(null);
+
   /** Who last changed each line, once the blame view has asked for it. */
   blame = $state<Blame | null>(null);
   /** The file itself at the revision the blame was taken at, so the two line up. */
   text = $state<string | null>(null);
-  /** The commits that touched this file, newest first, once the history view has asked. */
-  history = $state<Commit[]>([]);
+  /**
+   * The commits that touched this file, newest first, once the history view has asked.
+   *
+   * Null until the read comes back, which is not the same as empty. Walking a kernel file's
+   * history takes ten seconds, and for all of them the pane said "Nothing has touched this
+   * file" — which is a sentence a reader believes.
+   */
+  history = $state<Commit[] | null>(null);
   /** True while there may be older commits than the ones held. */
   moreHistory = $state(false);
   /** The commit whose change to this file is being shown, when it came from the history. */
   atCommit = $state<string | null>(null);
+
+  /**
+   * The commit the panel was opened on, null for the working tree or a comparison.
+   *
+   * So the window can tell that the selection has moved off it. Not the revision being read:
+   * picking a commit out of the file's history reads that one and leaves this alone.
+   */
+  openedAt = $state<string | null>(null);
 
   #token = 0;
   #side = 0;
@@ -80,6 +115,29 @@ export class DiffState {
   }
 
   /**
+   * Whether a patch past the size guard is read anyway.
+   *
+   * Not remembered between files, like the expanded view: asking for one enormous file is not
+   * a standing instruction to parse the next one too.
+   */
+  unguarded = $state(false);
+
+  /** Reads the open file again with the size guard off. */
+  async readAnyway(): Promise<void> {
+    this.unguarded = true;
+    await this.#reread();
+  }
+
+  /** How the next read is asked for: the view's settings, plus whether the guard still holds. */
+  get #reading(): ReadOptions {
+    return {
+      wholeFile: this.wholeFile,
+      ignoreWhitespace: this.ignoreWhitespace,
+      guardLarge: !this.unguarded,
+    };
+  }
+
+  /**
    * Whether the unified view shows the file around the changes rather than only the hunks.
    *
    * Not remembered between files. Widening the context is a thing somebody does to read one
@@ -104,10 +162,14 @@ export class DiffState {
    * Except for a comparison of two commits, which is always the change itself: blame and
    * history are about one file's past, and opening a comparison while the panel was left on
    * the history tab showed a file's history beside a range's diff, with nothing selected in
-   * the list. The remembered choice is left alone, so it comes back with the next file.
+   * the list. And except for a binary file, which has no lines to attribute: the pane painted
+   * four kilobytes of replacement characters for one. The remembered choice is left alone in
+   * both cases, so it comes back with the next file.
    */
   get view(): FileView {
-    return this.source === 'compare' ? 'diff' : this.#views.current.fileView;
+    if (this.source === 'compare') return 'diff';
+    const remembered = this.#views.current.fileView;
+    return remembered === 'blame' && this.file?.binary === true ? 'diff' : remembered;
   }
 
   setView(view: FileView): void {
@@ -156,6 +218,7 @@ export class DiffState {
    * repository, so neither is read until the view that shows it is asked for.
    */
   async #sideLoad(): Promise<void> {
+    this.sideError = null;
     if (this.view === 'blame') await this.#loadBlame();
     else if (this.view === 'history') await this.#loadHistory();
   }
@@ -166,19 +229,20 @@ export class DiffState {
     const side = ++this.#side;
     this.blame = null;
     this.text = null;
+    this.sideError = null;
     // A commit's blame is of the file as that commit left it; the working tree's is of HEAD,
     // since a line nobody has committed has nobody to attribute it to.
     const rev = revisionOf(request);
     try {
       const [blame, text] = await Promise.all([
-        fileBlame(request.repo, rev, request.path),
-        fileText(request.repo, rev, request.path),
+        fileBlame(request.repo, rev, request.path, request.oldPath),
+        fileText(request.repo, rev, request.path, request.oldPath),
       ]);
       if (side !== this.#side) return;
       this.blame = blame;
       this.text = text;
     } catch (e) {
-      if (side === this.#side) this.error = messageOf(e);
+      if (side === this.#side) this.sideError = messageOf(e);
     }
   }
 
@@ -186,6 +250,7 @@ export class DiffState {
     const request = this.#request;
     if (request === null) return;
     const side = ++this.#side;
+    this.history = null;
     try {
       // From the commit being looked at, so the list holds the change on screen.
       const rev = revisionOf(request);
@@ -194,9 +259,19 @@ export class DiffState {
       this.history = got;
       this.moreHistory = got.length >= this.#historyLimit;
     } catch (e) {
-      if (side === this.#side) this.error = messageOf(e);
+      if (side === this.#side) this.sideError = messageOf(e);
     }
   }
+
+  /**
+   * Why there is nothing to show, when nothing has gone wrong.
+   *
+   * A file that this commit did not touch, or that is the same in both, is an answer rather
+   * than a failure — and the "view all files" tree is mostly such files. Held apart from
+   * {@link error} because the two read as the same thing in the pane otherwise, and a sentence
+   * in alarm red says something is broken.
+   */
+  empty = $state<string | null>(null);
 
   /** What is being shown, so the header can say whether it is a commit or the working tree. */
   source = $state<'commit' | 'unstaged' | 'staged' | 'compare'>('commit');
@@ -205,17 +280,23 @@ export class DiffState {
   #opened: Request | null = null;
 
   /** Opens one file's diff from a commit. A second call supersedes the first. */
-  async open(repo: string, rev: string, path: string): Promise<void> {
+  async open(repo: string, rev: string, path: string, oldPath: string | null = null): Promise<void> {
     await this.#load(
-      { repo, source: 'commit', rev, to: '', path },
+      { repo, source: 'commit', rev, to: '', path, oldPath },
       'This commit did not change that file.',
     );
   }
 
   /** Opens one file's diff between two commits. */
-  async openCompare(repo: string, from: string, to: string, path: string): Promise<void> {
+  async openCompare(
+    repo: string,
+    from: string,
+    to: string,
+    path: string,
+    oldPath: string | null = null,
+  ): Promise<void> {
     await this.#load(
-      { repo, source: 'compare', rev: from, to, path },
+      { repo, source: 'compare', rev: from, to, path, oldPath },
       'That file is the same in both commits.',
     );
   }
@@ -228,7 +309,7 @@ export class DiffState {
    */
   async openWorking(repo: string, staged: boolean, path: string): Promise<void> {
     await this.#load(
-      { repo, source: staged ? 'staged' : 'unstaged', rev: '', to: '', path },
+      { repo, source: staged ? 'staged' : 'unstaged', rev: '', to: '', path, oldPath: null },
       absent(staged),
     );
   }
@@ -252,12 +333,14 @@ export class DiffState {
     this.#request = request;
     const token = ++this.#token;
     try {
-      const got = await read(request, this.wholeFile, this.ignoreWhitespace);
+      const got = await read(request, this.#reading);
       if (token !== this.#token) return;
       this.file = got;
-      this.error = got === null ? absentFor(request.source) : null;
+      this.empty = got === null ? absentFor(request.source) : null;
+      this.error = null;
     } catch (e) {
       if (token !== this.#token) return;
+      this.empty = null;
       this.error = messageOf(e);
     }
   }
@@ -267,23 +350,26 @@ export class DiffState {
     this.#request = request;
     this.#opened = request;
     this.#historyLimit = HISTORY_PAGE;
+    this.unguarded = false;
     this.atCommit = null;
+    this.openedAt = request.source === 'commit' ? request.rev : null;
     this.blame = null;
     this.text = null;
-    this.history = [];
+    this.history = null;
     this.moreHistory = false;
     this.source = request.source;
     this.path = request.path;
     this.file = null;
     this.error = null;
+    this.empty = null;
     this.loading = true;
     try {
-      const got = await read(request, this.wholeFile, this.ignoreWhitespace);
+      const got = await read(request, this.#reading);
       // Clicking down a long file list must not let an earlier, slower read win.
       if (token !== this.#token) return;
       this.file = got;
       if (got === null) {
-        this.error = absent;
+        this.empty = absent;
       } else if (got.change === 'unmerged') {
         // git has no patch for a path with conflict stages: it prints `* Unmerged path` and
         // counts nothing. Showing that as an empty diff says the file is unchanged, which is
@@ -306,15 +392,19 @@ export class DiffState {
     this.file = null;
     this.path = null;
     this.error = null;
+    this.empty = null;
+    this.sideError = null;
     this.loading = false;
     this.source = 'commit';
     this.#opened = null;
     this.blame = null;
     this.text = null;
-    this.history = [];
+    this.history = null;
     this.moreHistory = false;
     this.atCommit = null;
+    this.openedAt = null;
     this.expanded = false;
+    this.unguarded = false;
   }
 }
 
@@ -334,31 +424,21 @@ function wholeFileFor(mode: DiffMode): boolean {
   return mode === 'split';
 }
 
-function read(
-  request: Request,
-  wholeFile: boolean,
-  ignoreWhitespace: boolean,
-): Promise<FileDiff | null> {
+function read(request: Request, options: ReadOptions): Promise<FileDiff | null> {
   if (request.source === 'compare') {
     return compareFileDiff(
       request.repo,
       request.rev,
       request.to,
       request.path,
-      wholeFile,
-      ignoreWhitespace,
+      request.oldPath,
+      options,
     );
   }
   if (request.source === 'commit') {
-    return fileDiff(request.repo, request.rev, request.path, wholeFile, ignoreWhitespace);
+    return fileDiff(request.repo, request.rev, request.path, request.oldPath, options);
   }
-  return worktreeDiff(
-    request.repo,
-    request.source === 'staged',
-    request.path,
-    wholeFile,
-    ignoreWhitespace,
-  );
+  return worktreeDiff(request.repo, request.source === 'staged', request.path, options);
 }
 
 /** What to say when the side being shown has nothing in it for that file. */

@@ -178,6 +178,41 @@ async fn a_binary_file_reports_no_counts_and_no_hunks() {
     assert!(f.hunks.is_empty());
 }
 
+/// A path Git LFS holds has no lines of its own to show.
+///
+/// LFS keeps a pointer of three lines in the repository and the asset outside it, so its diff
+/// is two changed lines of pointer. Staging one of them left the index holding a pointer with
+/// no object named in it: it commits, and the file is gone from every clone after it.
+#[tokio::test]
+async fn a_path_git_lfs_holds_reports_no_counts_and_no_hunks() {
+    let repo = TestRepo::new();
+    // The attribute is what decides, so the driver itself is stood down; see the same fixture
+    // in tests/conflict.rs.
+    repo.git(["config", "filter.lfs.process", ""]);
+    repo.git(["config", "filter.lfs.clean", "cat"]);
+    repo.git(["config", "filter.lfs.smudge", "cat"]);
+    let repo = repo
+        .write(".gitattributes", "*.png filter=lfs\n")
+        .write("logo.png", "oid 0\nsize 1\n")
+        .write("plain.txt", "one\ntwo\n")
+        .commit("base");
+    let repo = repo
+        .write("logo.png", "oid 9\nsize 9\n")
+        .write("plain.txt", "one\nTWO\n");
+    repo.git(["add", "--all"]);
+
+    let files = staged(&repo).await;
+    let find = |p: &str| files.iter().find(|f| f.path == p).expect(p);
+
+    let asset = find("logo.png");
+    assert!(asset.binary);
+    assert_eq!((asset.added, asset.removed), (None, None));
+    assert!(asset.hunks.is_empty());
+    // And an ordinary file in the same diff still carries its lines.
+    assert_eq!(find("plain.txt").added, Some(1));
+    assert!(!find("plain.txt").hunks.is_empty());
+}
+
 /// A mode change carries no hunks; the file must still be reported.
 #[cfg(unix)]
 #[tokio::test]
@@ -622,4 +657,141 @@ fn comparing_backwards_reads_as_the_reverse() {
         let backward = loc.compare(&runner, "HEAD", "HEAD~1").await.unwrap();
         assert_eq!(backward[0].change, FileChange::Deleted);
     });
+}
+
+#[test]
+fn a_patch_past_the_guard_is_reported_without_its_hunks() {
+    // One generated file the size of a kernel header dump costs a visible pause to parse, so
+    // the panel is told the size rather than made to wait for it.
+    let mut files = vec![coral_core::diff::FileDiff {
+        path: "huge.txt".into(),
+        old_path: None,
+        change: coral_core::diff::FileChange::Added,
+        binary: false,
+        added: Some(1),
+        removed: Some(0),
+        hunks: Vec::new(),
+        mode: None,
+        too_large: false,
+    }];
+    let patch = vec![b'x'; coral_core::diff::LARGE_PATCH_BYTES + 1];
+    coral_core::diff::apply_patch(&mut files, &patch, coral_core::diff::DiffOptions::default())
+        .unwrap();
+    assert!(files[0].too_large);
+    assert!(files[0].hunks.is_empty());
+}
+
+#[test]
+fn the_guard_can_be_turned_off_for_a_reader_who_asked() {
+    // Saying only that the contents were not read left no way to ever see such a file, so the
+    // panel can ask again with the guard down and take the one-off parse knowingly.
+    let mut files = vec![coral_core::diff::FileDiff {
+        path: "huge.txt".into(),
+        old_path: None,
+        change: coral_core::diff::FileChange::Modified,
+        binary: false,
+        added: Some(1),
+        removed: Some(1),
+        hunks: Vec::new(),
+        mode: None,
+        too_large: false,
+    }];
+
+    let context = format!(" {}\n", "x".repeat(1000));
+    let rows = coral_core::diff::LARGE_PATCH_BYTES / context.len() + 1;
+    let mut patch = format!(
+        "diff --git a/huge.txt b/huge.txt\n--- a/huge.txt\n+++ b/huge.txt\n@@ -1,{} +1,{} @@\n-one\n+ONE\n",
+        rows + 1,
+        rows + 1
+    );
+    patch.push_str(&context.repeat(rows));
+    assert!(patch.len() > coral_core::diff::LARGE_PATCH_BYTES);
+
+    let options = coral_core::diff::DiffOptions::default().guarding_large(false);
+    coral_core::diff::apply_patch(&mut files, patch.as_bytes(), options).unwrap();
+    assert!(!files[0].too_large, "the reader asked for it");
+    assert_eq!(files[0].hunks.len(), 1, "and the hunks came back");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_mode_only_change_says_which_modes() {
+    // Without the two modes the panel had a file listed as modified and "No line changes." to
+    // say about it, which is true and explains nothing.
+    let repo = TestRepo::new().write("f.sh", "echo hi\n").commit("base");
+    std::fs::set_permissions(
+        repo.path().join("f.sh"),
+        std::os::unix::fs::PermissionsExt::from_mode(0o755),
+    )
+    .unwrap();
+
+    let runner = coral_core::process::GitRunner::discover().await.unwrap();
+    let loc = coral_core::repo::RepoLocation::discover(&runner, repo.path())
+        .await
+        .unwrap();
+    let files = loc
+        .diff(
+            &runner,
+            false,
+            &[],
+            coral_core::diff::DiffOptions::default(),
+        )
+        .await
+        .unwrap();
+
+    let mode = files[0].mode.as_ref().expect("the modes are reported");
+    assert_eq!(mode.old, "100644");
+    assert_eq!(mode.new, "100755");
+    assert!(files[0].hunks.is_empty(), "and there are no lines to show");
+}
+
+/// A new file too large to read is reported as too large without being read.
+///
+/// `--no-index` makes a patch as large as the file, and holding one only to be told it was too
+/// large to show is the thing the guard exists to avoid: a 300 MB log file dropped into a
+/// repository took the window from 190 MB to 485 MB on a single click.
+#[tokio::test]
+async fn an_untracked_file_past_the_guard_is_not_read() {
+    let repo = TestRepo::new().write("a.txt", "a\n").commit("base");
+    let big = "a line of perfectly ordinary text\n".repeat(200_000);
+    assert!(big.len() > coral_core::diff::LARGE_PATCH_BYTES);
+    std::fs::write(repo.path().join("dump.log"), &big).unwrap();
+
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+    let file = loc
+        .untracked_diff(&runner, "dump.log", DiffOptions::default())
+        .await
+        .unwrap()
+        .expect("an untracked file has a diff against nothing");
+
+    assert!(file.too_large);
+    assert!(file.hunks.is_empty());
+    assert!(!file.binary);
+    // And it still says how much of it there is, which the guard used to answer with zero.
+    assert_eq!(file.added, Some(200_000));
+    assert_eq!(file.removed, Some(0));
+}
+
+/// Asked for anyway, the same file is read end to end.
+#[tokio::test]
+async fn the_same_file_is_read_when_the_guard_is_lifted() {
+    let repo = TestRepo::new().write("a.txt", "a\n").commit("base");
+    let big = "a line of perfectly ordinary text\n".repeat(200_000);
+    std::fs::write(repo.path().join("dump.log"), &big).unwrap();
+
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+    let options = DiffOptions {
+        guard_large: false,
+        ..DiffOptions::default()
+    };
+    let file = loc
+        .untracked_diff(&runner, "dump.log", options)
+        .await
+        .unwrap()
+        .expect("an untracked file has a diff against nothing");
+
+    assert!(!file.too_large);
+    assert_eq!(file.added, Some(200_000));
 }

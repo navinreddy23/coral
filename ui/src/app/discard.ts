@@ -15,6 +15,28 @@ export function count(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? '' : 's'}`;
 }
 
+/** The same for a noun whose plural is not the singular with an s on it. */
+function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+/**
+ * What deleting the untracked entries actually takes.
+ *
+ * git lists a directory nobody has added as one entry — `? build/` — rather than walking it,
+ * which is what keeps `status` fast on a repository with a build tree in it. Repeating that
+ * count as a number of files made the dialog undercount: "Delete 2 new files" about a button
+ * that removed a loose file and a directory holding six, and the dialog's whole job is to say
+ * what is going.
+ */
+export function untrackedWords(paths: readonly string[]): string {
+  const dirs = paths.filter((p) => p.endsWith('/')).length;
+  const files = paths.length - dirs;
+  if (dirs === 0) return count(files, 'new file');
+  const both = plural(dirs, 'new directory', 'new directories');
+  return files === 0 ? both : `${count(files, 'new file')} and ${both}`;
+}
+
 /**
  * The buttons and the explanation for discarding.
  *
@@ -23,10 +45,13 @@ export function count(n: number, noun: string): string {
  */
 export function discardWords(
   tracked: number,
-  untracked: number,
+  /** The untracked paths themselves: a directory among them is one entry and many files. */
+  untrackedPaths: readonly string[],
   /** The branch HEAD is on, or null while it is detached. */
   branch: string | null,
 ): { choices: Choice[]; detail: string } {
+  const untracked = untrackedPaths.length;
+  const going = untrackedWords(untrackedPaths);
   const choices: Choice[] = [];
   if (tracked > 0) {
     choices.push({
@@ -44,16 +69,18 @@ export function discardWords(
     choices.push({
       id: 'all',
       danger: true,
-      label:
-        tracked > 0
-          ? `Discard everything, deleting ${count(untracked, 'new file')}`
-          : `Delete ${count(untracked, 'new file')}`,
+      label: tracked > 0 ? `Discard everything, deleting ${going}` : `Delete ${going}`,
     });
   }
-  return { choices, detail: detailOf(tracked, untracked, branch) };
+  return { choices, detail: detailOf(tracked, untrackedPaths, branch) };
 }
 
-function detailOf(tracked: number, untracked: number, branch: string | null): string {
+function detailOf(
+  tracked: number,
+  untrackedPaths: readonly string[],
+  branch: string | null,
+): string {
+  const untracked = untrackedPaths.length;
   const where = branch === null ? 'the commit that is checked out' : branch;
   const parts: string[] = [];
   if (tracked > 0) {
@@ -62,10 +89,38 @@ function detailOf(tracked: number, untracked: number, branch: string | null): st
   }
   if (untracked > 0) {
     parts.push(
-      `${count(untracked, 'file')} ${untracked === 1 ? 'is' : 'are'} not tracked by git,` +
-        ' so deleting them removes the only copy there is.',
+      `${untrackedWords(untrackedPaths)} ${untracked === 1 ? 'is' : 'are'} not tracked by git,` +
+        ` so deleting ${untracked === 1 ? 'it' : 'them'} removes the only copy there is.`,
     );
+    if (untrackedPaths.some((p) => p.endsWith('/'))) {
+      parts.push('A directory goes with everything inside it.');
+    }
   }
   parts.push('This cannot be undone.');
   return parts.join(' ');
+}
+
+/**
+ * The question for throwing away part of a file.
+ *
+ * Where the change goes back to is the index, and the index is the last commit only while
+ * nothing is staged for this file. Worded as "what is committed" whichever it was, the question
+ * promised to throw away a staged change that the discard does not touch, and the honest answer
+ * to that question is no.
+ */
+export function partWords(
+  path: string,
+  /** How many lines were picked. None of them means the whole hunk. */
+  lines: number,
+  /** Whether the file also has something staged, which is then what it goes back to. */
+  alsoStaged: boolean,
+): { what: string; detail: string } {
+  const what = lines === 0 ? 'this hunk' : count(lines, 'line');
+  const backTo = alsoStaged ? 'what is staged for it' : 'what is committed';
+  return {
+    what,
+    detail:
+      `${path}\n\nThe change goes back to ${backTo}. It is not in any commit, so there is ` +
+      'nothing to bring it back from.',
+  };
 }

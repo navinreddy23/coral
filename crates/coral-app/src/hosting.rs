@@ -127,6 +127,15 @@ pub async fn hosting_login(
     let profile = current(&profiles);
     let view = host_of(&path, &profile).await?;
     let host = view.host.as_ref().ok_or_else(|| no_host(&view))?;
+    // Tried before it is kept. Stored first and asked after, the window said "Signed in as
+    // Personal" about a string the host had never seen, with the rejection arriving a moment
+    // later as a second line contradicting the first — and a token the host refuses sitting in
+    // the keyring in place of one that worked.
+    Client::new(secrecy::SecretString::from(token_value.clone()))
+        .map_err(|e| refused("sign in", &e))?
+        .check(host)
+        .await
+        .map_err(|e| refused("sign in", &e))?;
     // Always the profile's own, never the shared one: signing in here is this profile saying
     // who it is, and overwriting a token the other profiles were falling back to would sign
     // them in as somebody they never chose.

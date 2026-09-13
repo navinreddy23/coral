@@ -130,13 +130,15 @@ function signingScopes() {
 
 function wire(over: Record<string, unknown> = {}) {
   const table = answers(over);
-  invoke.mockImplementation(async (cmd: string) => {
+  invoke.mockImplementation(async (cmd: string, args: Record<string, unknown>) => {
     if (!(cmd in table)) throw new Error(`unstubbed command ${cmd}`);
     // An answer that is an error is one the engine refuses to give, which is a case the window
     // has to survive as much as any other.
     const answer = table[cmd];
     if (answer instanceof Error) throw answer;
-    return answer;
+    // A function answers about what was asked, for a command whose reply has to differ per
+    // revision: one commit_detail for every commit would make two rows indistinguishable.
+    return typeof answer === 'function' ? answer(args) : answer;
   });
 }
 
@@ -446,6 +448,32 @@ describe('the shell', () => {
     });
     expect(container.textContent).not.toContain('Select a commit');
     expect(container.querySelector('aside.wip-panel')).toBeNull();
+  });
+
+  it('gives the panel back when a stopped operation has nothing conflicted', async () => {
+    // `edit` in an interactive rebase stops precisely so the commit can be changed, and there
+    // is nothing for the merge tool to settle. Hidden along with everything else, the panel
+    // that does the changing was unreachable: the one step git stops for could not be finished
+    // without a terminal.
+    const { container } = await shell({
+      repo_operation: {
+        state: 'rebase',
+        labels: { ours: 'main', theirs: 'topic', swapped: true },
+        progress: { done: 2, total: 3 },
+        headName: null,
+        stoppedAt: null,
+        interactive: true,
+        resumable: true,
+      },
+      repo_conflicts: [],
+    });
+
+    await waitFor(() => {
+      if (!container.textContent?.includes('rebase in progress')) throw new Error('not yet');
+    });
+    await waitFor(() => {
+      if (!container.querySelector('aside.wip-panel')) throw new Error('no staging panel');
+    });
   });
 
   it('shows the working copy at once in a repository with nothing committed', async () => {
@@ -1332,6 +1360,30 @@ describe('what an action leaves behind', () => {
     });
   });
 
+  /**
+   * The stash stack is a reflog, not a ref. Dropping or applying anything but the top leaves
+   * `refs/stash` exactly where it was, so the "did a ref move" test says no and nothing was
+   * re-read — and the panel went on listing an entry that had been dropped, whose index now
+   * names nothing. Reading it costs one reflog, kernel or not.
+   */
+  it('reads the stash stack again even when no ref moved', async () => {
+    const { container } = await shell({ ...fetched, repo_refs: spikeOn(1) });
+    wire({ ...fetched, repo_refs: spikeOn(1) });
+    invoke.mockClear();
+
+    await fireEvent.click(
+      [...container.querySelectorAll('button.action')].find(
+        (b) => b.getAttribute('aria-label') === 'Fetch',
+      ) as HTMLButtonElement,
+    );
+
+    await waitFor(() => {
+      if (!invoke.mock.calls.some(([cmd]) => cmd === 'repo_stashes')) {
+        throw new Error('the stash stack was never read again');
+      }
+    });
+  });
+
   /** A ref that has not moved must not cost a walk of the whole repository. */
   it('does not rewalk when nothing moved', async () => {
     const { container } = await shell({ ...fetched, repo_refs: spikeOn(1) });
@@ -1497,5 +1549,132 @@ describe('moving down the list with the keyboard', () => {
     const rows = [...container.querySelectorAll('li.row')];
     await fireEvent.click(rows[1]?.querySelector('button.hit') as HTMLButtonElement);
     expect(rows[1]?.classList.contains('selected')).toBe(true);
+  });
+  it('closes the file panel when the selection walks off the commit it came from', async () => {
+    // The arrow keys move the selection while the panel covers the commit list, and the panel
+    // kept showing the file it was opened on: a diff of "huge.txt +200000" beside a commit
+    // whose own file list said none, with nothing on screen naming the commit it is from.
+    const { container } = await shell({
+      commit_detail: (args: { rev: string }) => ({
+        commit: {
+          oid: args.rev,
+          parents: [],
+          author: { name: 'Ada', email: 'ada@example.com', time: 0, offset: 0 },
+          committer: { name: 'Ada', email: 'ada@example.com', time: 0, offset: 0 },
+          summary: 'core: the summary',
+          body: '',
+        },
+        files: [{ path: 'huge.txt', oldPath: null, change: 'added' }],
+      }),
+      file_diff: {
+        path: 'huge.txt',
+        oldPath: null,
+        change: 'added',
+        binary: false,
+        added: 200_000,
+        removed: 0,
+        tooLarge: true,
+        hunks: [],
+      },
+    });
+
+    const rows = [...container.querySelectorAll('li.row')];
+    await fireEvent.click(rows[0]?.querySelector('button.hit') as HTMLButtonElement);
+    const file = await waitFor(() => {
+      const found = container.querySelector('button.file');
+      if (!found) throw new Error('no file list yet');
+      return found;
+    });
+    await fireEvent.click(file);
+    await waitFor(() => {
+      if (!container.querySelector('section.diff')) throw new Error('no file panel yet');
+    });
+
+    await fireEvent.keyDown(window, { key: 'ArrowDown' });
+    await waitFor(() => {
+      if (container.querySelector('section.diff')) throw new Error('the panel is still up');
+    });
+  });
+  it('does not offer to take an untracked file back to a commit it was never in', async () => {
+    // The item read "Discard its changes — back to the last commit" about a file whose only
+    // copy is on disk, and did exactly what the line under it does.
+    const { container } = await shell({
+      repo_status: {
+        entries: [{ path: 'fresh.txt', index: 'unmodified', worktree: 'untracked' }],
+        conflicted: [],
+      },
+    });
+
+    const wip = await waitFor(() => {
+      const found = container.querySelector('button.row.wip');
+      if (!found) throw new Error('no WIP row yet');
+      return found as HTMLButtonElement;
+    });
+    await fireEvent.click(wip);
+
+    // The staging panel's rows, not the commit panel's: both list the file, and only these
+    // carry the menu.
+    const row = await waitFor(() => {
+      const found = [...container.querySelectorAll('aside li')].find(
+        (li) => li.querySelector('div.row') !== null && li.textContent?.includes('fresh.txt'),
+      );
+      if (!found) throw new Error('no staging row yet');
+      return found as HTMLElement;
+    });
+    await fireEvent.contextMenu(row.querySelector('div.row') as HTMLElement);
+
+    const labels = await waitFor(() => {
+      const found = [...document.querySelectorAll('.menu .label')].map((e) =>
+        e.textContent?.trim(),
+      );
+      if (found.length === 0) throw new Error('no menu yet');
+      return found;
+    });
+    expect(labels).toContain('Delete the file');
+    expect(labels).not.toContain('Discard its changes');
+  });
+
+  it('does not promise a last commit for a file that is only staged', async () => {
+    // Staged as added is in the index and in no commit. The question said the last commit
+    // still had it, which is the sentence for a file that has been committed once.
+    const { container } = await shell({
+      repo_status: {
+        entries: [{ path: 'fresh.txt', index: 'added', worktree: 'unmodified' }],
+        conflicted: [],
+      },
+    });
+
+    const wip = await waitFor(() => {
+      const found = container.querySelector('button.row.wip');
+      if (!found) throw new Error('no WIP row yet');
+      return found as HTMLButtonElement;
+    });
+    await fireEvent.click(wip);
+
+    const row = await waitFor(() => {
+      const found = [...container.querySelectorAll('aside li')].find(
+        (li) => li.querySelector('div.row') !== null && li.textContent?.includes('fresh.txt'),
+      );
+      if (!found) throw new Error('no staging row yet');
+      return found as HTMLElement;
+    });
+    await fireEvent.contextMenu(row.querySelector('div.row') as HTMLElement);
+
+    const item = await waitFor(() => {
+      const found = [...document.querySelectorAll('.menu .label')].find(
+        (e) => e.textContent?.trim() === 'Delete the file',
+      );
+      if (!found) throw new Error('no menu yet');
+      return found.closest('button') as HTMLButtonElement;
+    });
+    await fireEvent.click(item);
+
+    const dialog = await waitFor(() => {
+      const found = document.querySelector('[role="dialog"]');
+      if (!found) throw new Error('no question yet');
+      return found as HTMLElement;
+    });
+    expect(dialog.textContent).toContain('nothing to bring it back from');
+    expect(dialog.textContent).not.toContain('last commit still has it');
   });
 });

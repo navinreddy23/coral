@@ -65,12 +65,33 @@ pub struct RepoInfo {
     pub commit_graph: bool,
 }
 
+/// Whether a repository is still at `at`.
+///
+/// Cheap and synchronous, for lists of paths recorded earlier: [`RepoLocation::discover`] runs
+/// git and walks upward, which would report the parent of a directory someone deleted. A
+/// worktree has `.git`, a bare repository has `HEAD` in the directory itself.
+#[must_use]
+pub fn present(at: &Path) -> bool {
+    at.join(".git").exists() || at.join("HEAD").exists()
+}
+
 impl RepoLocation {
     /// Resolves `path` to a repository.
     ///
     /// # Errors
     /// [`CoralError::NotARepository`] if `path` is not inside a git repository.
     pub async fn discover(runner: &GitRunner, path: &Path) -> Result<Self, CoralError> {
+        // Somebody pointing at a repository often points at its `.git`, and a file chooser that
+        // shows hidden entries puts that one click away. git will not name a work tree from
+        // inside one: `--show-toplevel` exits "this operation must be run in a work tree", and
+        // that was the whole answer — a tab called `.git` reporting a failure about a directory
+        // the user did not mean. The repository is the one holding it. A bare repository is
+        // named for itself rather than `.git`, and a linked worktree's git dir is deeper, so
+        // neither arrives here.
+        let path = match path.file_name() {
+            Some(name) if name == ".git" => path.parent().unwrap_or(path),
+            _ => path,
+        };
         let out = runner
             .output(
                 GitCommand::read("rev-parse", path)
@@ -302,9 +323,68 @@ impl RepoLocation {
         crate::diff::apply_name_status(&mut files, &names.stdout)?;
 
         let patch = runner.output(base(&options.flags())).await?;
-        crate::diff::apply_patch(&mut files, &patch.stdout)?;
+        crate::diff::apply_patch(&mut files, &patch.stdout, options)?;
         crate::diff::recount(&mut files, options);
+
+        // What the repository holds for a path in Git LFS is a pointer of three lines, so its
+        // diff is two changed lines of pointer. Staging one of them left the index holding a
+        // pointer with no object named in it at all.
+        let lfs = self
+            .in_lfs(runner, files.iter().map(|f| f.path.as_slice()))
+            .await?;
+        for file in files
+            .iter_mut()
+            .filter(|f| lfs.contains(&f.path.to_string()))
+        {
+            file.binary = true;
+            file.added = None;
+            file.removed = None;
+            file.hunks.clear();
+        }
         Ok(files)
+    }
+
+    /// Whether an untracked file is larger than the biggest patch that is read whole.
+    fn past_the_guard(&self, path: &str) -> bool {
+        std::fs::metadata(self.display_path().join(path))
+            .is_ok_and(|m| m.len() > crate::diff::LARGE_PATCH_BYTES as u64)
+    }
+
+    /// What to say about an untracked file too large to read: that it is new, how much of it
+    /// there is, and that its contents were left alone.
+    ///
+    /// `--numstat` rather than the patch, because its answer is one line whatever the file
+    /// holds — the counts for a text file and `-` for a binary one, which is git's own rule
+    /// and the same one the tracked side uses.
+    async fn oversized(
+        &self,
+        runner: &GitRunner,
+        path: &str,
+    ) -> Result<crate::diff::FileDiff, CoralError> {
+        let out = runner
+            .output_allowing(
+                GitCommand::status("diff", self.display_path())
+                    .args(["diff", "--no-index", "--numstat", "--", "/dev/null"])
+                    .arg(path),
+                &[1],
+            )
+            .await?;
+        let counted = crate::diff::parse_numstat(&out.stdout)?;
+        let (added, removed, binary) = counted
+            .first()
+            .map_or((None, None, false), |f| (f.added, f.removed, f.binary));
+
+        Ok(crate::diff::FileDiff {
+            path: path.into(),
+            old_path: None,
+            change: crate::diff::FileChange::Added,
+            binary,
+            added,
+            removed,
+            hunks: Vec::new(),
+            mode: None,
+            too_large: true,
+        })
     }
 
     /// The whole of an untracked file, as a diff against nothing.
@@ -338,6 +418,14 @@ impl RepoLocation {
             return Ok(None);
         }
 
+        // The whole file is the patch, so a file past the guard is a patch past it too, and
+        // holding one to be told it is too large to show is the thing the guard exists to
+        // avoid: a 300 MB log file dropped into a repository took the window from 190 MB to
+        // 485 MB on a single click. The size is asked of the filesystem before git is run.
+        if options.guard_large && self.past_the_guard(path) {
+            return self.oversized(runner, path).await.map(Some);
+        }
+
         // "/dev/null" is a literal git recognises on every platform it builds for, not a path
         // it opens, so this works on Windows too.
         let out = runner
@@ -361,9 +449,10 @@ impl RepoLocation {
             added: None,
             removed: None,
             hunks: Vec::new(),
+            mode: None,
             too_large: false,
         };
-        crate::diff::apply_patch(std::slice::from_mut(&mut file), &out.stdout)?;
+        crate::diff::apply_patch(std::slice::from_mut(&mut file), &out.stdout, options)?;
         if !binary {
             let added = file
                 .hunks
@@ -461,7 +550,7 @@ impl RepoLocation {
         crate::diff::apply_name_status(&mut files, &names.stdout)?;
 
         let patch = runner.output(base(&options.flags())).await?;
-        crate::diff::apply_patch(&mut files, &patch.stdout)?;
+        crate::diff::apply_patch(&mut files, &patch.stdout, options)?;
         crate::diff::recount(&mut files, options);
         Ok(files)
     }
@@ -668,21 +757,67 @@ impl RepoLocation {
         runner: &GitRunner,
         rev: &str,
         path: &str,
+        was: Option<&str>,
     ) -> Result<Vec<u8>, CoralError> {
+        let named = self.named_at(runner, rev, path, was).await?;
         let out = runner
             .output(
                 GitCommand::read("show", self.display_path())
                     .arg("show")
-                    .arg(format!("{rev}:{path}")),
+                    .arg(format!("{rev}:{named}")),
             )
             .await?;
         Ok(out.stdout)
+    }
+
+    /// Which of the two names the file goes by at `rev`.
+    ///
+    /// The current one unless the revision predates the rename, which is the case a reader
+    /// reaches by stepping back through a file's history.
+    async fn named_at<'a>(
+        &self,
+        runner: &GitRunner,
+        rev: &str,
+        path: &'a str,
+        was: Option<&'a str>,
+    ) -> Result<&'a str, CoralError> {
+        match was {
+            Some(old) if old != path && !self.holds_path(runner, rev, path).await? => Ok(old),
+            _ => Ok(path),
+        }
+    }
+
+    /// Whether `rev` has a blob at `path`.
+    ///
+    /// `rev-parse --verify --quiet` answers with an exit code and nothing on stdout, and the
+    /// runner treats a non-zero exit as an error, so the absence is read from the output being
+    /// empty rather than from the failure.
+    async fn holds_path(
+        &self,
+        runner: &GitRunner,
+        rev: &str,
+        path: &str,
+    ) -> Result<bool, CoralError> {
+        let out = runner
+            .output(
+                GitCommand::read("cat-file", self.display_path())
+                    .args(["cat-file", "-t"])
+                    .arg(format!("{rev}:{path}")),
+            )
+            .await;
+        Ok(out.is_ok())
     }
 
     /// Attributes each line of a file to the commit that last changed it.
     ///
     /// Streams rather than buffers: `--incremental` emits chunks as it resolves them, which is
     /// what lets the UI paint a long file progressively.
+    ///
+    /// `was` is the name the file had before a rename, when the caller knows of one. Blame
+    /// takes one path and one revision, and at a revision from before the rename the current
+    /// name is not in the tree: reading a file's history and stepping back through it answered
+    /// "no such path <current name> in <forty characters>" as soon as the reader asked who
+    /// wrote a line.
     ///
     /// # Errors
     /// Propagates git failures and [`CoralError::Protocol`] on malformed output.
@@ -691,10 +826,12 @@ impl RepoLocation {
         runner: &GitRunner,
         rev: &str,
         path: &str,
+        was: Option<&str>,
     ) -> Result<crate::blame::Blame, CoralError> {
+        let named = self.named_at(runner, rev, path, was).await?;
         let cmd = GitCommand::read("blame", self.display_path())
             .args(["blame", "--porcelain", "--incremental", rev, "--"])
-            .arg(path);
+            .arg(named);
 
         let mut parser = crate::blame::BlameParser::default();
         runner

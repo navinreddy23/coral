@@ -66,6 +66,32 @@ fn item(oid: &str, summary: &str) -> TodoItem {
     }
 }
 
+/// git runs `GIT_SEQUENCE_EDITOR` through a shell, so what Coral puts there is shell syntax.
+///
+/// Installed under a path holding an apostrophe, the quoting ended early and every rewrite
+/// died on "There was a problem with the editor" without touching the repository.
+#[test]
+fn a_rewrite_works_from_a_binary_under_a_path_with_an_apostrophe() {
+    let repo = stack();
+    let b = repo.git(["rev-parse", "HEAD~1"]);
+
+    let holding = tempfile::tempdir().unwrap();
+    let at = holding.path().join("o'brien");
+    std::fs::create_dir(&at).unwrap();
+    let binary = at.join(if cfg!(windows) { "coral.exe" } else { "coral" });
+    std::fs::copy(coral_binary(), &binary).unwrap();
+
+    run(async {
+        let (runner, loc) = located(&repo).await;
+        let outcome = loc
+            .rewrite_commit(&runner, &b, &Rewrite::Drop, &binary)
+            .await
+            .unwrap();
+        assert!(outcome.completed, "{outcome:?}");
+    });
+    assert_eq!(summaries(&repo), ["commit c", "commit a", "base"]);
+}
+
 #[test]
 fn dropping_a_commit_removes_it_and_keeps_the_rest() {
     let repo = stack();

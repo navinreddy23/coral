@@ -89,7 +89,19 @@ function answers(): Record<string, unknown> {
     hosting_status: { host: null, detail: 'no remotes', token: 'none' },
     hosting_pull_requests: [],
     remote_list: [],
-    commit_detail: null,
+    // The whole message, which is what rewording has to start from: a commit with a body is
+    // the normal case, and the summary alone is not the message.
+    commit_detail: {
+      commit: {
+        oid: 'a'.repeat(40),
+        parents: [],
+        author: { name: 'Ada', email: 'ada@example.com', time: 0, offset: 0 },
+        committer: { name: 'Ada', email: 'ada@example.com', time: 0, offset: 0 },
+        summary: 'core: the summary',
+        body: 'Why it was done.\n\nSigned-off-by: Ada <ada@example.com>',
+      },
+      files: [],
+    },
     watch_repo: { complete: true, detail: null },
     unwatch_repo: null,
     session_get: SESSION,
@@ -162,10 +174,12 @@ async function confirm(container: HTMLElement, take: boolean): Promise<void> {
     return found as HTMLElement;
   });
   const buttons = [...dialog.querySelectorAll('button')] as HTMLButtonElement[];
-  const primary = buttons.find((b) => b.className.includes('primary'));
   const cancel = buttons.find((b) => b.className.includes('cancel'));
-  const target = take ? primary : cancel;
-  if (!target) throw new Error(`no ${take ? 'primary' : 'cancel'} button`);
+  // Whichever button answers it, marked primary or marked danger: the most destructive ones
+  // are deliberately neither Enter's nor the eye's default.
+  const going = buttons.find((b) => b !== cancel);
+  const target = take ? going : cancel;
+  if (!target) throw new Error(`no ${take ? 'answering' : 'cancel'} button`);
   await fireEvent.click(target);
 }
 
@@ -294,6 +308,32 @@ describe('the commit menu', () => {
     });
   });
 
+  it('will not let Enter answer the hard reset', async () => {
+    // Enter is what people press to make a dialog go away, and the panel's own note says a
+    // dialog reading "cannot be recovered" must not be one of them. This is the one button in
+    // the window that throws away work nothing can bring back.
+    const { container } = await shell();
+    await openMenu(container);
+
+    const submenu = itemNamed(container, 'Reset master to this commit').closest('.wrap');
+    if (submenu) await fireEvent.mouseEnter(submenu);
+    await fireEvent.click(itemNamed(container, 'Hard — discard everything since'));
+    await waitFor(() => {
+      if (!container.querySelector('[role="dialog"]')) throw new Error('no question yet');
+    });
+
+    await fireEvent.keyDown(window, { key: 'Enter' });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(lastAction()).toBeUndefined();
+    // Still up, waiting for an answer rather than dismissed by the same key.
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+
+    // Escape is how a dialog goes away, and it takes nothing with it.
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(lastAction()).toBeUndefined();
+  });
+
   it('does not ask before a soft reset, which discards nothing', async () => {
     const { container } = await shell();
     await openMenu(container);
@@ -307,6 +347,24 @@ describe('the commit menu', () => {
     });
   });
 
+  it('offers the whole message when rewording, not just the summary', async () => {
+    // The field held the summary and what came back replaced the entire message, so rewording
+    // any commit with a body — on a kernel, every commit, with its explanation and its
+    // Signed-off-by lines — silently threw the body away.
+    const { container } = await shell();
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Edit commit message'));
+
+    const field = await waitFor(() => {
+      const found = container.querySelector('[role="dialog"] textarea');
+      if (!found) throw new Error('the question offers no box to type in');
+      return found as HTMLTextAreaElement;
+    });
+    expect(field.value).toBe(
+      'core: the summary\n\nWhy it was done.\n\nSigned-off-by: Ada <ada@example.com>',
+    );
+  });
+
   it('sends the message it was given when rewording, and nothing when cancelled', async () => {
     const { container } = await shell();
     await openMenu(container);
@@ -315,11 +373,11 @@ describe('the commit menu', () => {
     // The field has to be there at all: it was gated on a placeholder being set, so every
     // question that wanted text but had no hint to offer rendered none.
     const field = await waitFor(() => {
-      const found = container.querySelector('[role="dialog"] input');
+      const found = container.querySelector('[role="dialog"] textarea');
       if (!found) throw new Error('the question offers no field to type in');
-      return found as HTMLInputElement;
+      return found as HTMLTextAreaElement;
     });
-    await fireEvent.input(field, { target: { value: 'core: say it better' } });
+    await fireEvent.input(field, { target: { value: 'core: say it better\n\nand why' } });
     await confirm(container, true);
 
     await waitFor(() => {
@@ -327,7 +385,7 @@ describe('the commit menu', () => {
         kind: 'rewrite',
         rev: oidOf(frame, 0),
         how: 'reword',
-        message: 'core: say it better',
+        message: 'core: say it better\n\nand why',
       });
     });
   });
@@ -1065,5 +1123,207 @@ describe('a remote branch with a local of its own name', () => {
     });
     expect(container.querySelector('[role="dialog"]')).toBeNull();
     expect(actions()).toEqual([{ kind: 'checkout', rev: 'topic' }]);
+  });
+});
+
+/**
+ * `docs/ui-spec.md` says a double-click on a branch pill checks it out, the way every client
+ * this one is meant to feel like does. Nothing did it: both clicks landed on the row.
+ */
+describe('double-clicking a pill', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  function on(short: string, kind: PlacedRef['kind']): PlacedRef {
+    return {
+      name: kind.kind === 'tag' ? `refs/tags/${short}` : `refs/heads/${short}`,
+      short,
+      kind,
+      target: 'a'.repeat(40),
+      peeled: null,
+      upstream: null,
+      ahead: 0,
+      behind: 0,
+      row: 0,
+    };
+  }
+
+  /** The pill drawn on the first row, which is the one the fixture's refs sit on. */
+  function pill(container: HTMLElement): HTMLElement {
+    const found = container.querySelector('button.pill');
+    if (!found) throw new Error('no pill on the row');
+    return found as HTMLElement;
+  }
+
+  function actions(): Record<string, unknown>[] {
+    return invoke.mock.calls
+      .filter(([cmd]) => cmd === 'repo_action')
+      .map(([, args]) => (args as { action: Record<string, unknown> }).action);
+  }
+
+  it('checks out the branch it names', async () => {
+    const { container } = await shell({ repo_refs: [on('topic', { kind: 'local_branch' })] }, true);
+    await fireEvent.dblClick(pill(container));
+
+    await waitFor(() => {
+      if (actions().length === 0) throw new Error('nothing sent');
+    });
+    expect(actions()).toEqual([{ kind: 'checkout', rev: 'topic' }]);
+  });
+
+  it('takes a tracking branch by its own name, as the menu does', async () => {
+    const { container } = await shell(
+      { repo_refs: [on('origin/topic', { kind: 'remote_branch', remote: 'origin' })] },
+      true,
+    );
+    await fireEvent.dblClick(pill(container));
+
+    await waitFor(() => {
+      if (actions().length === 0) throw new Error('nothing sent');
+    });
+    expect(actions()).toEqual([{ kind: 'checkout', rev: 'topic' }]);
+  });
+
+  it('leaves a tag alone, because checking one out detaches HEAD', async () => {
+    const { container } = await shell(
+      { repo_refs: [on('v1.2.0', { kind: 'tag', annotated: false })] },
+      true,
+    );
+    await fireEvent.dblClick(pill(container));
+
+    await new Promise((r) => setTimeout(r, 20));
+    expect(actions()).toEqual([]);
+  });
+
+  it('does nothing on the branch already checked out', async () => {
+    // `open_repo` says HEAD is on `master` in this harness.
+    const { container } = await shell(
+      { repo_refs: [on('master', { kind: 'local_branch' })] },
+      true,
+    );
+    await fireEvent.dblClick(pill(container));
+
+    await new Promise((r) => setTimeout(r, 20));
+    expect(actions()).toEqual([]);
+  });
+
+  it('does nothing in a bare repository, which has nothing to check out into', async () => {
+    const { container } = await shell(
+      {
+        repo_refs: [on('topic', { kind: 'local_branch' })],
+        open_repo: {
+          path: '/repo',
+          gitDir: '/repo',
+          gitVersion: '2.43.0',
+          isBare: true,
+          head: { kind: 'branch', name: 'master' },
+          state: 'clean',
+          commitGraph: true,
+        },
+      },
+      true,
+    );
+    await fireEvent.dblClick(pill(container));
+
+    await new Promise((r) => setTimeout(r, 20));
+    expect(actions()).toEqual([]);
+  });
+});
+
+/**
+ * Undo and redo describe a file beside the repository, and every action can move it.
+ *
+ * The buttons carry the name of what they would act on. Read once and left, that name was the
+ * one from two actions ago: the tooltip said "create branch topic/checkme" and the button
+ * undid a checkout.
+ */
+describe('what undo and redo say they will do', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  function on(short: string, kind: PlacedRef['kind']): PlacedRef {
+    return {
+      name: kind.kind === 'tag' ? `refs/tags/${short}` : `refs/heads/${short}`,
+      short,
+      kind,
+      target: 'a'.repeat(40),
+      peeled: null,
+      upstream: null,
+      ahead: 0,
+      behind: 0,
+      row: 0,
+    };
+  }
+
+  it('is read again after an action that could have moved it', async () => {
+    const { container } = await shell({ repo_refs: [on('topic', { kind: 'local_branch' })] }, true);
+    const readsBefore = invoke.mock.calls.filter(([cmd]) => cmd === 'repo_journal').length;
+
+    await fireEvent.dblClick(container.querySelector('button.pill') as HTMLElement);
+    await waitFor(() => {
+      const now = invoke.mock.calls.filter(([cmd]) => cmd === 'repo_journal').length;
+      if (now <= readsBefore) throw new Error('the journal was not read again');
+    });
+  });
+});
+
+/**
+ * A stash has a row in the graph like anything else, and the menu on it was the commit menu:
+ * drop the commit, move it up, edit its message, rebase from it. None of that means anything
+ * for a stash, and "Drop commit" beside them reads as the one thing that does.
+ */
+describe('the menu on a stash row', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  const stash = {
+    index: 0,
+    name: 'stash@{0}',
+    oid: frameOids[0],
+    message: 'WIP on main',
+    branch: 'main',
+    time: 1_756_000_000,
+    row: 0,
+  };
+
+  it('offers what a stash can do, and nothing that rewrites the branch', async () => {
+    const { container } = await shell({ repo_stashes: [stash] });
+    // The stack is a second read that lands after the rows; a menu opened in between knows of
+    // no stash at all. The panel's own section is what says it has arrived.
+    await waitFor(() => {
+      if (!container.textContent?.includes('WIP on main')) throw new Error('no stash yet');
+    });
+    const labels = await openMenu(container);
+
+    expect(labels).toContain('Apply it, and keep it');
+    expect(labels).toContain('Pop it');
+    expect(labels).toContain('Drop it…');
+    for (const gone of [
+      'Drop commit',
+      'Move commit up',
+      'Move commit down',
+      'Edit commit message',
+      'Interactive rebase from this commit',
+      'Revert commit',
+    ]) {
+      expect(labels).not.toContain(gone);
+    }
+  });
+
+  it('still gives an ordinary commit its own menu', async () => {
+    // The row the stash is on is the only one that changes.
+    const { container } = await shell({ repo_stashes: [{ ...stash, oid: 'f'.repeat(40), row: 5 }] });
+    await waitFor(() => {
+      if (!container.querySelector('li.row')) throw new Error('no rows yet');
+    });
+    const labels = await openMenu(container);
+    expect(labels).toContain('Drop commit');
+    expect(labels).not.toContain('Pop it');
   });
 });

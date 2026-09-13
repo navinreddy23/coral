@@ -13,7 +13,7 @@ use coral_core::repo::RepoLocation;
 pub async fn run(path: &Path, rev: &str, file: &str) -> Result<Blame, CoralError> {
     let runner = GitRunner::discover().await?;
     let loc = RepoLocation::discover(&runner, path).await?;
-    loc.blame(&runner, rev, file).await
+    loc.blame(&runner, rev, file, None).await
 }
 
 impl crate::output::Human for Blame {

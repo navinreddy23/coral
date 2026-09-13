@@ -50,6 +50,26 @@
     return tabs.session.tabs.filter((t) => t.path.toLowerCase().includes(q));
   });
 
+  let bar = $state<HTMLElement | null>(null);
+  /** Read only so that a narrower window re-runs the effect below. */
+  let windowWidth = $state(0);
+
+  /**
+   * Keeps the tab in use on screen.
+   *
+   * The strip scrolls sideways and deliberately shows no scrollbar, so a tab carried out of
+   * sight stayed there: a narrower window left five tabs on the strip and none of them the one
+   * the window was showing, with nothing marked current anywhere.
+   */
+  $effect(() => {
+    // Named so the effect re-runs for each of them: which tab is current, how many there are,
+    // and how much room the strip has.
+    void [tabs.session.active, tabs.session.tabs.length, windowWidth, newTab];
+    // The start page is the current tab while it is up, and it sits at the end of the strip.
+    const chip = bar?.querySelector(newTab ? '.tab.new' : '.tab.active');
+    chip?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  });
+
   function groupOf(tab: Tab): TabGroup | null {
     return tabs.session.groups.find((g) => g.id === tab.group) ?? null;
   }
@@ -352,6 +372,7 @@
 {/snippet}
 
 <nav
+  bind:this={bar}
   class="bar"
   class:loose={dragging !== null && overBar}
   role="presentation"
@@ -475,7 +496,10 @@
   </div>
 {/if}
 
-<svelte:window onkeydown={(e) => (e.key === 'Escape' && picking ? (picking = null) : null)} />
+<svelte:window
+  bind:innerWidth={windowWidth}
+  onkeydown={(e) => (e.key === 'Escape' && picking ? (picking = null) : null)}
+/>
 
 {#if picking}
   {@const tab = picking}

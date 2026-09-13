@@ -241,6 +241,40 @@ fn the_helper_arguments_clear_existing_helpers_first() {
     assert!(args[3].trim_end().ends_with("'n0nce'"));
 }
 
+/// A path with an apostrophe in it is still one word to the shell.
+///
+/// git runs a `!`-prefixed helper through a shell, so the line is shell syntax. Coral
+/// installed under a home directory belonging to anyone called O'Brien made a line the shell
+/// could not parse, and every fetch, push and clone that needed a credential failed saying it
+/// could not read a username for the remote.
+#[test]
+fn an_apostrophe_in_the_path_does_not_end_the_quoting() {
+    let args = helper_args(std::path::Path::new("/home/o'brien/bin/coral"), "n0nce");
+    let line = args[3]
+        .strip_prefix("credential.helper=!")
+        .expect("the ! form");
+
+    assert_eq!(
+        line,
+        concat!(
+            "'/home/o'",
+            "\\",
+            "''brien/bin/coral' ",
+            "credential-helper --session 'n0nce'"
+        )
+    );
+    // And a shell reads it as the three words meant, the path whole among them.
+    let out = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("for a in {line}; do echo \"$a\"; done"))
+        .output()
+        .expect("spawn sh");
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        "/home/o'brien/bin/coral\ncredential-helper\n--session\nn0nce\n"
+    );
+}
+
 /// The password must never reach a log through an accidental Debug format.
 #[test]
 fn the_debug_rendering_hides_the_password() {

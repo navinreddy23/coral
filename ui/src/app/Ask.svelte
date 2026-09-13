@@ -25,6 +25,7 @@
     placeholder = '',
     initial = '',
     asksText = false,
+    lines = 1,
     choices,
     onAnswer,
   }: {
@@ -38,6 +39,13 @@
      * commit — rendered no field at all and could only be cancelled.
      */
     asksText?: boolean;
+    /**
+     * How many lines the field should hold. One is a line; more is a box.
+     *
+     * A commit message is the case: it has a summary and a body, and asking for it in a single
+     * line meant the body could neither be read nor kept.
+     */
+    lines?: number;
     placeholder?: string;
     initial?: string;
     choices: Choice[];
@@ -49,7 +57,10 @@
   // discarded with it, so there is no later `initial` to track.
   // svelte-ignore state_referenced_locally
   let text = $state(initial);
-  let input = $state<HTMLInputElement | null>(null);
+  let input = $state<HTMLInputElement | HTMLTextAreaElement | null>(null);
+
+  /** True when the field is a box rather than a line, which changes what Enter means. */
+  const boxed = $derived(asksText && lines > 1);
 
   /**
    * The choice the Enter key takes, if any.
@@ -71,8 +82,11 @@
 
   function key(event: KeyboardEvent) {
     if (event.key === 'Escape') answer(null);
-    else if (event.key === 'Enter' && primary) answer(primary.id);
-    else return;
+    // In a box, Enter is a newline and Ctrl+Enter is the answer — the same pair the commit
+    // panel uses, and the only arrangement in which a body can be typed at all.
+    else if (event.key === 'Enter' && primary && (!boxed || event.ctrlKey || event.metaKey)) {
+      answer(primary.id);
+    } else return;
     event.preventDefault();
   }
 </script>
@@ -95,7 +109,16 @@
   >
     <h2>{title}</h2>
     {#if detail}<p class="detail">{detail}</p>{/if}
-    {#if asksText}
+    {#if boxed}
+      <textarea
+        bind:this={input}
+        bind:value={text}
+        rows={lines}
+        {placeholder}
+        aria-label={title}
+        spellcheck="false"
+      ></textarea>
+    {:else if asksText}
       <input bind:this={input} bind:value={text} {placeholder} aria-label={title} />
     {/if}
     <div class="choices">
@@ -131,6 +154,14 @@
     margin: var(--space-2) 0 0; font-size: var(--text-base); color: var(--fg-2); line-height: 1.5;
     white-space: pre-line;
   }
+  textarea {
+    width: 100%; box-sizing: border-box; resize: vertical;
+    font: inherit; font-family: var(--mono);
+    padding: var(--space-2); margin-bottom: var(--space-3);
+    background: var(--bg-0); color: var(--fg-0);
+    border: 1px solid var(--border-strong); border-radius: var(--radius-1);
+  }
+  textarea:focus { border-color: var(--accent); outline: none; }
   input {
     width: 100%; box-sizing: border-box; font: inherit; font-size: var(--text-md);
     margin-top: var(--space-3); padding: var(--space-2);

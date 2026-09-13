@@ -1,3 +1,4 @@
+pub mod attributes;
 pub mod blame;
 pub mod bytes;
 pub mod commit;

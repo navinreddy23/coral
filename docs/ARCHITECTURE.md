@@ -169,12 +169,21 @@ conflicts each carrying the base.
 backwards: git replays your commits onto the target, so stage 2 is the branch being rebased
 *onto* and stage 3 is your own work. `SideLabels` carries a `swapped` flag so the interface can
 state this once. For the same reason `git checkout --ours` is never used to take a side — it
-applies the opposite of what the user picked during a rebase. The stage blob is written
-directly instead.
+applies the opposite of what the user picked during a rebase. **The chosen stage is written to
+the index and git lays the file down from it**, rather than its bytes being written to the
+worktree: that keeps the mode, so a symlink stays a symlink rather than becoming a file holding
+the path it pointed at, and it applies the conversions a checkout applies. Without them an
+`autocrlf` worktree was left with one LF file among its CRLF ones and an LFS path with the
+pointer where the asset should be, neither of which `git status` will ever mention, because
+cleaning those bytes again gives back exactly what the index holds.
 
-Not everything is block-resolvable: add/add has no base, delete/modify offers only keep or
-delete, and binary files offer only whole-file choices. `merge-file` exits with the *number of
-conflicts*, so a non-zero exit is the normal case.
+Not everything is block-resolvable, and `ConflictedFile` says which of the reasons applies:
+add/add has no base, delete/modify offers only keep or delete, and a binary file, a submodule,
+a symlink, a path held by Git LFS or one past `LARGE_PATCH_BYTES` offers only whole-file
+choices. The last four are answered from one read of the unmerged index plus one
+`cat-file --batch-check`, so deciding costs the same whether the conflicted asset is 8 KB or
+800 MB. `merge-file` exits with the *number of conflicts*, so a non-zero exit is the normal
+case.
 
 ## Remotes and credentials
 

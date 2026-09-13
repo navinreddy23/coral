@@ -4,6 +4,8 @@ import { GRAPH_COLUMN_PX, REFS_COLUMN_PX } from '../src/graph/layout';
 import {
   clampPane,
   fitColumns,
+  fitPanels,
+  LIST_FLOOR_PX,
   MESSAGE_FLOOR_PX,
   PANE_LIMITS,
   PanesState,
@@ -180,5 +182,44 @@ describe('columns in a pane too narrow for them', () => {
 
   it('answers before the pane has been measured', () => {
     expect(fitColumns(widths, 0)).toEqual({ refs: 240, graph: 170 });
+  });
+});
+
+describe('the side panels in a window too narrow for them', () => {
+  const want = { sidebar: 285, details: 480 };
+
+  it('leaves them alone while the list still has its floor', () => {
+    expect(fitPanels(want, 1440)).toEqual(want);
+  });
+
+  it('takes from both so the commit list keeps its width', () => {
+    // At the window's own minimum both panels kept every pixel and the list was left with
+    // five: a column of graph nodes with no summary, no date and no object id beside any.
+    const fitted = fitPanels(want, 900);
+    expect(fitted.sidebar).toBeLessThan(want.sidebar);
+    expect(fitted.details).toBeLessThan(want.details);
+    expect(900 - fitted.sidebar - fitted.details).toBeGreaterThanOrEqual(LIST_FLOOR_PX);
+  });
+
+  it('shares the loss rather than emptying one of them', () => {
+    const fitted = fitPanels(want, 900);
+    expect(fitted.sidebar).toBeGreaterThan(PANE_LIMITS.sidebar.min);
+    expect(fitted.details).toBeGreaterThan(PANE_LIMITS.details.min);
+  });
+
+  it('never takes a panel below the width that keeps its handle reachable', () => {
+    const fitted = fitPanels(want, 400);
+    expect(fitted.sidebar).toBe(PANE_LIMITS.sidebar.min);
+    expect(fitted.details).toBe(PANE_LIMITS.details.min);
+  });
+
+  it('leaves a panel that is not on screen at zero', () => {
+    const fitted = fitPanels({ sidebar: 0, details: 480 }, 700);
+    expect(fitted.sidebar).toBe(0);
+    expect(fitted.details).toBeLessThan(480);
+  });
+
+  it('says nothing about a window it has not been measured in yet', () => {
+    expect(fitPanels(want, 0)).toEqual(want);
   });
 });

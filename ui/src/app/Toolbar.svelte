@@ -15,6 +15,7 @@
     leftPanel,
     stashes,
     dirty,
+    journal,
     rightPanel,
     rightPanelUsable,
     onAction,
@@ -44,6 +45,15 @@
      */
     stashes: number;
     dirty: boolean;
+    /**
+     * What undo and redo would act on, or null when there is nothing.
+     *
+     * Both buttons need something to act on, like Stash and Pop beside them. Offered whatever
+     * the journal held, pressing one on a repository nothing had happened in answered "cannot
+     * redo: nothing to redo" from a control that had looked available. Naming the entry is the
+     * other half: "Undo" alone does not say what is about to be taken back.
+     */
+    journal: { undo: string | null; redo: string | null };
     /** The right panel has two states, not three: it holds one thing, so it has no rail. */
     rightPanel: boolean;
     /**
@@ -96,8 +106,22 @@
    */
   const groups = $derived<Action[][]>([
     [
-      { name: 'undo', label: 'Undo', icon: 'undo', hint: 'the last ref change', binding: 'undo' },
-      { name: 'redo', label: 'Redo', icon: 'redo', hint: 'what was undone', binding: 'redo' },
+      {
+        name: 'undo',
+        label: 'Undo',
+        icon: 'undo',
+        hint: journal.undo ?? 'Nothing to undo',
+        binding: 'undo',
+        disabled: journal.undo === null,
+      },
+      {
+        name: 'redo',
+        label: 'Redo',
+        icon: 'redo',
+        hint: journal.redo ?? 'Nothing to redo',
+        binding: 'redo',
+        disabled: journal.redo === null,
+      },
     ],
     [
       { name: 'fetch', label: 'Fetch', icon: 'fetch', hint: 'and prune', binding: 'fetch.all' },

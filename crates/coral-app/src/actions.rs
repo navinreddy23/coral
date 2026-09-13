@@ -75,9 +75,18 @@ pub enum Action {
         /// Whether to record the result. False leaves it staged, for someone who wants to
         /// change it, split it, or fold it into something else first.
         commit: bool,
+        /// Which parent's line to treat as the mainline, counting from one.
+        ///
+        /// A merge has two sides, so replaying or undoing one means keeping one of them. git
+        /// requires this for a merge and refuses it for anything else.
+        #[serde(default)]
+        mainline: Option<u32>,
     },
     Revert {
         revs: Vec<String>,
+        /// Which parent's line to keep, counting from one. See [`Action::CherryPick`].
+        #[serde(default)]
+        mainline: Option<u32>,
     },
     StashPush {
         message: Option<String>,
@@ -126,6 +135,13 @@ pub enum Action {
         rev: String,
         /// Create this branch there rather than detaching.
         branch: Option<String>,
+    },
+    /// Remove a linked working tree, leaving the repository and its commits alone.
+    WorktreeRemove {
+        /// The working tree's own path, as `git worktree list` reports it.
+        path: String,
+        /// Remove it even though it has changes in it that are recorded nowhere else.
+        force: bool,
     },
     /// Clone and check out a submodule's working copy, or move it to its branch tip.
     SubmoduleInit {
@@ -311,7 +327,7 @@ impl Action {
                 _ => format!("merge {}", named(rev)),
             },
             Self::Rebase { onto } => format!("rebase onto {}", named(onto)),
-            Self::CherryPick { revs, commit } => {
+            Self::CherryPick { revs, commit, .. } => {
                 let what = shortened(revs);
                 if *commit {
                     format!("cherry-pick {what}")
@@ -319,7 +335,7 @@ impl Action {
                     format!("cherry-pick {what} without committing")
                 }
             }
-            Self::Revert { revs } => format!("revert {}", shortened(revs)),
+            Self::Revert { revs, .. } => format!("revert {}", shortened(revs)),
             Self::StashPush { .. } => "stash".to_owned(),
             Self::StashApply { pop: true, .. } => "stash pop".to_owned(),
             Self::StashApply { .. } => "stash apply".to_owned(),
@@ -340,6 +356,7 @@ impl Action {
                 RewriteKind::MoveOlder => format!("move {} down", named(rev)),
             },
             Self::WorktreeAdd { path, .. } => format!("worktree at {path}"),
+            Self::WorktreeRemove { path, .. } => format!("remove the worktree at {path}"),
             Self::SubmoduleInit {
                 path: Some(p),
                 remote: true,
@@ -377,6 +394,36 @@ impl Action {
             Self::Fetch { .. } | Self::Pull { .. } | Self::Push { .. }
         )
     }
+}
+
+/// What undo and redo would do next, so the two buttons can say.
+///
+/// Nothing else in the window knows: the journal is a file beside the repository and the
+/// toolbar offered both buttons whatever was in it, so pressing one on a fresh repository
+/// answered "cannot redo: nothing to redo" from a control that had looked available.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JournalView {
+    /// What undo would reverse, named as it was recorded. None when there is nothing.
+    pub undo: Option<String>,
+    /// What redo would replay. None when nothing has been undone.
+    pub redo: Option<String>,
+}
+
+/// Reads the journal's two ends.
+///
+/// # Errors
+/// Propagates git failures from finding the repository.
+#[tauri::command]
+pub async fn repo_journal(path: String) -> Result<JournalView, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    let journal = coral_core::undo::Journal::load(&loc);
+    Ok(JournalView {
+        undo: journal.undoable().map(|e| e.label.clone()),
+        redo: journal.redoable().map(|e| e.label.clone()),
+    })
 }
 
 /// Runs one action against a repository.
@@ -620,14 +667,18 @@ async fn run_refs(
             let out = loc.rebase(runner, &onto, true).await?;
             return Ok(Done::from(&out));
         }
-        Action::CherryPick { revs, commit } => {
+        Action::CherryPick {
+            revs,
+            commit,
+            mainline,
+        } => {
             let refs: Vec<&str> = revs.iter().map(String::as_str).collect();
-            let out = loc.cherry_pick(runner, &refs, commit).await?;
+            let out = loc.cherry_pick(runner, &refs, commit, mainline).await?;
             return Ok(Done::from(&out));
         }
-        Action::Revert { revs } => {
+        Action::Revert { revs, mainline } => {
             let refs: Vec<&str> = revs.iter().map(String::as_str).collect();
-            let out = loc.revert(runner, &refs).await?;
+            let out = loc.revert(runner, &refs, mainline).await?;
             return Ok(Done::from(&out));
         }
         Action::Reset { rev, mode } => loc.reset(runner, &rev, mode.into()).await?,
@@ -690,6 +741,10 @@ async fn run_tree(
             loc.worktree_add(runner, std::path::Path::new(&path), &rev, branch.as_deref())
                 .await?;
         }
+        Action::WorktreeRemove { path, force } => {
+            loc.worktree_remove(runner, std::path::Path::new(&path), force)
+                .await?;
+        }
         Action::SubmoduleInit {
             path,
             recursive,
@@ -750,13 +805,26 @@ pub async fn rebase_start(
     let binary = coral_binary()?;
 
     let before = loc.snapshot_refs(&runner).await?;
-    let outcome = loc
-        .rebase_interactive(&runner, &onto, &todo, &binary)
-        .await?;
-    let after = loc.snapshot_refs(&runner).await?;
     // Named the way the menu names it. The journal keeps this text for the life of the entry,
     // so an undo months later read "undid rebase onto <forty characters>~1".
     let what = format!("rebase onto {}", named(&onto));
+    // Logged like every other mutation. It was the one rewrite of history that left no trace
+    // in the record of the session: squashing three commits into one showed nothing at all
+    // between the commit before it and whatever was done next.
+    let logged = crate::activity::started(&path, &what);
+    let outcome = match loc.rebase_interactive(&runner, &onto, &todo, &binary).await {
+        Ok(outcome) => outcome,
+        Err(e) => {
+            logged.failed(&e.to_string());
+            return Err(e.into());
+        }
+    };
+    if outcome.conflicts.is_empty() {
+        logged.finished();
+    } else {
+        logged.stopped();
+    }
+    let after = loc.snapshot_refs(&runner).await?;
     loc.journal_change(&what, before, after, coral_core::undo::Restore::Worktree)?;
 
     Ok(ActionOutcome {

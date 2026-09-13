@@ -19,6 +19,7 @@ const EMPTY_DIFF = {
   added: 0,
   removed: 0,
   tooLarge: false,
+  mode: null,
   hunks: [],
 };
 
@@ -97,11 +98,11 @@ describe('the file panel', () => {
     answering();
     const diff = new DiffState(new ViewsState());
     await diff.open('/repo', 'HEAD', 'a.c');
-    expect(called('file_diff')[0]?.[1]).toMatchObject({ ignoreWhitespace: false });
+    expect(called('file_diff')[0]?.[1]).toMatchObject({ options: { ignoreWhitespace: false } });
 
     diff.setIgnoreWhitespace(true);
     await vi.waitFor(() => expect(called('file_diff')).toHaveLength(2));
-    expect(called('file_diff')[1]?.[1]).toMatchObject({ ignoreWhitespace: true });
+    expect(called('file_diff')[1]?.[1]).toMatchObject({ options: { ignoreWhitespace: true } });
 
     // Setting it to what it already is costs nothing.
     diff.setIgnoreWhitespace(true);
@@ -157,6 +158,61 @@ describe('the file panel', () => {
     expect(called('file_history').at(-1)?.[1]).toMatchObject({ limit: 100 });
   });
 
+  it('asks about the name a renamed file had before, as well as the one it has', async () => {
+    // git sees a rename by pairing a deletion with an addition. Given the new name alone it has
+    // nothing to pair, so it answers with the whole file as added: a file moved with a one-line
+    // edit came out as every line of it.
+    answering();
+    const diff = new DiffState(new ViewsState());
+    await diff.open('/repo', 'HEAD', 'renamed.txt', 'was-called.txt');
+    expect(called('file_diff').at(-1)?.[1]).toMatchObject({
+      file: 'renamed.txt',
+      oldFile: 'was-called.txt',
+    });
+  });
+
+  it('sends no old name for a file that was not renamed', async () => {
+    answering();
+    const diff = new DiffState(new ViewsState());
+    await diff.open('/repo', 'HEAD', 'a.c');
+    expect(called('file_diff').at(-1)?.[1]).toMatchObject({ file: 'a.c', oldFile: null });
+  });
+
+  it('keeps a blame failure out of the diff, and a diff failure out of the blame', async () => {
+    // A submodule pointer has no lines, so git refuses to blame it. The refusal used to land in
+    // the field the diff reads, which left the blame pane on "Working out who wrote each line…"
+    // for ever and put git's complaint under a diff where nothing had gone wrong.
+    invoke.mockImplementation((name: string) => {
+      if (name === 'file_blame' || name === 'file_text') {
+        return Promise.reject(new Error('fatal: no such path vendor/sub in HEAD'));
+      }
+      return Promise.resolve(name === 'file_diff' ? EMPTY_DIFF : null);
+    });
+    const diff = new DiffState(new ViewsState());
+    await diff.open('/repo', 'HEAD', 'vendor/sub');
+    await diff.setView('blame');
+
+    await vi.waitFor(() => expect(diff.sideError).toContain('no such path'));
+    expect(diff.error, 'the diff itself was fine').toBeNull();
+  });
+
+  it('says it is still reading rather than that nothing touched the file', async () => {
+    // The pane shows "Nothing has touched this file." for an empty history, and an empty list
+    // was also what it held while the read was in flight. Walking a kernel file's history
+    // takes ten seconds, and for all ten it said a sentence that was not true.
+    let release = (_: unknown) => {};
+    answering({ file_history: new Promise((r) => (release = r)) });
+    const diff = new DiffState(new ViewsState());
+    await diff.open('/repo', 'HEAD', 'a.c');
+
+    const showing = diff.setView('history');
+    expect(diff.history, 'unread, which is not the same as empty').toBeNull();
+
+    release([]);
+    await showing;
+    await vi.waitFor(() => expect(diff.history).toEqual([]));
+  });
+
   it('forgets the blame and the history when another file is opened', async () => {
     answering();
     const diff = new DiffState(new ViewsState());
@@ -169,5 +225,22 @@ describe('the file panel', () => {
     expect(diff.blame).toBeNull();
     expect(diff.text).toBeNull();
     await second;
+  });
+  it('reads a file past the size guard only when the reader asks, and only that file', async () => {
+    // `LARGE_PATCH_BYTES` in core says "the UI offers an explicit load", and for a while it
+    // did not: the panel reported the size and had no way past it.
+    const huge = { ...EMPTY_DIFF, path: 'huge.txt', tooLarge: true };
+    answering({ file_diff: huge });
+    const diff = new DiffState(new ViewsState());
+    await diff.open('/repo', 'HEAD', 'huge.txt');
+    expect(called('file_diff')[0]?.[1]).toMatchObject({ options: { guardLarge: true } });
+
+    await diff.readAnyway();
+    expect(called('file_diff')[1]?.[1]).toMatchObject({ options: { guardLarge: false } });
+
+    // Asking for one enormous file is not a standing instruction to parse the next one.
+    await diff.open('/repo', 'HEAD', 'a.c');
+    expect(diff.unguarded).toBe(false);
+    expect(called('file_diff')[2]?.[1]).toMatchObject({ options: { guardLarge: true } });
   });
 });

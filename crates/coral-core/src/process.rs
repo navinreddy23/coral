@@ -239,7 +239,26 @@ impl GitCommand {
     }
 }
 
-/// Replaces the password in `scheme://user:password@host/…` with `<redacted>`.
+/// One word for a shell, however the word is spelt.
+///
+/// Several of the values handed to git are shell syntax rather than argv: `GIT_EDITOR`,
+/// `GIT_SEQUENCE_EDITOR`, `GIT_SSH_COMMAND` and a `!`-prefixed `credential.helper` are all run
+/// through a shell. Inside single quotes every character is itself, so the apostrophe is the
+/// only one to deal with: close the quoting, escape it, open it again. Without this a path
+/// holding one — a home directory belonging to anyone called O'Brien, a project directory
+/// called `Bob's game` — ended the quoting early and left git a line it could not parse.
+#[must_use]
+pub fn shell_word(word: &str) -> String {
+    format!("'{}'", word.replace('\'', r"'\''"))
+}
+
+/// Replaces the credentials in `scheme://user:password@host/…` with `<redacted>`.
+///
+/// With a colon the user half is kept, because a user name is not the secret. Without one the
+/// single field is kept secret instead: URL syntax calls it the user name, but it is the form
+/// GitHub documents for a token — `https://<token>@github.com/owner/repo.git` — and a token
+/// cannot be told apart from a name by looking. Hiding a name costs a log line some detail;
+/// printing a token costs the account.
 fn redact_url_userinfo(s: &str) -> String {
     let Some(scheme_end) = s.find("://") else {
         return s.to_owned();
@@ -249,18 +268,14 @@ fn redact_url_userinfo(s: &str) -> String {
         return s.to_owned();
     };
     let userinfo = &rest[..at];
-    let Some(colon) = userinfo.find(':') else {
-        return s.to_owned();
-    };
     if userinfo.contains('/') {
         return s.to_owned();
     }
-    format!(
-        "{}{}:<redacted>{}",
-        &s[..scheme_end + 3],
-        &userinfo[..colon],
-        &rest[at..]
-    )
+    let kept = match userinfo.find(':') {
+        Some(colon) => &userinfo[..=colon],
+        None => "",
+    };
+    format!("{}{kept}<redacted>{}", &s[..scheme_end + 3], &rest[at..])
 }
 
 pub struct GitOutput {
@@ -817,7 +832,12 @@ impl GitRunner {
                 label: cmd.label,
                 code,
                 argv,
-                stderr: scrubbed(&tail),
+                // Through the same reading the buffered path gets. Everything streamed is a
+                // network command, which writes its progress to stderr and its reason at the
+                // end — the case `why_it_failed` exists for, and the one path that was not
+                // asking it: a pull refused over local changes reported three lines of
+                // counting objects and never said which file was in the way.
+                stderr: scrubbed(&why_it_failed(&tail)),
             },
             None => CoralError::GitSignal {
                 label: cmd.label,
@@ -1276,6 +1296,25 @@ mod tests {
     }
 
     #[test]
+    fn a_token_standing_alone_is_a_secret_too() {
+        // The form GitHub's own documentation gives for a token in a remote, and the one a
+        // colon-seeking redaction walked straight past: the whole of it reached the log.
+        assert_eq!(
+            redact_url_userinfo("https://ghp_abc123@github.com/o/r.git"),
+            "https://<redacted>@github.com/o/r.git"
+        );
+        assert_eq!(
+            redact_url_userinfo("https://glpat-abc123@gitlab.com/o/r.git"),
+            "https://<redacted>@gitlab.com/o/r.git"
+        );
+        // A password that is empty is still a password field, and the user half still shows.
+        assert_eq!(
+            redact_url_userinfo("https://user:@github.com/o/r.git"),
+            "https://user:<redacted>@github.com/o/r.git"
+        );
+    }
+
+    #[test]
     fn only_a_held_index_lock_is_worth_waiting_out() {
         let lock = CoralError::GitExit {
             label: "commit",
@@ -1465,6 +1504,31 @@ fn is_progress(line: &str) -> bool {
         || bare.starts_with("Total ")
         || bare.starts_with("Unpacking objects:")
         || bare.starts_with("Updating files:")
+}
+
+#[cfg(test)]
+mod word_tests {
+    use super::shell_word;
+
+    /// Several values handed to git are shell syntax rather than argv: the sequence editor,
+    /// the ssh command, a `!`-prefixed credential helper. A path holding an apostrophe ended
+    /// the quoting early and left git a line the shell could not parse.
+    #[test]
+    fn a_word_survives_an_apostrophe_in_it() {
+        assert_eq!(shell_word("/home/dev/bin/coral"), "'/home/dev/bin/coral'");
+        assert_eq!(
+            shell_word("/home/o'brien/bin/coral"),
+            concat!("'/home/o'", "\\", "''brien/bin/coral'")
+        );
+    }
+
+    /// Everything else inside single quotes is itself, and stays itself.
+    #[test]
+    fn nothing_else_is_touched() {
+        let awkward = "a \"b\" $c \\d `e` *f*";
+        assert_eq!(shell_word(awkward), format!("'{awkward}'"));
+        assert_eq!(shell_word(""), "''");
+    }
 }
 
 #[cfg(test)]

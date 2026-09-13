@@ -495,6 +495,7 @@ const DIFF = {
   added: 4,
   removed: 2,
   tooLarge: false,
+    mode: null,
   hunks: [
     {
       header: '@@ -96,8 +96,10 @@ function drawThroughLanes(',

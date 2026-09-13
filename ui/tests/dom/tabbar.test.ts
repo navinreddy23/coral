@@ -548,3 +548,37 @@ describe('choosing a group\'s colour', () => {
     expect(container.querySelector('.menu .sub .hint'), 'and nothing in the hint slot').toBeNull();
   });
 });
+
+describe('the tab in use', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  /**
+   * The strip scrolls sideways and shows no scrollbar. A tab carried out of sight by a
+   * narrower window stayed there, so the strip had five tabs on it and none of them marked:
+   * nothing on screen said which repository the window was showing.
+   */
+  it('is scrolled back into view when it changes', async () => {
+    const seen: HTMLElement[] = [];
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function into(this: HTMLElement) {
+      seen.push(this);
+    };
+    try {
+      const { tabs, container } = bar();
+      await waitFor(() => {
+        if (seen.length === 0) throw new Error('nothing scrolled into view yet');
+      });
+      seen.length = 0;
+
+      tabs.session = { ...tabs.session, active: 3 };
+      await waitFor(() => {
+        if (seen.length === 0) throw new Error('the new tab was not scrolled to');
+      });
+      expect(seen.at(-1)).toBe(chipFor(container, 'gamma'));
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+});

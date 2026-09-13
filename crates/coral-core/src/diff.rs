@@ -39,10 +39,26 @@ pub enum Whitespace {
 }
 
 /// How to ask git for a patch.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DiffOptions {
     pub context: Context,
     pub whitespace: Whitespace,
+    /// Whether a patch past [`LARGE_PATCH_BYTES`] is reported without its hunks.
+    ///
+    /// On by default, because one generated file the size of a kernel header dump costs a
+    /// visible pause to parse. Off when the reader has been shown the guard and asked for the
+    /// contents anyway, which is the only way to ever see such a file.
+    pub guard_large: bool,
+}
+
+impl Default for DiffOptions {
+    fn default() -> Self {
+        Self {
+            context: Context::default(),
+            whitespace: Whitespace::default(),
+            guard_large: true,
+        }
+    }
 }
 
 impl DiffOptions {
@@ -65,6 +81,13 @@ impl DiffOptions {
         let mut out = vec!["--no-color", "-p", self.context.flag()];
         out.extend_from_slice(self.whitespace_flags());
         out
+    }
+
+    /// Reads a patch of any size, however long it takes to parse.
+    #[must_use]
+    pub const fn guarding_large(mut self, yes: bool) -> Self {
+        self.guard_large = yes;
+        self
     }
 
     #[must_use]
@@ -161,8 +184,25 @@ pub struct FileDiff {
     pub removed: Option<u32>,
     /// Empty for a binary file, a pure rename, or a mode-only change.
     pub hunks: Vec<Hunk>,
+    /// The two file modes, when the commit changed them. None when it did not.
+    ///
+    /// A mode-only change has no hunks at all, so without this the panel had a file listed as
+    /// modified and nothing whatever to say about it.
+    pub mode: Option<ModeChange>,
     /// Set when the file was not read because it exceeds the size guard.
     pub too_large: bool,
+}
+
+/// The file mode on each side of a change that touched it.
+///
+/// Kept as git writes it — six octal digits — because that is what a reader recognises and
+/// there is nothing here to compute with.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "types.ts"))]
+#[serde(rename_all = "camelCase")]
+pub struct ModeChange {
+    pub old: String,
+    pub new: String,
 }
 
 impl FileDiff {
@@ -226,6 +266,7 @@ pub fn parse_numstat(input: &[u8]) -> Result<Vec<FileDiff>, CoralError> {
             added,
             removed,
             hunks: Vec::new(),
+            mode: None,
             too_large: false,
         });
     }
@@ -298,8 +339,12 @@ pub fn recount(files: &mut [FileDiff], options: DiffOptions) {
 /// # Errors
 /// [`CoralError::Protocol`] if a hunk header does not parse, or if the patch has more file
 /// sections than the authoritative listing.
-pub fn apply_patch(files: &mut [FileDiff], patch: &[u8]) -> Result<(), CoralError> {
-    if patch.len() > LARGE_PATCH_BYTES {
+pub fn apply_patch(
+    files: &mut [FileDiff],
+    patch: &[u8],
+    options: DiffOptions,
+) -> Result<(), CoralError> {
+    if options.guard_large && patch.len() > LARGE_PATCH_BYTES {
         for f in files.iter_mut() {
             f.too_large = true;
         }
@@ -312,9 +357,24 @@ pub fn apply_patch(files: &mut [FileDiff], patch: &[u8]) -> Result<(), CoralErro
                 "patch has more file sections than the numstat listing",
             ));
         };
+        file.mode = parse_mode(&section);
         file.hunks = parse_hunks(section)?;
     }
     Ok(())
+}
+
+/// `old mode 100644` / `new mode 100755`, which git writes before anything else in a section.
+fn parse_mode(section: &[&[u8]]) -> Option<ModeChange> {
+    let read = |prefix: &[u8]| {
+        section
+            .iter()
+            .find_map(|l| l.strip_prefix(prefix))
+            .map(|m| m.trim().to_str_lossy().into_owned())
+    };
+    match (read(b"old mode "), read(b"new mode ")) {
+        (Some(old), Some(new)) => Some(ModeChange { old, new }),
+        _ => None,
+    }
 }
 
 /// Yields each `diff --git ...` section as a slice of lines.

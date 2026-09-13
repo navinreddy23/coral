@@ -8,6 +8,8 @@ export interface Recent {
   name: string;
   /** Seconds since the epoch. */
   opened: number;
+  /** Whether the repository has gone from where it was. */
+  missing: boolean;
 }
 
 export function recentRepos(): Promise<Recent[]> {

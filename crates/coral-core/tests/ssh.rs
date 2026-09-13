@@ -74,6 +74,33 @@ fn the_key_is_read_back_out_of_a_command_whatever_the_quoting() {
     assert_eq!(key_in_command(""), None);
 }
 
+/// A key under a path with an apostrophe still pins, and still reads back.
+///
+/// `GIT_SSH_COMMAND` and `core.sshCommand` are shell syntax, not argv. A home directory
+/// belonging to anyone called O'Brien ended the quoting early and left ssh a line the shell
+/// could not parse, so every fetch and push with that key failed.
+#[test]
+fn an_apostrophe_in_the_key_path_survives_both_ways() {
+    let command = command_for("/home/o'brien/.ssh/id_work");
+
+    assert_eq!(
+        key_in_command(&command).as_deref(),
+        Some("/home/o'brien/.ssh/id_work"),
+        "{command}"
+    );
+
+    // And a shell reads the command as the words meant, the path whole among them.
+    let out = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("for a in {command}; do echo \"$a\"; done"))
+        .output()
+        .expect("spawn sh");
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("/home/o'brien/.ssh/id_work\n"),
+        "{command}"
+    );
+}
+
 #[test]
 fn a_key_pair_is_the_private_file_whose_public_half_sits_beside_it() {
     let dir = tempfile::tempdir().unwrap();

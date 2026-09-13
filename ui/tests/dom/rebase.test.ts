@@ -63,6 +63,32 @@ describe('the interactive rebase picker', () => {
     expect(container.querySelector('.warn')?.textContent).toContain('nothing above it');
   });
 
+  it('refuses a squash that is first because everything above it was dropped', async () => {
+    // git looks at the list it is given, not at the one that was typed: with the row above it
+    // dropped, the squash is the first commit and there is nothing to fold into. Only the top
+    // row was ever checked, so this started and stopped halfway, detached, with a todo file to
+    // repair by hand.
+    const { rebase, container } = picker(three());
+    rebase.setStep(0, 'drop');
+    rebase.setStep(1, 'squash');
+    expect(rebase.invalid).toBe(true);
+    await Promise.resolve();
+    const start = [...container.querySelectorAll('footer button')].find((b) =>
+      b.textContent?.includes('Start'),
+    ) as HTMLButtonElement;
+    expect(start.disabled).toBe(true);
+  });
+
+  it('says which of the two reasons it is', async () => {
+    const { rebase, container } = picker(three());
+    rebase.setStep(1, 'reword');
+    rebase.setMessage(1, '  ');
+    await Promise.resolve();
+    // One sentence stood for both, so an empty message was explained as a squash with nothing
+    // above it.
+    expect(container.querySelector('.warn')?.textContent).toContain('needs a message');
+  });
+
   it('offers a message field for a reword, seeded with the message it has', async () => {
     const { rebase, container } = picker(three());
     rebase.setStep(1, 'reword');

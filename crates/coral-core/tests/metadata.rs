@@ -1,6 +1,7 @@
 //! The windowed metadata read. The commit-graph carries neither author nor message, so this is
 //! the only way the graph gets them, and it runs on every scroll.
 
+use coral_core::commit::Listing;
 use coral_core::process::GitRunner;
 use coral_core::repo::RepoLocation;
 use coral_core::testutil::TestRepo;
@@ -179,7 +180,10 @@ async fn commit_detail_reports_the_message_and_the_files_it_changed() {
     repo.git(["commit", "--quiet", "-m", "a change", "-m", "with a body"]);
 
     let (runner, loc) = open(&repo).await;
-    let detail = loc.commit_detail(&runner, "HEAD").await.unwrap();
+    let detail = loc
+        .commit_detail(&runner, "HEAD", Listing::Commit)
+        .await
+        .unwrap();
 
     assert_eq!(detail.commit.summary, "a change");
     assert_eq!(detail.commit.body, "with a body");
@@ -224,7 +228,10 @@ async fn a_merge_reports_its_first_parent_changes_rather_than_nothing() {
     ]);
 
     let (runner, loc) = open(&repo).await;
-    let detail = loc.commit_detail(&runner, "HEAD").await.unwrap();
+    let detail = loc
+        .commit_detail(&runner, "HEAD", Listing::Commit)
+        .await
+        .unwrap();
 
     assert_eq!(detail.commit.parents.len(), 2);
     assert!(detail.commit.is_merge());
@@ -241,7 +248,10 @@ async fn the_root_commit_lists_every_file_it_introduced() {
         .commit("first");
 
     let (runner, loc) = open(&repo).await;
-    let detail = loc.commit_detail(&runner, "HEAD").await.unwrap();
+    let detail = loc
+        .commit_detail(&runner, "HEAD", Listing::Commit)
+        .await
+        .unwrap();
 
     assert!(detail.commit.parents.is_empty());
     let mut paths: Vec<String> = detail.files.iter().map(|f| f.path.to_string()).collect();
@@ -264,7 +274,10 @@ async fn a_rename_carries_both_paths() {
     repo.git(["commit", "--quiet", "-m", "rename it"]);
 
     let (runner, loc) = open(&repo).await;
-    let detail = loc.commit_detail(&runner, "HEAD").await.unwrap();
+    let detail = loc
+        .commit_detail(&runner, "HEAD", Listing::Commit)
+        .await
+        .unwrap();
 
     let f = &detail.files[0];
     assert_eq!(f.change, coral_core::diff::FileChange::Renamed);
@@ -281,9 +294,13 @@ async fn an_unknown_revision_is_refused() {
     let (runner, loc) = open(&repo).await;
 
     assert!(
-        loc.commit_detail(&runner, "0000000000000000000000000000000000000000")
-            .await
-            .is_err()
+        loc.commit_detail(
+            &runner,
+            "0000000000000000000000000000000000000000",
+            Listing::Commit
+        )
+        .await
+        .is_err()
     );
 }
 
@@ -341,4 +358,39 @@ async fn a_long_body_is_cut_on_a_character_boundary() {
         std::str::from_utf8(&meta[0].body).is_ok(),
         "and is still valid UTF-8, so it renders as text rather than as U+FFFD"
     );
+}
+
+#[tokio::test]
+async fn a_stash_lists_the_untracked_files_it_carries() {
+    // `git stash -u` keeps them in a third parent, which a diff against the first never
+    // reaches. The panel listed one file for a stash that also held a whole new one, and the
+    // only warning before dropping it is that list.
+    let repo = TestRepo::new().write("kept.txt", "one\n").commit("base");
+    let repo = repo.write("kept.txt", "two\n").write("fresh.txt", "new\n");
+    let (runner, loc) = open(&repo).await;
+    repo.git([
+        "stash",
+        "push",
+        "--include-untracked",
+        "-m",
+        "with an untracked file",
+    ]);
+
+    let oid = repo.git(["rev-parse", "stash@{0}"]).trim().to_owned();
+    let named: Vec<String> = loc
+        .commit_detail(&runner, &oid, Listing::Stash)
+        .await
+        .unwrap()
+        .files
+        .iter()
+        .map(|f| f.path.to_string())
+        .collect();
+    assert_eq!(named, ["fresh.txt", "kept.txt"], "both sides of the stash");
+
+    // And the ordinary reader still answers about ordinary commits.
+    let commit = loc
+        .commit_detail(&runner, "HEAD", Listing::Commit)
+        .await
+        .unwrap();
+    assert_eq!(commit.files.len(), 1);
 }

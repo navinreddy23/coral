@@ -28,6 +28,7 @@ function fileDiff(): FileDiff {
     added: 1,
     removed: 1,
     tooLarge: false,
+  mode: null,
     hunks: [
       {
         header: '@@ -1,3 +1,3 @@',
@@ -104,6 +105,95 @@ describe('the diff viewer', () => {
     // The sheet still stands for the whole file, so the scrollbar means what it says.
     const sheet = container.querySelector('.sheet');
     expect(sheet?.getAttribute('style')).toContain(`${4000 * 17}px`);
+  });
+
+  it('keeps Diff, Blame and History in one place as the view changes', () => {
+    // Everything that comes and goes with the view — the layout toggle, whole file, the step
+    // arrows — has to sit after the free space, or choosing Blame slides the three tabs a
+    // quarter of the header to the right, out from under the pointer that just chose one.
+    const where = (view: 'diff' | 'blame') => {
+      const diff = new DiffState(new ViewsState());
+      diff.path = 'kernel/sched/core.c';
+      diff.file = fileDiff();
+      diff.setView(view);
+      const { container } = render(DiffView, {
+        props: { diff, onClose: () => {}, onPart: () => {} },
+      });
+      const header = container.querySelector('header');
+      const kids = [...(header?.children ?? [])];
+      const tabs = kids.findIndex((e) => e.getAttribute('aria-label') === 'What to show about this file');
+      return { tabs, spread: kids.findIndex((e) => e.classList.contains('spread')) };
+    };
+
+    const asDiff = where('diff');
+    const asBlame = where('blame');
+    expect(asDiff.tabs).toBeGreaterThanOrEqual(0);
+    expect(asBlame.tabs).toBe(asDiff.tabs);
+    // And the free space is what everything after them is pushed against.
+    expect(asDiff.spread).toBe(asDiff.tabs + 1);
+    expect(asBlame.spread).toBe(asBlame.tabs + 1);
+  });
+
+  it('says a file this commit did not touch in its ordinary voice', () => {
+    // The "all files" tree is mostly files the commit did not touch, and opening one is a
+    // reasonable thing to do. It answered in the same alarm red as a git failure.
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'README';
+    diff.empty = 'This commit did not change that file.';
+    const { container } = render(DiffView, {
+      props: { diff, onClose: () => {}, onPart: () => {} },
+    });
+
+    expect(container.querySelector('.error')).toBeNull();
+    expect(container.querySelector('.muted')?.textContent).toContain('did not change that file');
+  });
+
+  it('will not offer to blame a binary file', async () => {
+    // git answers for one all the same, treating its bytes as lines, and the pane painted four
+    // kilobytes of replacement characters. The diff beside it already says "Binary file".
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'logo.bin';
+    diff.file = { ...fileDiff(), path: 'logo.bin', binary: true, hunks: [] };
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+
+    const blame = [...view.container.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Blame',
+    ) as HTMLButtonElement;
+    expect(blame.disabled).toBe(true);
+    expect(blame.title).toContain('no lines to blame');
+  });
+
+  it('shows a blame that failed rather than waiting on it for ever', () => {
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'vendor/sub';
+    diff.file = fileDiff();
+    diff.setView('blame');
+    diff.sideError = 'fatal: no such path vendor/sub in HEAD';
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+
+    expect(view.container.textContent).toContain('no such path vendor/sub');
+    expect(view.container.textContent).not.toContain('Working out who wrote each line');
+  });
+
+  it('forgets which lines were picked when the diff is read again', async () => {
+    // Staging part of a hunk reloads the same file in the same mode, and the hunks that come
+    // back hold different lines under the same indices. Kept, the bar went on offering "Stage
+    // 1 line" for a line nobody had picked, and git answered the patch built from it with
+    // "corrupt patch at line 12".
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'kernel/sched/core.c';
+    diff.source = 'unstaged';
+    diff.file = fileDiff();
+    diff.setMode('inline');
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+
+    await fireEvent.click(view.container.querySelector('button.pick') as HTMLElement);
+    expect(view.getByText('Stage 1 line')).toBeTruthy();
+
+    // The same path, the same mode, a fresh read: the picks belong to the rows that are gone.
+    diff.file = fileDiff();
+    await Promise.resolve();
+    expect(view.queryByText('Stage 1 line')).toBeNull();
   });
 
   it('shows the hunk header inline, and none side by side', () => {
@@ -361,5 +451,90 @@ describe('the words that changed inside a line', () => {
     };
     const { container } = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
     expect(container.querySelectorAll('mark')).toHaveLength(0);
+  });
+
+  it('offers a way past the size guard, and asks again without it', async () => {
+    // The comment on the guard in core promises "the UI offers an explicit load", and for a
+    // while it did not: the panel said the contents were not read and stopped there.
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'huge.txt';
+    diff.file = { ...fileDiff(), hunks: [], tooLarge: true };
+    const { container, getByText } = render(DiffView, {
+      props: { diff, onClose: () => {}, onPart: () => {} },
+    });
+    expect(container.textContent).toContain('past the size guard');
+
+    const asked = vi.spyOn(diff, 'readAnyway').mockResolvedValue(undefined);
+    await fireEvent.click(getByText('Read it anyway'));
+    expect(asked).toHaveBeenCalledOnce();
+  });
+  it('says which side has no newline at the end of the file', async () => {
+    // git marks it and the panel dropped the flag, so a change that only added a trailing
+    // newline drew "gamma" removed and "gamma" added with nothing saying what differs.
+    const diff = new DiffState(new ViewsState());
+    diff.setMode('inline');
+    diff.path = 'nonewline.txt';
+    diff.file = {
+      ...fileDiff(),
+      hunks: [
+        {
+          header: '@@ -1,3 +1,3 @@',
+          oldStart: 1,
+          oldLines: 3,
+          newStart: 1,
+          newLines: 3,
+          lines: [
+            line('context', 'alpha', 1, 1),
+            line('context', 'beta', 2, 2),
+            { ...line('remove', 'gamma', 3, null), noNewline: true },
+            line('add', 'gamma', null, 3),
+          ],
+        },
+      ],
+    };
+    const { container } = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+
+    const marked = [...container.querySelectorAll('tbody tr')].filter((r) =>
+      r.querySelector('.nonl'),
+    );
+    expect(marked, 'only the side that lacks it').toHaveLength(1);
+    expect(marked[0]?.classList.contains('remove')).toBe(true);
+    expect(marked[0]?.querySelector('.nonl')?.getAttribute('title')).toContain('No newline');
+  });
+  it('says what a mode-only change did, since it has no lines to show', async () => {
+    // "No line changes." was the whole of what a file listed as modified had to say.
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'f.sh';
+    diff.file = {
+      ...fileDiff(),
+      hunks: [],
+      added: 0,
+      removed: 0,
+      mode: { old: '100644', new: '100755' },
+    };
+    const { container } = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+    const said = container.textContent ?? '';
+    expect(said).toContain('No line changes.');
+    expect(said).toContain('100644');
+    expect(said).toContain('100755');
+  });
+  it('tells an empty new file apart from a file nothing happened to', async () => {
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'empty.txt';
+    diff.file = { ...fileDiff(), change: 'added', hunks: [], added: 0, removed: 0 };
+    const { container } = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+    expect(container.textContent).toContain('A new file with nothing in it.');
+  });
+  it('shows that a line too long for the column was cut', () => {
+    // The rows are a fixed height so the sheet can hold a file of any length, which rules out
+    // wrapping, and the columns are capped so one long line cannot push the other pane off the
+    // window. Without the ellipsis a five-thousand-character line looked like a short one.
+    view('split');
+    const rules = [...document.styleSheets]
+      .flatMap((sheet) => [...(sheet.cssRules ?? [])])
+      .map((r) => r.cssText);
+    const cell = rules.find((text) => text.includes('white-space: pre') && text.includes('.cell'));
+    expect(cell, 'the side-by-side cell').toBeDefined();
+    expect(cell).toMatch(/text-overflow:\s*ellipsis/u);
   });
 });

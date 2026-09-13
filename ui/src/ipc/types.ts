@@ -109,9 +109,10 @@ export type ConflictKind = "both_modified" | "both_added" | "both_deleted" | "ad
  */
 export type ConflictedFile = { path: string, kind: ConflictKind, 
 /**
- * Binary files offer only whole-file choices; there are no blocks to pick between.
+ * Why there is nothing to pick between, when there is nothing. `None` is the ordinary
+ * text file, settled region by region.
  */
-binary: boolean, 
+whole: Whole | null, 
 /**
  * One side deleted the file, so keeping or deleting is the only meaningful choice.
  */
@@ -131,6 +132,13 @@ added: number | null, removed: number | null,
  * Empty for a binary file, a pure rename, or a mode-only change.
  */
 hunks: Array<Hunk>, 
+/**
+ * The two file modes, when the commit changed them. None when it did not.
+ *
+ * A mode-only change has no hunks at all, so without this the panel had a file listed as
+ * modified and nothing whatever to say about it.
+ */
+mode: ModeChange | null, 
 /**
  * Set when the file was not read because it exceeds the size guard.
  */
@@ -186,6 +194,14 @@ export type Line = { kind: LineKind, text: string, oldNo: number | null, newNo: 
 noNewline: boolean, };
 
 export type LineKind = "context" | "add" | "remove";
+
+/**
+ * The file mode on each side of a change that touched it.
+ *
+ * Kept as git writes it — six octal digits — because that is what a reader recognises and
+ * there is nothing here to compute with.
+ */
+export type ModeChange = { old: string, new: string, };
 
 /**
  * The result of an operation that may stop for conflicts.
@@ -506,7 +522,17 @@ message: string,
 /**
  * Seconds since the epoch.
  */
-time: bigint, };
+time: bigint, 
+/**
+ * True when git named the entry, rather than somebody typing a message for it.
+ *
+ * git's own name for a stash made with no message is the commit it was taken from:
+ * "WIP on master: 1a2b3c4 the subject". That names what the branch was sitting on, not
+ * what is in the stash, so a list of them reads as a list of commits somebody stashed —
+ * which is exactly what they are not. Knowing which shape it was is what lets a window
+ * say "On master" instead.
+ */
+automatic: boolean, };
 
 export type Status = { branch: string | null, oid: string | null, upstream: string | null, ahead: bigint, behind: bigint, stashCount: number, entries: Array<StatusEntry>, };
 
@@ -585,6 +611,11 @@ export type TodoItem = { step: Step, oid: string, summary: string,
 message: string | null, };
 
 /**
+ * Why a conflicted path has no lines of its own to choose between.
+ */
+export type Whole = "binary" | "lfs" | "submodule" | "symlink" | "too_large";
+
+/**
  * One working tree attached to the repository, the main one included.
  */
 export type Worktree = { path: string, 
@@ -603,4 +634,13 @@ locked: boolean,
 /**
  * True when the main worktree of a bare repository, which has no files of its own.
  */
-bare: boolean, };
+bare: boolean, 
+/**
+ * True for the repository's own working tree, which is the one that cannot be removed.
+ *
+ * git lists it first and marks it no other way. Telling it apart by comparing its path
+ * with the path the repository was opened at does not work: inside a submodule git reports
+ * the gitdir under `.git/modules/…` rather than the checkout, so the submodule listed
+ * itself as a linked tree and offered to remove it.
+ */
+main: boolean, };

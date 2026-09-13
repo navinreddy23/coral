@@ -4,7 +4,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("../src/ipc/invoke", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
 
-const { MergeState, render } = await import("../src/state/merge.svelte");
+const { MergeState, hasMarkers, render } = await import("../src/state/merge.svelte");
 const commands = await import("../src/ipc/commands");
 import type { Block } from "../src/ipc/types";
 
@@ -46,22 +46,28 @@ describe("rendering a resolved file", () => {
     expect(render(blocks, { 0: take("base", 0) })).toBe("original\n");
   });
 
-  it("keeps the base where nobody has taken a side", () => {
-    // The lines as they were before either branch touched them: the one answer that cannot
-    // be said to favour either side, and what the result pane shows for an untouched region.
+  it("marks a region nobody has answered rather than quietly taking the base", () => {
+    // This used to write the base: the lines as they were before either branch touched them.
+    // It reads as neutral and is not — it throws away what both branches did there while
+    // looking like a resolution, so a merge could be finished with both sides' work gone and
+    // nothing on screen having said so. Markers say the true thing, which is that the region
+    // is undecided, and nothing will write the file while one is in it.
     const blocks = [conflict(["mine"], ["yours"], ["original"])];
-    expect(render(blocks, {})).toBe("original\n");
+    expect(render(blocks, {}, { ours: "main", theirs: "side" })).toBe(
+      "<<<<<<< main\nmine\n=======\nyours\n>>>>>>> side\n",
+    );
   });
 
-  it("goes back to the base when every line is taken back out", () => {
-    // Unticking both sides is how a region is put back the way it was, which is the same
-    // thing an untouched region does: there is one meaning for "nothing taken".
+  it("takes nothing when every line is taken back out", () => {
+    // Unticking both sides is an answer — keep neither — and it is not the same answer as
+    // never having looked at the region. An entry that is there and empty means the region
+    // goes; no entry at all means nobody has decided.
     const blocks = [
       common("a"),
       conflict(["mine"], ["yours"], ["was"]),
       common("b"),
     ];
-    expect(render(blocks, { 0: [] })).toBe("a\nwas\nb\n");
+    expect(render(blocks, { 0: [] })).toBe("a\nb\n");
   });
 
   it("drops a region with no base when nothing is taken", () => {
@@ -82,15 +88,17 @@ describe("rendering a resolved file", () => {
   });
 
   it("numbers decisions by conflict, not by block", () => {
-    // The second conflict is index 1 even though it is the fourth block, so the first one is
-    // untouched and keeps its base.
+    // The second conflict is index 1 even though it is the fourth block, so the decision lands
+    // on it and the first one is left unanswered.
     const blocks = [
       common("a"),
       conflict(["x"], ["y"], ["was x"]),
       common("b"),
       conflict(["p"], ["q"], ["was p"]),
     ];
-    expect(render(blocks, { 1: take("theirs", 0) })).toBe("a\nwas x\nb\nq\n");
+    expect(render(blocks, { 1: take("theirs", 0) })).toBe(
+      "a\n<<<<<<< ours\nx\n=======\ny\n>>>>>>> theirs\nb\nq\n",
+    );
   });
 });
 
@@ -251,7 +259,7 @@ describe("arriving at a stopped operation", () => {
     files: {
       path: string;
       kind: string;
-      binary: boolean;
+      whole: string | null;
       deleteModify: boolean;
     }[],
   ) {
@@ -291,7 +299,7 @@ describe("arriving at a stopped operation", () => {
   const conflicted = (path: string) => ({
     path,
     kind: "both_modified",
-    binary: false,
+    whole: null,
     deleteModify: false,
   });
 
@@ -329,13 +337,13 @@ describe("arriving at a stopped operation", () => {
   });
 
   it("does not read blocks for a file that has none", async () => {
-    // Binary, or on one side only: the whole-file choices are all there is, and the read
-    // would be parsing a blob to show nothing.
+    // Binary, in Git LFS, a submodule, or on one side only: the whole-file choices are all
+    // there is, and the read would be parsing a blob to show nothing.
     wire([
       {
         path: "logo.png",
         kind: "both_modified",
-        binary: true,
+        whole: "binary",
         deleteModify: false,
       },
     ]);
@@ -374,7 +382,7 @@ describe("stepping an operation on", () => {
       {
         path: "dummy.txt",
         kind: "both_modified",
-        binary: false,
+        whole: null,
         deleteModify: false,
       },
     ]);
@@ -406,5 +414,37 @@ describe("stepping an operation on", () => {
     merge.stopped = "error: could not apply 91e605d... local: dummy1 file";
     expect(await merge.step("continue")).toBe(true);
     expect(merge.stopped).toBe("");
+  });
+});
+
+describe('a resolution typed by hand', () => {
+  it('is not settled while a conflict marker is still in it', () => {
+    // Editing by hand answered every region at once, whatever was in the box. Leaving a marker
+    // in wrote it, staged it, and called the file resolved; the next commit carried it.
+    expect(hasMarkers('one\ntwo\n')).toBe(false);
+    expect(hasMarkers('one\n<<<<<<< theirs\ntwo\n')).toBe(true);
+    expect(hasMarkers('one\n=======\ntwo\n')).toBe(true);
+    expect(hasMarkers('one\n>>>>>>> ours\n')).toBe(true);
+    expect(hasMarkers('one\n||||||| base\n')).toBe(true);
+  });
+
+  it('leaves alone a line that only looks like one', () => {
+    // Six is not seven, and a run that carries on is not what git writes.
+    expect(hasMarkers('<<<<<< six of them\n')).toBe(false);
+    expect(hasMarkers('<<<<<<<<in the middle of a word\n')).toBe(false);
+    expect(hasMarkers('  <<<<<<< indented\n')).toBe(false);
+  });
+  it('refuses to write one, and says why', async () => {
+    const merge = new MergeState();
+    merge.blocks = { blocks: [common('top'), conflict(['mine'], ['yours'])] };
+    merge.active = 'f.txt';
+    merge.edited = 'top\n<<<<<<< ours\nmine\n';
+
+    expect(merge.settled).toBe(false);
+    expect(await merge.apply()).toBe(false);
+    expect(merge.error).toContain('conflict marker');
+
+    merge.edited = 'top\nmine\n';
+    expect(merge.settled).toBe(true);
   });
 });

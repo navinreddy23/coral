@@ -1,4 +1,4 @@
-import { commitDetail, compareCommits } from '../ipc/commands';
+import { commitDetail, compareCommits, type Listing } from '../ipc/commands';
 
 import { covers, rowOfOid, type Frame } from '../graph/frame';
 import type { ChangedFile, CommitDetail } from '../ipc/types';
@@ -47,7 +47,12 @@ export class SelectionState {
     this.#anchor = null;
   }
 
-  async select(path: string, row: number, oid: string): Promise<void> {
+  async select(
+    path: string,
+    row: number,
+    oid: string,
+    listing: Listing = 'commit',
+  ): Promise<void> {
     this.#anchor = { row, oid };
     this.pair = null;
     this.compared = [];
@@ -59,7 +64,7 @@ export class SelectionState {
     // otherwise a slow earlier one lands last and shows the wrong commit.
     const token = ++this.#token;
     try {
-      const detail = await commitDetail(path, oid);
+      const detail = await commitDetail(path, oid, listing);
       if (token === this.#token) this.detail = detail;
     } catch (e) {
       if (token === this.#token) {

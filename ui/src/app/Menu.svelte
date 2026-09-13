@@ -23,17 +23,28 @@
         disabled?: boolean;
         /** Marks a destructive choice, which is drawn in the danger colour. */
         danger?: boolean;
+        /**
+         * Whether the item needs a checkout to work.
+         *
+         * A bare repository has none, and git refuses every one of these in it: checkout,
+         * merge, rebase, cherry-pick, reset, revert, and everything that rewrites history.
+         * Offering an operation git will refuse is what the caller strips with this.
+         */
+        worktree?: boolean;
         run: () => void;
       }
     | {
         kind: 'submenu';
         label: string;
+        /** As on an item: the whole submenu goes when there is no checkout. */
+        worktree?: boolean;
         items: MenuItem[];
       };
 </script>
 
 <script lang="ts">
   import Icon from './Icon.svelte';
+  import { fitPanel, fitSubmenu } from './placement';
 
   const { x, y, items, onClose }: {
     x: number;
@@ -58,12 +69,40 @@
   $effect(() => {
     if (!panel) return;
     const box = panel.getBoundingClientRect();
-    const margin = 8;
-    fitted = {
-      left: Math.max(margin, Math.min(x, window.innerWidth - box.width - margin)),
-      top: Math.max(margin, Math.min(y, window.innerHeight - box.height - margin)),
-    };
+    fitted = fitPanel(x, y, box, viewport());
   });
+
+  /**
+   * Where the open submenu sits.
+   *
+   * The stylesheet hangs it off the right of its row, which is right until the menu itself is
+   * against the right edge of the window: the panel is fitted there, the submenu that hangs
+   * off it was not, and its rows ran off the window with no way to read or reach them — Reset,
+   * whose three choices differ only in how much they throw away, was exactly that menu.
+   *
+   * Measured from the row rather than from the submenu's own box, so running it again after a
+   * flip reaches the same answer instead of oscillating.
+   */
+  let sub = $state<HTMLDivElement | null>(null);
+  let subFit = $state<{ left: string; top: string } | null>(null);
+  $effect(() => {
+    void open;
+    const el = sub;
+    const row = el?.parentElement ?? null;
+    if (el === null || row === null) {
+      subFit = null;
+      return;
+    }
+    subFit = fitSubmenu(
+      row.getBoundingClientRect(),
+      { width: el.offsetWidth, height: el.offsetHeight },
+      viewport(),
+    );
+  });
+
+  function viewport() {
+    return { width: window.innerWidth, height: window.innerHeight, margin: 8 };
+  }
 
   function choose(item: Extract<MenuItem, { kind: 'item' }>) {
     if (item.disabled) return;
@@ -119,7 +158,13 @@
           <span class="more"><Icon name="chevronRight" size={13} /></span>
         </button>
         {#if open === i}
-          <div class="sub" role="menu">
+          <div
+            class="sub"
+            role="menu"
+            bind:this={sub}
+            style:left={subFit?.left ?? 'calc(100% - 2px)'}
+            style:top={subFit?.top ?? '-5px'}
+          >
             {#each item.items as child, j (j)}
               {#if child.kind === 'item'}
                 <button
@@ -200,7 +245,7 @@
    * whole row to itself.
    */
   .label {
-    flex: 0 1 auto; min-width: 0; margin-right: auto;
+    flex: 0 1 auto; min-width: 0; max-width: 100%; margin-right: auto;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   /* The colour itself, before its name. The ring is what keeps a pale one visible on the
@@ -220,6 +265,19 @@
    */
   .row:disabled .label { flex-shrink: 8; }
   .row:disabled .hint { flex-shrink: 0; }
+  /*
+   * And where the row can be used, the hint gives way until there is none of it left before
+   * the label loses a character. Shrunk in proportion, as they were, "Fast-forward
+   * renamed-branch to main" came out as "Fast-forward renamed-branch to m…" beside a hint that
+   * still had room — on the rows that decide how much gets thrown away.
+   *
+   * `flex-shrink: 0` rather than a minimum width: shrink is shared out in proportion, so a
+   * floor only stops the label at the floor and it gives up characters all the way down to it
+   * while the hint still has room. Refusing to shrink at all is what makes the hint go first,
+   * and `max-width: 100%` above is what still ellipsizes a label longer than the whole menu
+   * instead of pushing the panel off the side of the window.
+   */
+  .row:not(:disabled) .label { flex-shrink: 0; }
   .more { flex: 0 0 auto; color: var(--fg-2); display: flex; }
   /* Reserved on every row, ticked or not, so a menu where one item is in force does not
      indent that row alone. */

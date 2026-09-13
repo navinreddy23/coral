@@ -67,7 +67,17 @@ pub async fn resolve_conflict(path: String, file: String, choice: Choice) -> Res
         Choice::Delete => Resolution::Delete,
         Choice::Content { text } => Resolution::Content(text.into()),
     };
-    Ok(loc.resolve(&runner, &file, &resolution).await?)
+    let logged = crate::activity::started(&path, &format!("resolve {file}"));
+    match loc.resolve(&runner, &file, &resolution).await {
+        Ok(()) => {
+            logged.finished();
+            Ok(())
+        }
+        Err(e) => {
+            logged.failed(&e.to_string());
+            Err(e.into())
+        }
+    }
 }
 
 /// Continues, aborts, or skips the operation in progress.
@@ -93,7 +103,22 @@ pub async fn operation_step(
     // Read before the step, since finishing it is what clears the state.
     let label = journal_label(loc.operation(&runner).await?.state, &step);
     let before = loc.snapshot_refs(&runner).await?;
-    let outcome = loc.op(&runner, action).await?;
+    // Logged like every other mutation. Without this the log showed a merge that stopped on
+    // conflicts and then nothing: whether it was finished, aborted or left open was the one
+    // thing the record of the session did not say.
+    let logged = crate::activity::started(&path, &label);
+    let outcome = match loc.op(&runner, action).await {
+        Ok(outcome) => outcome,
+        Err(e) => {
+            logged.failed(&e.to_string());
+            return Err(e.into());
+        }
+    };
+    if outcome.completed {
+        logged.finished();
+    } else {
+        logged.stopped();
+    }
     let after = loc.snapshot_refs(&runner).await?;
     loc.journal_change(&label, before, after, coral_core::undo::Restore::Worktree)?;
     Ok(outcome)

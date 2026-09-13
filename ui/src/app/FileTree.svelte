@@ -56,7 +56,7 @@
         >
           <span class="caret">
             <Icon name={shut(node.path) ? 'chevronRight' : 'chevronDown'} size={13} />
-          </span>{node.name}
+          </span><span class="name">{node.name}</span>
         </button>
         {#if !shut(node.path)}
           <FileTree
@@ -78,7 +78,7 @@
           <span class="mark {node.item.change ?? 'untouched'}">
             {node.item.change === null ? '' : mark[node.item.change] ?? '?'}
           </span>
-          {node.name}
+          <span class="name">{node.name}</span>
         </button>
       {/if}
     </li>
@@ -87,13 +87,22 @@
 
 <style>
   .tree { list-style: none; margin: 0; padding: 0; }
+  /*
+   * The indent is padding, so the row has to count it inside its own width. Left outside, every
+   * row was wider than the panel by its own indent — which gave the panel a sideways scrollbar
+   * whatever was in the tree, and one stray scroll then carried the message, the object ids and
+   * the controls off the left edge with it.
+   */
   button {
     display: flex; align-items: center; gap: var(--space-2);
-    width: 100%; text-align: left; cursor: pointer;
+    width: 100%; box-sizing: border-box; text-align: left; cursor: pointer;
     font: inherit; font-size: var(--text-base); padding: 1px var(--space-2) 1px 4px;
     background: var(--bg-1); border: 0; color: var(--fg-1);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    overflow: hidden; white-space: nowrap;
   }
+  /* The name is what gives, since the mark and the caret are what the row is read by. Ellipsis
+     on the button itself does nothing: a flex item does not shrink, so it was cut mid-letter. */
+  .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   button:hover { background: var(--bg-2); }
   .file.open { background: var(--accent-soft); color: var(--fg-0); }
   .dir { color: var(--fg-2); }

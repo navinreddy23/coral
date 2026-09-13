@@ -1,5 +1,5 @@
 use coral_core::process::GitRunner;
-use coral_core::repo::{Head, OpState, RepoLocation};
+use coral_core::repo::{Head, OpState, RepoLocation, present};
 use coral_core::testutil::TestRepo;
 
 async fn runner() -> GitRunner {
@@ -130,4 +130,50 @@ async fn detects_an_in_progress_merge() {
     let r = runner().await;
     let loc = RepoLocation::discover(&r, fixture.path()).await.unwrap();
     assert_eq!(loc.op_state(), OpState::Merge);
+}
+
+#[test]
+fn a_repository_that_has_gone_is_not_present() {
+    let fixture = TestRepo::new().write("a.txt", "hello\n").commit("first");
+    assert!(present(fixture.path()));
+
+    // A bare repository has no .git, and the start page lists those too.
+    let bare = fixture.path().join("bare.git");
+    fixture.git(["clone", "--quiet", "--bare", ".", bare.to_str().unwrap()]);
+    assert!(present(&bare));
+
+    std::fs::remove_dir_all(&bare).unwrap();
+    assert!(!present(&bare));
+    assert!(!present(&fixture.path().join("never-existed")));
+}
+
+#[tokio::test]
+async fn the_git_directory_stands_for_the_repository_holding_it() {
+    // What a file chooser hands back when somebody picks the folder they think of as the
+    // repository. git refuses to name a work tree from inside one, so this was a failure
+    // about a directory nobody meant to open.
+    let fixture = TestRepo::new().write("a.txt", "hello\n").commit("first");
+    let r = runner().await;
+
+    let loc = RepoLocation::discover(&r, &fixture.path().join(".git"))
+        .await
+        .unwrap();
+    assert!(!loc.is_bare);
+    assert_eq!(
+        loc.workdir.map(|w| std::fs::canonicalize(w).unwrap()),
+        Some(std::fs::canonicalize(fixture.path()).unwrap()),
+    );
+}
+
+#[tokio::test]
+async fn a_bare_repository_named_for_itself_is_not_mistaken_for_one() {
+    // `project.git` is a repository, not the git dir of the directory above it.
+    let fixture = TestRepo::new().write("a.txt", "hello\n").commit("first");
+    let bare = fixture.path().join("bare.git");
+    fixture.git(["clone", "--quiet", "--bare", ".", bare.to_str().unwrap()]);
+
+    let r = runner().await;
+    let loc = RepoLocation::discover(&r, &bare).await.unwrap();
+    assert!(loc.is_bare);
+    assert_eq!(loc.workdir, None);
 }

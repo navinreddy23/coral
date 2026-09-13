@@ -75,6 +75,9 @@ export class HostingState {
   }
 
   async signOut(): Promise<void> {
+    // The last failure was about the token being forgotten. Left up, the panel reported a
+    // rejection of a token that is no longer there.
+    this.error = null;
     try {
       this.view = await hostingLogout(this.#path);
       this.pullRequests = [];

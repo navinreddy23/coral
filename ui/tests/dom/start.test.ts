@@ -28,8 +28,8 @@ const KEYS = [
 ];
 
 const RECENTS = [
-  { path: '/home/someone/Work/alpha', name: 'alpha', opened: 1_756_000_000 },
-  { path: '/home/someone/Play/beta', name: 'beta', opened: 1_755_000_000 },
+  { path: '/home/someone/Work/alpha', name: 'alpha', opened: 1_756_000_000, missing: false },
+  { path: '/home/someone/Play/beta', name: 'beta', opened: 1_755_000_000, missing: false },
 ];
 
 function wire(over: Record<string, unknown> = {}) {
@@ -105,6 +105,24 @@ describe('the start page', () => {
     await waitFor(() => {
       if (!view.container.textContent?.includes('Nothing matches')) throw new Error('not yet');
     });
+  });
+
+  it('marks a repository that is no longer where it was', async () => {
+    // Without the mark the row reads like every other one and clicking it ends in "not a git
+    // repository", which names a fault rather than the repository someone moved.
+    const gone = [RECENTS[0], { ...RECENTS[1], missing: true }];
+    const { view } = await page({ recent_repos: gone });
+
+    await waitFor(() => {
+      if (view.container.querySelectorAll('.recents li').length !== 2) throw new Error('not yet');
+    });
+    const [here, moved] = [...view.container.querySelectorAll('.recents li')];
+    expect(here?.className).not.toContain('gone');
+    expect(moved?.className).toContain('gone');
+    expect(moved?.textContent).toContain('Not found');
+    expect(moved?.querySelector('.repo')?.getAttribute('title')).toContain(
+      'Nothing is at /home/someone/Play/beta any more',
+    );
   });
 
   it('opens a recent repository by its row', async () => {

@@ -158,13 +158,13 @@ merge.files = [
   {
     path: "ui/src/graph/render.ts",
     kind: "both_modified",
-    binary: false,
+    whole: null,
     deleteModify: false,
   },
   {
     path: "assets/logo.png",
     kind: "both_added",
-    binary: true,
+    whole: "binary",
     deleteModify: false,
   },
 ];
@@ -415,9 +415,9 @@ mount(Ask, {
 const start = new StartState();
 const NOW = Math.floor(Date.now() / 1000);
 start.recents = [
-  { path: "/home/dev/projects/coral", name: "coral", opened: NOW - 600 },
-  { path: "/home/dev/projects/linux", name: "linux", opened: NOW - 86_400 },
-  { path: "/home/dev/projects/notes", name: "notes", opened: NOW - 9 * 86_400 },
+  { path: "/home/dev/projects/coral", name: "coral", opened: NOW - 600, missing: false },
+  { path: "/home/dev/projects/linux", name: "linux", opened: NOW - 86_400, missing: false },
+  { path: "/home/dev/projects/notes", name: "notes", opened: NOW - 9 * 86_400, missing: true },
 ];
 mount(Start, {
   target: panel("Start page", "460px"),
@@ -478,6 +478,7 @@ mount(Toolbar, {
     terminalOpen: false,
     stashes: 2,
     dirty: true,
+    journal: { undo: null, redo: null },
     leftPanel: "open",
     rightPanel: true,
     rightPanelUsable: true,

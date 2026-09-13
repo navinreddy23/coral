@@ -20,6 +20,7 @@ function bar(overrides: Record<string, unknown> = {}) {
       leftPanel: 'open',
       stashes: 0,
       dirty: true,
+    journal: { undo: null, redo: null },
       rightPanel: true,
       rightPanelUsable: true,
       onAction: vi.fn(),
@@ -302,5 +303,31 @@ describe('the two buttons that need something to act on', () => {
     const { container } = bar({ busy: true, stashes: 2, dirty: true });
     expect(named(container, 'Pop').disabled).toBe(true);
     expect(named(container, 'Stash').disabled).toBe(true);
+  });
+});
+
+describe('undo and redo', () => {
+  /** The button with that accessible name. */
+  function named(container: HTMLElement, label: string): HTMLButtonElement {
+    const found = buttons(container).find((b) => b.getAttribute('aria-label') === label);
+    if (!found) throw new Error(`no ${label} button`);
+    return found;
+  }
+
+  it('are off when the journal has nothing at that end, and say so', () => {
+    // Offered whatever the journal held, pressing one on a repository nothing had happened in
+    // answered "cannot redo: nothing to redo" from a control that had looked available.
+    const { container } = bar({ journal: { undo: null, redo: null } });
+    expect(named(container, 'Undo').disabled).toBe(true);
+    expect(named(container, 'Redo').disabled).toBe(true);
+    expect(named(container, 'Undo').title).toContain('Nothing to undo');
+    expect(named(container, 'Redo').title).toContain('Nothing to redo');
+  });
+
+  it('name what they would act on', () => {
+    const { container } = bar({ journal: { undo: 'merge topic', redo: null } });
+    expect(named(container, 'Undo').disabled).toBe(false);
+    expect(named(container, 'Undo').title).toContain('merge topic');
+    expect(named(container, 'Redo').disabled).toBe(true);
   });
 });

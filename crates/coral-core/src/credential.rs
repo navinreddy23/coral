@@ -329,8 +329,9 @@ pub fn helper_args(coral_binary: &std::path::Path, session: &str) -> Vec<String>
         "credential.helper=".to_owned(),
         "-c".to_owned(),
         format!(
-            "credential.helper=!'{}' credential-helper --session '{session}'",
-            coral_binary.display()
+            "credential.helper=!{} credential-helper --session {}",
+            crate::process::shell_word(&coral_binary.display().to_string()),
+            crate::process::shell_word(session)
         ),
     ]
 }

@@ -21,12 +21,27 @@ export class RebaseState {
 
   open = $derived(this.onto !== null);
 
-  /** True when the list would be refused, or has a reword with nothing to say. */
-  invalid = $derived(
-    (this.items.length > 0 &&
-      (this.items[0]?.step === 'squash' || this.items[0]?.step === 'fixup')) ||
-      this.items.some((i) => i.step === 'reword' && (i.message ?? '').trim() === ''),
-  );
+  /**
+   * Why the list would be refused, or null when it is ready to run.
+   *
+   * Whether a squash has anything to fold into is a question about the first commit git keeps,
+   * not the first row: dropping the row above a squash leaves the squash first, and git stops
+   * with "cannot 'squash' without a previous commit" — halfway in, with the branch detached and
+   * a todo file to repair. Only the topmost row was ever checked.
+   */
+  whyNotReady = $derived.by(() => {
+    const first = this.items.find((i) => i.step !== 'drop');
+    if (first?.step === 'squash' || first?.step === 'fixup') {
+      return 'The first commit kept has nothing above it to fold into.';
+    }
+    if (this.items.some((i) => i.step === 'reword' && (i.message ?? '').trim() === '')) {
+      return 'A reworded commit needs a message.';
+    }
+    return null;
+  });
+
+  /** True when the list would be refused. */
+  invalid = $derived(this.whyNotReady !== null);
 
   /** Commits that will survive, for the summary line. */
   remaining = $derived(this.items.filter((i) => i.step !== 'drop').length);

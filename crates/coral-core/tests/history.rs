@@ -136,7 +136,7 @@ async fn blame_attributes_every_line_to_the_commit_that_wrote_it() {
     let second = repo.git(["rev-parse", "HEAD"]);
 
     let (runner, loc) = open(&repo).await;
-    let blame = loc.blame(&runner, "HEAD", "f.txt").await.unwrap();
+    let blame = loc.blame(&runner, "HEAD", "f.txt", None).await.unwrap();
 
     assert_eq!(blame.commit_for_line(1).unwrap().oid, first);
     assert_eq!(
@@ -361,4 +361,37 @@ fn searching_matches_a_file_path() {
                 .is_empty()
         );
     });
+}
+
+#[tokio::test]
+async fn blame_reaches_a_file_by_the_name_it_had_then() {
+    // Stepping back through a file's history and asking who wrote a line answered "no such
+    // path <current name> in <forty characters>": blame takes one path and one revision, and
+    // before the rename the current name is not in that tree.
+    let repo = TestRepo::new().write("before.txt", "one\n").commit("base");
+    let base = repo.git(["rev-parse", "HEAD"]).trim().to_owned();
+    repo.git(["mv", "before.txt", "after.txt"]);
+    let repo = repo.commit("moved");
+
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+    let blame = loc
+        .blame(&runner, &base, "after.txt", Some("before.txt"))
+        .await
+        .unwrap();
+    assert_eq!(blame.chunks.len(), 1, "the file as it was named then");
+
+    let text = loc
+        .file_at(&runner, &base, "after.txt", Some("before.txt"))
+        .await
+        .unwrap();
+    assert_eq!(String::from_utf8_lossy(&text), "one\n");
+
+    // And the current name still wins wherever it exists.
+    let now = loc
+        .file_at(&runner, "HEAD", "after.txt", Some("before.txt"))
+        .await
+        .unwrap();
+    assert_eq!(String::from_utf8_lossy(&now), "one\n");
 }

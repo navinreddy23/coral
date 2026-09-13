@@ -63,7 +63,7 @@
   const ourRows = $derived(merge.blocks === null ? [] : sideRows(merge.blocks.blocks, 'ours'));
   const theirRows = $derived(merge.blocks === null ? [] : sideRows(merge.blocks.blocks, 'theirs'));
   const outRows = $derived(
-    merge.blocks === null ? [] : outputRows(merge.blocks.blocks, merge.choices),
+    merge.blocks === null ? [] : outputRows(merge.blocks.blocks, merge.choices, labels),
   );
 
   /**
@@ -149,12 +149,26 @@
   );
 
   function supportsBlocks(file: ConflictedFile): boolean {
-    return !file.binary && !file.deleteModify;
+    return file.whole === null && !file.deleteModify;
   }
 
   /** Why this file cannot be settled region by region, in words rather than a flag. */
   function whyWhole(file: ConflictedFile): string {
-    if (file.binary) return `${file.path} is binary, so there are no lines to pick between.`;
+    if (file.whole === 'binary') {
+      return `${file.path} is binary, so there are no lines to pick between.`;
+    }
+    if (file.whole === 'lfs') {
+      return `${file.path} is kept outside the repository by Git LFS. What is stored here is a short pointer to it, not the file, so take one side whole.`;
+    }
+    if (file.whole === 'submodule') {
+      return `${file.path} is a submodule. ${labels.ours} and ${labels.theirs} moved it to different commits, and one of the two is the answer.`;
+    }
+    if (file.whole === 'symlink') {
+      return `${file.path} is a link. ${labels.ours} and ${labels.theirs} pointed it at different files, and one of the two is the answer.`;
+    }
+    if (file.whole === 'too_large') {
+      return `${file.path} is too large to lay out side by side, so take one side whole and edit it afterwards if you need to.`;
+    }
     const gone = sidesOf(file);
     if (!gone.ours) {
       return `${file.path} is not on ${labels.ours} at all: ${labels.theirs} changed a file this side had deleted.`;
@@ -342,7 +356,12 @@
           <button title="All {labels.theirs}" onclick={() => merge.chooseAll('theirs')}
             >All {labels.theirs}</button
           >
-          <button class="primary" disabled={merge.busy} onclick={() => merge.apply()}>
+          <button
+            class="primary"
+            disabled={merge.busy || !merge.settled}
+            title={merge.settled ? 'Write this file and stage it' : merge.whyNotSettled}
+            onclick={() => merge.apply()}
+          >
             Mark resolved
           </button>
         </div>

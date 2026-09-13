@@ -102,11 +102,19 @@ pub enum Command {
     CherryPick {
         #[arg(required = true)]
         revs: Vec<String>,
+        /// Which parent of a merge to measure the change against, counting from one. A merge
+        /// needs one; git refuses a number the commit has no parent for.
+        #[arg(long)]
+        mainline: Option<u32>,
     },
     /// Record commits that undo others.
     Revert {
         #[arg(required = true)]
         revs: Vec<String>,
+        /// Which parent of a merge to keep, counting from one. A merge needs one; git refuses
+        /// a number the commit has no parent for.
+        #[arg(long)]
+        mainline: Option<u32>,
     },
     /// Move the current branch, and optionally the index and worktree.
     Reset {
@@ -254,8 +262,17 @@ pub enum Command {
     },
     /// Throw away worktree changes. This cannot be undone from the index.
     Discard {
-        #[arg(value_name = "PATH", required = true)]
+        #[arg(value_name = "PATH", required_unless_present = "file")]
         paths: Vec<String>,
+        /// Throw away one hunk of a file instead. Use with --file.
+        #[arg(long, requires = "file")]
+        hunk: Option<usize>,
+        /// The file a --hunk or --lines selection applies to.
+        #[arg(long)]
+        file: Option<String>,
+        /// Throw away only these line indices within --hunk.
+        #[arg(long, requires = "hunk", value_delimiter = ',')]
+        lines: Option<Vec<usize>>,
     },
     /// Show changes to the worktree, or to the index with --staged.
     Diff {
@@ -667,10 +684,12 @@ async fn dispatch_write(command: Command, repo: &std::path::Path) -> output::Ren
         Command::Rebase { onto, update_refs } => {
             output::render_op(&commands::write::rebase(repo, onto, update_refs).await)
         }
-        Command::CherryPick { revs } => {
-            output::render_op(&commands::write::cherry_pick(repo, revs).await)
+        Command::CherryPick { revs, mainline } => {
+            output::render_op(&commands::write::cherry_pick(repo, revs, mainline).await)
         }
-        Command::Revert { revs } => output::render_op(&commands::write::revert(repo, revs).await),
+        Command::Revert { revs, mainline } => {
+            output::render_op(&commands::write::revert(repo, revs, mainline).await)
+        }
         Command::Reset { rev, mode } => {
             output::render(&commands::write::reset(repo, rev, mode).await)
         }
@@ -747,7 +766,12 @@ async fn dispatch_tree(command: Command, repo: &std::path::Path) -> output::Rend
             file,
             lines,
         } => output::render(&stage_or_unstage(repo, paths, hunk, file, lines, D::Unstage).await),
-        Command::Discard { paths } => output::render(&commands::stage::discard(repo, &paths).await),
+        Command::Discard {
+            paths,
+            hunk,
+            file,
+            lines,
+        } => output::render(&discard(repo, paths, hunk, file, lines).await),
         Command::Remotes
         | Command::Remote { .. }
         | Command::Fetch { .. }
@@ -759,6 +783,24 @@ async fn dispatch_tree(command: Command, repo: &std::path::Path) -> output::Rend
 }
 
 /// Routes a stage or unstage to the whole-path or partial form.
+/// Throws away whole paths, or one hunk of a file.
+///
+/// A whole path is restored from the index rather than by reversing a patch, which is what
+/// `discard` has always meant here. A selection has no such shortcut and goes through the same
+/// patch machinery staging does, in reverse.
+async fn discard(
+    repo: &std::path::Path,
+    paths: Vec<String>,
+    hunk: Option<usize>,
+    file: Option<String>,
+    lines: Option<Vec<usize>>,
+) -> Result<commands::stage::Staged, coral_core::CoralError> {
+    match (hunk, file) {
+        (Some(h), Some(f)) => commands::stage::partial(repo, &f, h, lines, D::Discard).await,
+        _ => commands::stage::discard(repo, &paths).await,
+    }
+}
+
 async fn stage_or_unstage(
     repo: &std::path::Path,
     paths: Vec<String>,

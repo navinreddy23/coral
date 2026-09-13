@@ -326,3 +326,41 @@ async fn reading_the_git_directory_is_not_a_change() {
         .flatten();
     assert_eq!(after, None, "reading files reported a change");
 }
+
+/// The second edit of a file is as much a change as the first.
+///
+/// Status names the paths that differ and the blobs the index and HEAD hold for them, never
+/// what the file says now, so a file already listed as modified hashed the same however often
+/// it was written. Every edit after the first was narrowed away as noise, and a diff left open
+/// on that file showed the first edit for as long as it stayed open.
+#[tokio::test]
+async fn every_edit_of_an_already_modified_file_is_news() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let (runner, loc) = runner_at(&repo).await;
+    let mut seen = loc.fingerprint(&runner).await.unwrap();
+    let claimed = RepoChanged {
+        worktree: true,
+        ..RepoChanged::default()
+    };
+
+    std::fs::write(repo.path().join("a.txt"), "2\n").unwrap();
+    assert_eq!(
+        loc.narrow(&runner, &mut seen, claimed).await.unwrap(),
+        Some(claimed),
+        "the first edit"
+    );
+
+    std::fs::write(repo.path().join("a.txt"), "3\n").unwrap();
+    assert_eq!(
+        loc.narrow(&runner, &mut seen, claimed).await.unwrap(),
+        Some(claimed),
+        "the second edit, which status alone cannot tell from the first"
+    );
+
+    std::fs::write(repo.path().join("a.txt"), "3\n").unwrap();
+    assert_eq!(
+        loc.narrow(&runner, &mut seen, claimed).await.unwrap(),
+        None,
+        "writing the same bytes again is not a change"
+    );
+}

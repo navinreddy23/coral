@@ -25,6 +25,9 @@ pub struct Recent {
     pub name: String,
     /// Seconds since the epoch, so the list can be ordered without storing the order.
     pub opened: i64,
+    /// Whether the repository has gone from where it was, filled in by [`marked`].
+    #[serde(default, skip_deserializing)]
+    pub missing: bool,
 }
 
 /// The list, and the file it came from, under one lock so a profile switch cannot be
@@ -51,9 +54,10 @@ impl Recents {
         }
     }
 
+    /// The list, each entry saying whether its repository is still where it was.
     #[must_use]
     pub fn read(&self) -> Vec<Recent> {
-        self.held().list.clone()
+        marked(self.held().list.clone())
     }
 
     /// Puts this list away and takes out the one at `path`.
@@ -62,7 +66,7 @@ impl Recents {
         store(&held.path, &held.list);
         held.list = read(&path);
         held.path = path;
-        held.list.clone()
+        marked(held.list.clone())
     }
 
     /// Records that a repository was opened, moving it to the front.
@@ -117,10 +121,22 @@ pub fn with(existing: &[Recent], path: &str, opened: i64) -> Vec<Recent> {
         path: path.to_owned(),
         name: name_of(path),
         opened,
+        missing: false,
     });
     out.extend(existing.iter().filter(|r| r.path != path).cloned());
     out.truncate(KEEP);
     out
+}
+
+/// The same list, with each entry told whether its repository is still on disk.
+///
+/// Answered as the list is handed out rather than written into it: a repository moved away and
+/// put back is there again, and the file would go on saying otherwise.
+fn marked(mut list: Vec<Recent>) -> Vec<Recent> {
+    for entry in &mut list {
+        entry.missing = !coral_core::repo::present(Path::new(&entry.path));
+    }
+    list
 }
 
 /// What to call a repository: the last segment of its path.
@@ -187,6 +203,7 @@ mod tests {
                 path: (*p).to_owned(),
                 name: name_of(p),
                 opened: i64::try_from(i).unwrap_or(0),
+                missing: false,
             })
             .collect()
     }

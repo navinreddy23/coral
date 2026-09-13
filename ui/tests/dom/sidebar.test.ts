@@ -19,7 +19,7 @@ import FileTree from '../../src/app/FileTree.svelte';
 import { buildTree } from '../../src/diff/tree';
 import type { PlacedRef } from '../../src/ipc/commands';
 import type { PullRequest } from '../../src/ipc/commands';
-import type { ChangedFile, Submodule } from '../../src/ipc/types';
+import type { ChangedFile, Submodule, Worktree } from '../../src/ipc/types';
 
 function ref(short: string, row: number | null = 0): PlacedRef {
   return {
@@ -39,13 +39,20 @@ function tag(short: string): PlacedRef {
   return { ...ref(short), name: `refs/tags/${short}`, kind: { kind: 'tag', annotated: false } };
 }
 
-function stash(name: string, oid: string, row: number | null = 0, message = '1a2b3c4 a commit') {
+function stash(
+  name: string,
+  oid: string,
+  row: number | null = 0,
+  message = '1a2b3c4 a commit',
+  automatic = true,
+) {
   return {
     index: 0,
     oid,
     branch: 'master',
     message,
     time: 1_756_000_000,
+    automatic,
     name,
     row,
   };
@@ -58,6 +65,7 @@ function mount(over: Record<string, unknown> = {}) {
       head: 'master',
       stashes: [],
       submodules: [],
+      worktrees: [],
       pullRequests: [],
       pullRequestLabel: 'Pull requests',
       remotes: [],
@@ -71,6 +79,7 @@ function mount(over: Record<string, unknown> = {}) {
       onCollapse: () => {},
       onInitAllSubmodules: () => {},
       onSubmoduleMenu: () => {},
+      onWorktreeMenu: () => {},
       onStashMenu: () => {},
       onRefMenu: () => {},
       detachedHead: null,
@@ -265,6 +274,21 @@ describe('the file tree', () => {
     expect(opened).toEqual(['drivers/net/ethernet/intel/ice/ice_main.c']);
   });
 
+  it('keeps its rows inside the panel, indent and all', async () => {
+    // The indent is padding on a row that is already the full width. Counted outside the row,
+    // as it was, every row was wider than the panel by its own indent: the panel got a sideways
+    // scrollbar whatever was in the tree, and one stray scroll carried the commit message and
+    // the object ids off the left edge with it.
+    const { container } = render(FileTree, {
+      props: { nodes: buildTree(files), openPath: null, onOpenFile: () => {} },
+    });
+    const row = container.querySelector('button.dir') as HTMLElement;
+    expect(getComputedStyle(row).boxSizing).toBe('border-box');
+    // And the name is its own element, so it is what gives when the row runs out of room:
+    // ellipsis on the row itself does nothing to a flex item that will not shrink.
+    expect(row.querySelector('.name')?.textContent).toContain('drivers/net');
+  });
+
   it('hides the contents of a directory when it is collapsed', async () => {
     const { container } = render(FileTree, {
       props: { nodes: buildTree(files), openPath: null, onOpenFile: () => {} },
@@ -277,6 +301,65 @@ describe('the file tree', () => {
   });
 });
 
+function tree(path: string, over: Partial<Worktree> = {}): Worktree {
+  return {
+    path,
+    head: 'a'.repeat(40),
+    branch: null,
+    locked: false,
+    bare: false,
+    main: false,
+    ...over,
+  };
+}
+
+describe('the working trees', () => {
+  it('is not there at all for a repository that has only its own', () => {
+    // Every repository has one working tree and it is the one being looked at, so a section
+    // listing nothing but that is a heading with no purpose.
+    expect(mount().container.querySelector('[data-section="worktrees"]')).toBeNull();
+  });
+
+
+  it('lists a linked one by its directory and what is checked out there', () => {
+    // The window can make a working tree from any commit, and until now that was the end of
+    // it: the tree appeared nowhere, so finding it again or taking it away meant a terminal.
+    const view = mount({ worktrees: [tree('/tmp/kernel-wt', { branch: 'topic' })] });
+    expect(view.getByText('kernel-wt — topic')).toBeTruthy();
+  });
+
+  it('names the commit when the head there is detached', () => {
+    const view = mount({ worktrees: [tree('/tmp/kernel-wt', { head: 'c0ffee1234567890' })] });
+    expect(view.getByText('kernel-wt — c0ffee1')).toBeTruthy();
+  });
+
+  it('offers what can be done with one from the dots and from a right-click', () => {
+    const asked: string[] = [];
+    const view = mount({
+      worktrees: [tree('/tmp/kernel-wt', { branch: 'topic' })],
+      onWorktreeMenu: (_e: MouseEvent, w: Worktree) => asked.push(w.path),
+    });
+
+    void fireEvent.click(view.getByTitle('What can be done with this working tree'));
+    void fireEvent.contextMenu(view.getByText('kernel-wt — topic'));
+
+    expect(asked).toEqual(['/tmp/kernel-wt', '/tmp/kernel-wt']);
+  });
+
+  it('narrows with the filter box, like everything else in the panel', async () => {
+    const { container } = mount({
+      worktrees: [tree('/tmp/kernel-wt', { branch: 'topic' }), tree('/tmp/other-wt')],
+    });
+    const field = container.querySelector('input') as HTMLInputElement;
+    field.value = 'kernel';
+    await fireEvent.input(field);
+
+    const section = container.querySelector('[data-section="worktrees"]');
+    expect(section?.textContent).toContain('kernel-wt');
+    expect(section?.textContent).not.toContain('other-wt');
+  });
+});
+
 describe('the stash list', () => {
   it('lists the whole stack, not the one ref git keeps for it', () => {
     // `refs/stash` is the top of the stack and the only stash with a ref, so listing refs found
@@ -284,8 +367,8 @@ describe('the stash list', () => {
     // the next one.
     const view = mount({
       stashes: [
-        stash('master@78d0a2d', '78d0a2dd1a00b8e06286b02bac7ca3811a7041fc', 0, 'a half-finished thought'),
-        stash('master@21b55eb', '21b55ebccffb3a1b09c67b16ef4b009cce430e5e', 0, 'the other thing entirely'),
+        stash('master@78d0a2d', '78d0a2dd1a00b8e06286b02bac7ca3811a7041fc', 0, 'a half-finished thought', false),
+        stash('master@21b55eb', '21b55ebccffb3a1b09c67b16ef4b009cce430e5e', 0, 'the other thing entirely', false),
       ],
     });
     expect(view.getByText('a half-finished thought')).toBeTruthy();
@@ -297,10 +380,22 @@ describe('the stash list', () => {
     // what is in it. Two of those side by side cannot be chosen between, which is the only job
     // this list has.
     const view = mount({
-      stashes: [stash('master@78d0a2d', 'a'.repeat(40), 0, 'a half-finished thought')],
+      stashes: [stash('master@78d0a2d', 'a'.repeat(40), 0, 'a half-finished thought', false)],
     });
     expect(view.getByText('a half-finished thought')).toBeTruthy();
     expect(view.queryByText('master@78d0a2d')).toBeNull();
+  });
+
+  it('says which branch a stash git named came off, not the commit it was sitting on', () => {
+    // git's own subject for a stash made with no message is "WIP on master: 1a2b3c4 <subject>",
+    // and the engine hands that over with the branch split off — leaving "1a2b3c4 Revert …",
+    // which in this column reads as though that commit is what was stashed. It is not: it is
+    // what the branch was on at the time.
+    const view = mount({
+      stashes: [stash('master@78d0a2d', 'a'.repeat(40), 0, '1a2b3c4 Revert something', true)],
+    });
+    expect(view.getByText('On master')).toBeTruthy();
+    expect(view.queryByText('1a2b3c4 Revert something')).toBeNull();
   });
 
   it('puts the id back when two stashes were written the same', () => {
@@ -312,8 +407,8 @@ describe('the stash list', () => {
         stash('master@21b55eb', '21b55ebccffb3a1b09c67b16ef4b009cce430e5e'),
       ],
     });
-    expect(view.getByText('1a2b3c4 a commit 78d0a2d')).toBeTruthy();
-    expect(view.getByText('1a2b3c4 a commit 21b55eb')).toBeTruthy();
+    expect(view.getByText('On master 78d0a2d')).toBeTruthy();
+    expect(view.getByText('On master 21b55eb')).toBeTruthy();
   });
 
   it('offers what can be done with one from the dots and from a right-click', () => {
@@ -325,7 +420,7 @@ describe('the stash list', () => {
 
     const dots = view.getByTitle('What can be done with master@78d0a2d');
     void fireEvent.click(dots);
-    void fireEvent.contextMenu(view.getByText('1a2b3c4 a commit'));
+    void fireEvent.contextMenu(view.getByText('On master'));
 
     expect(asked).toEqual(['master@78d0a2d', 'master@78d0a2d']);
   });
@@ -339,7 +434,7 @@ describe('the stash list', () => {
       onSelect: (row: number) => picked.push(row),
     });
 
-    const row = view.getByText('1a2b3c4 a commit').closest('button');
+    const row = view.getByText('On master').closest('button');
     expect(row?.hasAttribute('disabled')).toBe(true);
     void fireEvent.click(row as HTMLElement);
     expect(picked).toEqual([]);

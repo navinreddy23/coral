@@ -7,6 +7,7 @@
   import { shortAge } from './age';
   import { initialsOf } from '../graph/initials';
   import type { DiffState } from '../state/diff.svelte';
+  import type { FileDiff } from '../ipc/types';
 
   const { diff, onClose, onPart }: {
     diff: DiffState;
@@ -28,6 +29,26 @@
    * a DOM row here; past this it is not a diff anyone is reading, it is a scroll bar.
    */
   const LIMIT = 6000;
+
+  /**
+   * What to say about a file the panel has no lines for.
+   *
+   * Three different things end here — a rename that moved nothing, a file added with nothing
+   * in it, a change that touched only the mode — and "No line changes." was all three.
+   */
+  function emptyDiffSays(file: FileDiff): string {
+    if (file.oldPath) return `Renamed from ${file.oldPath}.`;
+    if (file.change === 'added') return 'A new file with nothing in it.';
+    return 'No line changes.';
+  }
+
+  /**
+   * What git says about a file whose last line has no newline after it.
+   *
+   * The diff carries the flag and the panel dropped it, so a commit that only added a trailing
+   * newline drew "gamma" removed and "gamma" added with nothing on screen saying what differs.
+   */
+  const NO_NEWLINE = 'No newline at end of file';
 
   const total = $derived(
     (diff.file?.hunks ?? []).reduce((n, h) => n + h.lines.length, 0),
@@ -125,11 +146,17 @@
    */
   let picked = $state<Set<string>>(new Set());
   let pickedFor = '';
+  let pickedOn: unknown = null;
   $effect(() => {
     const key = `${diff.path ?? ''}\u0000${diff.source}\u0000${diff.mode}`;
-    void diff.file;
-    if (pickedFor !== key) {
+    // The diff object itself, not only the key: staging part of a hunk reloads the same file
+    // in the same mode, and the hunks that come back are different lines under the same
+    // indices. Kept, the bar went on offering to stage a line nobody had picked, and git
+    // answered the patch built from it with "corrupt patch at line 12".
+    const file = diff.file;
+    if (pickedFor !== key || pickedOn !== file) {
       pickedFor = key;
+      pickedOn = file;
       picked = new Set();
     }
   });
@@ -304,12 +331,27 @@
     {#if diff.source !== 'compare'}
       <div class="toggle" role="group" aria-label="What to show about this file">
         <button class:on={diff.view === 'diff'} onclick={() => diff.setView('diff')}>Diff</button>
-        <button class:on={diff.view === 'blame'} onclick={() => diff.setView('blame')}>Blame</button>
+        <!-- Blame reads the file as lines, which a binary has none of: git answers for one all
+             the same and the pane painted four kilobytes of replacement characters. -->
+        <button
+          class:on={diff.view === 'blame'}
+          disabled={diff.file?.binary === true}
+          title={diff.file?.binary === true ? 'A binary file has no lines to blame' : 'Blame'}
+          onclick={() => diff.setView('blame')}>Blame</button
+        >
         <button class:on={diff.view === 'history'} onclick={() => diff.setView('history')}>
           History
         </button>
       </div>
     {/if}
+
+    <!--
+      The free space sits here rather than in the file name, so that what follows is pushed to
+      the right and what precedes it stays put. Everything after this comes and goes with the
+      view: choosing Blame took the layout toggle away and slid the three tabs a quarter of the
+      header to the right, out from under the pointer that had just chosen one of them.
+    -->
+    <span class="spread"></span>
 
     {#if diff.view === 'diff'}
       <div class="toggle" role="group" aria-label="Diff layout">
@@ -377,7 +419,7 @@
       the file, which is the question a file history is opened to answer.
     -->
     <ul class="history">
-      {#each diff.history as commit (commit.oid)}
+      {#each diff.history ?? [] as commit (commit.oid)}
         <li>
           <button
             class="entry"
@@ -393,7 +435,11 @@
           </button>
         </li>
       {/each}
-      {#if diff.history.length === 0}
+      {#if diff.sideError}
+        <li class="error">{diff.sideError}</li>
+      {:else if diff.history === null}
+        <li class="muted">Reading what has touched this file…</li>
+      {:else if diff.history.length === 0}
         <li class="muted">Nothing has touched this file.</li>
       {:else if diff.moreHistory}
         <li>
@@ -405,7 +451,9 @@
 
   <div class="scroll" bind:this={scroller} onscroll={onScroll} bind:clientHeight={viewport}>
     {#if diff.view === 'blame'}
-      {#if diff.blame === null || diff.text === null}
+      {#if diff.sideError}
+        <p class="error">{diff.sideError}</p>
+      {:else if diff.blame === null || diff.text === null}
         <p class="muted">Working out who wrote each line…</p>
       {:else}
         <table class="lines blame">
@@ -432,12 +480,23 @@
       <p class="muted">Loading…</p>
     {:else if diff.error}
       <p class="error">{diff.error}</p>
+    {:else if diff.empty}
+      <!-- Not red: the file is simply not part of this change, which is an answer. -->
+      <p class="muted">{diff.empty}</p>
     {:else if !diff.file}
       <p class="muted">Nothing to show.</p>
     {:else if diff.file.binary}
       <p class="muted">Binary file — no textual diff.</p>
     {:else if diff.file.tooLarge}
-      <p class="muted">The file is past the size guard, so its contents were not read.</p>
+      <!--
+        The guard is there because one generated file the size of a kernel header dump costs a
+        visible pause to parse, not because the change is unreadable. Saying only that the
+        contents were not read left no way to ever see such a file.
+      -->
+      <p class="muted">
+        The file is past the size guard, so its contents were not read.
+        <button class="anyway" onclick={() => void diff.readAnyway()}>Read it anyway</button>
+      </p>
     {:else if isDirectory}
       <!--
         git collapses an untracked directory to one entry — `? notes/` — rather than listing
@@ -450,8 +509,18 @@
         there is nothing here to read line by line; staging it adds everything inside.
       </p>
     {:else if diff.file.hunks.length === 0}
+      <!--
+        A mode-only change has no hunks at all, so this was the whole of what a file listed as
+        modified had to say for itself: "No line changes." about a file that had changed.
+      -->
       <p class="muted">
-        {diff.file.oldPath ? `Renamed from ${diff.file.oldPath}.` : 'No line changes.'}
+        {emptyDiffSays(diff.file)}
+        {#if diff.file.mode}
+          <span class="modes"
+            >The file mode went from <code>{diff.file.mode.old}</code> to
+            <code>{diff.file.mode.new}</code>.</span
+          >
+        {/if}
       </p>
     {:else if diff.mode === 'inline'}
       <table class="lines" bind:this={table}>
@@ -491,7 +560,9 @@
                       ><span class="sign">{sign[line.kind]}</span><CodeLine
                         text={line.text}
                         spans={words.get(line) ?? null}
-                      /></button
+                      />{#if line.noNewline}<span class="nonl" title={NO_NEWLINE}
+                        >no newline</span
+                      >{/if}</button
                     >
                   </td>
                 {:else}
@@ -499,7 +570,8 @@
                     ><span class="sign">{sign[line.kind]}</span><CodeLine
                       text={line.text}
                       spans={words.get(line) ?? null}
-                    /></td
+                    />{#if line.noNewline}<span class="nonl" title={NO_NEWLINE}>no newline</span
+                      >{/if}</td
                   >
                 {/if}
               </tr>
@@ -521,14 +593,16 @@
                 ><CodeLine
                   text={row.left?.text ?? ''}
                   spans={row.left ? words.get(row.left) ?? null : null}
-                /></span
+                />{#if row.left?.noNewline}<span class="nonl" title={NO_NEWLINE}>no newline</span
+                  >{/if}</span
               >
               <span class="no">{row.right?.newNo ?? ''}</span>
               <span class="cell {row.right ? row.right.kind : 'blank'}"
                 ><CodeLine
                   text={row.right?.text ?? ''}
                   spans={row.right ? words.get(row.right) ?? null : null}
-                /></span
+                />{#if row.right?.noNewline}<span class="nonl" title={NO_NEWLINE}>no newline</span
+                  >{/if}</span
               >
             </div>
           {/each}
@@ -587,9 +661,10 @@
   /* Normal weight. The file name is a label on the diff, not a heading over it, and mono at
      twelve pixels already reads heavier than the interface font beside it. */
   .path {
-    flex: 1; min-width: 0; font-size: var(--text-base); font-weight: 400; color: var(--fg-1);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    flex: 0 1 auto; min-width: 3em; font-size: var(--text-base); font-weight: 400;
+    color: var(--fg-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  .spread { flex: 1 1 auto; min-width: var(--space-2); }
   .tally {
     flex: 0 0 auto; font-size: var(--text-sm); display: flex; gap: var(--space-2);
     font-family: var(--font-mono); font-variant-ligatures: none; font-variant-numeric: tabular-nums;
@@ -687,6 +762,27 @@
     color: var(--fg-1); padding: var(--space-1);
   }
   .deeper:hover { background: var(--bg-3); color: var(--fg-0); }
+
+  .modes code {
+    font-family: var(--font-mono); font-size: var(--text-sm);
+    background: var(--bg-2); border-radius: var(--radius-1); padding: 0 4px;
+  }
+
+  /* Set apart from the line it is about: it is git's note, not part of the file. */
+  .nonl {
+    margin-left: var(--space-2); padding: 0 4px; border-radius: var(--radius-1);
+    background: var(--bg-2); color: var(--fg-2); font-size: var(--text-sm);
+    user-select: none; white-space: nowrap;
+  }
+
+  /* Beside the sentence it answers, not across the panel: `.deeper` is sized for the narrow
+     history column and here it would be a button the width of the diff. */
+  .anyway {
+    font: inherit; font-size: var(--text-sm); cursor: pointer; margin-left: var(--space-2);
+    background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-1);
+    color: var(--fg-1); padding: var(--space-1) var(--space-2);
+  }
+  .anyway:hover { background: var(--bg-3); color: var(--fg-0); }
 
   /* Who wrote each line, named once per run rather than once per line. */
   .blame .author {
@@ -791,8 +887,15 @@
     border-right: 1px solid var(--border); box-sizing: border-box;
     font-variant-numeric: tabular-nums;
   }
+  /*
+   * Clipped, and saying so. The rows are a fixed height so the sheet can hold a file of any
+   * length, which rules out wrapping, and the columns are capped so a long line cannot push
+   * the other pane off the window. That leaves the text cut at the column edge, and without
+   * the ellipsis nothing said it had been: a five-thousand-character line looked like a line
+   * that ended there. The inline view scrolls sideways and is where such a line is read.
+   */
   .cell {
-    white-space: pre; overflow: hidden; padding: 0 var(--space-2);
+    white-space: pre; overflow: hidden; text-overflow: ellipsis; padding: 0 var(--space-2);
     color: var(--fg-0); background: var(--bg-0);
   }
   .cell.add { background: var(--add-bg); box-shadow: inset 2px 0 0 var(--ok); --word-mark: var(--add-word); }

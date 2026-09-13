@@ -12,7 +12,7 @@
   } from '../graph/frame';
   import GraphCanvas from '../graph/GraphCanvas.svelte';
   import Splitter from './Splitter.svelte';
-  import { fitColumns, PANE_LIMITS, PanesState } from '../state/panes.svelte';
+  import { fitColumns, fitPanels, PANE_LIMITS, PanesState } from '../state/panes.svelte';
   import DiffView from './DiffView.svelte';
   import { DiffState } from '../state/diff.svelte';
   import { HostingState } from '../state/hosting.svelte';
@@ -69,7 +69,7 @@
   import { SshState } from '../state/ssh.svelte';
   import { laneColour } from './lane';
   import { beside, elideRef } from './path';
-  import { askUntilAccepted } from './prompt';
+  import { askUntilAccepted, nameWasRefused } from './prompt';
   import { checkoutOf, divergence, remoteOf, withoutRemote } from './refname';
   import { orderRefs, pillChars, pillNamed } from './pill';
   import {
@@ -79,11 +79,11 @@
     type ResetModes,
     type RevisionActions,
   } from './revision';
-  import { count, discardWords } from './discard';
+  import { count, discardWords, partWords } from './discard';
   import { bandWidth, columnWidth, laneToken } from '../graph/column';
   import { shortAge } from './age';
   import { initialsOf } from '../graph/initials';
-  import type { Action } from '../ipc/commands';
+  import type { Action, JournalView, Listing } from '../ipc/commands';
   import {
     DEFAULT_METRICS,
     metricsFor,
@@ -104,6 +104,7 @@
     pickDirectory,
     pickGitProgram,
     pickRepository,
+    repoJournal,
   } from '../ipc/commands';
   import { GraphState } from '../state/graph.svelte';
   import { RefsState } from '../state/refs.svelte';
@@ -124,6 +125,7 @@
   import { ThemeState } from '../state/theme.svelte';
   import { SelectionState } from '../state/selection.svelte';
   import { WorktreeState } from '../state/worktree.svelte';
+  import { WorktreesState } from '../state/worktrees.svelte';
   import Staging from './Staging.svelte';
   import Details from './Details.svelte';
   import Sidebar from './Sidebar.svelte';
@@ -141,6 +143,7 @@
     StatusEntry,
     Submodule,
     SubmoduleRevision,
+    Worktree,
   } from '../ipc/types';
   import { submoduleRevision } from '../ipc/commands';
   import type { PlacedRef } from '../state/refs.svelte';
@@ -154,6 +157,7 @@
   const scope = new ScopeState();
   const selection = new SelectionState();
   const worktree = new WorktreeState();
+  const worktrees = new WorktreesState();
   let showWip = $state(false);
 
   /**
@@ -164,7 +168,6 @@
    * makes the first commit" — which was the first thing a stranger read, pointing at a panel
    * that was showing something else.
    */
-  const stagingShowing = $derived(showWip || (graph.totalRows === 0 && worktree.dirty));
   const tabs = new TabsState();
   let showHelp = $state(false);
 
@@ -242,8 +245,11 @@
     // commit and re-scrolls to where the list already is, which at thirty key repeats a second
     // is the panel flickering and the list twitching under a key that is doing nothing.
     if (next === at) return;
-    pick(next);
-    scrollToRow(next);
+    // Through `reveal`, because a jump lands outside the window of rows the graph holds and
+    // selecting a row the frame does not have does nothing at all: Home and End scrolled a
+    // million rows and left the panel on the commit that was selected before. A step of one is
+    // already loaded, so the wait costs it nothing.
+    void reveal(next);
   }
 
   function onKey(event: KeyboardEvent) {
@@ -325,6 +331,25 @@
 
   let findField = $state<HTMLInputElement | null>(null);
 
+  /**
+   * Shows the first match as soon as a search settles.
+   *
+   * The field said "1 of 500" while the reader was left wherever they had been, so the match it
+   * was counting was never on screen — and stepping forward from it went to the second, which
+   * left the first reachable only by going round all five hundred.
+   *
+   * A plain variable rather than state: the effect follows the matches, and the marker only
+   * stops it from revealing the same set twice.
+   */
+  let revealedFor: unknown = null;
+  $effect(() => {
+    const matches = find.matches;
+    if (matches === revealedFor) return;
+    revealedFor = matches;
+    const row = find.current;
+    if (row !== null) void reveal(row);
+  });
+
   /** Steps to the next match, or the previous one, and scrolls it into view. */
   async function stepFind(direction: 1 | -1) {
     const row = find.step(direction);
@@ -388,6 +413,34 @@
   /** Bumped to ask the branch panel for the caret; see the prop's own note. */
   let filterTick = $state(0);
   const merge = new MergeState();
+
+  /**
+   * Whether the panel on the right is the staging one.
+   *
+   * The third case is an operation that has stopped with nothing conflicted — the `edit` step
+   * of an interactive rebase, which exists so the commit can be changed before it is replayed.
+   * There is nothing for the merge tool to settle there, and the panel that does the changing
+   * was hidden along with everything else, so the one step git stops for could not be finished
+   * without a terminal.
+   */
+  const stagingShowing = $derived(
+    showWip ||
+      (graph.totalRows === 0 && worktree.dirty) ||
+      (merge.inProgress && merge.files.length === 0),
+  );
+
+  /*
+   * Whether the panel on the right is up at all.
+   *
+   * Not while there is a conflict to settle: the tool that settles it takes the main pane, and
+   * the panel beside it can only offer a commit to select. An operation stopped with nothing
+   * conflicted is the other case, and there the panel is the point — `edit` stops a rebase so
+   * the commit can be changed, and with this hidden the staging panel that changes it was
+   * unreachable.
+   */
+  const detailsShowing = $derived(
+    views.current.details && (!merge.inProgress || merge.files.length === 0),
+  );
   /**
    * The message git prepared, put in the box the one time it appears.
    *
@@ -445,6 +498,8 @@
   const startPage = new StartState();
   const find = new FindState();
   let showStart = $state(false);
+  /** Whether the start page is what the window is showing, asked for or for want of a tab. */
+  const onStart = $derived(showStart || tabs.session.tabs.length === 0);
   let showRemotes = $state<{ focus: string | null } | null>(null);
   const activity = new ActivityState();
   const experimental = new ExperimentalState();
@@ -477,6 +532,8 @@
     detail: string;
     /** Whether a line of text is wanted as well as a choice. Stated, never inferred. */
     asksText: boolean;
+    /** How many lines the field holds. More than one makes it a box. Absent means one. */
+    lines?: number;
     placeholder: string;
     initial: string;
     choices: Choice[];
@@ -502,11 +559,17 @@
    * Wraps `ask` because most callers want a string and nothing else, and repeating the choice
    * plumbing at every call site is what makes a dialog inconsistent.
    */
-  async function askText(title: string, detail: string, initial: string): Promise<string | null> {
+  async function askText(
+    title: string,
+    detail: string,
+    initial: string,
+    lines = 1,
+  ): Promise<string | null> {
     const { choice, text } = await ask({
       title,
       detail,
       asksText: true,
+      lines,
       placeholder: '',
       initial,
       choices: [{ id: 'ok', label: 'OK', primary: true }],
@@ -670,14 +733,42 @@
    * Ctrl or Shift, as the reference takes either: what the modifier means here is "and this
    * one too", not a range, so both do the same thing.
    */
+  /**
+   * How the selected row's files are listed.
+   *
+   * A stash keeps what was untracked in a third parent, which the ordinary reader never sees:
+   * the panel said "1 file" about a stash that also carried a whole new one, and dropping it
+   * would have taken that file with nothing on screen having named it.
+   */
+  function listingFor(oid: string): Listing {
+    return stashes.list.some((s) => s.oid === oid) ? 'stash' : 'commit';
+  }
+
   function pick(row: number, event?: MouseEvent) {
     const local = localRow(graph.frame, row);
     if (local === null || !graph.frame || !info) return;
     showWip = false;
     const oid = oidOf(graph.frame, local);
     const second = event !== undefined && (event.ctrlKey || event.metaKey || event.shiftKey);
-    void (second ? selection.compare(info.path, row, oid) : selection.select(info.path, row, oid));
+    void (second
+      ? selection.compare(info.path, row, oid)
+      : selection.select(info.path, row, oid, listingFor(oid)));
   }
+
+  /*
+   * The file panel is about one commit, so it goes when the selection leaves that commit.
+   *
+   * The arrow keys move the selection while the panel covers the commit list, and walking off
+   * a commit with a file open left "huge.txt +200000" beside a merge whose own file list said
+   * none — a diff attributed, by everything on screen, to a commit it is not in. A comparison
+   * and the working tree are not about a selected commit and are left alone.
+   */
+  $effect(() => {
+    const oid = selection.detail?.commit.oid ?? null;
+    if (diff.source === 'commit' && diff.openedAt !== null && oid !== diff.openedAt) {
+      diff.close();
+    }
+  });
 
   /*
    * A working-tree action supersedes whatever the line along the bottom last said.
@@ -694,6 +785,24 @@
     wasBusy = busy;
   });
 
+  /**
+   * What undo and redo would act on, read after anything that could have moved the journal.
+   *
+   * The journal is a file beside the repository, so nothing else in the window knows whether
+   * either button has work to do.
+   */
+  let journal = $state<JournalView>({ undo: null, redo: null });
+
+  async function readJournal(path: string) {
+    try {
+      journal = await repoJournal(path);
+    } catch {
+      // A repository that cannot be read has no journal to offer; the buttons stay off rather
+      // than the window carrying an error nobody asked about.
+      journal = { undo: null, redo: null };
+    }
+  }
+
   /** Reloads everything after an operation finished, since it may have moved any of it. */
   async function reloadAll() {
     if (!info) return;
@@ -702,8 +811,17 @@
     // says the repository is in a state it is no longer in.
     actions.clear();
     const path = info.path;
-    await Promise.all([refs.load(path), worktree.load(path), merge.load(path)]);
+    await Promise.all([worktree.load(path), merge.load(path)]);
+    // The walk first, then the refs and stashes that are placed on it, which is the order the
+    // watcher and the transfer path both take and for the same reason: a ref carries the row
+    // it sits on, and an operation that records a commit renumbers every row under it. Loaded
+    // before the walk, as this did, one commit recorded here moved every pill up a row — the
+    // branch just committed to lost its label entirely and the one below it took somebody
+    // else's commit, and it stayed wrong until something else happened to reload them.
+    graph.forget();
     await graph.open(path);
+    await Promise.all([refs.load(path), stashes.load(path), worktrees.load(path)]);
+    void readJournal(path);
     // The session re-checks every tab's directory whenever it is read, so this is what takes
     // the line back off a tab whose repository was moved away and put back.
     await tabs.refresh();
@@ -973,7 +1091,16 @@
       await offerToForce(action, outcome.message);
     }
 
-    await Promise.all([refs.load(path), worktree.load(path), merge.load(path)]);
+    // Stashes always, not only when a ref moved. The stack is a reflog rather than a ref, so
+    // dropping or applying anything but the top leaves `refs/stash` exactly where it was — and
+    // the panel went on listing an entry that had been dropped, whose index now names nothing.
+    // `git stash list` reads one reflog and costs nothing, kernel or not.
+    await Promise.all([
+      refs.load(path),
+      worktree.load(path),
+      merge.load(path),
+      stashes.load(path),
+    ]);
     const after = refSignature();
     if (before !== after) {
       // `forget` first, as the scope rewalk does and for the same reason: a ref moved, so the
@@ -991,6 +1118,12 @@
       // one commit out. The watcher path has always done it in this order and says why.
       await Promise.all([refs.load(path), stashes.load(path)]);
     }
+
+    // The journal is a file beside the repository, so nothing else in the window notices that
+    // an action moved it. Left unread until the next thing that reloads everything, undo and
+    // redo described the repository as it was two actions ago: the button named one operation
+    // in its tooltip and then undid a different one.
+    void readJournal(path);
 
     // A checkout moves HEAD, and leaving the view where it was is the commonest way to end up
     // reading the branch that was just left.
@@ -1136,6 +1269,29 @@
     moveTag: (name, to) => void moveTag(name, to),
   });
 
+  /**
+   * The menu as a bare repository can actually use it.
+   *
+   * A bare repository has no checkout, and git refuses every operation that needs one:
+   * checkout, merge, rebase, cherry-pick, reset, revert and every rewrite. Half the branch
+   * menu was offered in one and answered "this operation must be run in a work tree" — the
+   * same fault the ancestry lookup already guards against for a different reason.
+   *
+   * Stripped rather than disabled: a dozen greyed rows say nothing a reader can act on, and
+   * the separators around them would be left framing nothing.
+   */
+  function withAWorktree(items: MenuItem[]): MenuItem[] {
+    if (info?.isBare !== true) return items;
+    const kept = items.filter((i) => i.kind === 'separator' || i.worktree !== true);
+    // Separators that now sit against each other, or at either end, frame nothing.
+    return kept.filter((item, i) => {
+      if (item.kind !== 'separator') return true;
+      const before = kept.slice(0, i).some((o) => o.kind !== 'separator');
+      const after = kept.slice(i + 1).some((o) => o.kind !== 'separator');
+      return before && after && kept[i - 1]?.kind !== 'separator';
+    });
+  }
+
   function checkoutsFor(row: number): MenuItem[] {
     const out = checkoutItems(refs.byRow.get(row) ?? [], headName, revisionActions);
     return out.length === 0 ? out : [...out, { kind: 'separator' }];
@@ -1215,7 +1371,14 @@
 
     if (!current) {
       const [label, hint] = checkoutOf(ref);
-      items.push({ kind: 'item', label, hint, disabled: busy, run: () => void goTo(ref) });
+      items.push({
+        kind: 'item',
+        label,
+        hint,
+        disabled: busy,
+        worktree: true,
+        run: () => void goTo(ref),
+      });
     }
 
     if (ref.kind.kind === 'local_branch' && hosting.available) {
@@ -1238,13 +1401,19 @@
     const oid = ref.peeled ?? ref.target;
     items.push({ kind: 'separator' });
     items.push({ kind: 'item', label: 'Create branch here', run: () => void branchAt(oid) });
-    items.push({ kind: 'item', label: 'Cherry pick commit…', run: () => void cherryPick(oid) });
+    items.push({
+      kind: 'item',
+      label: 'Cherry pick commit…',
+      worktree: true,
+      run: () => void cherryPick(oid),
+    });
     items.push(resetItem(head, resetModes(oid, head), busy));
     items.push({
       kind: 'item',
       label: 'Revert commit',
       disabled: busy,
-      run: () => void act({ kind: 'revert', revs: [oid] }),
+      worktree: true,
+      run: () => void revertCommit(oid),
     });
 
     // What the graph is drawn from, which is a different question from what can be done to the
@@ -1342,7 +1511,7 @@
     await askUntilAccepted(
       from,
       (initial) => askText('Rename the branch', `${from} becomes:`, initial),
-      async (to) => (to === from ? true : act({ kind: 'branchRename', from, to })),
+      async (to) => (to === from ? true : settled(await act({ kind: 'branchRename', from, to }))),
     );
   }
 
@@ -1535,6 +1704,20 @@
    * like it does, and the local branch quietly wins. So the choice is put to the user, as
    * GitKraken does: go to the local branch as it stands, or move it onto the remote first.
    */
+  /**
+   * Double-clicking a branch pill checks it out, which `docs/ui-spec.md` promised and nothing
+   * did: the second click only landed on the row the first had already selected.
+   *
+   * Branches only. A tag detaches HEAD, which is a state to arrive at deliberately rather than
+   * by a click that went one too far, and it stays on the menu where it says so.
+   */
+  function checkoutPill(label: PlacedRef) {
+    if (!info || info.isBare || actions.busy || worktree.busy) return;
+    const branch = label.kind.kind === 'local_branch' || label.kind.kind === 'remote_branch';
+    if (!branch || label.short === headName) return;
+    void goTo(label);
+  }
+
   async function goTo(ref: PlacedRef) {
     const name = withoutRemote(ref.short);
     if (ref.kind.kind !== 'remote_branch' || name === '') {
@@ -1613,7 +1796,50 @@
    * this branch now, while stopping short leaves it staged so it can be changed, split, or
    * folded into something else first.
    */
+  /**
+   * Which of a merge's parents to treat as the mainline, or null when the user backed out.
+   *
+   * A merge has two sides, so undoing or replaying one means saying which side to keep. git
+   * requires it and, asked without one, answers "is a merge but no -m option was given" —
+   * a sentence about its command line rather than about the repository, which is what the
+   * window used to hand over. Undefined for anything that is not a merge, where git refuses
+   * the option instead.
+   */
+  async function mainlineFor(oid: string, verb: string): Promise<number | null | undefined> {
+    if (!info) return undefined;
+    const parents = await commitDetail(info.path, oid)
+      .then((d) => d.commit.parents)
+      .catch(() => []);
+    if (parents.length < 2) return undefined;
+
+    const { choice } = await ask({
+      title: `Which side should the ${verb} keep?`,
+      detail:
+        'This is a merge, so it has more than one line of history behind it. The side you ' +
+        'keep is the one the change is measured against; the other side is what is undone ' +
+        'or replayed.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: parents.map((p, i) => ({
+        id: String(i + 1),
+        label: `${i === 0 ? 'The branch it was merged into' : 'The branch that came in'} — ${p.slice(0, 7)}`,
+        primary: i === 0,
+      })),
+    });
+    return choice === null ? null : Number(choice);
+  }
+
+  /** Undoes one commit, asking which side to keep when it is a merge. */
+  async function revertCommit(oid: string) {
+    const mainline = await mainlineFor(oid, 'revert');
+    if (mainline === null) return;
+    await act({ kind: 'revert', revs: [oid], mainline });
+  }
+
   async function cherryPick(oid: string) {
+    const mainline = await mainlineFor(oid, 'cherry pick');
+    if (mainline === null) return;
     const { choice } = await ask({
       title: 'Commit the cherry picked changes?',
       detail:
@@ -1629,7 +1855,7 @@
       ],
     });
     if (choice === null) return;
-    await act({ kind: 'cherryPick', revs: [oid], commit: choice === 'yes' });
+    await act({ kind: 'cherryPick', revs: [oid], commit: choice === 'yes', mainline });
   }
 
   /**
@@ -1643,6 +1869,15 @@
   async function commitMenu(event: MouseEvent, row: number, oid: string) {
     event.preventDefault();
     pick(row);
+    // A stash sits on a row of its own but is not a commit on this branch, so most of what
+    // follows is a rewrite the engine would refuse — and "Drop commit" beside "Move commit up"
+    // reads as an offer to throw the stash away with a wholly different meaning. It gets the
+    // menu its row in the panel gets, which is the one that fits it.
+    const stash = stashes.list.find((s) => s.oid === oid);
+    if (stash !== undefined) {
+      stashMenu(event, stash);
+      return;
+    }
     const short = oid.slice(0, 8);
     const branch = headName ?? 'HEAD';
     const summary = visibleMeta.get(row)?.summary ?? '';
@@ -1661,6 +1896,7 @@
           kind: 'item',
           label: 'Checkout this commit',
           hint: `${short}, detached`,
+          worktree: true,
           run: () => void act({ kind: 'checkout', rev: oid }),
         },
         { kind: 'item', label: 'Create worktree from this commit', run: () => void worktreeAt(oid) },
@@ -1670,36 +1906,47 @@
         {
           kind: 'item',
           label: 'Cherry pick commit…',
+          worktree: true,
           run: () => void cherryPick(oid),
         },
         resetItem(branch, resetModes(oid, branch), actions.busy),
         {
           kind: 'item',
           label: 'Revert commit',
-          run: () => void act({ kind: 'revert', revs: [oid] }),
+          worktree: true,
+          run: () => void revertCommit(oid),
         },
         { kind: 'separator' },
         {
           kind: 'item',
           label: 'Interactive rebase from this commit',
           hint: `${short} and newer`,
+          worktree: true,
           run: () => info && void rebase.load(info.path, `${oid}~1`),
         },
-        { kind: 'item', label: 'Edit commit message', run: () => void reword(oid, summary) },
+        {
+          kind: 'item',
+          label: 'Edit commit message',
+          worktree: true,
+          run: () => void reword(oid, summary),
+        },
         {
           kind: 'item',
           label: 'Drop commit',
           danger: true,
+          worktree: true,
           run: () => void confirmDrop(oid, summary),
         },
         {
           kind: 'item',
           label: 'Move commit up',
+          worktree: true,
           run: () => void act({ kind: 'rewrite', rev: oid, how: 'moveNewer', message: null }),
         },
         {
           kind: 'item',
           label: 'Move commit down',
+          worktree: true,
           run: () => void act({ kind: 'rewrite', rev: oid, how: 'moveOlder', message: null }),
         },
         { kind: 'separator' },
@@ -1711,6 +1958,7 @@
           label: 'Apply a patch file…',
           hint: 'onto this branch',
           disabled: actions.busy,
+          worktree: true,
           run: () => void applyPatch(),
         },
         { kind: 'separator' },
@@ -1720,11 +1968,22 @@
     };
   }
 
+  /**
+   * Whether a name dialog is finished with, given how the work it asked for went.
+   *
+   * Only a name git refused is worth asking about again. Creating a branch here also switches
+   * to it, so it can fail over a file in the way — and the dialog reopening on that said the
+   * name was wrong and left no name that would work.
+   */
+  function settled(ok: boolean): boolean {
+    return ok || !nameWasRefused(actions.report?.text);
+  }
+
   async function branchAt(oid: string) {
     await askUntilAccepted(
       '',
       (initial) => askText('Create branch here', `At ${oid.slice(0, 8)}.`, initial),
-      (name) => act({ kind: 'branchCreate', name, at: oid, checkout: true }),
+      async (name) => settled(await act({ kind: 'branchCreate', name, at: oid, checkout: true })),
     );
   }
 
@@ -1745,15 +2004,20 @@
           // correct, so the name is not asked for again.
           if (message === null) return true;
         }
-        return act({ kind: 'tagCreate', name, at: oid, message });
+        return settled(await act({ kind: 'tagCreate', name, at: oid, message }));
       },
     );
   }
 
   async function worktreeAt(oid: string) {
     // The repository's own parent, which is where working trees for it go: a new one may not
-    // be made inside the repository, and its siblings are where people keep them.
-    const where = await pickDirectory('Where should the new working tree go?', beside(info?.path));
+    // be made inside the repository, and its siblings are where people keep them. Named as an
+    // empty folder because that is what git will take — the picker offers folders that exist,
+    // and every one of them with anything in it is refused.
+    const where = await pickDirectory(
+      'Choose an empty folder for the new working tree',
+      beside(info?.path),
+    );
     if (where === null) return;
     const branch = await askText(
       'Branch for the new working tree',
@@ -1851,11 +2115,24 @@
     await act({ kind: 'patch', rev: oid, from: null, directory: where });
   }
 
+  /**
+   * Rewrites one commit's message.
+   *
+   * Seeded with the whole message, not the summary the row shows. The field used to be one
+   * line holding the summary and whatever came back replaced the entire message, so rewording
+   * any commit with a body — which on a kernel means every commit, with its explanation and
+   * its Signed-off-by lines — silently threw the body away.
+   */
   async function reword(oid: string, summary: string) {
+    if (!info) return;
+    const whole = await commitDetail(info.path, oid)
+      .then((d) => (d.commit.body === '' ? d.commit.summary : `${d.commit.summary}\n\n${d.commit.body}`))
+      .catch(() => summary);
     const message = await askText(
       'Edit commit message',
       'Everything above this commit is replayed, so their object ids change.',
-      summary,
+      whole,
+      10,
     );
     if (message === null || message.trim() === '') return;
     await act({ kind: 'rewrite', rev: oid, how: 'reword', message: message.trim() });
@@ -1892,7 +2169,11 @@
       asksText: false,
       placeholder: '',
       initial: '',
-      choices: [{ id: 'reset', label: 'Discard and reset', primary: true, danger: true }],
+      // Not the Enter key's. The panel's own note puts it plainly: a dialog that reads "cannot
+      // be recovered" must not be one Enter answers, because Enter is what people press to make
+      // a dialog go away. This is the one button in the window that throws away work nothing
+      // can bring back.
+      choices: [{ id: 'reset', label: 'Discard and reset', danger: true }],
     });
     if (choice === null) return;
     await act({ kind: 'reset', rev: oid, mode: 'hard' });
@@ -1965,7 +2246,7 @@
     const untracked = entries.filter((e) => e.worktree === 'untracked').map((e) => e.path);
     const tracked = entries.filter((e) => e.worktree !== 'untracked').map((e) => e.path);
 
-    const words = discardWords(tracked.length, untracked.length, headName);
+    const words = discardWords(tracked.length, untracked, headName);
     const { choice } = await ask({
       title: 'Discard changes?',
       detail: words.detail,
@@ -2322,14 +2603,21 @@
             disabled: busy,
             run: () => void worktree.stage([entry.path], true),
           },
-      {
-        kind: 'item',
-        label: 'Discard its changes',
-        hint: 'back to the last commit',
-        disabled: busy,
-        danger: true,
-        run: () => void discardChanges([entry]),
-      },
+      // Only for a file git already has a copy of. An untracked one has no last commit to go
+      // back to, so this read "Discard its changes — back to the last commit" about a file
+      // whose only copy is on disk, and did the same thing as the line under it.
+      ...(entry.worktree === 'untracked'
+        ? []
+        : [
+            {
+              kind: 'item' as const,
+              label: 'Discard its changes',
+              hint: 'back to the last commit',
+              disabled: busy,
+              danger: true,
+              run: () => void discardChanges([entry]),
+            },
+          ]),
       {
         kind: 'item',
         label: 'Delete the file',
@@ -2356,11 +2644,14 @@
     if (!info || file === null) return;
 
     if (part === 'discard') {
-      const what = lines.length === 0 ? 'this hunk' : count(lines.length, 'line');
+      const { what, detail } = partWords(
+        file,
+        lines.length,
+        worktree.staged.some((e) => e.path === file),
+      );
       const { choice } = await ask({
         title: `Discard ${what}?`,
-        detail: `${file}\n\nThe change goes back to what is committed. It is not in any commit, ` +
-          'so there is nothing to bring it back from.',
+        detail,
         asksText: false,
         placeholder: '',
         initial: '',
@@ -2381,13 +2672,17 @@
   /** Deleting a file cannot be undone, so it is asked about by name. */
   async function confirmDelete(entry: StatusEntry) {
     const untracked = entry.worktree === 'untracked';
+    // A file staged as added is in the index and in no commit, so the sentence about the last
+    // commit still having it is not true of one: staging a new file and then deleting it was
+    // reassured about a copy that does not exist.
+    const inACommit = !untracked && entry.index !== 'added';
     const { choice } = await ask({
       title: `Delete ${entry.path}?`,
-      detail: untracked
-        ? 'The file is removed from the working tree. It is in no commit, so there is nothing ' +
-          'to bring it back from.'
-        : 'The file is removed from the working tree and its deletion staged. Committing that ' +
-          'makes it permanent; until then the last commit still has it.',
+      detail: inACommit
+        ? 'The file is removed from the working tree and its deletion staged. Committing that ' +
+          'makes it permanent; until then the last commit still has it.'
+        : 'The file is removed from the working tree. It is in no commit, so there is nothing ' +
+          'to bring it back from.',
       asksText: false,
       placeholder: '',
       initial: '',
@@ -2397,17 +2692,25 @@
     await worktree.delete(untracked ? [] : [entry.path], untracked ? [entry.path] : []);
   }
 
-  /** Opens one of the selected commit's files in the diff viewer, or one of the pair's. */
+  /**
+   * Opens one of the selected commit's files in the diff viewer, or one of the pair's.
+   *
+   * The name it had before goes with it. git sees a rename by pairing a deletion with an
+   * addition, so asking for the new name alone leaves it nothing to pair and it answers with
+   * the whole file as added — which for a file moved with a one-line edit is every line of it.
+   */
   function openFile(file: string) {
     if (!info) return;
     const pair = selection.pair;
     if (pair !== null) {
-      void diff.openCompare(info.path, pair.from.oid, pair.to.oid, file);
+      const was = selection.compared.find((f) => f.path === file)?.oldPath ?? null;
+      void diff.openCompare(info.path, pair.from.oid, pair.to.oid, file, was);
       return;
     }
     const rev = selection.detail?.commit.oid;
     if (rev === undefined) return;
-    void diff.open(info.path, rev, file);
+    const was = selection.detail?.files.find((f) => f.path === file)?.oldPath ?? null;
+    void diff.open(info.path, rev, file, was);
   }
 
   /** Drops the comparison and goes back to the newer of the two on its own. */
@@ -2415,7 +2718,7 @@
     const pair = selection.pair;
     if (!info || pair === null) return;
     diff.close();
-    void selection.select(info.path, pair.to.row, pair.to.oid);
+    void selection.select(info.path, pair.to.row, pair.to.oid, listingFor(pair.to.oid));
   }
 
   /**
@@ -2439,8 +2742,15 @@
       ...(stashes.list.length > 0
         ? [{ id: 'pop', label: 'Pop the latest stash', group: 'Stash', run: () => void act({ kind: 'stashApply', index: 0, pop: true }) } satisfies Command]
         : []),
-      { id: 'undo', label: 'Undo', group: 'History', run: () => void act({ kind: 'undo' }) },
-      { id: 'redo', label: 'Redo', group: 'History', run: () => void act({ kind: 'redo' }) },
+      // Named for what they would act on, and offered only when there is one, for the reason
+      // above: "Undo" alone says nothing about which of the last twenty operations it means,
+      // and on a repository nothing has happened in it answered with a git error.
+      ...(journal.undo === null
+        ? []
+        : [{ id: 'undo', label: `Undo ${journal.undo}`, group: 'History', run: () => void act({ kind: 'undo' }) } satisfies Command]),
+      ...(journal.redo === null
+        ? []
+        : [{ id: 'redo', label: `Redo ${journal.redo}`, group: 'History', run: () => void act({ kind: 'redo' }) } satisfies Command]),
       {
         id: 'theme',
         label: theme.current === 'dark' ? 'Switch to the light theme' : 'Switch to the dark theme',
@@ -2633,7 +2943,8 @@
             });
             return choice === null ? null : text;
           },
-          (name) => act({ kind: 'branchCreate', name, at: null, checkout: true }),
+          async (name) =>
+            settled(await act({ kind: 'branchCreate', name, at: null, checkout: true })),
         );
         return;
       }
@@ -2691,7 +3002,7 @@
    */
   async function revealAt(row: number, oid: string) {
     scrollToRow(row);
-    if (info) void selection.select(info.path, row, oid);
+    if (info) void selection.select(info.path, row, oid, listingFor(oid));
     await graph.ensureRows(row, row);
   }
 
@@ -2821,6 +3132,7 @@
       // left soloed is already narrowed by the time the rows arrive; this is only what the
       // panel draws with — which row carries the struck eye, and whether the banner is up.
       void scope.load(info.path);
+      void readJournal(info.path);
       // Before the walk rather than after it. The branch list needs a row per ref, and the
       // engine answers from whatever walk it has, so this fills the panel in a moment instead
       // of leaving it saying the kernel has no branches for the six seconds the real walk
@@ -2830,6 +3142,7 @@
       await refs.load(info.path);
       await stashes.load(info.path);
       await worktree.load(info.path);
+      void worktrees.load(info.path);
       // A repository can be opened mid-merge, so the tool has to be there on arrival rather
       // than only after an action of ours stopped.
       await merge.load(info.path);
@@ -2845,6 +3158,7 @@
       graph.clear();
       refs.clear();
       worktree.clear();
+      worktrees.clear();
       stashes.clear();
       error = messageOf(e);
     }
@@ -2870,10 +3184,21 @@
     // Everything the panels show belongs to the repository being left. Left up, it is another
     // repository's branches and another repository's changes under the new one's name — and it
     // is what the loading screen exists to replace.
+    //
+    // The rows go with them, and so does what was read about the repository itself. Both were
+    // replaced only once the new repository had been read, and on a kernel-sized one that read
+    // is long enough to stand and look at: the tab and the crumb said rpi-linux while the
+    // list, the lanes, the branch and "1,482,171 commits" were still the repository just left.
+    // The loading screen asks whether there is a frame, so leaving one up is also what kept it
+    // from appearing.
+    info = null;
+    journal = { undo: null, redo: null };
+    graph.clear();
     stashes.clear();
     refs.clear();
     scope.clear();
     worktree.clear();
+    worktrees.clear();
     showSubmodule = null;
     submoduleAt = null;
     showWip = false;
@@ -3092,6 +3417,9 @@
     }
     await refs.load(path);
     await stashes.load(path);
+    // A working tree is added and removed under .git, so the watcher is what notices one
+    // appearing or going away.
+    void worktrees.load(path);
     // Only when it actually moved: following HEAD on every commit would drag the view away
     // from whatever the user was reading.
     if (headMark !== wasHead) await focusHead();
@@ -3307,6 +3635,87 @@
     else toasts.push('error', 'Could not reach the clipboard');
   }
 
+  /**
+   * What the dots beside a working tree offer, and what a right-click on its row does.
+   *
+   * Opening one is a tab of its own, not a view inside this one: a linked working tree is a
+   * separate checkout with its own HEAD and its own uncommitted changes, and showing it under
+   * this tab's name would say those belong to this checkout.
+   */
+  function worktreeMenu(event: MouseEvent, tree: Worktree) {
+    event.preventDefault();
+    event.stopPropagation();
+    const at = event.currentTarget instanceof HTMLElement
+      ? event.currentTarget.getBoundingClientRect()
+      : null;
+    menu = {
+      x: at && event.type === 'click' ? at.right : event.clientX,
+      y: at && event.type === 'click' ? at.bottom + 2 : event.clientY,
+      items: [
+        {
+          kind: 'item',
+          label: 'Open it in a tab',
+          run: () => void tabs.open(tree.path),
+        },
+        {
+          kind: 'item',
+          label: 'Copy its path',
+          run: () => void copyUrl(tree.path),
+        },
+        { kind: 'separator' },
+        {
+          kind: 'item',
+          label: 'Remove this working tree…',
+          danger: true,
+          // git refuses while another process holds it, and saying so here beats letting the
+          // refusal come back as a git error under a button that looked available.
+          disabled: tree.locked,
+          hint: tree.locked ? 'git is using it' : undefined,
+          run: () => void removeWorktree(tree),
+        },
+      ],
+    };
+  }
+
+  /**
+   * Takes a working tree away, with the files in it.
+   *
+   * Asked twice over when it holds changes, because those are the one thing here that exists
+   * nowhere else: the commits stay in the repository whatever happens to the tree.
+   */
+  async function removeWorktree(tree: Worktree) {
+    if (!info) return;
+    const { choice } = await ask({
+      title: `Remove the working tree at ${tree.path}?`,
+      detail:
+        'The directory and everything in it goes. The commits stay in the repository: it is ' +
+        'the checkout that is removed, not the history.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'go', label: 'Remove it', danger: true }],
+    });
+    if (choice === null) return;
+    const done = await act({ kind: 'worktreeRemove', path: tree.path, force: false });
+    if (!done) {
+      // git's own refusal, which is what it says when the tree has changes in it or files it
+      // does not track. Forcing is a second question rather than a flag on the first.
+      const { choice: anyway } = await ask({
+        title: 'It has changes in it. Remove it anyway?',
+        detail:
+          'git refused because the working tree holds changes that are recorded nowhere else. ' +
+          'Removing it now throws those away and they cannot be recovered.',
+        asksText: false,
+        placeholder: '',
+        initial: '',
+        choices: [{ id: 'go', label: 'Throw them away', danger: true }],
+      });
+      if (anyway === null) return;
+      await act({ kind: 'worktreeRemove', path: tree.path, force: true });
+    }
+    await worktrees.load(info.path);
+  }
+
   /** Opens the submodule panel and reads the commit it is pinned at. */
   async function openSubmodulePanel(submodule: Submodule) {
     showSubmodule = submodule;
@@ -3339,7 +3748,9 @@
       asksText: false,
       placeholder: '',
       initial: '',
-      choices: [{ id: 'go', label: 'Delete it', primary: true, danger: true }],
+      // Not primary, for the reason the hard reset is not: this is forced, so a submodule with
+      // work in it loses that work and no copy of it exists anywhere else.
+      choices: [{ id: 'go', label: 'Delete it', danger: true }],
     });
     if (choice === null) return;
     // Forced: a submodule with local edits refuses otherwise, and the user has just been told
@@ -3357,6 +3768,20 @@
 
   /** The two fixed columns as the pane can actually afford to draw them. */
   const columns = $derived(fitColumns(panes.widths, paneWidth));
+
+  /** The window's own width, which is what the side panels have to fit inside. */
+  let frameWidth = $state(0);
+
+  /** The two side panels as the window can actually afford to draw them. */
+  const panels = $derived(
+    fitPanels(
+      {
+        sidebar: views.current.sidebar === 'open' ? panes.widths.sidebar : 0,
+        details: detailsShowing ? panes.widths.details : 0,
+      },
+      frameWidth,
+    ),
+  );
 
   /**
    * Whether there is room for the dimmed body preview after the summary.
@@ -3533,7 +3958,7 @@
   -->
   <TitleStrip
     {tabs}
-    newTab={showStart || tabs.session.tabs.length === 0}
+    newTab={onStart}
     profile={profiles.current}
     provisional={graph.provisional}
     dark={theme.current === 'dark'}
@@ -3567,6 +3992,7 @@
       leftPanel={views.current.sidebar}
       stashes={stashes.list.length}
       dirty={worktree.dirty}
+      {journal}
       rightPanel={views.current.details}
       rightPanelUsable={!merge.inProgress}
       onAction={toolbarAction}
@@ -3581,13 +4007,18 @@
        panel that covers what somebody was reading to tell them to wait is worse than one. -->
   <Transfer {transfer} />
 
-  {#if graph.transportWarning}
-    <p class="banner">{graph.transportWarning}</p>
-  {/if}
-  {#if error}
-    <p class="banner error">{error}</p>
-  {:else if graph.error}
-    <p class="banner error">{graph.error}</p>
+  <!-- Both belong to the repository in the tab, and the start page is not showing it: a page
+       offering repositories to open under "not a git repository" reads as a complaint about
+       the list. -->
+  {#if !onStart}
+    {#if graph.transportWarning}
+      <p class="banner">{graph.transportWarning}</p>
+    {/if}
+    {#if error}
+      <p class="banner error">{error}</p>
+    {:else if graph.error}
+      <p class="banner error">{graph.error}</p>
+    {/if}
   {/if}
 
   <!--
@@ -3636,7 +4067,7 @@
     there — and a window with no repository in it is no longer an empty grey rectangle that
     says nothing about what to do next.
   -->
-  {#if showStart || tabs.session.tabs.length === 0}
+  {#if onStart}
     <Start
       start={startPage}
       sshKeys={ssh.keys}
@@ -3669,10 +4100,11 @@
     >
     <div
       class="body"
+      bind:clientWidth={frameWidth}
       style:--refs-col="{columns.refs}px"
       style:--graph-col="{columns.graph}px"
-      style:--sidebar-w="{panes.widths.sidebar}px"
-      style:--details-w="{panes.widths.details}px"
+      style:--sidebar-w="{panels.sidebar}px"
+      style:--details-w="{panels.details}px"
     >
     {#if views.current.sidebar === 'rail'}
       <Rail
@@ -3690,6 +4122,7 @@
           : null}
         stashes={stashes.list}
         submodules={refs.submodules}
+        worktrees={worktrees.linked}
         remotes={remotes.list}
         openSubmodule={tabs.active?.submodule ?? null}
         onSelect={reveal}
@@ -3699,6 +4132,7 @@
         onRefMenu={refMenu}
         onInitAllSubmodules={() => void initSubmodule(null, false)}
         onSubmoduleMenu={submoduleMenu}
+        onWorktreeMenu={worktreeMenu}
         onDropRef={dropRef}
         pullRequests={hosting.pullRequests}
         pullRequestLabel={hosting.view?.host?.kind === 'gitlab' ? 'Merge requests' : 'Pull requests'}
@@ -3982,6 +4416,7 @@
                     ondragleave={() => (dragOver === label.short ? (dragOver = null) : null)}
                     ondrop={(e) => dropOnPill(e, label.short)}
                     onclick={(e) => pick(row, e)}
+                    ondblclick={() => checkoutPill(label)}
                   >
                     <!-- The cap says what the ref is; for a tracking branch that is the host
                          it came from, which is more than "a branch" says. -->
@@ -4031,13 +4466,7 @@
       </div>
     </div>
     </div>
-    <!--
-      Not while a merge is stopped. The tool that settles it is the only thing worth looking at
-      until it is settled, and the panel beside it can only offer a commit to select — so it
-      spent half the window saying "select a commit" while the two sides being merged were
-      squeezed into a column too narrow to read, with the button that takes a side clipped.
-    -->
-    {#if views.current.details && !merge.inProgress}
+    {#if detailsShowing}
       <Splitter
         label="Resize the detail panel"
         value={panes.widths.details}
@@ -4170,6 +4599,7 @@
     title={question.title}
     detail={question.detail}
     asksText={question.asksText}
+    lines={question.lines ?? 1}
     placeholder={question.placeholder}
     initial={question.initial}
     choices={question.choices}
@@ -4190,7 +4620,7 @@
 {/if}
 
 {#if menu}
-  <Menu x={menu.x} y={menu.y} items={menu.items} onClose={() => (menu = null)} />
+  <Menu x={menu.x} y={menu.y} items={withAWorktree(menu.items)} onClose={() => (menu = null)} />
 {/if}
 
 <Toasts {toasts} />

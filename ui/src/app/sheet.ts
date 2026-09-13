@@ -6,7 +6,7 @@
  */
 import type { Block } from '../ipc/types';
 import type { Pick, Side } from '../state/merge.svelte';
-import { sideOf } from '../state/merge.svelte';
+import { markersFor, sideOf } from '../state/merge.svelte';
 
 /** One line of a file as a pane draws it. */
 export interface Row {
@@ -42,8 +42,17 @@ export function sideRows(blocks: readonly Block[], side: Side): Row[] {
   return out;
 }
 
-/** The file as it will be written, with each line tied back to the conflict it came from. */
-export function outputRows(blocks: readonly Block[], choices: Record<number, Pick>): Row[] {
+/**
+ * The file as it will be written, with each line tied back to the conflict it came from.
+ *
+ * A region nobody has answered draws the markers it would be written as, so the pane shows the
+ * file rather than a guess at it.
+ */
+export function outputRows(
+  blocks: readonly Block[],
+  choices: Record<number, Pick>,
+  labels: { ours: string; theirs: string } = { ours: 'ours', theirs: 'theirs' },
+): Row[] {
   const out: Row[] = [];
   let conflict = 0;
   for (const block of blocks) {
@@ -51,11 +60,14 @@ export function outputRows(blocks: readonly Block[], choices: Record<number, Pic
       for (const text of block.lines) push(out, text, null, null, false);
       continue;
     }
-    const pick = choices[conflict] ?? [];
-    const lines =
-      pick.length === 0
-        ? [...block.base]
-        : pick.map((t) => sideOf(block, t.side)[t.line]).filter((l) => l !== undefined);
+    const pick = choices[conflict];
+    if (pick === undefined) {
+      // No `line`, because a marker is not a line of either side and cannot be picked.
+      markersFor(block, labels).forEach((text, i) => push(out, text, conflict, null, i === 0));
+      conflict += 1;
+      continue;
+    }
+    const lines = pick.map((t) => sideOf(block, t.side)[t.line]).filter((l) => l !== undefined);
     lines.forEach((text, i) => push(out, text, conflict, i, i === 0));
     if (lines.length === 0) push(out, '(nothing taken)', conflict, null, true, false);
     conflict += 1;

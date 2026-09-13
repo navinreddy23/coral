@@ -22,6 +22,14 @@ pub struct StashEntry {
     pub message: String,
     /// Seconds since the epoch.
     pub time: i64,
+    /// True when git named the entry, rather than somebody typing a message for it.
+    ///
+    /// git's own name for a stash made with no message is the commit it was taken from:
+    /// "WIP on master: 1a2b3c4 the subject". That names what the branch was sitting on, not
+    /// what is in the stash, so a list of them reads as a list of commits somebody stashed —
+    /// which is exactly what they are not. Knowing which shape it was is what lets a window
+    /// say "On master" instead.
+    pub automatic: bool,
 }
 
 impl StashEntry {
@@ -71,7 +79,7 @@ fn parse_line(line: &[u8]) -> Result<StashEntry, CoralError> {
         label: "stash list",
         detail: format!("cannot read a position from {:?}", f[1]),
     })?;
-    let (branch, message) = split_subject(f[2]);
+    let (branch, message, automatic) = split_subject(f[2]);
 
     Ok(StashEntry {
         index,
@@ -79,6 +87,7 @@ fn parse_line(line: &[u8]) -> Result<StashEntry, CoralError> {
         branch,
         message,
         time: f[3].parse().unwrap_or_default(),
+        automatic,
     })
 }
 
@@ -91,20 +100,20 @@ fn selector_index(selector: &str) -> Option<usize> {
         .ok()
 }
 
-/// Splits git's subject into the branch it names and what is left.
+/// Splits git's subject into the branch it names, what is left, and whether git wrote it.
 ///
 /// Two shapes, and they are git's: `WIP on <branch>: <commit> <subject>` for a stash made with
 /// no message, `On <branch>: <message>` for one made with. Anything else is kept whole rather
-/// than guessed at.
-fn split_subject(subject: &str) -> (Option<String>, String) {
-    for prefix in ["WIP on ", "On "] {
+/// than guessed at, and counts as somebody's own words.
+fn split_subject(subject: &str) -> (Option<String>, String, bool) {
+    for (prefix, automatic) in [("WIP on ", true), ("On ", false)] {
         if let Some(rest) = subject.strip_prefix(prefix)
             && let Some((branch, message)) = rest.split_once(": ")
         {
-            return (Some(branch.to_owned()), message.to_owned());
+            return (Some(branch.to_owned()), message.to_owned(), automatic);
         }
     }
-    (None, subject.to_owned())
+    (None, subject.to_owned(), false)
 }
 
 impl RepoLocation {
@@ -147,6 +156,10 @@ mod tests {
         assert_eq!(entries[0].message, "1a2b3c4 a commit");
         assert_eq!(entries[1].branch.as_deref(), Some("topic"));
         assert_eq!(entries[1].message, "something I typed");
+        // Which of the two shapes it was, because git's own names the base commit rather than
+        // the work, and a list of those reads as a list of commits.
+        assert!(entries[0].automatic);
+        assert!(!entries[1].automatic);
     }
 
     #[test]
@@ -156,6 +169,7 @@ mod tests {
         let entries = parse(&input).unwrap();
         assert_eq!(entries[0].branch, None);
         assert_eq!(entries[0].message, "something else entirely");
+        assert!(!entries[0].automatic);
     }
 
     #[test]
@@ -190,6 +204,7 @@ mod tests {
             branch: None,
             message: String::new(),
             time: 0,
+            automatic: true,
         };
         assert_eq!(entry.name(), "abcdef1");
     }
