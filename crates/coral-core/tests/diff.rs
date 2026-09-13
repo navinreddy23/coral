@@ -744,3 +744,54 @@ async fn a_mode_only_change_says_which_modes() {
     assert_eq!(mode.new, "100755");
     assert!(files[0].hunks.is_empty(), "and there are no lines to show");
 }
+
+/// A new file too large to read is reported as too large without being read.
+///
+/// `--no-index` makes a patch as large as the file, and holding one only to be told it was too
+/// large to show is the thing the guard exists to avoid: a 300 MB log file dropped into a
+/// repository took the window from 190 MB to 485 MB on a single click.
+#[tokio::test]
+async fn an_untracked_file_past_the_guard_is_not_read() {
+    let repo = TestRepo::new().write("a.txt", "a\n").commit("base");
+    let big = "a line of perfectly ordinary text\n".repeat(200_000);
+    assert!(big.len() > coral_core::diff::LARGE_PATCH_BYTES);
+    std::fs::write(repo.path().join("dump.log"), &big).unwrap();
+
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+    let file = loc
+        .untracked_diff(&runner, "dump.log", DiffOptions::default())
+        .await
+        .unwrap()
+        .expect("an untracked file has a diff against nothing");
+
+    assert!(file.too_large);
+    assert!(file.hunks.is_empty());
+    assert!(!file.binary);
+    // And it still says how much of it there is, which the guard used to answer with zero.
+    assert_eq!(file.added, Some(200_000));
+    assert_eq!(file.removed, Some(0));
+}
+
+/// Asked for anyway, the same file is read end to end.
+#[tokio::test]
+async fn the_same_file_is_read_when_the_guard_is_lifted() {
+    let repo = TestRepo::new().write("a.txt", "a\n").commit("base");
+    let big = "a line of perfectly ordinary text\n".repeat(200_000);
+    std::fs::write(repo.path().join("dump.log"), &big).unwrap();
+
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+    let options = DiffOptions {
+        guard_large: false,
+        ..DiffOptions::default()
+    };
+    let file = loc
+        .untracked_diff(&runner, "dump.log", options)
+        .await
+        .unwrap()
+        .expect("an untracked file has a diff against nothing");
+
+    assert!(!file.too_large);
+    assert_eq!(file.added, Some(200_000));
+}

@@ -344,6 +344,49 @@ impl RepoLocation {
         Ok(files)
     }
 
+    /// Whether an untracked file is larger than the biggest patch that is read whole.
+    fn past_the_guard(&self, path: &str) -> bool {
+        std::fs::metadata(self.display_path().join(path))
+            .is_ok_and(|m| m.len() > crate::diff::LARGE_PATCH_BYTES as u64)
+    }
+
+    /// What to say about an untracked file too large to read: that it is new, how much of it
+    /// there is, and that its contents were left alone.
+    ///
+    /// `--numstat` rather than the patch, because its answer is one line whatever the file
+    /// holds — the counts for a text file and `-` for a binary one, which is git's own rule
+    /// and the same one the tracked side uses.
+    async fn oversized(
+        &self,
+        runner: &GitRunner,
+        path: &str,
+    ) -> Result<crate::diff::FileDiff, CoralError> {
+        let out = runner
+            .output_allowing(
+                GitCommand::status("diff", self.display_path())
+                    .args(["diff", "--no-index", "--numstat", "--", "/dev/null"])
+                    .arg(path),
+                &[1],
+            )
+            .await?;
+        let counted = crate::diff::parse_numstat(&out.stdout)?;
+        let (added, removed, binary) = counted
+            .first()
+            .map_or((None, None, false), |f| (f.added, f.removed, f.binary));
+
+        Ok(crate::diff::FileDiff {
+            path: path.into(),
+            old_path: None,
+            change: crate::diff::FileChange::Added,
+            binary,
+            added,
+            removed,
+            hunks: Vec::new(),
+            mode: None,
+            too_large: true,
+        })
+    }
+
     /// The whole of an untracked file, as a diff against nothing.
     ///
     /// `git diff` knows about tracked paths only, so a file git has never seen produces no
@@ -373,6 +416,14 @@ impl RepoLocation {
             .await?;
         if listed.stdout.is_empty() {
             return Ok(None);
+        }
+
+        // The whole file is the patch, so a file past the guard is a patch past it too, and
+        // holding one to be told it is too large to show is the thing the guard exists to
+        // avoid: a 300 MB log file dropped into a repository took the window from 190 MB to
+        // 485 MB on a single click. The size is asked of the filesystem before git is run.
+        if options.guard_large && self.past_the_guard(path) {
+            return self.oversized(runner, path).await.map(Some);
         }
 
         // "/dev/null" is a literal git recognises on every platform it builds for, not a path
