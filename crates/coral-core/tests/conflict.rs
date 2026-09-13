@@ -909,3 +909,40 @@ async fn a_resolved_file_keeps_the_mode_of_the_side_taken() {
         .mode();
     assert_eq!(mode & 0o111, 0o111, "still executable on disk");
 }
+
+/// A file too big to lay out as lines is taken whole, and is never read to find that out.
+///
+/// The three stages were loaded whole and all at once to look at 8000 bytes of each, so
+/// opening a merge that conflicted in a 120 MB asset made the window hold a third of a
+/// gigabyte. The size is asked for first now, and the bound is the one a patch is shown at.
+#[tokio::test]
+async fn a_file_past_the_size_a_patch_is_shown_at_is_taken_whole() {
+    let big = "a line of perfectly ordinary text\n".repeat(200_000);
+    assert!(big.len() > coral_core::diff::LARGE_PATCH_BYTES);
+
+    let repo = TestRepo::new().write("big.txt", &big).commit("base");
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo
+        .write("big.txt", &format!("{big}side\n"))
+        .commit("side");
+    repo.git(["checkout", "--quiet", "main"]);
+    let repo = repo
+        .write("big.txt", &format!("{big}main\n"))
+        .commit("main");
+    repo.command(["merge", "side"]).output().unwrap();
+
+    let (runner, loc) = open(&repo).await;
+    let files = loc.conflicts(&runner).await.unwrap();
+
+    assert_eq!(files[0].whole, Some(Whole::TooLarge));
+    assert!(!files[0].supports_blocks());
+    // Still resolvable, and the file that lands is the side asked for.
+    loc.resolve(&runner, "big.txt", &Resolution::TakeTheirs)
+        .await
+        .unwrap();
+    assert!(
+        std::fs::read_to_string(repo.path().join("big.txt"))
+            .unwrap()
+            .ends_with("side\n")
+    );
+}

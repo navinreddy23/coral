@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use bstr::{BString, ByteSlice};
 
@@ -35,6 +35,8 @@ pub enum Whole {
     Submodule,
     /// A symlink: each side points somewhere, and the file it points at is not the answer.
     Symlink,
+    /// Too big to lay out as lines, whatever it holds.
+    TooLarge,
 }
 
 impl ConflictedFile {
@@ -61,7 +63,7 @@ pub enum Resolution {
 /// The mode git gives a submodule's entry: its object is a commit.
 const GITLINK: &str = "160000";
 /// The mode git gives a symlink: its object is the path pointed at.
-const SYMLINK: &[u8] = b"120000";
+const SYMLINK: &str = "120000";
 
 /// What the index records for one stage of a conflicted path.
 struct Staged {
@@ -73,18 +75,55 @@ impl Staged {
     /// Reads one `git ls-files -u -z` record, `<mode> <oid> <stage>\t<path>`, if it is the
     /// stage asked for.
     fn parse(record: &[u8], stage: u8) -> Option<Self> {
-        let (meta, _) = record.split_once_str("\t")?;
+        let (_, staged, at) = Self::listed(record)?;
+        (at == stage).then_some(staged)
+    }
+
+    /// The same record read whole: the path it is about, the stage, and what is in it.
+    fn listed(record: &[u8]) -> Option<(String, Self, u8)> {
+        let (meta, path) = record.split_once_str("\t")?;
         let mut parts = meta.split_str(" ");
         let mode = parts.next()?;
         let oid = parts.next()?;
-        if parts.next()? != [stage] {
-            return None;
-        }
-        Some(Self {
-            mode: String::from_utf8_lossy(mode).into_owned(),
-            oid: String::from_utf8_lossy(oid).into_owned(),
-        })
+        let stage = *parts.next()?.first()?;
+        Some((
+            String::from_utf8_lossy(path).into_owned(),
+            Self {
+                mode: String::from_utf8_lossy(mode).into_owned(),
+                oid: String::from_utf8_lossy(oid).into_owned(),
+            },
+            stage,
+        ))
     }
+}
+
+/// Why a conflicted path has nothing to pick between, as far as the index alone can say.
+///
+/// Ordered by what the person is looking at: a submodule and a symlink are not files at all,
+/// an LFS path holds a pointer rather than the file, and anything past the size a patch is
+/// shown at is not something to lay out as lines whatever it holds. Binary is left to the
+/// caller, because answering that one means reading the stages.
+fn from_index(
+    submodule: bool,
+    stages: &[Staged],
+    lfs: bool,
+    sizes: &HashMap<String, u64>,
+) -> Option<Whole> {
+    if submodule {
+        return Some(Whole::Submodule);
+    }
+    if stages.iter().any(|s| s.mode == SYMLINK) {
+        return Some(Whole::Symlink);
+    }
+    if lfs {
+        return Some(Whole::Lfs);
+    }
+    let too_large = stages.iter().any(|s| {
+        sizes
+            .get(&s.oid)
+            .is_some_and(|n| *n > crate::diff::LARGE_PATCH_BYTES as u64)
+    });
+    too_large.then_some(Whole::TooLarge)
 }
 
 impl RepoLocation {
@@ -95,10 +134,14 @@ impl RepoLocation {
     pub async fn conflicts(&self, runner: &GitRunner) -> Result<Vec<ConflictedFile>, CoralError> {
         let status = self.status(runner).await?;
         let paths: Vec<String> = status.conflicted().map(|e| e.path.to_string()).collect();
+        if paths.is_empty() {
+            return Ok(Vec::new());
+        }
         let lfs = self
             .in_lfs(runner, paths.iter().map(String::as_bytes))
             .await?;
-        let symlinks = self.symlinks(runner).await?;
+        let stages = self.unmerged(runner, &paths).await?;
+        let sizes = self.sizes(runner, &stages).await?;
 
         let mut out = Vec::new();
         for entry in status.conflicted() {
@@ -108,16 +151,15 @@ impl RepoLocation {
                 kind,
                 ConflictKind::DeletedByUs | ConflictKind::DeletedByThem | ConflictKind::BothDeleted
             );
-            let whole = if entry.submodule {
-                Some(Whole::Submodule)
-            } else if symlinks.contains(&path) {
-                Some(Whole::Symlink)
-            } else if lfs.contains(&path) {
-                Some(Whole::Lfs)
-            } else if !delete_modify && self.stage_is_binary(runner, &path).await {
-                Some(Whole::Binary)
-            } else {
-                None
+            let mine = stages.get(&path).map_or(&[][..], Vec::as_slice);
+            let whole = match from_index(entry.submodule, mine, lfs.contains(&path), &sizes) {
+                Some(reason) => Some(reason),
+                // One of the two sides has nothing in it, so there is nothing to read either.
+                None if delete_modify => None,
+                None => self
+                    .stage_is_binary(runner, &path)
+                    .await
+                    .then_some(Whole::Binary),
             };
             out.push(ConflictedFile {
                 path,
@@ -129,24 +171,66 @@ impl RepoLocation {
         Ok(out)
     }
 
-    /// The conflicted paths that are symlinks on either side.
+    /// The unmerged index for these paths: every stage git holds, with its mode and object.
     ///
-    /// One read of the unmerged index for all of them. What such a path holds is the path it
-    /// points at, and writing that out as a file both loses the link and, if the old link is
-    /// still there, puts the new target inside whatever the old one pointed at.
-    async fn symlinks(&self, runner: &GitRunner) -> Result<HashSet<String>, CoralError> {
+    /// One read for all of them, narrowed to the paths asked about so git is not made to walk
+    /// a 96,000-file index to answer about three.
+    async fn unmerged(
+        &self,
+        runner: &GitRunner,
+        paths: &[String],
+    ) -> Result<HashMap<String, Vec<Staged>>, CoralError> {
         let out = runner
             .output(
-                GitCommand::read("ls-files", self.display_path()).args(["ls-files", "-u", "-z"]),
+                GitCommand::read("ls-files", self.display_path())
+                    .args(["ls-files", "-u", "-z", "--"])
+                    .args(paths),
             )
             .await?;
-        Ok(out
-            .stdout
-            .split(|b| *b == 0)
-            .filter_map(|record| {
-                let (meta, path) = record.split_once_str("\t")?;
-                meta.starts_with(SYMLINK)
-                    .then(|| String::from_utf8_lossy(path).into_owned())
+
+        let mut held: HashMap<String, Vec<Staged>> = HashMap::new();
+        for record in out.stdout.split(|b| *b == 0) {
+            if let Some((path, staged, _)) = Staged::listed(record) {
+                held.entry(path).or_default().push(staged);
+            }
+        }
+        Ok(held)
+    }
+
+    /// How big each of those objects is.
+    ///
+    /// Asked before any of them is read, because the answer decides whether to read them at
+    /// all: the three stages of a conflicted 120 MB asset were loaded whole and all at once to
+    /// look at 8000 bytes of each, and the window held the third of a gigabyte that took.
+    async fn sizes(
+        &self,
+        runner: &GitRunner,
+        stages: &HashMap<String, Vec<Staged>>,
+    ) -> Result<HashMap<String, u64>, CoralError> {
+        let mut asked = Vec::new();
+        for staged in stages.values().flatten() {
+            asked.extend_from_slice(staged.oid.as_bytes());
+            asked.push(b'\n');
+        }
+        if asked.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let out = runner
+            .output(
+                GitCommand::read("cat-file", self.display_path())
+                    .args(["cat-file", "--batch-check"])
+                    .stdin_bytes(asked),
+            )
+            .await?;
+
+        // `<oid> <type> <size>`, and a line git could not answer says `missing` instead.
+        Ok(String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .filter_map(|line| {
+                let mut fields = line.split(' ');
+                let oid = fields.next()?;
+                let size = fields.nth(1)?.parse().ok()?;
+                Some((oid.to_owned(), size))
             })
             .collect())
     }

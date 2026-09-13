@@ -166,6 +166,9 @@
     if (file.whole === 'symlink') {
       return `${file.path} is a link. ${labels.ours} and ${labels.theirs} pointed it at different files, and one of the two is the answer.`;
     }
+    if (file.whole === 'too_large') {
+      return `${file.path} is too large to lay out side by side, so take one side whole and edit it afterwards if you need to.`;
+    }
     const gone = sidesOf(file);
     if (!gone.ours) {
       return `${file.path} is not on ${labels.ours} at all: ${labels.theirs} changed a file this side had deleted.`;

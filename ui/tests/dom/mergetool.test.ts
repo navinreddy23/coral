@@ -153,6 +153,15 @@ describe("the merge tool", () => {
     expect(container.querySelector(".conflict")).toBeNull();
   });
 
+  it("offers only whole-file choices for a file too large to lay out", async () => {
+    const merge = state([conflicted({ path: "asset.psd", whole: "too_large" })]);
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+    await fireEvent.click(container.querySelector("button.file") as HTMLButtonElement);
+
+    expect(container.querySelector(".whole")?.textContent).toContain("too large");
+    expect(container.querySelector(".conflict")).toBeNull();
+  });
+
   it("offers the two targets for a conflicted link", async () => {
     // What a link holds is the path it points at. Shown as a line to edit, resolving wrote
     // that path into the file the old link pointed at and left the link where it was.
