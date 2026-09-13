@@ -186,7 +186,13 @@ impl RepoLocation {
             .map(|_| ())
     }
 
-    /// Creates a tag. A message makes it annotated.
+    /// Creates a tag. A message makes it annotated, and `tag.gpgSign` then signs it.
+    ///
+    /// Without one it is lightweight, which is a ref and nothing else: there is no object for
+    /// a signature to sit on, so `--no-sign` says so. `tag.gpgSign` otherwise turns every tag
+    /// into a signed one needing a message, and the window, which pins the editor to a no-op
+    /// so nothing can hang waiting for one, got "fatal: no tag message?" from a menu entry
+    /// that had just offered to make a tag without a message.
     ///
     /// # Errors
     /// Propagates git failures.
@@ -198,8 +204,9 @@ impl RepoLocation {
         message: Option<&str>,
     ) -> Result<(), CoralError> {
         let mut cmd = GitCommand::write("tag", self.display_path()).arg("tag");
-        if let Some(m) = message {
-            cmd = cmd.args(["-a", "-m", m]);
+        match message {
+            Some(m) => cmd = cmd.args(["-a", "-m", m]),
+            None => cmd = cmd.arg("--no-sign"),
         }
         cmd = cmd.arg(name);
         if let Some(rev) = at {

@@ -138,6 +138,33 @@ async fn refuses_to_delete_an_unmerged_branch_without_force() {
     assert!(repo.git(["branch", "--list", "work"]).is_empty());
 }
 
+/// A repository that signs its tags can still be given one without a message.
+///
+/// `tag.gpgSign` turns every `git tag` into a signed one, and a signed tag needs a message git
+/// would open an editor for. The window pins the editor to a no-op so nothing can hang waiting
+/// for one, so the menu entry offering a tag without a message answered "fatal: no tag
+/// message?" instead of making a tag. A lightweight tag is a ref and nothing else, with no
+/// object for a signature to sit on, which is what it now says.
+#[tokio::test]
+async fn a_tag_without_a_message_is_made_even_where_tags_are_signed() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    repo.git(["config", "tag.gpgSign", "true"]);
+    // A signing program that is not there, so a tag that tried to be signed would fail rather
+    // than quietly succeed and make the test prove nothing.
+    repo.git(["config", "gpg.program", "definitely-not-a-program"]);
+    let (runner, loc) = open(&repo).await;
+
+    loc.tag_create(&runner, "light", None, None).await.unwrap();
+
+    assert_eq!(repo.git(["cat-file", "-t", "light"]), "commit");
+    assert!(
+        loc.tag_create(&runner, "heavy", None, Some("a release"))
+            .await
+            .is_err(),
+        "one with a message is still signed, and signing is what fails here"
+    );
+}
+
 #[tokio::test]
 async fn creates_lightweight_and_annotated_tags() {
     let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
