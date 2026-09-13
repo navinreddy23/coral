@@ -1,5 +1,84 @@
 # Changelog
 
+## 1.2.0
+
+Ninety-four fixes, most of them found by driving the real window rather than by running the
+tests. The ones worth reading about first are the handful that were quietly losing work.
+
+### Resolving a conflict could destroy what it touched
+
+- **Taking a side of a conflicted symlink wrote into the file it pointed at.** What the index
+  holds for a link is the path it points at, and those bytes were written into the worktree
+  with an ordinary write while the old link was still there: the new target landed inside
+  whatever the old link pointed at, and that file's contents were gone. The link itself never
+  moved, so the index was then resolved to the side nobody asked for, and Coral said the file
+  was settled.
+- **A merge that conflicted in a submodule could not be finished at all.** Its index stages are
+  commits, and reading them as content came back empty, so the pane put "not conflicted" in red
+  over a view that never stopped loading and offered deletion as the only way out — which would
+  have taken the submodule out of the superproject.
+- **Git LFS, three ways.** A conflicted asset was laid out as the three lines of its pointer
+  with a checkbox on each, so taking the object from one side and the size from the other made
+  a pointer naming nothing: it commits, it pushes, and the next clone has no file there. The
+  same pointer could be part-staged from the diff view. And resolving any conflict left the
+  pointer on disk where the asset should be.
+- **A resolved file came out in the repository's form rather than the worktree's.** In a
+  `core.autocrlf` checkout, which is what git for Windows gives every clone by default, the
+  file came out with Unix line endings among Windows ones. Nothing reported it, because
+  cleaning those bytes again gives back exactly what the index holds.
+- A side is taken through the index now and the file laid down from it, so the mode survives
+  and nothing is written through anything. That also settles a conflict on an executable, whose
+  bit used to depend on what the merge happened to leave on disk.
+
+### An apostrophe in a path broke three things
+
+git runs a `!`-prefixed credential helper, `GIT_SEQUENCE_EDITOR` and `core.sshCommand` through
+a shell, so what Coral puts in them is shell syntax. Paths went in between single quotes with
+nothing done about the apostrophe that might be in one.
+
+- **Nobody called O'Brien could sign in.** Every fetch, push and clone needing a credential
+  failed, and the message named the remote rather than the helper.
+- **A repository under `Bob's game` could not have its history edited.** Every drop, reword and
+  reorder died on "There was a problem with the editor".
+- **A key under such a home directory could not be used**, because pinning it produced an ssh
+  command the shell could not parse.
+
+### Signing
+
+- **A repository that signs its tags could not be given a plain one.** `tag.gpgSign` turns
+  every tag into a signed one needing a message git opens an editor for, and the window pins
+  the editor to a no-op so nothing can hang, so "Create tag here" answered "fatal: no tag
+  message?" and made nothing.
+- **An empty signing override was written rather than cleared.** git runs what
+  `gpg.ssh.program` names without looking at it first, so an empty value is a program whose
+  name is the empty string, and every signed commit then fails with `cannot run :`.
+
+### Large repositories
+
+- **Opening a merge read every conflicted file whole to look at 8000 bytes of it.** One
+  conflicted 120 MB asset made the window hold 358 MB to decide the file had no lines worth
+  showing. Sizes are asked for first now, and anything past the size a patch is shown at is
+  taken whole without being read: 7 MB and under ten milliseconds for the same file.
+- **Opening a large new file read the whole of it to say it was too large.** An untracked file
+  is diffed against nothing, so its patch is as long as the file, and it was held in full
+  before the guard looked at it. A 300 MB log dropped into a repository took the window from
+  192 MB to 485 MB on one click.
+- **Only the first edit of a file reached the window.** File events are narrowed against a
+  fingerprint taken from `git status`, which names which paths differ and never what they now
+  hold, so a file already listed as modified hashed the same however many times it was saved.
+  A diff left open showed the first edit for as long as it stayed open, and staging a hunk from
+  it built a patch against content that had moved on.
+
+### Everything else
+
+Sixty more, nearly all of them things the window said that were not so: a conflict in a CRLF
+file that hid the incoming side entirely, a token standing alone in a remote URL reaching the
+logs, Enter answering the two questions nothing can undo, rewording a commit throwing its body
+away, a dropped stash staying in the list, undo naming one operation and undoing another, and a
+long run of labels cut off mid-word. The command line gained `--mainline`, without which a
+merge could not be reverted from it, and the hunk and line selection for discarding that the
+window already had.
+
 ## 1.1.2
 
 Two faults found by driving the window, and the last of the workflows that had never run.
