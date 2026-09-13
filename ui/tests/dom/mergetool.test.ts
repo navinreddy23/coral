@@ -153,6 +153,18 @@ describe("the merge tool", () => {
     expect(container.querySelector(".conflict")).toBeNull();
   });
 
+  it("offers the two targets for a conflicted link", async () => {
+    // What a link holds is the path it points at. Shown as a line to edit, resolving wrote
+    // that path into the file the old link pointed at and left the link where it was.
+    const merge = state([conflicted({ path: "bin/latest", whole: "symlink" })]);
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+    const file = container.querySelector("button.file") as HTMLButtonElement;
+    await fireEvent.click(file);
+
+    expect(container.querySelector(".whole")?.textContent).toContain("is a link");
+    expect(container.querySelector(".conflict")).toBeNull();
+  });
+
   it("offers the two commits for a conflicted submodule", async () => {
     // The pane used to show a red "sub is not conflicted" over a region view that never
     // stopped loading, and the only thing left enabled was Abort.

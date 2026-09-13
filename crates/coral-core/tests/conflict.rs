@@ -815,3 +815,97 @@ async fn a_conflicted_submodule_is_settled_by_taking_one_of_the_two_commits() {
     assert_eq!(repo.git(["status", "--porcelain"]), "M  sub");
     assert!(loc.conflicts(&runner).await.unwrap().is_empty());
 }
+
+/// A conflicted symlink points somewhere; it is not a file with a line in it.
+///
+/// Its stages hold the path pointed at. Written out as content they made a file where the
+/// link was, and while the old link was still in place the write went through it: the new
+/// target landed inside whatever the old one pointed at, that file was left modified, and
+/// `git add` then recorded the link unchanged — so the side asked for was not the side staged.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_conflicted_symlink_is_repointed_rather_than_written_through() {
+    fn relink(at: &std::path::Path, to: &str) {
+        std::fs::remove_file(at.join("link")).unwrap();
+        std::os::unix::fs::symlink(to, at.join("link")).unwrap();
+    }
+
+    let repo = TestRepo::new()
+        .write("targets/ours", "OURS")
+        .write("targets/theirs", "THEIRS")
+        .write("targets/base", "BASE");
+    std::os::unix::fs::symlink("targets/base", repo.path().join("link")).unwrap();
+    let repo = repo.commit("base");
+
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    relink(repo.path(), "targets/theirs");
+    let repo = repo.commit("side points it elsewhere");
+    repo.git(["checkout", "--quiet", "main"]);
+    relink(repo.path(), "targets/ours");
+    let repo = repo.commit("main points it elsewhere");
+    repo.command(["merge", "side"]).output().unwrap();
+
+    let (runner, loc) = open(&repo).await;
+    let files = loc.conflicts(&runner).await.unwrap();
+    assert_eq!(files[0].whole, Some(Whole::Symlink));
+    assert!(!files[0].supports_blocks());
+
+    loc.resolve(&runner, "link", &Resolution::TakeTheirs)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        std::fs::read_link(repo.path().join("link")).unwrap(),
+        std::path::Path::new("targets/theirs")
+    );
+    assert_eq!(
+        repo.git(["ls-files", "-s", "link"]).split(' ').next(),
+        Some("120000")
+    );
+    // Nothing else was touched: the file the old link pointed at still says what it said.
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("targets/ours")).unwrap(),
+        "OURS"
+    );
+    assert_eq!(repo.git(["status", "--porcelain"]), "M  link");
+}
+
+/// Taking a side keeps the mode git recorded for it, executable bit included.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_resolved_file_keeps_the_mode_of_the_side_taken() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let repo = TestRepo::new().write("run.sh", "base\n");
+    std::fs::set_permissions(
+        repo.path().join("run.sh"),
+        std::fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    let repo = repo.commit("base");
+
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo.write("run.sh", "side\n").commit("side");
+    repo.git(["checkout", "--quiet", "main"]);
+    let repo = repo.write("run.sh", "main\n").commit("main");
+    repo.command(["merge", "side"]).output().unwrap();
+
+    let (runner, loc) = open(&repo).await;
+    loc.resolve(&runner, "run.sh", &Resolution::TakeTheirs)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("run.sh")).unwrap(),
+        "side\n"
+    );
+    assert_eq!(
+        repo.git(["ls-files", "-s", "run.sh"]).split(' ').next(),
+        Some("100755")
+    );
+    let mode = std::fs::metadata(repo.path().join("run.sh"))
+        .unwrap()
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o111, 0o111, "still executable on disk");
+}

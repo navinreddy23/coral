@@ -613,7 +613,7 @@ message: string | null, };
 /**
  * Why a conflicted path has no lines of its own to choose between.
  */
-export type Whole = "binary" | "lfs" | "submodule";
+export type Whole = "binary" | "lfs" | "submodule" | "symlink";
 
 /**
  * One working tree attached to the repository, the main one included.

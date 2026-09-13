@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use bstr::{BString, ByteSlice};
 
 use super::blocks::Take;
@@ -31,6 +33,8 @@ pub enum Whole {
     Lfs,
     /// A submodule: the two sides are commits.
     Submodule,
+    /// A symlink: each side points somewhere, and the file it points at is not the answer.
+    Symlink,
 }
 
 impl ConflictedFile {
@@ -54,10 +58,14 @@ pub enum Resolution {
     Content(BString),
 }
 
+/// The mode git gives a submodule's entry: its object is a commit.
+const GITLINK: &str = "160000";
+/// The mode git gives a symlink: its object is the path pointed at.
+const SYMLINK: &[u8] = b"120000";
+
 /// What the index records for one stage of a conflicted path.
 struct Staged {
-    /// A submodule: the object is a commit, not a file's content.
-    gitlink: bool,
+    mode: String,
     oid: String,
 }
 
@@ -73,7 +81,7 @@ impl Staged {
             return None;
         }
         Some(Self {
-            gitlink: mode == b"160000",
+            mode: String::from_utf8_lossy(mode).into_owned(),
             oid: String::from_utf8_lossy(oid).into_owned(),
         })
     }
@@ -86,8 +94,13 @@ impl RepoLocation {
     /// Propagates git failures.
     pub async fn conflicts(&self, runner: &GitRunner) -> Result<Vec<ConflictedFile>, CoralError> {
         let status = self.status(runner).await?;
-        let mut out = Vec::new();
+        let paths: Vec<String> = status.conflicted().map(|e| e.path.to_string()).collect();
+        let lfs = self
+            .in_lfs(runner, paths.iter().map(String::as_bytes))
+            .await?;
+        let symlinks = self.symlinks(runner).await?;
 
+        let mut out = Vec::new();
         for entry in status.conflicted() {
             let path = entry.path.to_string();
             let kind = entry.conflict.unwrap_or(ConflictKind::BothModified);
@@ -97,6 +110,10 @@ impl RepoLocation {
             );
             let whole = if entry.submodule {
                 Some(Whole::Submodule)
+            } else if symlinks.contains(&path) {
+                Some(Whole::Symlink)
+            } else if lfs.contains(&path) {
+                Some(Whole::Lfs)
             } else if !delete_modify && self.stage_is_binary(runner, &path).await {
                 Some(Whole::Binary)
             } else {
@@ -109,15 +126,29 @@ impl RepoLocation {
                 delete_modify,
             });
         }
-
-        let lfs = self
-            .in_lfs(runner, out.iter().map(|f| f.path.as_bytes()))
-            .await?;
-        for file in out.iter_mut().filter(|f| lfs.contains(&f.path)) {
-            // Ahead of binary, which is what the pointer's own three lines of text are not.
-            file.whole = Some(Whole::Lfs);
-        }
         Ok(out)
+    }
+
+    /// The conflicted paths that are symlinks on either side.
+    ///
+    /// One read of the unmerged index for all of them. What such a path holds is the path it
+    /// points at, and writing that out as a file both loses the link and, if the old link is
+    /// still there, puts the new target inside whatever the old one pointed at.
+    async fn symlinks(&self, runner: &GitRunner) -> Result<HashSet<String>, CoralError> {
+        let out = runner
+            .output(
+                GitCommand::read("ls-files", self.display_path()).args(["ls-files", "-u", "-z"]),
+            )
+            .await?;
+        Ok(out
+            .stdout
+            .split(|b| *b == 0)
+            .filter_map(|record| {
+                let (meta, path) = record.split_once_str("\t")?;
+                meta.starts_with(SYMLINK)
+                    .then(|| String::from_utf8_lossy(path).into_owned())
+            })
+            .collect())
     }
 
     /// Whether a conflicted path's content is binary, judged by git rather than by us.
@@ -160,12 +191,7 @@ impl RepoLocation {
                 } else {
                     Take::Theirs
                 };
-                let staged = self.staged(runner, path, take).await?;
-                if staged.gitlink {
-                    return self.take_commit(runner, path, &staged.oid).await;
-                }
-                let content = self.blob(runner, &staged.oid).await?;
-                self.write_worktree(path, &content)?;
+                return self.take_side(runner, path, take).await;
             }
             Resolution::Content(content) => {
                 self.write_worktree(path, content)?;
@@ -177,6 +203,34 @@ impl RepoLocation {
                 GitCommand::write("add", self.display_path())
                     .args(["add", "--"])
                     .arg(path),
+            )
+            .await?;
+        self.checkout_form(runner, path).await;
+        Ok(())
+    }
+
+    /// Settles a conflicted path on one whole side.
+    ///
+    /// The index is written first and the file laid down from it, rather than the other way
+    /// round. That keeps the mode, so a symlink stays a symlink: writing the stage's bytes
+    /// into the worktree made a file out of one, and while the old link was still there it
+    /// put the new target inside whatever the old one pointed at — then `git add` recorded the
+    /// unchanged link, so the side asked for was not even the side staged.
+    async fn take_side(
+        &self,
+        runner: &GitRunner,
+        path: &str,
+        take: Take,
+    ) -> Result<(), CoralError> {
+        let staged = self.staged(runner, path, take).await?;
+        if staged.mode == GITLINK {
+            return self.take_commit(runner, path, &staged.oid).await;
+        }
+        runner
+            .output(
+                GitCommand::write("update-index", self.display_path())
+                    .args(["update-index", "--cacheinfo"])
+                    .arg(format!("{},{},{path}", staged.mode, staged.oid)),
             )
             .await?;
         self.checkout_form(runner, path).await;
@@ -223,18 +277,6 @@ impl RepoLocation {
                 label: "resolve",
                 detail: format!("{path} has no content on that side; delete it instead"),
             })
-    }
-
-    /// One object's bytes.
-    async fn blob(&self, runner: &GitRunner, oid: &str) -> Result<BString, CoralError> {
-        let out = runner
-            .output(
-                GitCommand::read("cat-file", self.display_path())
-                    .args(["cat-file", "blob"])
-                    .arg(oid),
-            )
-            .await?;
-        Ok(BString::from(out.stdout))
     }
 
     /// Settles a conflicted submodule on one of the two commits.
@@ -318,6 +360,13 @@ impl RepoLocation {
         let full = self.display_path().join(path);
         if let Some(parent) = full.parent() {
             std::fs::create_dir_all(parent)?;
+        }
+        // Taken away rather than written over, because the path may be a symlink and writing
+        // would go through it into the file it points at.
+        match std::fs::remove_file(&full) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
         }
         std::fs::write(full, content)?;
         Ok(())

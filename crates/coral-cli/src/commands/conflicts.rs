@@ -31,6 +31,7 @@ impl crate::output::Human for ConflictList {
                 Some(Whole::Binary) => " [binary]",
                 Some(Whole::Lfs) => " [in git lfs]",
                 Some(Whole::Submodule) => " [submodule]",
+                Some(Whole::Symlink) => " [a link]",
                 None if f.delete_modify => " [deleted on one side]",
                 None => "",
             };
