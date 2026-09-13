@@ -147,11 +147,12 @@ export class MergeState {
     this.edited = null;
     this.error = null;
 
-    // A binary file, or one that exists on only one side, has nothing to pick between. The
-    // window offers the whole-file choices for it, so reading blocks would mean parsing a
-    // blob to show nothing — and for a binary one, parsing it as text at all.
+    // A binary file, one kept behind a filter, or one that exists on only one side has
+    // nothing to pick between. The window offers the whole-file choices for it, so reading
+    // blocks would mean parsing a blob to show nothing — for a binary one, parsing it as text
+    // at all, and for an LFS one, showing the pointer as though it were the file.
     const known = this.files.find((f) => f.path === file);
-    if (known && (known.binary || known.deleteModify)) return;
+    if (known && (known.binary || known.deleteModify || known.filtered)) return;
     try {
       this.blocks = await conflictBlocks(this.#path, file);
     } catch (e) {

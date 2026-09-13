@@ -115,7 +115,12 @@ binary: boolean,
 /**
  * One side deleted the file, so keeping or deleting is the only meaningful choice.
  */
-deleteModify: boolean, };
+deleteModify: boolean, 
+/**
+ * The repository stores this path through a filter driver, so what the index holds is
+ * not the file. Whole-file choices only, for the same reason a binary file gets them.
+ */
+filtered: boolean, };
 
 /**
  * What happened to a file between two trees.
