@@ -65,6 +65,16 @@ const STOPS = [
     },
   },
   {
+    // The dots beside a submodule, then the panel behind them — where the key it is reached
+    // with is chosen, and the one surface that says a submodule authenticates on its own.
+    name: 'submodule',
+    at: APP,
+    go: async (b) => {
+      await b.press('[data-section="submodules"] .dots', 0);
+      await b.press('.menu .row', 0);
+    },
+  },
+  {
     name: 'rail',
     at: APP,
     go: (b) => b.press('[aria-label="Left panel"]', 0),

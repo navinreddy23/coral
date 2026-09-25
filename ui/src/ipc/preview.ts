@@ -335,6 +335,8 @@ const FIXTURES: Record<string, unknown> = {
     time: 1_763_060_220,
     inSync: true,
   },
+  // Inheriting, which is what every submodule does until one is given a key of its own.
+  submodule_ssh: { key: null, inherited: '/home/dev/.ssh/id_ed25519' },
   /*
    * Five commands used to have no fixture at all, and the fallback answered `null` for them.
    * `repo_stashes` was the expensive one: a state assigned that null to its list, the sidebar
