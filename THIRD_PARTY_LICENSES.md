@@ -2856,7 +2856,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `hyper-rustls 0.27.9`, `rustls-native-certs 0.8.4`, `rustls 0.23.43`
+Used by: `hyper-rustls 0.27.9`, `rustls-native-certs 0.8.4`, `rustls 0.23.45`
 
 ```
 Copyright (c) 2016 Joseph Birr-Pixton &lt;jpixton@gmail.com&gt;
