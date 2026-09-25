@@ -2,6 +2,7 @@
 
 use coral_core::process::GitRunner;
 use coral_core::repo::RepoLocation;
+use coral_core::ssh::{SshOverrides, command_for};
 use coral_core::submodule::{parse_gitlinks, parse_gitmodules};
 use coral_core::testutil::TestRepo;
 
@@ -309,5 +310,206 @@ fn an_update_to_the_branch_tip_is_a_different_operation_from_one_to_the_recorded
             .unwrap();
         assert_eq!(moved.oid, tip, "with --remote it moves to the branch tip");
         assert!(!moved.in_sync, "and the superproject has not recorded that");
+    });
+}
+
+/// A superproject with two submodules, so one can be given a key the other does not have.
+fn with_two_submodules() -> (TestRepo, TestRepo, TestRepo) {
+    let one = TestRepo::new().write("lib.txt", "v1").commit("one");
+    let two = TestRepo::new().write("tool.txt", "v1").commit("two");
+    let repo = TestRepo::new().write("a.txt", "a").commit("first");
+    for (inner, at) in [(&one, "external/dev-scripts"), (&two, "vendor/tool")] {
+        repo.git([
+            "-c",
+            "protocol.file.allow=always",
+            "submodule",
+            "add",
+            inner.path().to_str().unwrap(),
+            at,
+        ]);
+    }
+    (repo.commit("add the submodules"), one, two)
+}
+
+/// What a submodule's own clone records, which is what a fetch from inside it will read.
+fn recorded_key(repo: &TestRepo, at: &str) -> Option<String> {
+    let out = repo
+        .command(["-C", at, "config", "--local", "--get", "core.sshCommand"])
+        .output()
+        .expect("spawn git");
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).trim().to_owned())
+}
+
+fn pin(repo: &TestRepo, key: Option<&str>) {
+    run(async {
+        let (runner, loc) = located(repo).await;
+        loc.set_ssh_local(
+            &runner,
+            &SshOverrides {
+                private_key: key.map(str::to_owned),
+                ..SshOverrides::default()
+            },
+        )
+        .await
+        .unwrap();
+    });
+}
+
+#[test]
+fn a_submodule_is_reached_with_the_key_the_superproject_is_pinned_to() {
+    // The bug this exists for: git runs the submodule's clone in the submodule's own
+    // configuration, so the key the superproject was cloned with is not read at all, and a
+    // private submodule is fetched as whoever the agent offers first.
+    let (repo, _inner) = with_submodule();
+    let key = repo.path().join("keys/work").display().to_string();
+    pin(&repo, Some(&key));
+
+    run(async {
+        let (runner, loc) = located(&repo).await;
+        loc.submodule_init(&runner, Some("external/dev-scripts"), false, false)
+            .await
+            .unwrap();
+    });
+
+    assert_eq!(
+        recorded_key(&repo, "external/dev-scripts"),
+        Some(command_for(&key)),
+        "a fetch from inside the submodule has to find the key too"
+    );
+}
+
+#[test]
+fn a_submodule_given_a_key_of_its_own_is_reached_with_that_one() {
+    // And its sibling is not: the pin is per submodule, so updating both in one go cannot be
+    // one command carrying one environment.
+    let (repo, _one, _two) = with_two_submodules();
+    let repo_key = repo.path().join("keys/work").display().to_string();
+    let own_key = repo.path().join("keys/vendor").display().to_string();
+    pin(&repo, Some(&repo_key));
+
+    run(async {
+        let (runner, loc) = located(&repo).await;
+        loc.set_submodule_ssh(&runner, "vendor/tool", Some(&own_key))
+            .await
+            .unwrap();
+        loc.submodule_init(&runner, None, false, false)
+            .await
+            .unwrap();
+    });
+
+    assert_eq!(
+        recorded_key(&repo, "vendor/tool"),
+        Some(command_for(&own_key)),
+        "the one with its own key"
+    );
+    assert_eq!(
+        recorded_key(&repo, "external/dev-scripts"),
+        Some(command_for(&repo_key)),
+        "and the other still takes the repository's"
+    );
+}
+
+#[test]
+fn a_repository_on_the_agent_leaves_its_submodules_on_the_agent() {
+    // Saying nothing is the whole point: an empty `core.sshCommand` still shadows whatever the
+    // user set by hand, so a repository that pins nothing must write nothing anywhere.
+    let (repo, _inner) = with_submodule();
+
+    run(async {
+        let (runner, loc) = located(&repo).await;
+        loc.submodule_init(&runner, Some("external/dev-scripts"), false, false)
+            .await
+            .unwrap();
+    });
+
+    assert_eq!(recorded_key(&repo, "external/dev-scripts"), None);
+}
+
+#[test]
+fn a_key_the_repository_no_longer_uses_is_cleared_from_the_submodule() {
+    // A submodule left holding a key the superproject has moved off authenticates as the wrong
+    // account, which is the failure the pin exists to prevent.
+    let (repo, _inner) = with_submodule();
+    let key = repo.path().join("keys/work").display().to_string();
+    pin(&repo, Some(&key));
+    run(async {
+        let (runner, loc) = located(&repo).await;
+        loc.submodule_init(&runner, Some("external/dev-scripts"), false, false)
+            .await
+            .unwrap();
+    });
+    assert_eq!(
+        recorded_key(&repo, "external/dev-scripts"),
+        Some(command_for(&key))
+    );
+
+    pin(&repo, None);
+    run(async {
+        let (runner, loc) = located(&repo).await;
+        loc.submodule_init(&runner, Some("external/dev-scripts"), false, false)
+            .await
+            .unwrap();
+    });
+
+    assert_eq!(recorded_key(&repo, "external/dev-scripts"), None);
+}
+
+#[test]
+fn choosing_a_key_reaches_a_submodule_that_is_already_cloned() {
+    // A fetch from inside a submodule reads that submodule's config and nothing else, so a
+    // choice that waited for the next update would leave it on the account just moved off.
+    let (repo, _inner) = with_submodule();
+    let repo_key = repo.path().join("keys/work").display().to_string();
+    let own_key = repo.path().join("keys/vendor").display().to_string();
+    pin(&repo, Some(&repo_key));
+
+    run(async {
+        let (runner, loc) = located(&repo).await;
+        let at = "external/dev-scripts";
+        loc.set_submodule_ssh(&runner, at, Some(&own_key))
+            .await
+            .unwrap();
+        assert_eq!(recorded_key(&repo, at), Some(command_for(&own_key)));
+
+        loc.set_submodule_ssh(&runner, at, None).await.unwrap();
+        assert_eq!(
+            recorded_key(&repo, at),
+            Some(command_for(&repo_key)),
+            "clearing it puts the repository's key back, not nothing"
+        );
+    });
+}
+
+#[test]
+fn a_submodules_own_key_reads_back_and_clears() {
+    let (repo, _inner) = with_submodule();
+    let repo_key = repo.path().join("keys/work").display().to_string();
+    let own_key = repo.path().join("keys/vendor").display().to_string();
+    pin(&repo, Some(&repo_key));
+
+    run(async {
+        let (runner, loc) = located(&repo).await;
+        let at = "external/dev-scripts";
+
+        let before = loc.submodule_ssh(&runner, at).await.unwrap();
+        assert_eq!(before.key, None, "it inherits until it is told otherwise");
+        assert_eq!(before.inherited, repo_key);
+
+        loc.set_submodule_ssh(&runner, at, Some(&own_key))
+            .await
+            .unwrap();
+        let after = loc.submodule_ssh(&runner, at).await.unwrap();
+        assert_eq!(after.key.as_deref(), Some(own_key.as_str()));
+        assert_eq!(after.inherited, repo_key, "and still says what it left");
+
+        loc.set_submodule_ssh(&runner, at, None).await.unwrap();
+        assert_eq!(loc.submodule_ssh(&runner, at).await.unwrap().key, None);
+
+        // The setting is keyed by the `.gitmodules` name, not the path, so it is stored where
+        // git stores everything else about this submodule.
+        let err = loc.submodule_ssh(&runner, "no/such").await.unwrap_err();
+        assert_eq!(err.code(), "refused");
     });
 }

@@ -1,29 +1,73 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
-  import type { Submodule, SubmoduleRevision } from '../ipc/types';
+  import type { SshKey, Submodule, SubmoduleRevision, SubmoduleSsh } from '../ipc/types';
 
-  const { submodule, revision, busy, error, onClose, onSetUrl, onOpen, onUpdate, onRemove }: {
+  const {
+    submodule,
+    revision,
+    ssh,
+    sshKeys,
+    focusKey,
+    busy,
+    error,
+    onClose,
+    onSetUrl,
+    onSetSshKey,
+    onOpen,
+    onUpdate,
+    onRemove,
+  }: {
     submodule: Submodule;
     /** Null while it loads, and for a submodule with no working copy to read one from. */
     revision: SubmoduleRevision | null;
+    /** Null while it loads. `key` is null until this submodule is given one of its own. */
+    ssh: SubmoduleSsh | null;
+    /** Every key pair on this machine, for the picker to offer. */
+    sshKeys: SshKey[];
+    /** Opened from "Choose an ssh key…", which should land on the key rather than the URL. */
+    focusKey: boolean;
     busy: boolean;
     error: string | null;
     onClose: () => void;
     onSetUrl: (url: string) => void;
+    /** Null puts it back on whatever key this repository uses. */
+    onSetSshKey: (key: string | null) => void;
     onOpen: () => void;
     /** `remote` moves it to its branch tip rather than to the recorded commit. */
     onUpdate: (remote: boolean) => void;
     onRemove: () => void;
   } = $props();
 
+  /** What a key is called, which is its file name; the whole path is too long to read. */
+  function named(path: string): string {
+    return path.split('/').pop() ?? path;
+  }
+
+  const inherits = $derived(
+    ssh === null || ssh.inherited === ''
+      ? 'Whatever the agent offers'
+      : `This repository's key · ${named(ssh.inherited)}`,
+  );
+
   let url = $state('');
   let seeded = $state('');
+  let picker = $state<HTMLSelectElement | null>(null);
+  let landed = $state(false);
 
   // Reseeds when a different submodule is opened, not on every change, or typing is undone.
   $effect(() => {
     if (seeded === submodule.path) return;
     seeded = submodule.path;
     url = submodule.url;
+    landed = false;
+  });
+
+  // Once, after the answer arrives: the picker is disabled until then, and reasserting the
+  // opening choice later would drag the user back to it.
+  $effect(() => {
+    if (landed || !focusKey || picker === null || ssh === null) return;
+    landed = true;
+    picker.focus();
   });
 
   const changed = $derived(url.trim() !== '' && url.trim() !== submodule.url);
@@ -68,6 +112,34 @@
     </button>
 
     {#if error}<p class="error">{error}</p>{/if}
+
+    <!--
+      A submodule is a separate repository and git clones it in its own configuration, so it
+      reads none of this one's settings. The key is handed to it rather than inherited, and is
+      recorded in its clone so a fetch from inside it finds the same one.
+    -->
+    <label class="sshkey">
+      <span class="name">SSH key</span>
+      <!-- An explicit handler rather than `bind:value`, as the clone form and the ssh pane do
+           it: the options arrive with the answer and a binding re-selects from state after they
+           render, which is how a picker ends up showing a choice nobody made. -->
+      <select
+        bind:this={picker}
+        value={ssh?.key ?? ''}
+        disabled={ssh === null || busy}
+        onchange={(e) => onSetSshKey(e.currentTarget.value || null)}
+      >
+        <option value="">{inherits}</option>
+        {#each sshKeys as key (key.path)}
+          <option value={key.path}>{named(key.path)} · {key.comment}</option>
+        {/each}
+      </select>
+    </label>
+    <p class="note">
+      Choosing a key here applies to this submodule alone. A pinned key ignores
+      <code>~/.ssh/config</code>, so a host alias, a <code>ProxyJump</code> or a per-host port
+      written there will not apply, and a key with a passphrase has to be in the agent already.
+    </p>
 
     {#if !submodule.initialised}
       <p class="state absent">
@@ -143,6 +215,18 @@
   }
   input:focus { border-color: var(--accent); }
   input[readonly] { background: var(--bg-2); color: var(--fg-2); }
+
+  .sshkey select {
+    font: inherit; font-size: var(--text-base);
+    padding: 5px var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-1);
+    background: var(--bg-0); color: var(--fg-0);
+  }
+  .sshkey select:disabled { opacity: 0.5; }
+  .note {
+    margin: -2px 0 0; max-width: 44em; font-size: var(--text-sm);
+    color: var(--fg-2); background: var(--bg-1);
+  }
+  .note code { font-family: var(--font-mono); font-variant-ligatures: none; }
 
   .state {
     margin: 0; padding: var(--space-2) var(--space-3); border-radius: var(--radius-1);

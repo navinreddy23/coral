@@ -583,6 +583,24 @@ pub async fn submodule_revision(
     Ok(loc.submodule_revision(&runner, &submodule).await?)
 }
 
+/// Which ssh key a submodule is cloned and fetched with, and which one it falls back to.
+///
+/// A submodule reads none of the superproject's own configuration, so the key has to be handed
+/// to it explicitly; this is what the panel shows while deciding which one.
+///
+/// # Errors
+/// Propagates git failures, and refuses a path that declares no submodule.
+#[tauri::command]
+pub async fn submodule_ssh(
+    path: String,
+    submodule: String,
+) -> Result<coral_core::submodule::SubmoduleSsh, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc.submodule_ssh(&runner, &submodule).await?)
+}
+
 /// The repository's working trees, its own included, for the sidebar.
 ///
 /// # Errors

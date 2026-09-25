@@ -164,4 +164,87 @@ if attempt "$alias_url" "ssh -F none -i $DIR/keys/bob -o IdentitiesOnly=yes $thr
 fi
 say "ok   the price: a pinned repository no longer resolves a host alias from the config"
 
+# --------------------------------------------------------------------------- submodules
+# A submodule is a separate repository, and git clones it in a child process running in that
+# submodule's own configuration. The `core.sshCommand` the superproject was cloned with is not
+# part of it, so without help the submodule is reached as whoever the agent offers first.
+bob_ssh="ssh -F none -i $DIR/keys/bob -o IdentitiesOnly=yes $throwaway"
+alice_ssh="ssh -F none -i $DIR/keys/alice -o IdentitiesOnly=yes $throwaway"
+
+git init -q --bare -b main "$DIR/srv/bob/tools.git"
+tools="$DIR/toolwork"
+git init -q -b main "$tools"
+git -C "$tools" config user.email fixture@coral.test
+git -C "$tools" config user.name Fixture
+echo tools > "$tools/tool.txt"
+git -C "$tools" add -A
+git -C "$tools" -c commit.gpgsign=false commit -qm "the tool only bob can see"
+git -C "$tools" push -q "$DIR/srv/bob/tools.git" HEAD:refs/heads/main
+tools_head=$(git -C "$tools" rev-parse HEAD)
+
+# A superproject naming it over ssh. The gitlink is written by hand rather than by `submodule
+# add`, which would clone it here and prove nothing.
+git init -q --bare -b main "$DIR/srv/bob/super.git"
+sup="$DIR/superwork"
+git init -q -b main "$sup"
+git -C "$sup" config user.email fixture@coral.test
+git -C "$sup" config user.name Fixture
+printf '[submodule "vendor/tools"]\n\tpath = vendor/tools\n\turl = ssh://%s@127.0.0.1:%s/tools.git\n' \
+    "$(id -un)" "$PORT" > "$sup/.gitmodules"
+git -C "$sup" add .gitmodules
+git -C "$sup" update-index --add --cacheinfo "160000,$tools_head,vendor/tools"
+git -C "$sup" -c commit.gpgsign=false commit -qm "the superproject"
+git -C "$sup" push -q "$DIR/srv/bob/super.git" HEAD:refs/heads/main
+
+# A fresh clone of it each time, pinned the way Coral pins one, so each attempt starts from the
+# state a user is actually in.
+super_url="ssh://$(id -un)@127.0.0.1:$PORT/super.git"
+fresh_super() {
+    rm -rf "$DIR/super"
+    GIT_SSH_COMMAND="$bob_ssh" git clone -q "$super_url" "$DIR/super" 2>"$DIR/clone.err" \
+        || { cat "$DIR/clone.err" >&2; fail "the superproject itself did not clone"; }
+    git -C "$DIR/super" config core.sshCommand "$bob_ssh"
+}
+
+# 6. The mechanism. The superproject's own command is made to record every time it is run; a
+# submodule update then never runs it, which is the whole fault in one assertion.
+fresh_super
+cat > "$DIR/recorder" <<RECORD
+#!/usr/bin/env bash
+echo ran >> "$DIR/used"
+exec $bob_ssh "\$@"
+RECORD
+chmod +x "$DIR/recorder"
+git -C "$DIR/super" config core.sshCommand "$DIR/recorder"
+rm -f "$DIR/used"
+git -C "$DIR/super" submodule update --init >/dev/null 2>&1 || true
+[ -s "$DIR/used" ] \
+    && fail "the superproject's core.sshCommand reached the submodule; the bug is not present"
+say "ok   a submodule reads none of the superproject's core.sshCommand"
+
+# 7. What that costs. The environment stands for whatever the config and the agent would have
+# decided on their own, which for somebody with two accounts is the wrong one.
+fresh_super
+if GIT_SSH_COMMAND="$alice_ssh" git -C "$DIR/super" submodule update --init \
+    >/dev/null 2>"$DIR/sub.err"; then
+    fail "alice should not be able to fetch bob's submodule"
+fi
+grep -q "could not be found" "$DIR/sub.err" \
+    || { cat "$DIR/sub.err" >&2; fail "expected the host's own refusal"; }
+say "ok   the wrong key reports a missing repository, never a wrong key"
+
+# 8. The fix: the key in the environment, which is inherited by every git the update spawns.
+fresh_super
+GIT_SSH_COMMAND="$bob_ssh" git -C "$DIR/super" submodule update --init >/dev/null 2>"$DIR/sub.err" \
+    || { cat "$DIR/sub.err" >&2; fail "the key in the environment did not reach the submodule"; }
+[ -f "$DIR/super/vendor/tools/tool.txt" ] || fail "cloned, but not bob's tool"
+say "ok   the key in the environment reaches the submodule's own clone"
+
+# 9. And it has to be recorded there, because a fetch from inside the submodule is a git that
+# reads only the submodule's configuration.
+git -C "$DIR/super/vendor/tools" config core.sshCommand "$bob_ssh"
+git -C "$DIR/super/vendor/tools" fetch -q origin \
+    || fail "a fetch from inside the submodule did not use the key recorded there"
+say "ok   a fetch from inside the submodule uses the key its own clone records"
+
 say "passed"

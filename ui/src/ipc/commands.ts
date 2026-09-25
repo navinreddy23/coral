@@ -27,6 +27,7 @@ import type {
   Status,
   Submodule,
   SubmoduleRevision,
+  SubmoduleSsh,
   Remote,
   RepoInfo,
   Worktree,
@@ -170,6 +171,16 @@ export function submoduleRevision(
   submodule: string,
 ): Promise<SubmoduleRevision | null> {
   return invoke<SubmoduleRevision | null>('submodule_revision', { path, submodule });
+}
+
+/**
+ * Which ssh key reaches a submodule's host, and which one it falls back to.
+ *
+ * A submodule reads none of the superproject's configuration, so the key is handed to it
+ * rather than inherited; `key` is null until one is chosen for this submodule alone.
+ */
+export function submoduleSsh(path: string, submodule: string): Promise<SubmoduleSsh> {
+  return invoke<SubmoduleSsh>('submodule_ssh', { path, submodule });
 }
 
 /**
@@ -348,6 +359,7 @@ export type Action =
   | { kind: 'worktreeRemove'; path: string; force: boolean }
   | { kind: 'submoduleInit'; path: string | null; recursive: boolean; remote: boolean }
   | { kind: 'submoduleSetUrl'; path: string; url: string }
+  | { kind: 'submoduleSetSshKey'; path: string; key: string | null }
   | { kind: 'submoduleRemove'; path: string; force: boolean }
   | { kind: 'patch'; rev: string; from: string | null; directory: string }
   | { kind: 'applyPatch'; files: string[]; commit: boolean }

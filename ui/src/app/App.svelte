@@ -143,9 +143,10 @@
     StatusEntry,
     Submodule,
     SubmoduleRevision,
+    SubmoduleSsh,
     Worktree,
   } from '../ipc/types';
-  import { submoduleRevision } from '../ipc/commands';
+  import { submoduleRevision, submoduleSsh } from '../ipc/commands';
   import type { PlacedRef } from '../state/refs.svelte';
 
   // Every remembered view choice lives here, so a toggle is a preference rather than a mode
@@ -513,6 +514,10 @@
   /** The submodule whose panel is open, and its recorded commit once that has been read. */
   let showSubmodule = $state<Submodule | null>(null);
   let submoduleAt = $state<SubmoduleRevision | null>(null);
+  /** Which key that submodule is reached with, once that has been read. */
+  let submoduleKey = $state<SubmoduleSsh | null>(null);
+  /** True when the panel was opened to choose a key, so it opens on the key. */
+  let submoduleOnKey = $state(false);
   /** The context menu on screen, if any. */
   let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   let showPrefs = $state(false);
@@ -3201,6 +3206,7 @@
     worktrees.clear();
     showSubmodule = null;
     submoduleAt = null;
+    submoduleKey = null;
     showWip = false;
     scrollTop = 0;
     if (scroller) scroller.scrollTop = 0;
@@ -3588,6 +3594,11 @@
         },
         {
           kind: 'item',
+          label: 'Choose an ssh key…',
+          run: () => void openSubmodulePanel(submodule, true),
+        },
+        {
+          kind: 'item',
           label: 'Open this submodule',
           disabled: !submodule.initialised,
           run: () => void openSubmodule(submodule.path),
@@ -3716,17 +3727,26 @@
     await worktrees.load(info.path);
   }
 
-  /** Opens the submodule panel and reads the commit it is pinned at. */
-  async function openSubmodulePanel(submodule: Submodule) {
+  /** Opens the submodule panel and reads the commit it is pinned at and the key it uses. */
+  async function openSubmodulePanel(submodule: Submodule, onKey = false) {
     showSubmodule = submodule;
     submoduleAt = null;
+    submoduleKey = null;
+    submoduleOnKey = onKey;
+    // The keys are on this machine rather than in the repository, so nothing has read them
+    // unless a settings pane has been opened.
+    void ssh.loadKeys();
     await refreshSubmodule();
   }
 
   async function refreshSubmodule() {
     const at = showSubmodule?.path;
     if (!info || at === undefined) return;
+    // The panel is holding the submodule as it was read before the action ran, and
+    // `initialised` is what decides whether it offers to fetch a working copy or to open one.
+    showSubmodule = refs.submodules.find((s) => s.path === at) ?? showSubmodule;
     submoduleAt = await submoduleRevision(info.path, at).catch(() => null);
+    submoduleKey = await submoduleSsh(info.path, at).catch(() => null);
   }
 
   async function setSubmoduleUrl(url: string) {
@@ -3734,7 +3754,14 @@
     if (!info || at === undefined) return;
     await act({ kind: 'submoduleSetUrl', path: at, url });
     await refs.load(info.path);
-    showSubmodule = refs.submodules.find((s) => s.path === at) ?? showSubmodule;
+    await refreshSubmodule();
+  }
+
+  async function setSubmoduleSshKey(key: string | null) {
+    const at = showSubmodule?.path;
+    if (!info || at === undefined) return;
+    await act({ kind: 'submoduleSetSshKey', path: at, key });
+    await refreshSubmodule();
   }
 
   async function removeSubmodule() {
@@ -3758,6 +3785,7 @@
     await act({ kind: 'submoduleRemove', path: submodule.path, force: true });
     showSubmodule = null;
     submoduleAt = null;
+    submoduleKey = null;
     await Promise.all([refs.load(info.path), worktree.load(info.path)]);
   }
 
@@ -4160,10 +4188,14 @@
       <SubmodulePanel
         submodule={showSubmodule}
         revision={submoduleAt}
+        ssh={submoduleKey}
+        sshKeys={ssh.keys}
+        focusKey={submoduleOnKey}
         busy={actions.busy}
         error={actions.report?.tone === 'error' ? actions.report.text : null}
         onClose={() => (showSubmodule = null)}
         onSetUrl={(url) => void setSubmoduleUrl(url)}
+        onSetSshKey={(key) => void setSubmoduleSshKey(key)}
         onOpen={() => {
           const at = showSubmodule?.path;
           showSubmodule = null;

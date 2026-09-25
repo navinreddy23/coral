@@ -594,6 +594,19 @@ time: bigint,
 inSync: boolean, };
 
 /**
+ * Which ssh key reaches a submodule's host: the one it is pinned to, and the one it inherits.
+ */
+export type SubmoduleSsh = { 
+/**
+ * The key this submodule is pinned to on its own. `None` takes the superproject's.
+ */
+key: string | null, 
+/**
+ * The superproject's own key, empty when that is the agent.
+ */
+inherited: string, };
+
+/**
  * A rebase todo list, in the order the commits will be replayed.
  *
  * Note that this is the reverse of how the graph shows them: git replays oldest first, while

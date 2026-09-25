@@ -404,6 +404,43 @@ Somebody who has already built host aliases for this — one `Host` per account,
 own key — should keep using them and leave Coral on the agent. Their alias in the URL does the
 same job with the config intact, and it travels with the remote rather than with one client.
 
+## A submodule is handed the key, because it inherits nothing
+
+A pinned key is `core.sshCommand` in the repository's own config, and a submodule reads none of
+it. git clones and fetches each submodule in a child process running in *that* submodule's
+configuration, which is a different repository; the superproject's local config is not part of
+it. `-c` is no better, since git carries a `-c` in `GIT_CONFIG_PARAMETERS` and clears that on
+the way into a submodule, along with every other variable naming the repository it came from.
+
+Measured, with a command that records every time it is run:
+
+```
+core.sshCommand in the superproject   git submodule update --init    ran 0 times
+GIT_SSH_COMMAND in the environment    git submodule update --init    ran on every attempt
+```
+
+So the key goes in the environment, which is what `clone` already does with it and for the same
+reason. The failure this prevents is the silent one: ssh falls back to the agent, authenticates
+perfectly well as whichever account it happens to offer first, and the host answers that the
+repository does not exist. Nothing in that mentions a key, so the URL and the grant are what
+get checked. `just ssh-test` stands a server up and asserts all three: that the superproject's
+command does not reach the submodule, that the wrong key reports a missing repository, and that
+the key in the environment arrives.
+
+The key is then written into each submodule's own clone. A fetch from inside one — which is
+what the window does once a submodule is open in a tab — is a git that reads only that
+configuration, so without it the key would reach the first clone and nothing after. It is
+cleared there as well as written, because a submodule left holding a key the superproject has
+moved off authenticates as the wrong account, which is the whole failure again.
+
+A submodule may also be given a key of its own, for the repository whose vendored dependency
+lives on another host. That is recorded in the superproject, as `coral.submodule.<name>.sshKey`
+— it has to be, because the clone that needs it is the one that does not exist yet — and keyed
+by name rather than path, which is what git does with everything else about a submodule.
+Updating them all is then one command per key rather than one command, since one environment
+cannot carry two; with nothing overridden, which is the ordinary case, it stays the single
+command git would run anyway.
+
 ## Undoing a commit keeps the work; undoing anything else does not
 
 Restoring refs is only half of an undo, and the half nobody sees is what happens to the files.

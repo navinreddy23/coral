@@ -41,6 +41,8 @@ fn every_action_the_window_can_send_is_understood() {
         r#"{"kind":"worktreeAdd","path":"/tmp/wt","rev":"abc","branch":null}"#,
         r#"{"kind":"submoduleInit","path":null,"recursive":true,"remote":false}"#,
         r#"{"kind":"submoduleSetUrl","path":"lib/x","url":"https://example.invalid/x.git"}"#,
+        r#"{"kind":"submoduleSetSshKey","path":"lib/x","key":"/home/dev/.ssh/id_work"}"#,
+        r#"{"kind":"submoduleSetSshKey","path":"lib/x","key":null}"#,
         r#"{"kind":"submoduleRemove","path":"lib/x","force":false}"#,
         r#"{"kind":"patch","rev":"abc","directory":"/tmp"}"#,
         r#"{"kind":"undo"}"#,
