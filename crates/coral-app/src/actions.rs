@@ -156,6 +156,12 @@ pub enum Action {
         path: String,
         url: String,
     },
+    /// Give one submodule an ssh key of its own, or clear that so it takes the repository's.
+    SubmoduleSetSshKey {
+        path: String,
+        /// The private key's path. Absent means the key the superproject itself uses.
+        key: Option<String>,
+    },
     /// Remove a submodule: its working copy, its configuration, and its clone.
     SubmoduleRemove {
         path: String,
@@ -365,6 +371,10 @@ impl Action {
             Self::SubmoduleInit { path: Some(p), .. } => format!("update {p}"),
             Self::SubmoduleInit { path: None, .. } => "update the submodules".to_owned(),
             Self::SubmoduleSetUrl { path, .. } => format!("re-point {path}"),
+            Self::SubmoduleSetSshKey { path, key: Some(_) } => format!("pin a key for {path}"),
+            Self::SubmoduleSetSshKey { path, .. } => {
+                format!("put {path} back on this repository's key")
+            }
             Self::SubmoduleRemove { path, .. } => format!("remove {path}"),
             Self::Patch { rev, from, .. } => match from {
                 Some(from) => format!("patches for {}..{}", named(from), named(rev)),
@@ -755,6 +765,9 @@ async fn run_tree(
         }
         Action::SubmoduleSetUrl { path, url } => {
             loc.submodule_set_url(runner, &path, &url).await?;
+        }
+        Action::SubmoduleSetSshKey { path, key } => {
+            loc.set_submodule_ssh(runner, &path, key.as_deref()).await?;
         }
         Action::SubmoduleRemove { path, force } => {
             loc.submodule_remove(runner, &path, force).await?;
