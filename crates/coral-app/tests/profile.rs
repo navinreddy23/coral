@@ -242,3 +242,93 @@ async fn a_profile_that_sets_nothing_leaves_a_new_repository_alone() {
 
     assert_eq!(repo.git(["config", "--local", "user.email"]), before);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_repository_made_under_a_profile_carries_its_ssh_key() {
+    // It did not, and the consequence is the one a pinned key exists to prevent: a new
+    // repository under a work profile was left on the agent, so its first push went out as
+    // whichever account the agent offered first.
+    use coral_app_lib::profile::{ProfileSettings, stamp_new_repository};
+    use coral_core::ssh::{SshOverrides, command_for};
+    use coral_core::testutil::TestRepo;
+
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let key = repo.path().join("keys/work").display().to_string();
+    let settings = ProfileSettings {
+        ssh: SshOverrides {
+            private_key: Some(key.clone()),
+            public_key: Some(format!("{key}.pub")),
+            ..SshOverrides::default()
+        },
+        ..ProfileSettings::default()
+    };
+
+    stamp_new_repository(&settings, repo.path()).await;
+
+    assert_eq!(
+        repo.git(["config", "--local", "core.sshCommand"]),
+        command_for(&key)
+    );
+    assert_eq!(
+        repo.git(["config", "--local", "coral.sshPublicKey"]),
+        format!("{key}.pub"),
+        "the half that gets pasted into the host travels with it"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_profile_on_the_agent_leaves_a_new_repository_on_the_agent() {
+    // Saying nothing is the point: an empty `core.sshCommand` still shadows whatever the user
+    // set by hand, so a profile that pins no key must write nothing rather than something
+    // empty.
+    use coral_app_lib::profile::{ProfileSettings, stamp_new_repository};
+    use coral_core::testutil::TestRepo;
+
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+
+    stamp_new_repository(&ProfileSettings::default(), repo.path()).await;
+
+    let read = repo
+        .command(["config", "--local", "--get", "core.sshCommand"])
+        .output()
+        .expect("spawn git");
+    assert!(!read.status.success(), "nothing should have been written");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_key_chosen_for_one_clone_is_not_overwritten_by_the_profile_default() {
+    // The clone form's choice was made about this repository; the profile is only the default
+    // it was filled in with. `repo_clone` puts the resolved key into the settings it stamps
+    // with, which is what this stands for — the stamp must write what it is given.
+    use coral_app_lib::profile::{ProfileSettings, stamp_new_repository};
+    use coral_core::ssh::{SshOverrides, command_for};
+    use coral_core::testutil::TestRepo;
+
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let chosen = repo.path().join("keys/this-one").display().to_string();
+    let profile_default = repo.path().join("keys/usual").display().to_string();
+
+    // What the clone authenticated with, written by the engine on its way out.
+    repo.git([
+        "config",
+        "--local",
+        "core.sshCommand",
+        &command_for(&chosen),
+    ]);
+
+    let settings = ProfileSettings {
+        ssh: SshOverrides {
+            private_key: Some(chosen.clone()),
+            ..SshOverrides::default()
+        },
+        ..ProfileSettings::default()
+    };
+    stamp_new_repository(&settings, repo.path()).await;
+
+    let after = repo.git(["config", "--local", "core.sshCommand"]);
+    assert_eq!(after, command_for(&chosen));
+    assert!(
+        !after.contains(&profile_default),
+        "not the profile's default"
+    );
+}

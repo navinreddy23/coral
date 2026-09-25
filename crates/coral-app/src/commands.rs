@@ -192,13 +192,15 @@ pub async fn repo_clone(
         depth,
         blobless,
     } = request;
-    let settings = profiles.read().current().settings.clone();
+    let mut settings = profiles.read().current().settings.clone();
     let runner = coral_core::process::GitRunner::discover().await?;
     // The form's own choice wins over the profile's, since it was made about this clone; the
     // profile is the default the form was filled in with.
     let key = ssh_key
         .filter(|k| !k.trim().is_empty())
         .or_else(|| settings.ssh.private_key.clone());
+    // And it is the key the stamp below should write, for the same reason.
+    settings.ssh = ssh_for_clone(&settings.ssh, key.as_deref());
     let what = coral_core::create::Cloned {
         url,
         parent: std::path::PathBuf::from(&parent),
@@ -234,6 +236,36 @@ pub async fn repo_clone(
             Err(e.into())
         }
     }
+}
+
+/// What to stamp a clone's ssh settings with, given the profile's and the key it used.
+///
+/// The profile is only the default the form was filled in with, so a key chosen there replaces
+/// it rather than being overwritten by it. Both halves go together: the public one is what
+/// gets pasted into a host, and the profile's names a key this repository does not sign in
+/// with. The credential helper is about the host rather than the key, so it stays.
+fn ssh_for_clone(
+    profile: &coral_core::ssh::SshOverrides,
+    key: Option<&str>,
+) -> coral_core::ssh::SshOverrides {
+    let key = key.map(str::to_owned);
+    if key == profile.private_key {
+        return profile.clone();
+    }
+    coral_core::ssh::SshOverrides {
+        public_key: key.as_deref().and_then(public_half),
+        private_key: key,
+        credential_helper: profile.credential_helper.clone(),
+    }
+}
+
+/// The public half beside a private key, when it is there.
+///
+/// The same pairing the key list uses: a private key is the file whose `.pub` sits next to it.
+/// git never reads this half; it is what the settings pane offers for pasting into a host.
+fn public_half(private: &str) -> Option<String> {
+    let beside = format!("{private}.pub");
+    std::path::Path::new(&beside).is_file().then_some(beside)
 }
 
 /// Whether `git lfs` is on this machine.
@@ -375,4 +407,65 @@ pub async fn commit_staged(
         tracing::warn!(error = %e, "committed, but could not journal it for undo");
     }
     Ok(loc.status(&runner).await?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ssh_for_clone;
+    use coral_core::ssh::SshOverrides;
+
+    fn profile(key: &str) -> SshOverrides {
+        SshOverrides {
+            private_key: Some(key.to_owned()),
+            public_key: Some(format!("{key}.pub")),
+            credential_helper: Some("manager".to_owned()),
+        }
+    }
+
+    #[test]
+    fn a_clone_that_used_the_profiles_key_is_stamped_with_the_profiles_settings() {
+        let settings = profile("/keys/work");
+        assert_eq!(
+            ssh_for_clone(&settings, Some("/keys/work")),
+            settings,
+            "the public half it names is the right one already"
+        );
+    }
+
+    #[test]
+    fn a_key_chosen_on_the_form_takes_its_own_public_half_rather_than_the_profiles() {
+        // Not the profile's: the pane offers that half for pasting into a host, and it would
+        // name a key this repository does not sign in with.
+        let stamped = ssh_for_clone(&profile("/keys/work"), Some("/keys/personal"));
+        assert_eq!(stamped.private_key.as_deref(), Some("/keys/personal"));
+        assert_eq!(
+            stamped.public_key, None,
+            "there is no /keys/personal.pub on this machine to name"
+        );
+        assert_eq!(
+            stamped.credential_helper.as_deref(),
+            Some("manager"),
+            "the helper is about the host, not the key"
+        );
+    }
+
+    #[test]
+    fn a_key_chosen_on_the_form_is_paired_with_the_public_half_beside_it() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let key = dir.path().join("id_chosen");
+        std::fs::write(&key, "x").expect("write");
+        std::fs::write(key.with_extension("pub"), "x").expect("write");
+        let key = key.display().to_string();
+
+        let stamped = ssh_for_clone(&profile("/keys/work"), Some(&key));
+
+        assert_eq!(stamped.private_key.as_deref(), Some(key.as_str()));
+        assert_eq!(stamped.public_key, Some(format!("{key}.pub")));
+    }
+
+    #[test]
+    fn a_clone_with_no_key_anywhere_is_stamped_with_nothing() {
+        let stamped = ssh_for_clone(&SshOverrides::default(), None);
+        assert!(stamped.is_empty(), "the agent stays the default");
+    }
 }
