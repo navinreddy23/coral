@@ -7,6 +7,7 @@
     revision,
     ssh,
     sshKeys,
+    focusKey,
     busy,
     error,
     onClose,
@@ -23,6 +24,8 @@
     ssh: SubmoduleSsh | null;
     /** Every key pair on this machine, for the picker to offer. */
     sshKeys: SshKey[];
+    /** Opened from "Choose an ssh key…", which should land on the key rather than the URL. */
+    focusKey: boolean;
     busy: boolean;
     error: string | null;
     onClose: () => void;
@@ -48,12 +51,23 @@
 
   let url = $state('');
   let seeded = $state('');
+  let picker = $state<HTMLSelectElement | null>(null);
+  let landed = $state(false);
 
   // Reseeds when a different submodule is opened, not on every change, or typing is undone.
   $effect(() => {
     if (seeded === submodule.path) return;
     seeded = submodule.path;
     url = submodule.url;
+    landed = false;
+  });
+
+  // Once, after the answer arrives: the picker is disabled until then, and reasserting the
+  // opening choice later would drag the user back to it.
+  $effect(() => {
+    if (landed || !focusKey || picker === null || ssh === null) return;
+    landed = true;
+    picker.focus();
   });
 
   const changed = $derived(url.trim() !== '' && url.trim() !== submodule.url);
@@ -110,6 +124,7 @@
            it: the options arrive with the answer and a binding re-selects from state after they
            render, which is how a picker ends up showing a choice nobody made. -->
       <select
+        bind:this={picker}
         value={ssh?.key ?? ''}
         disabled={ssh === null || busy}
         onchange={(e) => onSetSshKey(e.currentTarget.value || null)}

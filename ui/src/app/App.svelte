@@ -516,6 +516,8 @@
   let submoduleAt = $state<SubmoduleRevision | null>(null);
   /** Which key that submodule is reached with, once that has been read. */
   let submoduleKey = $state<SubmoduleSsh | null>(null);
+  /** True when the panel was opened to choose a key, so it opens on the key. */
+  let submoduleOnKey = $state(false);
   /** The context menu on screen, if any. */
   let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   let showPrefs = $state(false);
@@ -3593,7 +3595,7 @@
         {
           kind: 'item',
           label: 'Choose an ssh key…',
-          run: () => void openSubmodulePanel(submodule),
+          run: () => void openSubmodulePanel(submodule, true),
         },
         {
           kind: 'item',
@@ -3726,10 +3728,11 @@
   }
 
   /** Opens the submodule panel and reads the commit it is pinned at and the key it uses. */
-  async function openSubmodulePanel(submodule: Submodule) {
+  async function openSubmodulePanel(submodule: Submodule, onKey = false) {
     showSubmodule = submodule;
     submoduleAt = null;
     submoduleKey = null;
+    submoduleOnKey = onKey;
     // The keys are on this machine rather than in the repository, so nothing has read them
     // unless a settings pane has been opened.
     void ssh.loadKeys();
@@ -4184,6 +4187,7 @@
         revision={submoduleAt}
         ssh={submoduleKey}
         sshKeys={ssh.keys}
+        focusKey={submoduleOnKey}
         busy={actions.busy}
         error={actions.report?.tone === 'error' ? actions.report.text : null}
         onClose={() => (showSubmodule = null)}

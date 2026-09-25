@@ -2,6 +2,7 @@
 import { cleanup, render } from '@testing-library/svelte';
 import { fireEvent } from '@testing-library/dom';
 import { afterEach, describe, expect, it } from 'vitest';
+import { tick } from 'svelte';
 
 /**
  * The key a submodule is reached with.
@@ -37,7 +38,7 @@ const KEYS: SshKey[] = [
   },
 ];
 
-function panel(ssh: SubmoduleSsh | null) {
+function panel(ssh: SubmoduleSsh | null, focusKey = false) {
   const chosen: (string | null)[] = [];
   const view = render(Submodule, {
     props: {
@@ -45,6 +46,7 @@ function panel(ssh: SubmoduleSsh | null) {
       revision: null,
       ssh,
       sshKeys: KEYS,
+      focusKey,
       busy: false,
       error: null,
       onClose: () => {},
@@ -101,6 +103,22 @@ describe('which ssh key a submodule is reached with', () => {
     const { picker } = panel(null);
 
     expect(picker.disabled).toBe(true);
+  });
+
+  it('lands on the picker when that is what the menu was asked for', async () => {
+    // Two menu entries that opened the same panel at the same place would be one entry with
+    // two names; "Choose an ssh key…" puts the user on the key.
+    const { view, picker } = panel({ key: null, inherited: '' }, true);
+    await tick();
+
+    expect(view.container.ownerDocument.activeElement).toBe(picker);
+  });
+
+  it('leaves the focus alone when the panel was opened to edit the submodule', async () => {
+    const { view, picker } = panel({ key: null, inherited: '' });
+    await tick();
+
+    expect(view.container.ownerDocument.activeElement).not.toBe(picker);
   });
 
   it('says the price of pinning, as both other screens that offer the choice do', () => {
