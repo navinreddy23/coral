@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.2.1
+
+### A submodule was cloned with whatever key the agent offered
+
+A repository cloned over ssh with a chosen key records that key in its own config, and a
+submodule reads none of it. git clones and fetches each submodule in a child process running in
+that submodule's configuration, which is a different repository; the superproject's is not part
+of it, and a `-c` does not survive the way in either. So the first "Fetch a working copy" on a
+private submodule authenticated perfectly well as whoever the agent happened to offer first,
+and the host answered that the repository does not exist — which reads as a wrong URL or a
+missing grant, never as the wrong key.
+
+The key is handed to the update in the environment now, which is what git does carry into a
+submodule, and is written into each submodule's own clone so that a fetch from inside one finds
+it too. It is cleared there as well as written: a submodule left holding a key the repository
+has moved off is the same silent failure again.
+
+A submodule that really does live on another host can be given a key of its own, from the dots
+beside it or from its panel, which now says which key reaches it and what a pinned key costs.
+
 ## 1.2.0
 
 Ninety-four fixes, most of them found by driving the real window rather than by running the
