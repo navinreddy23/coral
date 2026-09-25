@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.2.2
+
+### A new repository under a profile was left on the ssh agent
+
+A profile carries an identity, signing settings and an ssh key, and a repository created under
+one was given the first two. So a repository started under a work profile that pins a key went
+out on whatever the agent offered first — the failure pinning a key exists to prevent, arriving
+at a repository nobody had had the chance to configure yet. It carries all three now.
+
+A clone was never wrong about which key it used, but stamping it with the profile's settings
+put the profile's *public* half into a repository the form had chosen a different key for. git
+never reads that half; it is the one the settings pane offers for pasting into a host, so the
+pane named a key the repository does not sign in with. The key a clone used now decides both
+halves.
+
+### Security
+
+- **rustls is 0.23.45**, for RUSTSEC-2026-0285: TLS 1.3 handshake messages were accepted across
+  encryption level boundaries. It reaches every build twice, through the client that talks to
+  GitHub and GitLab and through tauri.
+
 ## 1.2.1
 
 ### A submodule was cloned with whatever key the agent offered
