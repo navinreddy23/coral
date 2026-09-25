@@ -227,13 +227,21 @@ reads no `~/.ssh/config` at all, so no `ProxyJump`, no per-host `Port` and no `H
 that is why nothing is written unless a key was actually chosen, and why both screens that
 offer the choice say so.
 
+**A submodule inherits none of it.** git clones and fetches one in a child process running in
+that submodule's own configuration, so the pinned `core.sshCommand` is not read and a `-c` does
+not survive the way in. The key is passed in the environment, as a clone passes it, and then
+written into the submodule's own clone so a fetch from inside it finds the same one. A
+submodule that needs a different key is recorded in the superproject under its name, which is
+also what makes updating several of them one command per key.
+
 Both halves are tested without a server: `ssh -G` resolves the identity list for a host with
 every config rule applied and then exits, so `coral-core/tests/ssh.rs` can assert that a pinned
 key is the only entry and that the agent default leaves the file alone. `just ssh-test` goes
 the other way and stands an sshd up on a high port with two generated keys, two bare
 repositories and an agent of its own, because the failure being guarded against is not a wrong
 identity list — it is a clone that succeeds as the wrong account and reports the repository as
-missing.
+missing. It asserts the submodule case there too, since a submodule reading none of the
+superproject's command is not visible any other way.
 
 Coral is its own **git credential helper**, so tokens never appear in a remote URL, a config
 file, or an argument list. Any process on the machine can run the coral binary, so the helper
