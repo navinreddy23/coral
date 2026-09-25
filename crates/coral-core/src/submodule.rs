@@ -288,7 +288,16 @@ impl RepoLocation {
         let name = self.submodule_name(runner, path).await?;
         let key = key.map(str::trim).filter(|k| !k.is_empty());
         self.config_put(runner, Scope::Repository, &key_setting(&name), key)
-            .await
+            .await?;
+
+        // A submodule that is already cloned has its own config, and a fetch from inside it
+        // reads that and nothing else. Waiting for the next update to carry the choice across
+        // would leave it authenticating as the account the user has just moved off.
+        let reaches = self
+            .key_for(runner, &name, self.own_key(runner).await?.as_deref())
+            .await?;
+        self.record_key(runner, path, reaches.as_deref()).await;
+        Ok(())
     }
 
     async fn submodule_name(&self, runner: &GitRunner, path: &str) -> Result<String, CoralError> {
@@ -521,38 +530,45 @@ impl RepoLocation {
     /// A failure here leaves a perfectly good working copy, so it is logged and the update
     /// stands — the key can still be set from the submodule's own settings.
     async fn record_keys(&self, runner: &GitRunner, inherited: Option<&str>) {
-        let Some(workdir) = self.workdir.clone() else {
-            return;
-        };
         let Ok(subs) = self.submodules(runner).await else {
             return;
         };
         for s in subs.into_iter().filter(|s| s.initialised) {
-            let command = match self.key_for(runner, &s.name, inherited).await {
-                Ok(key) => key.as_deref().map(crate::ssh::command_for),
-                Err(e) => {
-                    tracing::warn!(error = %e, path = s.path, "could not read the submodule's key");
-                    continue;
-                }
-            };
-            let at = workdir.join(&s.path);
-            // Only `core.sshCommand`, rather than `set_ssh_local`, which would also unset the
-            // public key and the credential helper this clone may have been given by hand.
-            let wrote = match RepoLocation::discover(runner, &at).await {
-                Ok(loc) => {
-                    loc.config_put(
-                        runner,
-                        Scope::Repository,
-                        "core.sshCommand",
-                        command.as_deref(),
-                    )
-                    .await
-                }
-                Err(e) => Err(e),
-            };
-            if let Err(e) = wrote {
-                tracing::warn!(error = %e, path = s.path, "updated, but could not record its key");
+            match self.key_for(runner, &s.name, inherited).await {
+                Ok(key) => self.record_key(runner, &s.path, key.as_deref()).await,
+                Err(e) => tracing::warn!(error = %e, path = s.path, "could not read its key"),
             }
+        }
+    }
+
+    /// Writes one key into one submodule's clone, if there is a clone yet to write it into.
+    ///
+    /// Only `core.sshCommand`, rather than `set_ssh_local`, which would also unset the public
+    /// key and the credential helper that clone may have been given by hand.
+    async fn record_key(&self, runner: &GitRunner, path: &str, key: Option<&str>) {
+        let Some(workdir) = self.workdir.as_ref() else {
+            return;
+        };
+        let at = workdir.join(path);
+        if !at.join(".git").exists() {
+            // Nothing cloned yet; the update that clones it writes the key on its way through.
+            return;
+        }
+        let command = key.map(crate::ssh::command_for);
+        let wrote = match RepoLocation::discover(runner, &at).await {
+            Ok(loc) => {
+                loc.config_put(
+                    runner,
+                    Scope::Repository,
+                    "core.sshCommand",
+                    command.as_deref(),
+                )
+                .await
+            }
+            Err(e) => Err(e),
+        };
+        if let Err(e) = wrote {
+            tracing::warn!(error = %e, path, "could not record the key in the submodule");
         }
     }
 }

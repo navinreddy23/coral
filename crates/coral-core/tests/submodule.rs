@@ -457,6 +457,32 @@ fn a_key_the_repository_no_longer_uses_is_cleared_from_the_submodule() {
 }
 
 #[test]
+fn choosing_a_key_reaches_a_submodule_that_is_already_cloned() {
+    // A fetch from inside a submodule reads that submodule's config and nothing else, so a
+    // choice that waited for the next update would leave it on the account just moved off.
+    let (repo, _inner) = with_submodule();
+    let repo_key = repo.path().join("keys/work").display().to_string();
+    let own_key = repo.path().join("keys/vendor").display().to_string();
+    pin(&repo, Some(&repo_key));
+
+    run(async {
+        let (runner, loc) = located(&repo).await;
+        let at = "external/dev-scripts";
+        loc.set_submodule_ssh(&runner, at, Some(&own_key))
+            .await
+            .unwrap();
+        assert_eq!(recorded_key(&repo, at), Some(command_for(&own_key)));
+
+        loc.set_submodule_ssh(&runner, at, None).await.unwrap();
+        assert_eq!(
+            recorded_key(&repo, at),
+            Some(command_for(&repo_key)),
+            "clearing it puts the repository's key back, not nothing"
+        );
+    });
+}
+
+#[test]
 fn a_submodules_own_key_reads_back_and_clears() {
     let (repo, _inner) = with_submodule();
     let repo_key = repo.path().join("keys/work").display().to_string();
