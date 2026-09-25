@@ -192,13 +192,16 @@ pub async fn repo_clone(
         depth,
         blobless,
     } = request;
-    let settings = profiles.read().current().settings.clone();
+    let mut settings = profiles.read().current().settings.clone();
     let runner = coral_core::process::GitRunner::discover().await?;
     // The form's own choice wins over the profile's, since it was made about this clone; the
     // profile is the default the form was filled in with.
     let key = ssh_key
         .filter(|k| !k.trim().is_empty())
         .or_else(|| settings.ssh.private_key.clone());
+    // And it is the key the stamp below should write, for the same reason. Without this the
+    // profile's default would be written over the key the clone actually authenticated with.
+    settings.ssh.private_key = key.clone();
     let what = coral_core::create::Cloned {
         url,
         parent: std::path::PathBuf::from(&parent),

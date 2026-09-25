@@ -489,6 +489,15 @@ pub async fn profile_apply_here(
 }
 
 /// Stamps a repository that has just been made, where there is nothing to overwrite.
+///
+/// All three of what a profile carries, ssh included. A new repository under a profile that
+/// pins a key was left on the agent, so its first push went out as whichever account the agent
+/// offered first — the failure a pinned key exists to prevent, arriving at a repository nobody
+/// had had the chance to configure yet.
+///
+/// The caller decides which key that is. A clone is given one by the form, and that choice was
+/// made about this repository, so `repo_clone` puts it into the settings it stamps with rather
+/// than letting the profile's default overwrite it.
 pub async fn stamp_new_repository(settings: &ProfileSettings, path: &Path) {
     let Ok(runner) = coral_core::process::GitRunner::discover().await else {
         return;
@@ -502,6 +511,11 @@ pub async fn stamp_new_repository(settings: &ProfileSettings, path: &Path) {
         && let Err(e) = loc.set_identity_local(&runner, &settings.user).await
     {
         tracing::warn!(error = %e, "could not record the profile's identity");
+    }
+    if !settings.ssh.is_empty()
+        && let Err(e) = loc.set_ssh_local(&runner, &settings.ssh).await
+    {
+        tracing::warn!(error = %e, "could not record the profile's ssh settings");
     }
     if !settings.signing.is_empty() {
         let format = signing_format(&runner, &loc, settings).await;
