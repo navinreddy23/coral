@@ -3742,6 +3742,9 @@
   async function refreshSubmodule() {
     const at = showSubmodule?.path;
     if (!info || at === undefined) return;
+    // The panel is holding the submodule as it was read before the action ran, and
+    // `initialised` is what decides whether it offers to fetch a working copy or to open one.
+    showSubmodule = refs.submodules.find((s) => s.path === at) ?? showSubmodule;
     submoduleAt = await submoduleRevision(info.path, at).catch(() => null);
     submoduleKey = await submoduleSsh(info.path, at).catch(() => null);
   }
@@ -3751,7 +3754,7 @@
     if (!info || at === undefined) return;
     await act({ kind: 'submoduleSetUrl', path: at, url });
     await refs.load(info.path);
-    showSubmodule = refs.submodules.find((s) => s.path === at) ?? showSubmodule;
+    await refreshSubmodule();
   }
 
   async function setSubmoduleSshKey(key: string | null) {
