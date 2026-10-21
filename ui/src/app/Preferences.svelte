@@ -179,7 +179,7 @@
     background: var(--bg-1); border-bottom: 1px solid var(--border);
   }
   h2 {
-    margin: 0; font-size: var(--text-lg); font-weight: 600; color: var(--fg-0);
+    margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); color: var(--fg-0);
     flex: 0 0 auto;
   }
   /* Beside the title, so the two panes that are about one repository say which one before
@@ -217,7 +217,7 @@
   }
   .pane:hover { background: var(--bg-2); }
   .pane.on {
-    background: var(--accent-soft); color: var(--fg-0); font-weight: 600;
+    background: var(--accent-soft); color: var(--fg-0); font-weight: var(--weight-semibold);
     box-shadow: inset 2px 0 0 var(--accent-line);
   }
   .glyph { color: var(--fg-2); display: flex; }

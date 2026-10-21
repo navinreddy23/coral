@@ -231,8 +231,8 @@
     font-size: var(--text-base);
   }
   header { display: flex; align-items: center; gap: var(--space-4); width: 100%; }
-  h2 { margin: 0; font-size: var(--text-lg); font-weight: 600; flex: 1; }
-  h3 { margin: 0; font-size: var(--text-base); font-weight: 600; }
+  h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); flex: 1; }
+  h3 { margin: 0; font-size: var(--text-base); font-weight: var(--weight-semibold); }
 
   .levels { display: flex; border: 1px solid var(--border); border-radius: var(--radius-1);
             overflow: hidden; }
@@ -241,7 +241,7 @@
     background: var(--bg-0); border: 0; color: var(--fg-2);
   }
   .levels button:hover { color: var(--fg-0); }
-  .levels button.on { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+  .levels button.on { background: var(--accent); color: var(--accent-fg); font-weight: var(--weight-semibold); }
 
   .effective {
     margin: 0; padding: var(--space-2) var(--space-3); width: 100%; box-sizing: border-box;
@@ -250,7 +250,7 @@
   }
   .effective strong { color: var(--fg-0); }
   .tag {
-    margin-left: var(--space-2); font-size: var(--text-xs); padding: 0 6px; border-radius: 999px;
+    margin-left: var(--space-2); font-size: var(--text-xs); padding: 0 6px; border-radius: var(--radius-pill);
     background: var(--bg-3); color: var(--fg-2);
   }
   .tag.set { background: var(--accent-soft); color: var(--accent); }
@@ -287,7 +287,7 @@
   .buttons button:disabled, .row button:disabled { opacity: 0.5; cursor: default; }
   .primary {
     background: var(--accent); border-color: var(--accent); color: var(--accent-fg);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
   }
   .primary:hover:not(:disabled) { background: var(--accent-hover); color: var(--accent-fg); }
 

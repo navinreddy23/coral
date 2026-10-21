@@ -554,7 +554,7 @@
     display: flex; align-items: flex-end; gap: 0;
     padding: 3px 4px 0;
     background: var(--band-soft);
-    border-radius: 10px 10px 0 0;
+    border-radius: var(--radius-2) var(--radius-2) 0 0;
   }
   /* The band a drop would join, outlined rather than filled so the group's own colour still
      reads as its identity. */
@@ -571,9 +571,9 @@
    */
   .band.holding { box-shadow: inset 0 2px 0 var(--brand); }
   .group {
-    font: inherit; font-size: var(--text-sm); font-weight: 600; cursor: pointer; white-space: nowrap;
+    font: inherit; font-size: var(--text-sm); font-weight: var(--weight-semibold); cursor: pointer; white-space: nowrap;
     align-self: center; margin: 0 var(--space-1) 4px var(--space-1);
-    padding: 2px var(--space-2); border: 0; border-radius: 999px;
+    padding: 2px var(--space-2); border: 0; border-radius: var(--radius-pill);
     background: var(--band); color: var(--bg-0);
   }
   /*
@@ -582,14 +582,14 @@
    * contrasts exactly as well as the name beside it does, by construction.
    */
   .group .tally {
-    margin-left: var(--space-1); padding: 0 5px; border-radius: 999px;
-    background: var(--bg-0); color: var(--band); font-size: var(--text-xs); font-weight: 700;
+    margin-left: var(--space-1); padding: 0 5px; border-radius: var(--radius-pill);
+    background: var(--bg-0); color: var(--band); font-size: var(--text-xs); font-weight: var(--weight-bold);
   }
 
   .tab {
     display: flex; align-items: center; position: relative;
     margin: 0 3px; min-height: 32px;
-    border-radius: 10px 10px 0 0; background: transparent;
+    border-radius: var(--radius-2) var(--radius-2) 0 0; background: transparent;
   }
   /*
    * A hairline between neighbours, the way a browser separates tabs that carry no fill of
@@ -620,7 +620,7 @@
     background: var(--tab-face); z-index: 2;
     box-shadow: inset 0 2px 0 var(--brand);
   }
-  .tab.active .pick { color: var(--fg-0); font-weight: 600; }
+  .tab.active .pick { color: var(--fg-0); font-weight: var(--weight-semibold); }
   .tab.active::before, .tab.active::after {
     content: ''; position: absolute; bottom: 0; width: 10px; height: 10px;
     opacity: 1; pointer-events: none;
@@ -724,12 +724,12 @@
   .heading {
     display: flex; align-items: center; gap: var(--space-2);
     margin: 0 0 var(--space-1) var(--space-1);
-    font-size: var(--text-xs); font-weight: 600; text-transform: uppercase;
+    font-size: var(--text-xs); font-weight: var(--weight-semibold); text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--fg-2);
   }
   .heading .tally {
-    margin-left: auto; background: var(--bg-2); border-radius: 999px; padding: 0 6px;
+    margin-left: auto; background: var(--bg-2); border-radius: var(--radius-pill); padding: 0 6px;
     font-size: var(--text-xs);
   }
   .finder ul { list-style: none; margin: 0; padding: 0; }
@@ -750,7 +750,7 @@
   }
   /* The group's own colour, so a tab found here is placed as well as named. */
   .tag {
-    flex: 0 0 auto; font-size: var(--text-xs); padding: 0 6px; border-radius: 999px;
+    flex: 0 0 auto; font-size: var(--text-xs); padding: 0 6px; border-radius: var(--radius-pill);
     background: var(--band); color: var(--bg-0);
   }
   .drop {

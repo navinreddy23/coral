@@ -28,6 +28,6 @@
    */
   mark {
     background: var(--word-mark, transparent); color: inherit;
-    padding: 0; border-radius: 2px;
+    padding: 0; border-radius: var(--radius-0);
   }
 </style>

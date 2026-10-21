@@ -109,7 +109,7 @@
     overflow: hidden; white-space: nowrap;
   }
   .spacer { flex: 1; }
-  .branch { color: var(--fg-1); font-weight: 600; display: inline-flex; align-items: center; gap: 5px; }
+  .branch { color: var(--fg-1); font-weight: var(--weight-semibold); display: inline-flex; align-items: center; gap: 5px; }
   .glyph { color: var(--accent); }
   .tally { display: inline-flex; gap: var(--space-1); }
   .ahead { color: var(--ok); }
@@ -117,13 +117,13 @@
   .changed { color: var(--fg-1); }
   .host {
     font: inherit; color: var(--fg-1); cursor: pointer;
-    background: none; border: 0; padding: 1px var(--space-2); border-radius: 999px;
+    background: none; border: 0; padding: 1px var(--space-2); border-radius: var(--radius-pill);
   }
   .host:hover { background: var(--bg-2); color: var(--fg-0); }
   .muted { color: var(--fg-2); }
 
   .report {
-    font: inherit; cursor: pointer; border: 0; border-radius: 999px;
+    font: inherit; cursor: pointer; border: 0; border-radius: var(--radius-pill);
     padding: 1px var(--space-2); max-width: 46vw;
     overflow: hidden; text-overflow: ellipsis;
     background: var(--bg-3); color: var(--fg-1);

@@ -113,7 +113,7 @@
   /* The row the arrow keys are on is filled; a hover only tints, so the two never look alike
      and the keyboard stays the thing driving the list. */
   button:hover { background: var(--bg-2); color: var(--fg-0); }
-  button.on { background: var(--accent-soft); color: var(--fg-0); font-weight: 500; }
+  button.on { background: var(--accent-soft); color: var(--fg-0); font-weight: var(--weight-medium); }
   .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .group {
     flex: 0 0 auto; font-size: var(--text-xs); color: var(--fg-2);

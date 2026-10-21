@@ -147,7 +147,7 @@
     background: var(--bg-0); border: 1px solid var(--border-strong);
     border-radius: var(--radius-2); box-shadow: var(--elevate-2);
   }
-  h2 { margin: 0; font-size: var(--text-lg); font-weight: 600; color: var(--fg-0); }
+  h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); color: var(--fg-0); }
   /* `pre-line`, so a detail can put the thing being destroyed on a line of its own and the
      warning on another. Run together they read as one sentence that says neither. */
   .detail {
@@ -181,7 +181,7 @@
   button:disabled { opacity: 0.5; cursor: default; }
   button.primary:not(:disabled) {
     background: var(--accent); border-color: var(--accent); color: var(--accent-fg);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
   }
   button.primary:hover:not(:disabled) { background: var(--accent-hover); }
   /* Outlined rather than filled: a solid red button beside a grey Cancel reads as the one to

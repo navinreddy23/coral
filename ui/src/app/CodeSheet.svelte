@@ -122,7 +122,7 @@
   .code.ours .line.in-conflict { background: var(--lane-7-soft); box-shadow: inset 3px 0 0 var(--lane-7); }
   .code.theirs .line.in-conflict { background: var(--lane-3-soft); box-shadow: inset 3px 0 0 var(--lane-3); }
   .code.base .line.in-conflict { background: var(--bg-2); }
-  .line.in-conflict.taken { font-weight: 600; }
+  .line.in-conflict.taken { font-weight: var(--weight-semibold); }
   .code.result .line.in-conflict { background: var(--lane-2-soft); box-shadow: inset 3px 0 0 var(--lane-2); }
   .code.result .line.in-conflict.here { outline: 1px solid var(--lane-2); outline-offset: -1px; }
 </style>

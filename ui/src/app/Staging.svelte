@@ -322,7 +322,7 @@
     display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
     padding-bottom: var(--space-2); border-bottom: 1px solid var(--border);
   }
-  .count { font-weight: 600; color: var(--fg-0); }
+  .count { font-weight: var(--weight-semibold); color: var(--fg-0); }
   .on { color: var(--fg-2); }
   .branch {
     font-size: var(--text-sm); padding: 1px 8px; border-radius: var(--radius-pill);
@@ -353,11 +353,11 @@
     background: var(--bg-0); border: 0; color: var(--fg-2);
   }
   .toggle button:hover { color: var(--fg-0); }
-  .toggle button.on { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+  .toggle button.on { background: var(--accent); color: var(--accent-fg); font-weight: var(--weight-semibold); }
 
   h3 {
     display: flex; align-items: center; gap: var(--space-1);
-    font-size: var(--text-base); font-weight: 600; color: var(--fg-1);
+    font-size: var(--text-base); font-weight: var(--weight-semibold); color: var(--fg-1);
     margin: var(--space-2) 0 var(--space-1);
   }
   h3.conflict { color: var(--danger); }
@@ -365,7 +365,7 @@
   /* The whole-list action, set apart from the heading it belongs to rather than looking like
      part of the count. */
   .all {
-    margin-left: auto; font: inherit; font-size: var(--text-xs); font-weight: 600;
+    margin-left: auto; font: inherit; font-size: var(--text-xs); font-weight: var(--weight-semibold);
     cursor: pointer;
     padding: 1px var(--space-2); border-radius: var(--radius-1);
     background: var(--bg-2); border: 1px solid var(--border); color: var(--fg-1);
@@ -405,7 +405,7 @@
   }
   .mark {
     flex: 0 0 auto; width: 12px; text-align: center;
-    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm); font-weight: 700;
+    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm); font-weight: var(--weight-bold);
   }
   .mark.added { color: var(--ok); }
   .mark.deleted { color: var(--danger); }
@@ -415,7 +415,7 @@
   .act {
     flex: 0 0 auto; font: inherit; font-size: var(--text-md); line-height: 1; width: 1.6em;
     cursor: pointer; visibility: hidden;
-    background: var(--bg-2); border: 1px solid var(--border); border-radius: 3px;
+    background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-0);
     color: var(--fg-1); margin-right: var(--space-1);
   }
   .flat li:hover .act { visibility: visible; }
@@ -447,7 +447,7 @@
     background: var(--bg-0); color: var(--fg-0);
     transition: border-color var(--fast) var(--ease);
   }
-  .summary { padding-right: 3em; font-weight: 500; }
+  .summary { padding-right: 3em; font-weight: var(--weight-medium); }
   .description { resize: vertical; line-height: var(--leading-body); }
   .summary:focus, .description:focus { border-color: var(--accent); }
   /*
@@ -460,9 +460,9 @@
     opacity: 0; transition: opacity var(--fast) var(--ease); pointer-events: none;
   }
   .field:focus-within .limit, .limit.over { opacity: 1; }
-  .limit.over { color: var(--warn); font-weight: 600; }
+  .limit.over { color: var(--warn); font-weight: var(--weight-semibold); }
   .commit {
-    font: inherit; font-size: var(--text-md); font-weight: 600;
+    font: inherit; font-size: var(--text-md); font-weight: var(--weight-semibold);
     padding: var(--space-2); cursor: pointer;
     background: var(--accent); color: var(--accent-fg); border: 0;
     border-radius: var(--radius-1);

@@ -237,7 +237,7 @@
 
 <style>
   .pane { padding: var(--space-4) var(--space-5); overflow-y: auto; flex: 1; min-width: 0; }
-  h2 { margin: 0 0 var(--space-4); font-size: var(--text-xl); font-weight: 600; color: var(--fg-0); }
+  h2 { margin: 0 0 var(--space-4); font-size: var(--text-xl); font-weight: var(--weight-semibold); color: var(--fg-0); }
 
   .level { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-4); }
   .level button {
@@ -247,7 +247,7 @@
   }
   .level button.on {
     background: var(--accent); border-color: var(--accent); color: var(--accent-fg);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
   }
   .note { font-size: var(--text-sm); color: var(--fg-2); }
 
@@ -277,13 +277,13 @@
     border-radius: var(--radius-1); color: var(--fg-1);
   }
   .refresh:hover:not(:disabled), .generate:hover:not(:disabled) { background: var(--bg-2); }
-  .generate { color: var(--ok); font-weight: 600; }
+  .generate { color: var(--ok); font-weight: var(--weight-semibold); }
   button:disabled { opacity: 0.5; cursor: default; }
 
   .hint { margin: var(--space-1) 0 0; font-size: var(--text-sm); color: var(--fg-2); line-height: 1.5; max-width: 46em; }
   .hint.warn { color: var(--warn); }
   .tag {
-    margin-left: var(--space-2); font-size: var(--text-xs); padding: 0 6px; border-radius: 999px;
+    margin-left: var(--space-2); font-size: var(--text-xs); padding: 0 6px; border-radius: var(--radius-pill);
     background: var(--accent-soft); color: var(--accent);
   }
   .check { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-base); color: var(--fg-1); }
@@ -305,7 +305,7 @@
   .primary {
     font: inherit; font-size: var(--text-base); cursor: pointer; padding: 3px var(--space-4);
     background: var(--accent); border: 1px solid var(--accent); border-radius: var(--radius-1);
-    color: var(--accent-fg); font-weight: 600;
+    color: var(--accent-fg); font-weight: var(--weight-semibold);
   }
   .primary:hover:not(:disabled) { background: var(--accent-hover); }
 </style>

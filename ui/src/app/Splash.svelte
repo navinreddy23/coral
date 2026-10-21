@@ -149,7 +149,7 @@
 
   /* ---- what is being opened ---- */
 
-  h2 { margin: 0; font-size: var(--text-xl); font-weight: 600; letter-spacing: -0.01em; color: var(--fg-0); }
+  h2 { margin: 0; font-size: var(--text-xl); font-weight: var(--weight-semibold); letter-spacing: -0.01em; color: var(--fg-0); }
   .path {
     margin: 4px 0 0; font-size: var(--text-sm); color: var(--fg-2);
     max-width: 40em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -169,14 +169,14 @@
   /* The line into a station, from the one before it. */
   .rail li + li::before {
     content: ''; position: absolute; top: 5px; left: -50%; right: 50%; height: 2px;
-    border-radius: 1px; background: var(--bg-3);
+    border-radius: var(--radius-0); background: var(--bg-3);
   }
   .rail li.done + li::before { background: var(--accent); }
 
   /* And a lit stretch running along the one still being covered. */
   .rail li.now + li::after {
     content: ''; position: absolute; top: 5px; left: -50%; width: 30%; height: 2px;
-    border-radius: 1px; background: var(--accent);
+    border-radius: var(--radius-0); background: var(--accent);
     animation: travel 1500ms ease-in-out infinite;
   }
   @keyframes travel {
@@ -206,11 +206,11 @@
   }
 
   .label {
-    font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.06em;
+    font-size: var(--text-xs); font-weight: var(--weight-semibold); letter-spacing: 0.06em;
     text-transform: uppercase; color: var(--fg-2);
   }
   .rail li.done .label { color: var(--fg-1); }
-  .rail li.now .label { color: var(--fg-0); font-weight: 600; }
+  .rail li.now .label { color: var(--fg-0); font-weight: var(--weight-semibold); }
 
   .says { margin: var(--space-3) 0 0; font-size: var(--text-md); color: var(--fg-1); }
 

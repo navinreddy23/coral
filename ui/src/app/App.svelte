@@ -4726,7 +4726,7 @@
   }
   .find button {
     flex: 0 0 auto; font: inherit; font-size: var(--text-base); cursor: pointer; line-height: 18px;
-    background: var(--bg-0); border: 1px solid var(--border); border-radius: 3px;
+    background: var(--bg-0); border: 1px solid var(--border); border-radius: var(--radius-0);
     color: var(--fg-1); padding: 0 6px;
   }
   .find button:hover:not(:disabled) { background: var(--bg-2); color: var(--fg-0); }
@@ -4821,7 +4821,7 @@
    */
   .wip .cell.refs, .wip .cell.message { background: var(--bg-1); }
   .wip .cell.message { box-shadow: inset 2px 0 0 var(--brand); }
-  .wip .summary { color: var(--fg-0); font-weight: 600; }
+  .wip .summary { color: var(--fg-0); font-weight: var(--weight-semibold); }
   .wip .wip-node { border-color: var(--brand); }
 
   /*
@@ -4875,7 +4875,7 @@
      that looks picked, and the working copy is still the only amber-noded row on the list. */
   .wip.selected .cell.refs, .wip.selected .cell.message { background: var(--accent-soft); }
 
-  .row.selected .cell.message .summary { color: var(--fg-0); font-weight: 600; }
+  .row.selected .cell.message .summary { color: var(--fg-0); font-weight: var(--weight-semibold); }
   /*
    * Every text surface paints an opaque background of its own, and this is not optional.
    *
@@ -4975,7 +4975,7 @@
    */
   .pill.head {
     background: var(--accent); border-color: var(--accent);
-    color: var(--accent-fg); font-weight: 600;
+    color: var(--accent-fg); font-weight: var(--weight-semibold);
   }
   .pill.head .cap { background: var(--accent-fg); color: var(--accent); }
   .pill.head:hover { background: var(--accent); }
@@ -4985,7 +4985,7 @@
   .more {
     display: inline-flex; align-items: center; gap: 3px;
     color: var(--fg-2); background: none; padding: 1px 4px;
-    border: 1px dashed var(--border); border-radius: 7px;
+    border: 1px dashed var(--border); border-radius: var(--radius-1);
     flex: 0 0 auto; font: inherit; font-size: var(--text-xs); line-height: 13px; cursor: pointer;
     position: relative; z-index: 1;
   }

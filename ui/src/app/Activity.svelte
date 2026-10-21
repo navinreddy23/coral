@@ -96,7 +96,7 @@
     padding: var(--space-3) var(--space-4);
     border-bottom: 1px solid var(--border);
   }
-  h2 { margin: 0; font-size: var(--text-lg); font-weight: 600; flex: 1; }
+  h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); flex: 1; }
   .shut {
     display: flex; font: inherit; line-height: 1; cursor: pointer;
     background: var(--bg-1); border: 0; color: var(--fg-2); padding: 0 var(--space-2);
@@ -109,7 +109,7 @@
   }
   .spacer { flex: 1; }
   .tab {
-    font: inherit; font-size: var(--text-base); font-weight: 600; cursor: pointer;
+    font: inherit; font-size: var(--text-base); font-weight: var(--weight-semibold); cursor: pointer;
     padding: var(--space-2) var(--space-3);
     background: var(--bg-1); border: 0; border-bottom: 2px solid transparent;
     color: var(--fg-2);

@@ -65,7 +65,7 @@
     flex: 0 0 auto; width: 16px; height: 16px; line-height: 16px; text-align: center;
     /* The page's own colour: these fills are dark in the light theme and light in the
        dark one, so what reads on them is whatever the page is not. */
-    border-radius: 50%; font-size: var(--text-sm); font-weight: 700; color: var(--bg-0);
+    border-radius: 50%; font-size: var(--text-sm); font-weight: var(--weight-bold); color: var(--bg-0);
   }
   .toast.ok .mark { background: var(--ok); }
   .toast.info .mark { background: var(--accent); }
@@ -73,7 +73,7 @@
   .toast.error .mark { background: var(--danger); }
 
   .text { flex: 1; min-width: 0; }
-  .title { margin: 0; font-weight: 600; }
+  .title { margin: 0; font-weight: var(--weight-semibold); }
   .detail {
     margin: 2px 0 0; color: var(--fg-1); font-size: var(--text-sm); line-height: 1.4;
     /*

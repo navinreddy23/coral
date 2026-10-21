@@ -81,14 +81,14 @@
 
 <style>
   .pane { display: flex; flex-direction: column; gap: var(--space-5); align-items: flex-start; }
-  h2 { margin: 0; font-size: var(--text-lg); font-weight: 600; }
+  h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); }
 
   fieldset {
     margin: 0; padding: 0; border: 0;
     display: flex; flex-direction: column; gap: var(--space-2);
   }
   legend {
-    padding: 0; font-size: var(--text-sm); font-weight: 600; color: var(--fg-2);
+    padding: 0; font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--fg-2);
     text-transform: uppercase; letter-spacing: 0.06em;
   }
 
@@ -114,9 +114,9 @@
     display: flex; flex-direction: column; justify-content: center;
     height: 22px; width: 22px;
   }
-  .rule { display: block; width: 100%; height: 3px; border-radius: 1px; background: var(--fg-2); }
+  .rule { display: block; width: 100%; height: 3px; border-radius: var(--radius-0); background: var(--fg-2); }
   .choice.on .rule { background: var(--accent); }
-  .label { font-size: var(--text-md); font-weight: 600; color: var(--fg-0); }
+  .label { font-size: var(--text-md); font-weight: var(--weight-semibold); color: var(--fg-0); }
   .note { font-size: var(--text-sm); color: var(--fg-2); line-height: var(--leading-body); }
   .hint {
     margin: 0; font-size: var(--text-sm); color: var(--fg-2);

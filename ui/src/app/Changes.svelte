@@ -155,12 +155,12 @@
     background: var(--bg-1); border: 0; color: var(--fg-1);
   }
   .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dir { color: var(--fg-1); font-weight: 600; }
+  .dir { color: var(--fg-1); font-weight: var(--weight-semibold); }
   .file.open { background: var(--accent-soft); color: var(--fg-0); }
   .caret { width: 9px; flex: 0 0 auto; color: var(--fg-2); }
   .mark {
     flex: 0 0 auto; width: 12px; text-align: center;
-    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm); font-weight: 700;
+    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm); font-weight: var(--weight-bold);
   }
   .mark.added { color: var(--ok); }
   .mark.deleted { color: var(--danger); }
@@ -179,7 +179,7 @@
   .act {
     flex: 0 0 auto; font: inherit; font-size: var(--text-md); line-height: 1; width: 1.6em;
     cursor: pointer; visibility: hidden;
-    background: var(--bg-2); border: 1px solid var(--border); border-radius: 3px;
+    background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-0);
     color: var(--fg-1); margin-right: var(--space-1);
   }
   .row:hover .act { visibility: visible; }

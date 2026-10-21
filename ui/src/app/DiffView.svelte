@@ -661,7 +661,7 @@
   /* Normal weight. The file name is a label on the diff, not a heading over it, and mono at
      twelve pixels already reads heavier than the interface font beside it. */
   .path {
-    flex: 0 1 auto; min-width: 3em; font-size: var(--text-base); font-weight: 400;
+    flex: 0 1 auto; min-width: 3em; font-size: var(--text-base); font-weight: var(--weight-regular);
     color: var(--fg-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .spread { flex: 1 1 auto; min-width: var(--space-2); }
@@ -689,12 +689,12 @@
   }
   .toggle button {
     font: inherit; font-size: var(--text-sm); cursor: pointer; padding: 2px var(--space-2);
-    background: none; border: 0; border-radius: 4px; color: var(--fg-2);
+    background: none; border: 0; border-radius: var(--radius-0); color: var(--fg-2);
     transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
   }
   .toggle button:hover { color: var(--fg-0); }
   .toggle button.on {
-    background: var(--bg-0); color: var(--fg-0); font-weight: 600;
+    background: var(--bg-0); color: var(--fg-0); font-weight: var(--weight-semibold);
     box-shadow: var(--elevate-1);
   }
   .close {
@@ -725,7 +725,7 @@
   /* A pressed toggle keeps the tinted fill rather than the solid accent: these sit beside the
      segmented tracks, and two different ways of saying "chosen" in one header is one too
      many. */
-  .wider.on, .ws.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .wider.on, .ws.on { background: var(--accent-soft); color: var(--accent); font-weight: var(--weight-semibold); }
 
   /*
    * The file's history, beside the change it made rather than above it: the list is scrolled
@@ -750,7 +750,7 @@
     /* White, and this is the one place a literal is right: the node colours are
        deliberately dark in both themes so the letters inside a commit node can be white in
        both. */
-    background: var(--node-1); color: #ffffff; font-size: var(--text-xs); font-weight: 600;
+    background: var(--node-1); color: #ffffff; font-size: var(--text-xs); font-weight: var(--weight-semibold);
   }
   .what { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .subject { color: var(--fg-0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -808,7 +808,7 @@
     background: var(--bg-1);
   }
   .overview:hover { background: var(--bg-2); }
-  .mark { position: absolute; left: 2px; right: 2px; border-radius: 1px; }
+  .mark { position: absolute; left: 2px; right: 2px; border-radius: var(--radius-0); }
   .mark.add { background: var(--ok); }
   .mark.remove { background: var(--danger); }
   /*
@@ -824,11 +824,11 @@
   /* An outline rather than a fill: the marks under it are the point of the strip. */
   .here {
     position: absolute; left: 0; right: 0; min-height: 8px;
-    border: 1px solid var(--fg-2); border-radius: 2px; background: none;
+    border: 1px solid var(--fg-2); border-radius: var(--radius-0); background: none;
   }
   .lines {
     border-collapse: collapse; width: 100%;
-    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm); font-weight: 400;
+    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm); font-weight: var(--weight-regular);
     line-height: 17px;
   }
   /*
@@ -865,7 +865,7 @@
    */
   .sheet {
     position: relative; overflow: hidden;
-    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm); font-weight: 400; line-height: 17px;
+    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm); font-weight: var(--weight-regular); line-height: 17px;
   }
   .window { position: absolute; inset: 0 0 auto 0; will-change: transform; }
   /*
@@ -917,7 +917,7 @@
   .hunk-acts { flex: 0 0 auto; display: flex; gap: var(--space-1); }
   .hunk-acts button {
     font: inherit; font-family: var(--font-ui); font-size: var(--text-sm); cursor: pointer;
-    background: var(--bg-0); border: 1px solid var(--border); border-radius: 3px;
+    background: var(--bg-0); border: 1px solid var(--border); border-radius: var(--radius-0);
     color: var(--fg-1); padding: 0 6px; line-height: 17px;
   }
   .hunk-acts button:hover { background: var(--bg-3); color: var(--fg-0); }
@@ -930,7 +930,7 @@
     background: none; border: 0; padding: 0; color: inherit; white-space: pre;
   }
   tr.picked .text { box-shadow: inset 3px 0 0 var(--accent); }
-  tr.picked .sign { color: var(--accent); font-weight: 700; }
+  tr.picked .sign { color: var(--accent); font-weight: var(--weight-bold); }
 
   tr.hunk td {
     background: var(--bg-2); color: var(--fg-2); padding: 3px var(--space-2);

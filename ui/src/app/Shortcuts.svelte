@@ -54,7 +54,7 @@
   .note { margin: 0 0 var(--space-4); font-size: var(--text-base); color: var(--fg-2); }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); }
   h3 {
-    font-size: var(--text-xs); font-weight: 600; text-transform: uppercase;
+    font-size: var(--text-xs); font-weight: var(--weight-semibold); text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--fg-2); margin: 0 0 var(--space-2);
   }
@@ -66,7 +66,7 @@
   .label { flex: 1; color: var(--fg-1); }
   kbd {
     font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm); white-space: nowrap;
-    padding: 1px var(--space-2); border-radius: 3px;
+    padding: 1px var(--space-2); border-radius: var(--radius-0);
     background: var(--bg-2); border: 1px solid var(--border); color: var(--fg-0);
   }
 </style>

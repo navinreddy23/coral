@@ -211,7 +211,7 @@
     padding: var(--space-3) var(--space-4);
     border-bottom: 1px solid var(--border);
   }
-  h2 { margin: 0; font-size: var(--text-lg); font-weight: 600; flex: 1; }
+  h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); flex: 1; }
   .shut {
     display: flex; font: inherit; line-height: 1; cursor: pointer;
     background: var(--bg-1); border: 0; color: var(--fg-2); padding: 0 var(--space-2);
@@ -232,7 +232,7 @@
   }
   .pick:hover { background: var(--bg-2); }
   .pick.on { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent-line); }
-  .name { font-size: var(--text-base); font-weight: 600; color: var(--fg-0); }
+  .name { font-size: var(--text-base); font-weight: var(--weight-semibold); color: var(--fg-0); }
   .url {
     font-size: var(--text-sm); color: var(--fg-2); max-width: 100%;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -244,7 +244,7 @@
     padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3);
     align-items: flex-start;
   }
-  h3 { margin: 0; font-size: var(--text-md); font-weight: 600; }
+  h3 { margin: 0; font-size: var(--text-md); font-weight: var(--weight-semibold); }
   label {
     display: flex; flex-direction: column; gap: var(--space-1);
     font-size: var(--text-sm); color: var(--fg-2); width: 100%; max-width: 44em;
@@ -269,7 +269,7 @@
   .row button:disabled { opacity: 0.5; cursor: default; }
   .row .primary {
     background: var(--accent); border-color: var(--accent); color: var(--accent-fg);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
   }
   .row .primary:hover:not(:disabled) { background: var(--accent-hover); color: var(--accent-fg); }
   .row .danger { color: var(--danger); }

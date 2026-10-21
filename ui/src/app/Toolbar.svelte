@@ -363,7 +363,7 @@
      The line box has to hold the whole face, not just the x-height: eliding needs
      `overflow: hidden`, and at 1.15 that clipped the tails off `g`, `p` and `y`. */
   .value {
-    font-size: var(--text-md); font-weight: 600; line-height: 1.45; color: var(--fg-0);
+    font-size: var(--text-md); font-weight: var(--weight-semibold); line-height: 1.45; color: var(--fg-0);
     max-width: 22em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .sep { color: var(--border-strong); flex: 0 0 auto; display: flex; align-items: center; }

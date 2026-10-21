@@ -201,11 +201,11 @@
     background: var(--bg-0); color: var(--fg-1); font-size: var(--text-base);
   }
   h2 {
-    margin: 0 0 var(--space-3); font-size: var(--text-xl); font-weight: 600; color: var(--fg-0);
+    margin: 0 0 var(--space-3); font-size: var(--text-xl); font-weight: var(--weight-semibold); color: var(--fg-0);
     background: var(--bg-0);
   }
   h3 {
-    margin: var(--space-5) 0 var(--space-2); font-size: var(--text-lg); font-weight: 600;
+    margin: var(--space-5) 0 var(--space-2); font-size: var(--text-lg); font-weight: var(--weight-semibold);
     color: var(--fg-0); background: var(--bg-0);
   }
   p { margin: 0 0 var(--space-3); max-width: 68ch; line-height: 1.55; background: var(--bg-0); }
@@ -222,10 +222,10 @@
   }
   .list li.on { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent-line); }
   .dot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; background: var(--band); }
-  .who { flex: 1 1 auto; min-width: 0; color: var(--fg-0); font-weight: 600;
+  .who { flex: 1 1 auto; min-width: 0; color: var(--fg-0); font-weight: var(--weight-semibold);
          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .badge {
-    font-size: var(--text-xs); font-weight: 600; text-transform: uppercase;
+    font-size: var(--text-xs); font-weight: var(--weight-semibold); text-transform: uppercase;
     letter-spacing: 0.06em; color: var(--accent);
   }
 
@@ -234,7 +234,7 @@
   .swatches { display: inline-flex; gap: 2px; }
   .swatch {
     width: 12px; height: 12px; padding: 0; cursor: pointer;
-    border: 1px solid transparent; border-radius: 3px; background: var(--band);
+    border: 1px solid transparent; border-radius: var(--radius-0); background: var(--band);
   }
   .swatch.picked { border-color: var(--fg-0); }
 

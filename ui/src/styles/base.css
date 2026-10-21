@@ -65,7 +65,7 @@ code, .mono { font-family: var(--font-mono); font-variant-ligatures: none; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
   background: var(--border-strong);
-  border-radius: 5px;
+  border-radius: var(--radius-0);
   /* Inset by a transparent border so the thumb reads as narrower than the track it needs. */
   border: 3px solid transparent;
   background-clip: content-box;

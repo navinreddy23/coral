@@ -366,11 +366,11 @@
     color: var(--brand);
   }
   h2 {
-    flex: 1; margin: 0; font-size: var(--text-xl); font-weight: 600; color: var(--fg-0);
+    flex: 1; margin: 0; font-size: var(--text-xl); font-weight: var(--weight-semibold); color: var(--fg-0);
     background: var(--bg-0);
   }
   h3 {
-    margin: var(--space-5) 0 var(--space-2); font-size: var(--text-base); font-weight: 600;
+    margin: var(--space-5) 0 var(--space-2); font-size: var(--text-base); font-weight: var(--weight-semibold);
     color: var(--fg-2); background: var(--bg-0);
   }
   .shut {
@@ -396,7 +396,7 @@
   .action:hover { background: var(--bg-2); border-color: var(--border-strong); }
   .action.on { background: var(--accent-soft); border-color: var(--accent); }
   .glyph { display: flex; color: var(--accent); margin-bottom: var(--space-1); }
-  .what { font-size: var(--text-md); font-weight: 600; }
+  .what { font-size: var(--text-md); font-weight: var(--weight-semibold); }
   .why { font-size: var(--text-sm); color: var(--fg-2); line-height: var(--leading-body); }
 
   .form {
@@ -477,7 +477,7 @@
     flex: 1; min-width: 0; text-align: left; font: inherit; cursor: pointer;
     padding: var(--space-2); background: none; border: 0; color: var(--fg-1);
   }
-  .repo-name { grid-area: 1 / 1; color: var(--accent); font-weight: 600; font-size: var(--text-md); }
+  .repo-name { grid-area: 1 / 1; color: var(--accent); font-weight: var(--weight-semibold); font-size: var(--text-md); }
   .repo-when { grid-area: 1 / 2; color: var(--fg-2); font-size: var(--text-sm); }
   .repo-path {
     grid-area: 2 / 1 / 3 / 3; min-width: 0; color: var(--fg-2); font-size: var(--text-sm);

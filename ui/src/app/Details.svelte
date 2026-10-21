@@ -325,7 +325,7 @@
    */
   h2, h3, dt, dd, .muted, .error, .all, .name, .mail, .when { background: var(--bg-1); }
   h2 {
-    font-size: var(--text-lg); font-weight: 600; line-height: 1.3;
+    font-size: var(--text-lg); font-weight: var(--weight-semibold); line-height: 1.3;
     margin: 0 0 var(--space-3); color: var(--fg-0);
     /* Balanced, so a two-line summary does not leave one word alone on the second line. */
     text-wrap: balance;
@@ -346,13 +346,13 @@
   .face {
     flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    font-size: var(--text-mark); font-weight: 700; letter-spacing: 0.02em;
+    font-size: var(--text-mark); font-weight: var(--weight-bold); letter-spacing: 0.02em;
     /* White in both themes, which is why the node palette is dark in both. */
     color: #ffffff;
   }
   .names { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
   .name {
-    font-size: var(--text-md); font-weight: 600; color: var(--fg-0);
+    font-size: var(--text-md); font-weight: var(--weight-semibold); color: var(--fg-0);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .mail {
@@ -371,7 +371,7 @@
    */
   h3 {
     display: flex; align-items: center; gap: var(--space-2);
-    font-size: var(--text-base); font-weight: 600;
+    font-size: var(--text-base); font-weight: var(--weight-semibold);
     color: var(--fg-2); margin: var(--space-4) 0 var(--space-2);
   }
   h3::after {
@@ -435,7 +435,7 @@
     background: var(--bg-0); border: 0; color: var(--fg-2);
   }
   .toggle button:hover { color: var(--fg-0); }
-  .toggle button.on { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+  .toggle button.on { background: var(--accent); color: var(--accent-fg); font-weight: var(--weight-semibold); }
   .all { display: flex; align-items: center; gap: var(--space-1); font-size: var(--text-sm); color: var(--fg-2); }
   /* The directory gives way first; a truncated path that has lost its file name identifies
      nothing, which is the one part that must always survive. */
@@ -469,7 +469,7 @@
   .mark {
     flex: 0 0 auto; width: 15px; height: 15px; line-height: 15px; text-align: center;
     font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-xs);
-    border-radius: 3px; background: var(--bg-2); color: var(--fg-2);
+    border-radius: var(--radius-0); background: var(--bg-2); color: var(--fg-2);
   }
   .mark.added { color: var(--ok); background: var(--ok-soft); }
   .mark.deleted { color: var(--danger); background: var(--danger-soft); }

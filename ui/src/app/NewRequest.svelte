@@ -124,14 +124,14 @@
   }
   .back:hover { background: var(--bg-2); }
   .heading {
-    margin: var(--space-2) 0 0 var(--space-2); font-size: var(--text-lg); font-weight: 600;
+    margin: var(--space-2) 0 0 var(--space-2); font-size: var(--text-lg); font-weight: var(--weight-semibold);
     color: var(--fg-0);
   }
   .form { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); max-width: 46em; }
   .where { margin: 0; display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-md); }
   .branch {
     font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-base);
-    padding: 1px var(--space-2); border-radius: 999px;
+    padding: 1px var(--space-2); border-radius: var(--radius-pill);
     background: var(--accent-soft); color: var(--fg-0);
   }
   .arrow { color: var(--fg-2); }

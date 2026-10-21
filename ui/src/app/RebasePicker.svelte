@@ -116,7 +116,7 @@
   }
   .panel {
     width: min(720px, 92vw); max-height: 76vh; display: flex; flex-direction: column;
-    background: var(--bg-0); border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg-0); border: 1px solid var(--border); border-radius: var(--radius-1);
     overflow: hidden; font-size: var(--text-base);
   }
   header {
@@ -136,7 +136,7 @@
   select {
     font: inherit; font-size: var(--text-sm); width: 6.5em;
     background: var(--bg-0); color: var(--fg-1);
-    border: 1px solid var(--border); border-radius: 3px;
+    border: 1px solid var(--border); border-radius: var(--radius-0);
   }
   .sha { color: var(--fg-2); flex: 0 0 auto; }
   .summary { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -154,7 +154,7 @@
   .spacer { flex: 1; }
   button {
     font: inherit; font-size: var(--text-sm); cursor: pointer; padding: 2px var(--space-3);
-    background: var(--bg-0); border: 1px solid var(--border); border-radius: 3px;
+    background: var(--bg-0); border: 1px solid var(--border); border-radius: var(--radius-0);
     color: var(--fg-1);
   }
   button:disabled { opacity: 0.5; cursor: default; }

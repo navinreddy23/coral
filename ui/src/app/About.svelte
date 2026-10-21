@@ -80,7 +80,7 @@
     gap: var(--space-2) var(--space-3); margin: 0 0 var(--space-4); align-items: baseline;
   }
   dt {
-    font-size: var(--text-xs); font-weight: 600; text-transform: uppercase;
+    font-size: var(--text-xs); font-weight: var(--weight-semibold); text-transform: uppercase;
     letter-spacing: 0.06em; color: var(--fg-2);
   }
   dd { margin: 0; font-size: var(--text-md); color: var(--fg-0); }

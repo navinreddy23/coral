@@ -265,7 +265,7 @@
     background: var(--bg-1); border-bottom: 1px solid var(--border);
     font-size: var(--text-sm); color: var(--fg-2);
   }
-  .title { font-weight: 600; }
+  .title { font-weight: var(--weight-semibold); }
   .shell { font-size: var(--text-xs); }
   .spacer { flex: 1; }
   .dock { display: flex; gap: 2px; }

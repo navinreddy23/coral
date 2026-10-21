@@ -75,6 +75,33 @@ describe('the component stylesheets', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('round every corner from the radius scale', () => {
+    // Ten different radii were in use before this held: 1, 2, 3, 4, 5, 6, 7 and 10 pixels,
+    // and 999 written out where the pill token said the same thing.
+    const offenders: string[] = [];
+    for (const { name, css } of STYLES) {
+      for (const found of css.matchAll(/border(?:-[a-z]+)*-radius:\s*([^;]+);/g)) {
+        const parts = (found[1] ?? '').trim().split(/\s+(?![^(]*\))/u);
+        const literal = parts.filter((p) => !/^var\(--radius-[0-9a-z]+\)$/u.test(p) && p !== '0' && p !== '50%');
+        if (literal.length > 0) offenders.push(`${name}: ${found[1]?.trim()}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('set every weight from the four weight tokens', () => {
+    const offenders: string[] = [];
+    for (const { name, css } of STYLES) {
+      for (const found of css.matchAll(/font-weight:\s*([^;]+);/g)) {
+        const value = (found[1] ?? '').trim();
+        if (!/^var\(--weight-(regular|medium|semibold|bold)\)$/u.test(value) && value !== 'inherit') {
+          offenders.push(`${name}: ${value}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it('cast a shadow only where something floats above the page', () => {
     // A shadow is a large soft fill. On a row it would be repainted on every scroll frame, and
     // this window scrolls a million rows.
