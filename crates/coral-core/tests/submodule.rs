@@ -13,7 +13,8 @@ fn a_repository_without_gitmodules_has_no_submodules() {
     rt.block_on(async {
         let runner = GitRunner::discover().await.unwrap();
         let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
-        assert!(loc.submodules(&runner).await.unwrap().is_empty());
+        let submodules = loc.submodules(&runner).await.unwrap();
+        assert!(submodules.is_empty(), "{submodules:?}");
     });
 }
 
@@ -82,7 +83,7 @@ fn a_subsection_name_containing_dots_is_kept_whole() {
 fn a_declaration_without_a_path_is_dropped() {
     // Nothing to show in the sidebar and nowhere to open, so it is not a row.
     let subs = parse_gitmodules(b"submodule.orphan.url\nhttps://example.com/x\0");
-    assert!(subs.is_empty());
+    assert!(subs.is_empty(), "{subs:?}");
 }
 
 /// A superproject with one submodule, cloned and committed.

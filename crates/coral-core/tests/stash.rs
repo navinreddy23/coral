@@ -17,7 +17,8 @@ async fn open(repo: &TestRepo) -> (GitRunner, RepoLocation) {
 async fn an_untouched_repository_has_no_stashes() {
     let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
     let (runner, loc) = open(&repo).await;
-    assert!(loc.stashes(&runner).await.unwrap().is_empty());
+    let stashes = loc.stashes(&runner).await.unwrap();
+    assert!(stashes.is_empty(), "{stashes:?}");
 }
 
 #[tokio::test]

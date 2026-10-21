@@ -220,7 +220,8 @@ async fn resolving_every_file_lets_the_operation_continue() {
     loc.resolve(&runner, "delmod.txt", &Resolution::Delete)
         .await
         .unwrap();
-    assert!(loc.conflicts(&runner).await.unwrap().is_empty());
+    let conflicts = loc.conflicts(&runner).await.unwrap();
+    assert!(conflicts.is_empty(), "{conflicts:?}");
 
     let done = loc
         .op(&runner, coral_core::ops::OpAction::Continue)
@@ -433,8 +434,10 @@ fn malformed_marker_sequences_are_rejected() {
 
 #[test]
 fn an_empty_file_has_no_blocks() {
-    assert!(Blocks::parse(b"").unwrap().blocks.is_empty());
-    assert!(Blocks::parse(b"\n").unwrap().blocks.is_empty());
+    let blocks = Blocks::parse(b"").unwrap().blocks;
+    assert!(blocks.is_empty(), "{blocks:?}");
+    let blocks = Blocks::parse(b"\n").unwrap().blocks;
+    assert!(blocks.is_empty(), "{blocks:?}");
 }
 
 /// Merging a release tag must name it. Kernel releases have no branch pointing at them, so
@@ -813,7 +816,8 @@ async fn a_conflicted_submodule_is_settled_by_taking_one_of_the_two_commits() {
     assert_eq!(repo.git(["rev-parse", ":sub"]), left);
     assert_eq!(repo.git(["-C", "sub", "rev-parse", "HEAD"]), left);
     assert_eq!(repo.git(["status", "--porcelain"]), "M  sub");
-    assert!(loc.conflicts(&runner).await.unwrap().is_empty());
+    let conflicts = loc.conflicts(&runner).await.unwrap();
+    assert!(conflicts.is_empty(), "{conflicts:?}");
 }
 
 /// A conflicted symlink points somewhere; it is not a file with a line in it.

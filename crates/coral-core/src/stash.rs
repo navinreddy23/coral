@@ -230,6 +230,7 @@ mod tests {
 
     #[test]
     fn an_empty_stack_is_an_empty_list() {
-        assert!(parse(b"").unwrap().is_empty());
+        let parsed = parse(b"").unwrap();
+        assert!(parsed.is_empty(), "{parsed:?}");
     }
 }

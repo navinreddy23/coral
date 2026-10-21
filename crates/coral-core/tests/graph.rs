@@ -197,8 +197,10 @@ async fn an_empty_repository_walks_to_nothing() {
     let repo = TestRepo::new();
     let (gix, sub) = streams(repo.path()).await;
 
-    assert!(collect(&gix, &StreamOpts::default()).is_empty());
-    assert!(collect(&sub, &StreamOpts::default()).is_empty());
+    let rows = collect(&gix, &StreamOpts::default());
+    assert!(rows.is_empty(), "{rows:?}");
+    let rows = collect(&sub, &StreamOpts::default());
+    assert!(rows.is_empty(), "{rows:?}");
 }
 
 #[test]

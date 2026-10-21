@@ -60,7 +60,8 @@ async fn aborting_records_nothing_when_it_moved_nothing() {
     let runner = GitRunner::discover().await.unwrap();
     let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
     // An abort puts every ref back where it was, and the journal only records what moved.
-    assert!(Journal::load(&loc).entries.is_empty());
+    let entries = Journal::load(&loc).entries;
+    assert!(entries.is_empty(), "{entries:?}");
 }
 
 /// Labels carry a short object id, whatever the window sent.

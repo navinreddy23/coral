@@ -38,7 +38,9 @@ async fn open_reports_a_clean_repository() {
     ]))
     .await;
 
-    stable!().bind(|| insta::assert_json_snapshot!("open_clean", out.json));
+    stable!().bind(|| {
+        insta::assert_json_snapshot!("open_clean", out.json);
+    });
 }
 
 #[tokio::test]
@@ -52,7 +54,9 @@ async fn open_reports_an_unborn_branch() {
     ]))
     .await;
 
-    stable!().bind(|| insta::assert_json_snapshot!("open_unborn", out.json));
+    stable!().bind(|| {
+        insta::assert_json_snapshot!("open_unborn", out.json);
+    });
 }
 
 #[tokio::test]
@@ -66,7 +70,9 @@ async fn open_rejects_a_directory_that_is_not_a_repository() {
     ]))
     .await;
 
-    stable!().bind(|| insta::assert_json_snapshot!("open_not_a_repository", out.json));
+    stable!().bind(|| {
+        insta::assert_json_snapshot!("open_not_a_repository", out.json);
+    });
 }
 
 #[tokio::test]
@@ -75,7 +81,9 @@ async fn version_reports_the_resolved_git() {
 
     // The CLI and the window have to report the same number, and both take it from the crate.
     assert_eq!(out.json["result"]["coral"], env!("CARGO_PKG_VERSION"));
-    stable!().bind(|| insta::assert_json_snapshot!("version", out.json));
+    stable!().bind(|| {
+        insta::assert_json_snapshot!("version", out.json);
+    });
 }
 
 #[tokio::test]
@@ -233,16 +241,13 @@ async fn diff_reports_staged_and_unstaged_separately() {
     assert_eq!(files.len(), 1);
     assert_eq!(files[0]["path"], "a.txt");
     assert_eq!(files[0]["change"], "modified");
-    assert!(!files[0]["hunks"].as_array().unwrap().is_empty());
+    let hunks = files[0]["hunks"].as_array().unwrap();
+    assert!(!hunks.is_empty(), "{hunks:?}");
 
     // b.txt is untracked, so it does not appear in a worktree diff at all.
     let unstaged = coral_cli::run(argv(&["--json", "--repo", repo, "diff"])).await;
-    assert!(
-        unstaged.json["result"]["files"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-    );
+    let files = unstaged.json["result"]["files"].as_array().unwrap();
+    assert!(files.is_empty(), "{files:?}");
 }
 
 #[tokio::test]

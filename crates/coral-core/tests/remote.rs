@@ -129,7 +129,8 @@ async fn lists_adds_renames_and_removes_remotes() {
     let repo = TestRepo::new().write("f.txt", "1\n").commit("base");
     let (runner, loc) = open(&repo).await;
 
-    assert!(loc.remotes(&runner).await.unwrap().is_empty());
+    let remotes = loc.remotes(&runner).await.unwrap();
+    assert!(remotes.is_empty(), "{remotes:?}");
 
     loc.remote_add(&runner, "origin", "https://example.com/a.git")
         .await
@@ -154,7 +155,8 @@ async fn lists_adds_renames_and_removes_remotes() {
     assert_eq!(loc.remotes(&runner).await.unwrap()[0].name, "upstream");
 
     loc.remote_remove(&runner, "upstream").await.unwrap();
-    assert!(loc.remotes(&runner).await.unwrap().is_empty());
+    let remotes = loc.remotes(&runner).await.unwrap();
+    assert!(remotes.is_empty(), "{remotes:?}");
 }
 
 /// A separate push URL must not be reported as a second remote.
