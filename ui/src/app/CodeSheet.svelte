@@ -124,5 +124,7 @@
   .code.base .line.in-conflict { background: var(--bg-2); }
   .line.in-conflict.taken { font-weight: var(--weight-semibold); }
   .code.result .line.in-conflict { background: var(--lane-2-soft); box-shadow: inset 3px 0 0 var(--lane-2); }
-  .code.result .line.in-conflict.here { outline: 1px solid var(--lane-2); outline-offset: -1px; }
+  /* The conflict being worked on carries a wider bar rather than a box. Outlined, every line of
+     it was a box of its own, and a conflict reads as one block. */
+  .code.result .line.in-conflict.here { box-shadow: inset 6px 0 0 var(--lane-2); }
 </style>
