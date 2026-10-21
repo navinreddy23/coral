@@ -23,6 +23,12 @@ describe('shortcuts', () => {
     expect(resolve(key('End'), 'global')?.id).toBe('select.last');
   });
 
+  it('opens Preferences on Ctrl+comma, and not on a plain comma', () => {
+    expect(resolve(key(',', { ctrl: true }), 'global')?.id).toBe('preferences');
+    expect(resolve(key(','), 'global')).toBeNull();
+    expect(resolve(key(','), 'message')).toBeNull();
+  });
+
   it('accepts either spelling of redo', () => {
     expect(resolve(key('y', { ctrl: true }), 'global')?.id).toBe('redo');
     expect(resolve(key('z', { ctrl: true, shift: true }), 'global')?.id).toBe('redo');

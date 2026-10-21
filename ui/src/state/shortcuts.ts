@@ -1,6 +1,7 @@
 /**
  * Keyboard shortcuts, taken from the GitKraken client cheat sheet rather than invented, so
- * someone who already uses it does not have to relearn anything.
+ * someone who already uses it does not have to relearn anything. One is added where the sheet
+ * has nothing: Ctrl+comma for preferences.
  *
  * Every binding in the sheet is listed, including ones whose action does not exist yet. The
  * help overlay shows the whole table and marks what is live, which is more useful than a short
@@ -124,6 +125,9 @@ export const BINDINGS: Binding[] = [
   // everywhere else and would be the wrong reflex here.
   { id: 'terminal', label: 'Toggle the terminal', keys: 'Ctrl `', group: 'UI',
     context: 'global', match: (e) => primary(e) && is(e, '`') },
+  // Not on the GitKraken sheet, but what every desktop application binds to its settings.
+  { id: 'preferences', label: 'Open preferences', keys: 'Ctrl ,', group: 'UI',
+    context: 'global', match: (e) => primary(e) && !e.shift && is(e, ',') },
   { id: 'help', label: 'Show keyboard shortcuts', keys: 'Ctrl /', group: 'UI',
     context: 'global', match: (e) => primary(e) && is(e, '/') },
 ];

@@ -320,6 +320,15 @@ describe('the shell', () => {
     });
   });
 
+  it('opens Preferences on Ctrl+comma, as every desktop application does', async () => {
+    const { container } = await shell();
+    expect(container.querySelector('.prefs')).toBeNull();
+    await fireEvent.keyDown(window, { key: ',', ctrlKey: true });
+    await waitFor(() => {
+      if (container.querySelector('.prefs') === null) throw new Error('not open');
+    });
+  });
+
   it('hides and restores the toolbar from the keyboard', async () => {
     const { container } = await shell();
     const toolbar = () => container.querySelector('.toolbar');

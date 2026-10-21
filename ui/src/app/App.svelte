@@ -236,7 +236,7 @@
     'palette', 'repo.open', 'terminal', 'search.commits',
     'panel.left', 'panel.detail', 'help', 'undo', 'redo',
     'commit', 'commit.stageAll', 'commit.focus', 'stage.file', 'unstage.file',
-    'branch.create', 'fetch.all', 'toolbar', 'filter.focus',
+    'branch.create', 'fetch.all', 'toolbar', 'filter.focus', 'preferences',
   ]);
 
   function move(delta: number) {
@@ -297,6 +297,7 @@
       case 'panel.left': cycleSidebar(); break;
       case 'panel.detail': views.set('details', !views.current.details); break;
       case 'help': showHelp = !showHelp; break;
+      case 'preferences': openPreferences(); break;
       case 'palette': showPalette = !showPalette; break;
       case 'search.commits': openFind(); break;
       // The same two the toolbar runs. They were listed and rebindable but did nothing, which
