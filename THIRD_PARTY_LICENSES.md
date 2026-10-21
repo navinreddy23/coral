@@ -1369,7 +1369,7 @@ For these and/or other purposes and motivations, and without any expectation of 
 
 ## Community Data License Agreement Permissive 2.0
 
-Used by: `webpki-root-certs 1.0.9`
+Used by: `webpki-root-certs 1.0.10`
 
 ```
 # Community Data License Agreement - Permissive - Version 2.0
@@ -1500,7 +1500,7 @@ THIS SOFTWARE.
 
 ## ISC License
 
-Used by: `rustls-webpki 0.103.15`
+Used by: `rustls-webpki 0.103.16`
 
 ```
 Except as otherwise noted, this project is licensed under the following
@@ -2856,7 +2856,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `hyper-rustls 0.27.9`, `rustls-native-certs 0.8.4`, `rustls 0.23.45`
+Used by: `hyper-rustls 0.27.9`, `rustls-native-certs 0.8.4`, `rustls 0.23.46`
 
 ```
 Copyright (c) 2016 Joseph Birr-Pixton &lt;jpixton@gmail.com&gt;
