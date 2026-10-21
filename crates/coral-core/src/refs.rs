@@ -271,7 +271,8 @@ mod tests {
 
     #[test]
     fn an_empty_listing_is_not_an_error() {
-        assert!(parse(b"").unwrap().is_empty());
+        let parsed = parse(b"").unwrap();
+        assert!(parsed.is_empty(), "{parsed:?}");
     }
 }
 

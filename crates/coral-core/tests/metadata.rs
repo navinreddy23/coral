@@ -135,7 +135,8 @@ async fn an_empty_window_costs_nothing() {
     let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
     let (runner, loc) = open(&repo).await;
 
-    assert!(loc.commit_metadata(&runner, &[]).await.unwrap().is_empty());
+    let meta = loc.commit_metadata(&runner, &[]).await.unwrap();
+    assert!(meta.is_empty(), "{meta:?}");
 }
 
 /// The window is fed on stdin while output is read. Doing one before the other deadlocks as
@@ -253,7 +254,11 @@ async fn the_root_commit_lists_every_file_it_introduced() {
         .await
         .unwrap();
 
-    assert!(detail.commit.parents.is_empty());
+    assert!(
+        detail.commit.parents.is_empty(),
+        "{:?}",
+        detail.commit.parents
+    );
     let mut paths: Vec<String> = detail.files.iter().map(|f| f.path.to_string()).collect();
     paths.sort();
     assert_eq!(paths, vec!["a.txt", "b.txt"]);
@@ -337,7 +342,8 @@ async fn a_commit_with_no_body_previews_nothing() {
 
     let meta = loc.commit_metadata(&runner, &[head]).await.unwrap();
     assert_eq!(meta[0].summary, "just a subject");
-    assert!(meta[0].body.to_string().trim().is_empty());
+    let body = meta[0].body.to_string();
+    assert!(body.trim().is_empty(), "{body:?}");
 }
 
 /// A long body is truncated, and never in the middle of a character — a split multi-byte

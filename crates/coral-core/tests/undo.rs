@@ -96,7 +96,8 @@ async fn undoes_a_branch_deletion_by_recreating_the_ref() {
     let before = loc.snapshot_refs(&runner).await.unwrap();
 
     loc.branch_delete(&runner, "doomed", true).await.unwrap();
-    assert!(repo.git(["branch", "--list", "doomed"]).is_empty());
+    let output = repo.git(["branch", "--list", "doomed"]);
+    assert!(output.is_empty(), "{output:?}");
     let after = loc.snapshot_refs(&runner).await.unwrap();
 
     loc.restore_refs(&runner, &before, &after, Restore::Worktree, "undo")
@@ -240,7 +241,8 @@ async fn a_corrupt_journal_loads_as_empty() {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(&path, b"{ not json at all").unwrap();
 
-    assert!(Journal::load(&loc).entries.is_empty());
+    let entries = Journal::load(&loc).entries;
+    assert!(entries.is_empty(), "{entries:?}");
 }
 
 /// A ref that moved outside Coral makes the step unsafe, and saying so is the whole point.

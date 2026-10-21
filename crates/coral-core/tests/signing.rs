@@ -94,8 +94,10 @@ uid:u::::1600000000::H::Ada\\x3a the first <ada@e.invalid>::::::::::0:\n";
 
 #[test]
 fn nothing_at_all_is_not_an_error() {
-    assert!(parse_secret_keys(b"").is_empty());
-    assert!(parse_secret_keys(b"tru::1:1770192902:0:3:1:5\n").is_empty());
+    let keys = parse_secret_keys(b"");
+    assert!(keys.is_empty(), "{keys:?}");
+    let keys = parse_secret_keys(b"tru::1:1770192902:0:3:1:5\n");
+    assert!(keys.is_empty(), "{keys:?}");
 }
 
 #[test]

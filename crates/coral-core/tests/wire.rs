@@ -121,7 +121,7 @@ fn a_frame_past_the_end_is_empty_but_still_valid() {
     let f = decode(&encode(&store, store.len() + 100, 20)).unwrap();
 
     assert_eq!(f.row_count, 0);
-    assert!(f.lanes.is_empty());
+    assert!(f.lanes.is_empty(), "{:?}", f.lanes);
     assert_eq!(
         f.parent_start,
         vec![0],

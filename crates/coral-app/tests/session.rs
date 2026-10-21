@@ -177,7 +177,7 @@ fn a_corrupt_session_loads_as_empty() {
     std::fs::write(&path, b"{ this is not json").unwrap();
 
     let s = Session::load(&path);
-    assert!(s.tabs.is_empty());
+    assert!(s.tabs.is_empty(), "{:?}", s.tabs);
     assert_eq!(s.active, None);
 }
 
@@ -437,7 +437,7 @@ fn closing_a_group_closes_the_tabs_in_it_and_nothing_else() {
     s.close_group(group);
 
     assert_eq!(order(&s), vec![("/c".to_owned(), None)]);
-    assert!(s.groups.is_empty());
+    assert!(s.groups.is_empty(), "{:?}", s.groups);
     assert_eq!(s.active, Some(s.tabs[0].id), "focus lands on what is left");
 }
 
