@@ -794,7 +794,8 @@
   }
   .clear:hover { color: var(--fg-0); background: var(--bg-2); }
 
-  section + section { border-top: 1px solid var(--border); }
+  /* Sections are told apart by their labels and the air between them, not by rules. */
+  section + section { margin-top: var(--space-2); }
   /*
    * Every row that carries text paints its own opaque background.
    *
@@ -806,8 +807,8 @@
    */
   .head {
     display: flex; align-items: center; gap: var(--space-2);
-    width: 100%; font: inherit; font-size: var(--text-base); font-weight: var(--weight-semibold);
-    color: var(--fg-2);
+    width: 100%; font: inherit; font-size: var(--text-xs); font-weight: var(--weight-semibold);
+    text-transform: uppercase; letter-spacing: var(--tracking-label); color: var(--fg-2);
     background: var(--bg-1); border: 0; padding: var(--space-1) var(--space-1); cursor: pointer;
     border-radius: var(--radius-1);
     transition: color var(--fast) var(--ease), background var(--fast) var(--ease);
@@ -817,6 +818,7 @@
      names a thing, where the section above it names a kind. */
   .head.remote {
     padding-left: var(--space-3); font-weight: var(--weight-medium); color: var(--fg-1);
+    font-size: var(--text-base); text-transform: none; letter-spacing: normal;
   }
   .head.remote:hover { color: var(--fg-0); background: var(--bg-2); }
   /* A pill rather than a bare number: a count is a different kind of thing from the name
