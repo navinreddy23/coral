@@ -4975,24 +4975,22 @@
    * the cap already says branch, tag or stash. Text stays near-black on the tint — a whole
    * pill in a saturated lane colour is unreadable at eleven pixels.
    */
+  /*
+   * A label in its lane's tint, edged and marked in the lane's colour: it names the line
+   * beside it rather than being a second, louder line. The pills used to carry a solid cap in
+   * the lane colour, and a column of eight saturated blocks outshouted the lanes themselves.
+   */
   .pill {
-    display: inline-flex; align-items: center; gap: 5px;
+    display: inline-flex; align-items: center; gap: var(--space-1);
     flex: 0 1 auto; min-width: 0; font: inherit; font-size: var(--text-sm); line-height: 18px;
-    padding: 0 7px 0 0; cursor: pointer;
-    border-radius: var(--radius-pill); border: 1px solid var(--tint-line, var(--border));
+    padding: 0 var(--space-2) 0 var(--space-1); cursor: pointer;
+    border-radius: var(--radius-1); border: var(--hairline) solid var(--tint-line, var(--border));
     background: var(--tint, var(--bg-1)); color: var(--fg-0);
     max-width: 100%; overflow: hidden; white-space: nowrap;
   }
-  /*
-   * The cap is the lane colour solid, and it is what makes the pill read as belonging to the
-   * line beside it rather than as a grey chip that happens to be nearby. Its mark is drawn in
-   * the pill's own background, so the colour reads as a block and not as a coloured glyph.
-   */
   .cap {
     flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
-    align-self: stretch; width: 18px; margin-right: 1px;
-    border-radius: var(--radius-pill) 0 0 var(--radius-pill);
-    background: var(--tint-line, var(--fg-2)); color: var(--bg-0);
+    color: var(--tint-line, var(--fg-2));
   }
   .pill-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .pill:hover { background: var(--bg-1); border-color: var(--tint-line, var(--border-strong)); }
@@ -5008,7 +5006,7 @@
     background: var(--accent); border-color: var(--accent);
     color: var(--accent-fg); font-weight: var(--weight-semibold);
   }
-  .pill.head .cap { background: var(--accent-fg); color: var(--accent); }
+  .pill.head .cap { color: var(--accent-fg); }
   .pill.head:hover { background: var(--accent); }
   /* A statement rather than a control: everything it could do, the row already does. */
   .pill.detached { cursor: default; }
