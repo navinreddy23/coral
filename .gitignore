@@ -18,3 +18,4 @@
 
 # Design references the owner supplied. Third-party screenshots: never committed.
 /.reference
+__pycache__/

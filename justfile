@@ -193,6 +193,11 @@ kernel-clean:
 release-test:
     bash tests/release/run.sh
 
+# Builds two AppImages a version apart and has the older install the newer from a local server,
+# signed with a key made for the run. Slow, so not part of check.
+update-test:
+    bash tests/update/run.sh
+
 ssh-test:
     bash tests/ssh/run.sh
 
