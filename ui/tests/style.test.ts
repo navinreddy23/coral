@@ -95,6 +95,16 @@ describe('the component stylesheets', () => {
     expect(css).not.toMatch(/\.line\.in-conflict(\.here)? \{[^}]*box-shadow/u);
   });
 
+  it('shows a commit-list column handle once the pointer is on it', () => {
+    // The spec says the two handles are invisible until the pointer is on them. They were
+    // invisible after it too: the list switched the splitter's line off outright, hover and
+    // all, so nothing showed that the branch and graph columns could be dragged.
+    const app = STYLES.find((s) => s.name === 'App.svelte')?.css ?? '';
+    expect(app).not.toMatch(/\.handle :global\(\.splitter\)\s*\{[^}]*background-image:\s*none/u);
+    const splitter = STYLES.find((s) => s.name === 'Splitter.svelte')?.css ?? '';
+    expect(splitter).toMatch(/\.splitter:hover[^{]*\{[^}]*background-image:\s*linear-gradient/u);
+  });
+
   it('round every corner from the radius scale', () => {
     // Ten different radii were in use before this held: 1, 2, 3, 4, 5, 6, 7 and 10 pixels,
     // and 999 written out where the pill token said the same thing.

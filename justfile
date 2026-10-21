@@ -29,7 +29,7 @@ check:
 
     rust=0
     just fmt-check && just lint && just test && just bindings-current && just licenses-drift \
-        || rust=$?
+        && just release-test || rust=$?
 
     wait "$ui"; ui_status=$?
     echo
@@ -41,7 +41,7 @@ check:
     [ "$rust" -eq 0 ] && [ "$ui_status" -eq 0 ]
 
 # The same checks one after another, when interleaved output is in the way of a failure.
-check-serial: fmt-check lint test bindings-current ui-check licenses-drift
+check-serial: fmt-check lint test bindings-current ui-check licenses-drift release-test
 
 fmt:
     cargo fmt --all
@@ -189,11 +189,20 @@ kernel-clean:
     @echo 'removed {{kernel}}-scenarios; the next kernel-test rebuilds it
 
 # Stands an sshd up on a high port and checks a pinned key reaches the right account.
+# The release's file manifest and its publish step, against made-up release directories.
+release-test:
+    bash tests/release/run.sh
+
 ssh-test:
     bash tests/ssh/run.sh
 
 # Photographs every surface of the window in both themes, in a real browser. Needs Chrome,
 # which is why it is not part of `check`.
+# The release binary itself under WebKitGTK, on a private X display, through a fixed tour.
+# Needs Xephyr and ImageMagick, so it is not part of `just check`.
+window-real: app
+    bash tests/window-real/run.sh
+
 window-test *ARGS:
     bash tests/window/run.sh {{ARGS}}
 

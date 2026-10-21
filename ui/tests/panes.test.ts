@@ -183,6 +183,20 @@ describe('columns in a pane too narrow for them', () => {
   it('answers before the pane has been measured', () => {
     expect(fitColumns(widths, 0)).toEqual({ refs: 240, graph: 170 });
   });
+
+  /**
+   * The kernel at 1440 with both panels open: the graph column widens to a merge cluster's
+   * lanes, and the message cell, which also carries the age and the object id, was left about
+   * 290 pixels. That is a summary of a hundred and forty, cut after three or four words.
+   */
+  it('keeps a summary readable beside a graph widened for the kernel', () => {
+    const kernel = { ...widths, refs: 240, graph: 300 };
+    const fitted = fitColumns(kernel, 830);
+    expect(830 - fitted.refs - fitted.graph).toBeGreaterThanOrEqual(400);
+    // Both give way, rather than the branch column alone.
+    expect(fitted.refs).toBeLessThan(240);
+    expect(fitted.graph).toBeLessThan(300);
+  });
 });
 
 describe('the side panels in a window too narrow for them', () => {

@@ -29,10 +29,14 @@ export const PANE_LIMITS: Record<PaneKey, { min: number; max: number }> = {
 /**
  * How much of the commit list the message column is aimed at keeping.
  *
+ * The cell holds the age and the object id as well as the summary, which is why this is
+ * larger than it looks: at 260 a kernel summary beside a graph widened for a merge cluster was
+ * cut after three or four words. 400 leaves the summary about 280.
+ *
  * Not a guarantee: the two columns beside it have floors of their own, and below a certain
  * pane width those floors win. A target, not a contract.
  */
-export const MESSAGE_FLOOR_PX = 260;
+export const MESSAGE_FLOOR_PX = 400;
 
 /**
  * The refs and graph columns as they should actually be drawn in a pane of `paneWidth`.
@@ -62,10 +66,13 @@ export function fitColumns(
 /**
  * How much of the window the commit list is aimed at keeping.
  *
- * The message column's target plus the floors of the two columns beside it: below this the
- * list has room for the graph and nothing else.
+ * A message column of 260 plus the floors of the two columns beside it: below this the list
+ * has room for the graph and nothing else. Deliberately not `MESSAGE_FLOOR_PX`, which is the
+ * columns' target within a list that has room. The side panels give way only at the window's
+ * own minimum, and there a larger figure would take both to their floors instead of sharing
+ * the loss between them.
  */
-export const LIST_FLOOR_PX = MESSAGE_FLOOR_PX + PANE_LIMITS.refs.min + PANE_LIMITS.graph.min;
+export const LIST_FLOOR_PX = 260 + PANE_LIMITS.refs.min + PANE_LIMITS.graph.min;
 
 /**
  * The side panels as the window can actually afford to draw them.

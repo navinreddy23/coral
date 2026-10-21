@@ -238,6 +238,13 @@ const REMOTES = [
 
 const FIXTURES: Record<string, unknown> = {
   initial_repo: REPO,
+  app_version: { number: '1.2.3', commit: 'abc1234', debug: false },
+  check_for_update: {
+    current: '1.2.3',
+    latest: '1.2.3',
+    newer: false,
+    url: 'https://github.com/navinreddy23/coral/releases/tag/v1.2.3',
+  },
   open_repo: {
     path: REPO,
     gitDir: `${REPO}/.git`,

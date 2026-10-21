@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { marksOf, splitRows, windowAround, type SplitRow } from '../src/diff/split';
+import { marksOf, onScreen, splitRows, windowAround, type SplitRow } from '../src/diff/split';
 import type { Hunk, Line, LineKind } from '../src/ipc/types';
 
 function line(kind: LineKind, text: string): Line {
@@ -157,5 +157,33 @@ describe('marking where the changes are', () => {
   it('marks nothing in a file that did not change', () => {
     expect(marksOf([context(1), context(2)])).toEqual([]);
     expect(marksOf([])).toEqual([]);
+  });
+});
+
+describe('where the reader is, on the change strip', () => {
+  it('outlines the part of a long file on screen', () => {
+    // 1000 rows of 17px, a 400px viewport scrolled a fifth of the way down.
+    const span = onScreen(1000, 17, 3400, 400);
+    expect(span?.at).toBeCloseTo(0.2);
+    expect(span?.size).toBeCloseTo(400 / 17000);
+  });
+
+  /*
+   * A file that fits on screen has nowhere else to be. Outlining all of it drew a hollow box
+   * the height of the strip, which read as an empty scrollbar track and said nothing.
+   */
+  it('outlines nothing when the whole file is on screen', () => {
+    expect(onScreen(15, 17, 0, 400)).toBeNull();
+    expect(onScreen(15, 17, 0, 15 * 17)).toBeNull();
+  });
+
+  it('outlines nothing for an empty file, or before the viewport is measured', () => {
+    expect(onScreen(0, 17, 0, 400)).toBeNull();
+    expect(onScreen(1000, 17, 0, 0)).toBeNull();
+  });
+
+  it('never runs past the end of the strip', () => {
+    const span = onScreen(100, 17, 5000, 400);
+    expect((span?.at ?? 0) + (span?.size ?? 0)).toBeLessThanOrEqual(1);
   });
 });

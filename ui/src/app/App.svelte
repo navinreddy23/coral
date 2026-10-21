@@ -236,7 +236,7 @@
     'palette', 'repo.open', 'terminal', 'search.commits',
     'panel.left', 'panel.detail', 'help', 'undo', 'redo',
     'commit', 'commit.stageAll', 'commit.focus', 'stage.file', 'unstage.file',
-    'branch.create', 'fetch.all', 'toolbar', 'filter.focus',
+    'branch.create', 'fetch.all', 'toolbar', 'filter.focus', 'preferences',
   ]);
 
   function move(delta: number) {
@@ -297,6 +297,7 @@
       case 'panel.left': cycleSidebar(); break;
       case 'panel.detail': views.set('details', !views.current.details); break;
       case 'help': showHelp = !showHelp; break;
+      case 'preferences': openPreferences(); break;
       case 'palette': showPalette = !showPalette; break;
       case 'search.commits': openFind(); break;
       // The same two the toolbar runs. They were listed and rebindable but did nothing, which
@@ -4791,10 +4792,10 @@
        two columns rather than a step to the left of it. */
     margin-left: var(--space-3); display: flex;
   }
-  /* Invisible until it is wanted. A rule between the branch pills and the nodes they point at
-     would cut the one thing that ties them together, and one through the lanes would be worse
-     than none — so the boundary shows on hover and is otherwise not there. */
-  .handle :global(.splitter) { background-image: none; }
+  /* Invisible until it is wanted, which the splitter already is at rest. A rule between the
+     branch pills and the nodes they point at would cut the one thing that ties them together,
+     and one through the lanes would be worse than none — so the boundary shows on hover and
+     is otherwise not there. */
 
   .spacer { position: relative; }
   /* The canvas tracks the scroll position rather than being as tall as the graph: a canvas

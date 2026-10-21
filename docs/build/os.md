@@ -9,7 +9,7 @@ three.
 
 | Tool | Version | Why |
 |---|---|---|
-| Rust | 1.88 or newer | `rust-version` in `Cargo.toml`, edition 2024 |
+| Rust | 1.88 or newer to build; 1.99.1 for the gate | `rust-version` in `Cargo.toml` is the floor. `rust-toolchain.toml` pins what `just check` and CI run, and rustup installs it on first use. |
 | Node | 24 | What CI builds with; the interface is Vite and Svelte 5 |
 | git | 2.40 or newer | The floor the engine committed to, checked at startup |
 | `just` | any | The recipes below are its |

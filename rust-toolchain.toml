@@ -1,0 +1,7 @@
+# The one place the Rust version is chosen. CI used to install whatever was stable that day,
+# so a new release could fail a build that had passed the day before: 1.99 did, with a new
+# default lint. Moving this is a commit of its own, with the gate run against it.
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
