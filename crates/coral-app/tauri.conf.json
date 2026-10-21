@@ -29,7 +29,9 @@
       }
     ],
     "security": {
-      "dangerousDisableAssetCspModification": ["style-src"],
+      "dangerousDisableAssetCspModification": [
+        "style-src"
+      ],
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: asset: http://asset.localhost; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'"
     }
   },
@@ -63,6 +65,14 @@
           "/usr/bin/coral": "../../target/release/coral"
         }
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ3N0E5Q0UwRjIxOEM0MTMKUldRVHhCank0Sng2UjIyVFh0MENiMEVVR0xYc2FkaktlN1NBTGNibTV5TzRoQ3V0WmZhRXRwYWcK",
+      "endpoints": [
+        "https://github.com/navinreddy23/coral/releases/latest/download/latest.json"
+      ]
     }
   }
 }

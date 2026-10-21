@@ -42,6 +42,11 @@ tauri     = "2.11.5"
 tauri-build = "2.6.3"
 tauri-plugin-dialog = "2.7.3"
 tauri-plugin-opener = "2.5.5"
+# Without `zip`: it only reads zipped Windows installers and gzipped AppImages, which are Tauri v1's
+# update formats. v2 ships the NSIS installer and the AppImage as they are, and macOS's tar.gz
+# reader is not behind the feature. Leaving it out also leaves out zip 4, which has three open
+# advisories and no release this plugin version can take.
+tauri-plugin-updater = { version = "2.12.0", default-features = false, features = ["rustls-tls"] }
 tempfile  = "3"
 
 [workspace.lints.rust]
