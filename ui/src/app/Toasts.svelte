@@ -49,7 +49,7 @@
     width: 100%; box-sizing: border-box;
     padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
     background: var(--bg-0); color: var(--fg-0);
-    border: 1px solid var(--border-strong); border-radius: var(--radius-2);
+    border: var(--hairline) solid var(--border-strong); border-radius: var(--radius-3);
     /* It floats over the window, so it needs to read as above the page rather than in it. */
     box-shadow: var(--elevate-2);
     font-size: var(--text-base);
@@ -65,7 +65,7 @@
     flex: 0 0 auto; width: 16px; height: 16px; line-height: 16px; text-align: center;
     /* The page's own colour: these fills are dark in the light theme and light in the
        dark one, so what reads on them is whatever the page is not. */
-    border-radius: 50%; font-size: var(--text-sm); font-weight: 700; color: var(--bg-0);
+    border-radius: 50%; font-size: var(--text-sm); font-weight: var(--weight-bold); color: var(--bg-0);
   }
   .toast.ok .mark { background: var(--ok); }
   .toast.info .mark { background: var(--accent); }
@@ -73,7 +73,7 @@
   .toast.error .mark { background: var(--danger); }
 
   .text { flex: 1; min-width: 0; }
-  .title { margin: 0; font-weight: 600; }
+  .title { margin: 0; font-weight: var(--weight-semibold); }
   .detail {
     margin: 2px 0 0; color: var(--fg-1); font-size: var(--text-sm); line-height: 1.4;
     /*

@@ -159,7 +159,7 @@
     border-radius: var(--radius-2);
   }
   h2 {
-    margin: 0; font-size: var(--text-lg); font-weight: 600; color: var(--fg-0);
+    margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); color: var(--fg-0);
     display: flex; align-items: center; gap: var(--space-2);
   }
   .where {
@@ -187,7 +187,7 @@
   .hint a { color: var(--accent); }
   code {
     font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm);
-    padding: 0 3px; border-radius: 3px; background: var(--bg-2);
+    padding: 0 3px; border-radius: var(--radius-0); background: var(--bg-2);
   }
   .bad { margin: var(--space-2) 0 0; color: var(--danger); font-size: var(--text-base); }
   .acts {
@@ -204,7 +204,7 @@
   .cancel { border-color: transparent; background: var(--bg-0); }
   .primary:not(:disabled) {
     background: var(--accent); border-color: var(--accent); color: var(--accent-fg);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
   }
   .primary:hover:not(:disabled) { background: var(--accent-hover); }
 </style>

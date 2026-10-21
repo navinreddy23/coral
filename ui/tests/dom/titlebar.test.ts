@@ -247,15 +247,27 @@ describe('the title bar Coral draws', () => {
     expect(container.querySelector('.finder'), 'and the drawer closed').toBeNull();
   });
 
-  it('leaves a double click alone, rather than maximising on it', async () => {
+  it('maximises on a double click of the bare strip, as a desktop title bar does', async () => {
     const { container } = await shell();
     const strip = container.querySelector('.strip') as HTMLElement;
-    // Tauri's own drag region maximises on the second press. This strip is not one, which is
-    // the only thing keeping a stray double click off the whole screen.
+    // Not Tauri's drag region, whose double click also lands on a tab or a button. This strip
+    // decides for itself what counts as bare.
     expect(strip.getAttribute('data-tauri-drag-region'), 'not Tauri\'s drag region').toBeNull();
 
-    await fireEvent.mouseDown(strip, { button: 0, detail: 2 });
-    expect(win.calls).not.toContain('toggleMaximize');
+    await fireEvent.dblClick(strip);
+    expect(win.calls, 'the bare strip').toEqual(['toggleMaximize']);
+    win.calls = [];
+    await fireEvent.dblClick(container.querySelector('nav.bar') as HTMLElement);
+    expect(win.calls, 'the empty stretch of the tab bar').toEqual(['toggleMaximize']);
+  });
+
+  it('leaves a double click on a tab or a control alone', async () => {
+    // A tab is somewhere people click twice by accident, and the window jumping to full size
+    // for it is why this was once turned off altogether.
+    const { container } = await shell();
+    await fireEvent.dblClick(container.querySelector('.tab .pick') as HTMLElement);
+    await fireEvent.dblClick(named(container, 'Settings') as HTMLElement);
+    expect(win.calls).toEqual([]);
   });
 
   it('shows the path on the repository crumb, not in the strip', async () => {

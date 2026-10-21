@@ -180,14 +180,22 @@ Row height follows the density chosen in Preferences: 24, 28 or 32 pixels, with 
 same three numbers reach the stylesheet and the canvas metrics, which cannot read each other, so
 `ui/tests/density.test.ts` reads both files and fails when they drift.
 
-- Canvas draws only visible rows plus one screen of overscan. Edges are Bézier curves between
-  rows; lanes take a stable colour from the eight-colour palette in `tokens.css`. Commit nodes
-  show the author avatar once loaded, otherwise a filled circle in the lane colour. The commit
-  HEAD is on carries a second ring in the brand colour, clear of its own.
-- Label pills sit on the row of their target. A local and remote branch of the same name
-  collapse into one pill with a remote avatar. The HEAD pill is highlighted; a branch with an
-  open PR gets a badge. Click selects, double-click on a branch pill checks out, hover
-  highlights the lane, and pills are draggable.
+- Canvas draws only visible rows plus one screen of overscan. An edge that changes lane leaves
+  its node across the row and turns down into the parent's lane through a rounded corner, the
+  way GitKraken draws it; lanes take a stable colour from the eight-colour palette in
+  `tokens.css`. Every commit, merges included, is a disc in its author's colour ringed in its
+  lane's, with the author's initials on it set in the interface face. Nothing is fetched to
+  draw a node. The commit HEAD is on carries a second ring in the brand colour, clear of its
+  own. Curved edges with merges drawn as small dots were tried in 2026 and taken back.
+- Label pills sit on the row of their target, as a label in their lane's tint with a
+  lane-coloured edge and mark rather than a solid block, so the pill names the lane instead of
+  competing with it. A local and remote branch of the same name collapse into one pill with a
+  remote mark. The HEAD pill is filled in the accent; a branch with an open PR gets a badge.
+  Click selects, double-click on a branch pill checks out, hover highlights the lane, and
+  pills are draggable.
+- A subject's Conventional Commits type or kernel-style subsystem (`ui:`, `fix(parser)!:`,
+  `smb/client:`) is set back in dim mono so the sentence after it leads. One word with no
+  spaces, then a colon and a space, is the test; `ui/src/app/subject.ts` holds it.
 - The WIP row appears at the top when the worktree is dirty, showing `+added ~modified
   -deleted` and a diff-stat sparkline. Selecting it opens the staging panel.
 - Drag and drop: local pill onto local pill opens merge / rebase / create PR; local onto remote
@@ -344,8 +352,12 @@ itself is never rebuilt on a tab switch.
 `ui/src/styles/tokens.css` is the only place colour, spacing, type, shape and motion live.
 
 **Surfaces** are a four-step ladder biased cool: the page a list sits on, the panels either
-side of it, a control at rest, and one under the pointer. Depth is layered surfaces and
-hairlines. A shadow appears only on something that floats free of the page and never scrolls —
+side of it, a control at rest, and one under the pointer. The window's ground is the panel
+step, carried down from the toolbar. The commit list, a diff or the merge tool, the right
+panel, the terminal and a Preferences pane are cards on it: the page step, a hairline edge
+and the 12px radius, a space apart. The sidebar sits on the ground with no card, and the
+splitters are the gaps between cards, drawing nothing until the pointer is on one. Depth is
+layered surfaces and hairlines. A shadow appears only on something that floats free of the page and never scrolls —
 a menu, a dialog, the palette, a toast — because a shadow on a row is a large soft fill
 repainted on every scroll frame, and this window scrolls a million rows.
 
@@ -353,6 +365,13 @@ repainted on every scroll frame, and this window scrolls a million rows.
 composited layer with subpixel precision only where it knows what is behind it, so
 `background: none` silently drops it to grayscale. See `docs/ARCHITECTURE.md`. The lane canvas
 is the one deliberate exception.
+
+**Shape** comes from a radius scale (3px for a mark, 6px for a control, 10px for a tab's
+corner, 12px for a card or anything floating, and a pill), four named weights, one hairline
+and a control height of 28px that menu and palette rows share. `ui/tests/style.test.ts`
+rejects a literal radius or weight. A section in the sidebar, the right panel or a menu is
+headed by a small uppercase label with tracking rather than a rule; a choice between two or
+three views is a segmented control, a raised face in a sunken track.
 
 **Type** is Inter for the interface and JetBrains Mono for anything git produced, both bundled
 as latin subsets — 96 KB for three files. Ligatures are off: JetBrains Mono draws `!==` as one

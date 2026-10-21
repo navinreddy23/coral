@@ -45,7 +45,7 @@
   }
   .sheet {
     max-height: 82vh; overflow-y: auto; width: min(820px, 92vw);
-    padding: var(--space-5); border-radius: var(--radius-2);
+    padding: var(--space-5); border-radius: var(--radius-3);
     background: var(--bg-0); border: 1px solid var(--border-strong);
     box-shadow: var(--elevate-2); color: var(--fg-0);
     text-align: left; cursor: default;
@@ -54,8 +54,8 @@
   .note { margin: 0 0 var(--space-4); font-size: var(--text-base); color: var(--fg-2); }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); }
   h3 {
-    font-size: var(--text-xs); font-weight: 600; text-transform: uppercase;
-    letter-spacing: 0.06em;
+    font-size: var(--text-xs); font-weight: var(--weight-semibold); text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
     color: var(--fg-2); margin: 0 0 var(--space-2);
   }
   .row {
@@ -66,7 +66,7 @@
   .label { flex: 1; color: var(--fg-1); }
   kbd {
     font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm); white-space: nowrap;
-    padding: 1px var(--space-2); border-radius: 3px;
+    padding: 1px var(--space-2); border-radius: var(--radius-0);
     background: var(--bg-2); border: 1px solid var(--border); color: var(--fg-0);
   }
 </style>

@@ -53,9 +53,9 @@
     background: var(--bg-1); border-bottom: 1px solid var(--border);
     font-size: var(--text-sm); color: var(--fg-1);
   }
-  .what { flex: 0 0 auto; font-weight: 600; }
+  .what { flex: 0 0 auto; font-weight: var(--weight-semibold); }
   .track {
-    flex: 1 1 auto; min-width: 0; height: 6px; border-radius: 999px;
+    flex: 1 1 auto; min-width: 0; height: 6px; border-radius: var(--radius-pill);
     background: var(--bg-3); overflow: hidden;
   }
   .fill { display: block; height: 100%; background: var(--accent); }

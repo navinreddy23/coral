@@ -71,6 +71,7 @@
   import { beside, elideRef } from './path';
   import { askUntilAccepted, nameWasRefused } from './prompt';
   import { checkoutOf, divergence, remoteOf, withoutRemote } from './refname';
+  import { splitPrefix } from './subject';
   import { orderRefs, pillChars, pillNamed } from './pill';
   import {
     checkoutItems,
@@ -996,11 +997,33 @@
   const DRAG_SLOP = 4;
 
   /**
-   * Moves the window, by dragging anywhere in the strip that is not something to press.
+   * Whether a press landed on the strip itself rather than on something in it.
    *
-   * Written here rather than left to `data-tauri-drag-region`, whose handler also maximises
-   * the window on a double click. A tab strip is somewhere people click twice by accident and
-   * having the window jump to full screen for it is not worth the gesture.
+   * Tabs are dragged with the pointer too, and every control has its own job. A panel's dismiss
+   * backdrop is the subtle one: the tab drawer mounts its own inside this strip, and taking the
+   * pointer to the window manager meant the click that closes it was never delivered, so
+   * pressing outside the drawer did nothing at all.
+   */
+  function onBareStrip(event: MouseEvent): boolean {
+    const target = event.target as HTMLElement | null;
+    return !target?.closest('button, a, input, textarea, select, .tab, .scrim');
+  }
+
+  /**
+   * Maximises or restores the window on a double click of the bare strip, as a desktop's own
+   * title bar does.
+   *
+   * Not `data-tauri-drag-region`, whose double click also lands on a tab: a tab strip is
+   * somewhere people click twice by accident, and the window jumping to full size for that is
+   * why this was once turned off altogether.
+   */
+  function stripDoubleClick(event: MouseEvent) {
+    if (event.button !== 0 || !onBareStrip(event)) return;
+    void toggleMaximise();
+  }
+
+  /**
+   * Moves the window, by dragging anywhere in the strip that is not something to press.
    *
    * The pointer reaches the window manager only once it has actually moved. Handing it over on
    * the press itself made a plain click a drag of zero distance, and a window manager that
@@ -1008,13 +1031,7 @@
    * strip, which is at the top of the screen by definition, threw the window full size.
    */
   function stripDrag(event: MouseEvent) {
-    if (event.button !== 0) return;
-    const target = event.target as HTMLElement | null;
-    // Tabs are dragged with the pointer too, and every control has its own job. A panel's
-    // dismiss backdrop is the subtle one: the tab drawer mounts its own inside this strip, and
-    // taking the pointer to the window manager meant the click that closes it was never
-    // delivered, so pressing outside the drawer did nothing at all.
-    if (target?.closest('button, a, input, textarea, select, .tab, .scrim')) return;
+    if (event.button !== 0 || !onBareStrip(event)) return;
     event.preventDefault();
 
     const from = { x: event.clientX, y: event.clientY };
@@ -3994,6 +4011,7 @@
     {decorated}
     {maximised}
     onDrag={stripDrag}
+    onDoubleClick={stripDoubleClick}
     onMenu={stripMenu}
     onOpenTab={openAnother}
     onCloseNew={() => (showStart = false)}
@@ -4364,6 +4382,8 @@
             -->
             {@const local = localRow(graph.frame, row)}
             {@const labels = orderRefs(refs.byRow.get(row) ?? [], headName, (n) => scope.hides(n))}
+            {@const subject = visibleMeta.get(row)?.summary ?? ''}
+            {@const split = splitPrefix(subject)}
             <li
               class="row"
               class:merge={hasFlag(graph.frame.rowFlags[local ?? -1] ?? 0, RowFlag.Merge)}
@@ -4483,7 +4503,9 @@
               >
                 <span class="lane-strip" aria-hidden="true" style:--lane-gap="{laneGap(row)}px"
                 ></span>
-                <span class="summary">{visibleMeta.get(row)?.summary ?? ''}</span>
+                <span class="summary"
+                  >{#if split}<span class="prefix">{split.prefix}</span> {split.rest}{:else}{subject}{/if}</span
+                >
                 {#if showBody}
                   <span class="detail">{flatten(visibleMeta.get(row)?.body ?? '')}</span>
                 {/if}
@@ -4692,15 +4714,26 @@
      window's own chrome. */
   /* The workspace and the terminal. Side by side when it is docked right, stacked when it is
      docked at the bottom, which is the only difference between the two positions. */
-  .workspace { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+  /*
+   * The window's ground. The commit list, a diff, the right panel and the terminal are cards
+   * on it; the sidebar sits on it directly. The splitters are what is in the gaps, so a gap is
+   * also where a pane is resized from.
+   */
+  .workspace {
+    display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0;
+    gap: var(--space-1); padding: 0 var(--space-2) var(--space-2); background: var(--bg-1);
+  }
   .workspace.beside { flex-direction: row; }
-  .term { flex: 0 0 auto; display: flex; min-height: 0; min-width: 0; }
+  .term {
+    flex: 0 0 auto; display: flex; min-height: 0; min-width: 0;
+    border: var(--hairline) solid var(--border); border-radius: var(--radius-3); overflow: hidden;
+  }
   .term .pane { flex: 1; display: flex; min-width: 0; min-height: 0; }
   .term .pane[hidden] { display: none; }
   .term :global(.terminal) { flex: 1; min-width: 0; }
   /* Positioned, so the preferences screen can cover the panes without covering the
      window's own chrome. */
-  .body { display: flex; flex: 1; min-height: 0; position: relative; }
+  .body { display: flex; flex: 1; min-height: 0; position: relative; gap: var(--space-1); }
   .graph { flex: 1; overflow-y: auto; position: relative; background: var(--bg-0); }
   /* Hidden rather than unmounted: remounting would refetch the frame and lose the scroll
      position every time a file is opened and closed. The wrapper is what carries the class
@@ -4726,7 +4759,7 @@
   }
   .find button {
     flex: 0 0 auto; font: inherit; font-size: var(--text-base); cursor: pointer; line-height: 18px;
-    background: var(--bg-0); border: 1px solid var(--border); border-radius: 3px;
+    background: var(--bg-0); border: 1px solid var(--border); border-radius: var(--radius-0);
     color: var(--fg-1); padding: 0 6px;
   }
   .find button:hover:not(:disabled) { background: var(--bg-2); color: var(--fg-0); }
@@ -4747,7 +4780,10 @@
    * What it did carry was the handles, so they moved here — outside the scroller, spanning its
    * whole height, so they stay put while the list moves under them.
    */
-  .plot { position: relative; flex: 1; min-width: 0; display: flex; }
+  .plot {
+    position: relative; flex: 1; min-width: 0; display: flex;
+    background: var(--bg-0); border: var(--hairline) solid var(--border); border-radius: var(--radius-3); overflow: hidden;
+  }
   .plot.hidden { display: none; }
   .handle {
     position: absolute; top: 0; bottom: 0; z-index: 4;
@@ -4821,7 +4857,7 @@
    */
   .wip .cell.refs, .wip .cell.message { background: var(--bg-1); }
   .wip .cell.message { box-shadow: inset 2px 0 0 var(--brand); }
-  .wip .summary { color: var(--fg-0); font-weight: 600; }
+  .wip .summary { color: var(--fg-0); font-weight: var(--weight-semibold); }
   .wip .wip-node { border-color: var(--brand); }
 
   /*
@@ -4875,7 +4911,7 @@
      that looks picked, and the working copy is still the only amber-noded row on the list. */
   .wip.selected .cell.refs, .wip.selected .cell.message { background: var(--accent-soft); }
 
-  .row.selected .cell.message .summary { color: var(--fg-0); font-weight: 600; }
+  .row.selected .cell.message .summary { color: var(--fg-0); font-weight: var(--weight-semibold); }
   /*
    * Every text surface paints an opaque background of its own, and this is not optional.
    *
@@ -4944,24 +4980,22 @@
    * the cap already says branch, tag or stash. Text stays near-black on the tint — a whole
    * pill in a saturated lane colour is unreadable at eleven pixels.
    */
+  /*
+   * A label in its lane's tint, edged and marked in the lane's colour: it names the line
+   * beside it rather than being a second, louder line. The pills used to carry a solid cap in
+   * the lane colour, and a column of eight saturated blocks outshouted the lanes themselves.
+   */
   .pill {
-    display: inline-flex; align-items: center; gap: 5px;
+    display: inline-flex; align-items: center; gap: var(--space-1);
     flex: 0 1 auto; min-width: 0; font: inherit; font-size: var(--text-sm); line-height: 18px;
-    padding: 0 7px 0 0; cursor: pointer;
-    border-radius: var(--radius-pill); border: 1px solid var(--tint-line, var(--border));
+    padding: 0 var(--space-2) 0 var(--space-1); cursor: pointer;
+    border-radius: var(--radius-1); border: var(--hairline) solid var(--tint-line, var(--border));
     background: var(--tint, var(--bg-1)); color: var(--fg-0);
     max-width: 100%; overflow: hidden; white-space: nowrap;
   }
-  /*
-   * The cap is the lane colour solid, and it is what makes the pill read as belonging to the
-   * line beside it rather than as a grey chip that happens to be nearby. Its mark is drawn in
-   * the pill's own background, so the colour reads as a block and not as a coloured glyph.
-   */
   .cap {
     flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
-    align-self: stretch; width: 18px; margin-right: 1px;
-    border-radius: var(--radius-pill) 0 0 var(--radius-pill);
-    background: var(--tint-line, var(--fg-2)); color: var(--bg-0);
+    color: var(--tint-line, var(--fg-2));
   }
   .pill-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .pill:hover { background: var(--bg-1); border-color: var(--tint-line, var(--border-strong)); }
@@ -4975,9 +5009,9 @@
    */
   .pill.head {
     background: var(--accent); border-color: var(--accent);
-    color: var(--accent-fg); font-weight: 600;
+    color: var(--accent-fg); font-weight: var(--weight-semibold);
   }
-  .pill.head .cap { background: var(--accent-fg); color: var(--accent); }
+  .pill.head .cap { color: var(--accent-fg); }
   .pill.head:hover { background: var(--accent); }
   /* A statement rather than a control: everything it could do, the row already does. */
   .pill.detached { cursor: default; }
@@ -4985,7 +5019,7 @@
   .more {
     display: inline-flex; align-items: center; gap: 3px;
     color: var(--fg-2); background: none; padding: 1px 4px;
-    border: 1px dashed var(--border); border-radius: 7px;
+    border: 1px dashed var(--border); border-radius: var(--radius-1);
     flex: 0 0 auto; font: inherit; font-size: var(--text-xs); line-height: 13px; cursor: pointer;
     position: relative; z-index: 1;
   }
@@ -5007,6 +5041,8 @@
     flex: 0 1 auto; min-width: 0; color: var(--fg-0);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  /* The `ui:` or `smb/client:` a subject leads with, set back so the sentence leads instead. */
+  .prefix { color: var(--fg-2); font-family: var(--font-mono); font-size: var(--text-base); }
   /* Dimmer than the summary it continues, but not the dimmest thing on the row: at `fg-2` the
      half of the line that carries the body read as grey filler beside the date and the id. */
   .detail {
@@ -5045,7 +5081,7 @@
 
   .wip-panel {
     width: var(--details-w, 340px); flex: 0 0 auto; min-height: 0;
-    border-left: 1px solid var(--border); background: var(--bg-1);
+    border: var(--hairline) solid var(--border); border-radius: var(--radius-3); background: var(--bg-0);
     padding: var(--space-3);
     /* The panel itself does not scroll: the two file lists inside it do, each with half the
        height, so the commit box stays where it is and both lists are always visible. */

@@ -101,15 +101,15 @@
 <style>
   .status {
     display: flex; align-items: center; gap: var(--space-3);
-    flex: 0 0 auto; height: 24px; padding: 0 var(--space-3);
-    border-top: 1px solid var(--border); background: var(--bg-1);
+    flex: 0 0 auto; height: var(--statusbar-h); padding: 0 var(--space-3);
+    background: var(--bg-1);
     font-size: var(--text-sm); color: var(--fg-2);
     /* Nothing here may reflow the window: it is the one strip that must stay put while an
        operation runs and the counts either side of it change. */
     overflow: hidden; white-space: nowrap;
   }
   .spacer { flex: 1; }
-  .branch { color: var(--fg-1); font-weight: 600; display: inline-flex; align-items: center; gap: 5px; }
+  .branch { color: var(--fg-1); font-weight: var(--weight-semibold); display: inline-flex; align-items: center; gap: 5px; }
   .glyph { color: var(--accent); }
   .tally { display: inline-flex; gap: var(--space-1); }
   .ahead { color: var(--ok); }
@@ -117,13 +117,13 @@
   .changed { color: var(--fg-1); }
   .host {
     font: inherit; color: var(--fg-1); cursor: pointer;
-    background: none; border: 0; padding: 1px var(--space-2); border-radius: 999px;
+    background: none; border: 0; padding: 1px var(--space-2); border-radius: var(--radius-pill);
   }
   .host:hover { background: var(--bg-2); color: var(--fg-0); }
   .muted { color: var(--fg-2); }
 
   .report {
-    font: inherit; cursor: pointer; border: 0; border-radius: 999px;
+    font: inherit; cursor: pointer; border: 0; border-radius: var(--radius-pill);
     padding: 1px var(--space-2); max-width: 46vw;
     overflow: hidden; text-overflow: ellipsis;
     background: var(--bg-3); color: var(--fg-1);

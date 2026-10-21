@@ -444,7 +444,10 @@
 
 
 <style>
-  .merge { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-0); }
+  .merge {
+    flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-0);
+    border: var(--hairline) solid var(--border); border-radius: var(--radius-3); overflow: hidden;
+  }
   header {
     display: flex; align-items: center; gap: var(--space-3);
     height: 34px; padding: 0 var(--space-3); flex: 0 0 auto;
@@ -453,10 +456,10 @@
   .spacer { flex: 1; }
   /* Amber, not red: nothing has gone wrong, and this is the sentence that stops somebody
      taking the wrong side of a rebase. */
-  .warn { color: var(--warn); font-size: var(--text-sm); font-weight: 600; }
+  .warn { color: var(--warn); font-size: var(--text-sm); font-weight: var(--weight-semibold); }
   button {
     font: inherit; font-size: var(--text-sm); cursor: pointer; padding: 2px var(--space-2);
-    background: var(--bg-0); border: 1px solid var(--border); border-radius: 3px;
+    background: var(--bg-0); border: 1px solid var(--border); border-radius: var(--radius-0);
     color: var(--fg-1);
   }
   button:disabled { opacity: 0.5; cursor: default; }
@@ -526,8 +529,8 @@
    * The tint behind the lines below stays the lane colour, which is the light one.
    */
   .pane .tag {
-    display: inline-block; width: 15px; text-align: center; border-radius: 3px;
-    font-size: var(--text-xs); font-weight: 700; color: #ffffff;
+    display: inline-block; width: 15px; text-align: center; border-radius: var(--radius-0);
+    font-size: var(--text-xs); font-weight: var(--weight-bold); color: #ffffff;
   }
   .pane.ours .tag { background: var(--node-7); }
   .pane.theirs .tag { background: var(--node-3); }

@@ -325,8 +325,8 @@
    */
   .toolbar {
     display: flex; align-items: center; gap: var(--space-4);
-    height: 40px; box-sizing: border-box; padding: 0 var(--space-3) 0 var(--space-4);
-    border-bottom: 1px solid var(--border); background: var(--bg-1);
+    height: var(--toolbar-h); box-sizing: border-box; padding: 0 var(--space-3) 0 var(--space-4);
+    background: var(--bg-1);
   }
   /*
    * A column of its own width, not of its contents'.
@@ -354,7 +354,7 @@
      label overflowed its own box and painted over the next one: "REPOSITORY" and "BRANCH"
      came out as "REPOSITOR'BRANCH". */
   .label {
-    font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em;
+    font-size: var(--text-xs); text-transform: uppercase; letter-spacing: var(--tracking-label);
     color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   /* Wide enough for a real branch name. `gitlab-ci-local-support` is 23 characters and came
@@ -363,7 +363,7 @@
      The line box has to hold the whole face, not just the x-height: eliding needs
      `overflow: hidden`, and at 1.15 that clipped the tails off `g`, `p` and `y`. */
   .value {
-    font-size: var(--text-md); font-weight: 600; line-height: 1.45; color: var(--fg-0);
+    font-size: var(--text-md); font-weight: var(--weight-semibold); line-height: 1.45; color: var(--fg-0);
     max-width: 22em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .sep { color: var(--border-strong); flex: 0 0 auto; display: flex; align-items: center; }

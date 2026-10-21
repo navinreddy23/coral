@@ -217,7 +217,7 @@
        inside the panel rather than a band running into its edges. */
     padding: var(--space-1);
     background: var(--bg-0); color: var(--fg-0);
-    border: 1px solid var(--border-strong); border-radius: var(--radius-2);
+    border: var(--hairline) solid var(--border-strong); border-radius: var(--radius-3);
     /*
      * The one place a shadow is worth its cost: a menu floats over content it must be legible
      * against, and a border alone leaves it looking pasted onto the page.
@@ -229,7 +229,7 @@
   .row {
     display: flex; align-items: center; gap: var(--space-2);
     width: 100%; text-align: left; font: inherit; font-size: var(--text-base);
-    padding: 5px var(--space-2); cursor: pointer;
+    min-height: var(--control-h); padding: 0 var(--space-2); cursor: pointer;
     background: var(--bg-0); border: 0; border-radius: var(--radius-1); color: var(--fg-0);
     transition: background var(--fast) var(--ease);
   }
@@ -285,13 +285,13 @@
     flex: 0 0 auto; width: 14px; display: flex; align-items: center;
     color: var(--accent);
   }
-  .rule { height: 1px; margin: var(--space-1) var(--space-2); background: var(--border); }
+  .rule { height: var(--hairline); margin: var(--space-1) var(--space-2); background: var(--border); }
   /* Opens to the right of its parent row, overlapping it by a pixel so the pointer can cross
      between the two without passing over the page and closing it. */
   .sub {
     position: absolute; left: calc(100% - 2px); top: -5px; min-width: 12em;
     padding: var(--space-1);
-    background: var(--bg-0); border: 1px solid var(--border-strong);
-    border-radius: var(--radius-2); box-shadow: var(--elevate-2);
+    background: var(--bg-0); border: var(--hairline) solid var(--border-strong);
+    border-radius: var(--radius-3); box-shadow: var(--elevate-2);
   }
 </style>

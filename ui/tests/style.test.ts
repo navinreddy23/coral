@@ -75,6 +75,53 @@ describe('the component stylesheets', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('paints the file trees in the right panel on the panel\'s own ground', () => {
+    // The panel is the page's white. A tree whose rows still painted the frame's grey drew a
+    // grey bar across the panel for every folder and file, stopping short of its edge.
+    for (const [file, rule] of [
+      ['FileTree.svelte', /\n {2}button \{([^}]*)\}/u],
+      ['Changes.svelte', /\.dir, \.file \{([^}]*)\}/u],
+    ] as const) {
+      const css = STYLES.find((s) => s.name === file)?.css ?? '';
+      expect(rule.exec(css)?.[1], file).toMatch(/background:\s*var\(--bg-0\)/u);
+    }
+  });
+
+  it('marks the conflict being resolved where the gutter cannot paint over it', () => {
+    // The gutter paints its own ground over the line's left edge, so a bar drawn on the line
+    // was never seen, and with the outline gone it was the only mark the current conflict had.
+    const css = STYLES.find((s) => s.name === 'CodeSheet.svelte')?.css ?? '';
+    expect(css).toMatch(/\.line\.in-conflict\.here \.no \{[^}]*box-shadow:\s*inset -\d+px/u);
+    expect(css).not.toMatch(/\.line\.in-conflict(\.here)? \{[^}]*box-shadow/u);
+  });
+
+  it('round every corner from the radius scale', () => {
+    // Ten different radii were in use before this held: 1, 2, 3, 4, 5, 6, 7 and 10 pixels,
+    // and 999 written out where the pill token said the same thing.
+    const offenders: string[] = [];
+    for (const { name, css } of STYLES) {
+      for (const found of css.matchAll(/border(?:-[a-z]+)*-radius:\s*([^;]+);/g)) {
+        const parts = (found[1] ?? '').trim().split(/\s+(?![^(]*\))/u);
+        const literal = parts.filter((p) => !/^var\(--radius-[0-9a-z]+\)$/u.test(p) && p !== '0' && p !== '50%');
+        if (literal.length > 0) offenders.push(`${name}: ${found[1]?.trim()}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('set every weight from the four weight tokens', () => {
+    const offenders: string[] = [];
+    for (const { name, css } of STYLES) {
+      for (const found of css.matchAll(/font-weight:\s*([^;]+);/g)) {
+        const value = (found[1] ?? '').trim();
+        if (!/^var\(--weight-(regular|medium|semibold|bold)\)$/u.test(value) && value !== 'inherit') {
+          offenders.push(`${name}: ${value}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it('cast a shadow only where something floats above the page', () => {
     // A shadow is a large soft fill. On a row it would be repainted on every scroll frame, and
     // this window scrolls a million rows.

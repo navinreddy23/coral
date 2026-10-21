@@ -127,15 +127,15 @@
 
 <style>
   section {
-    flex: 1; min-width: 0; overflow-y: auto; padding: var(--space-4);
+    flex: 1; min-width: 0; overflow-y: auto; padding: var(--space-4) var(--space-5);
     background: var(--bg-0); color: var(--fg-1); font-size: var(--text-base);
   }
   h2 {
-    margin: 0 0 var(--space-3); font-size: var(--text-xl); font-weight: 600; color: var(--fg-0);
+    margin: 0 0 var(--space-3); font-size: var(--text-xl); font-weight: var(--weight-semibold); color: var(--fg-0);
     background: var(--bg-0);
   }
   h3 {
-    margin: var(--space-5) 0 var(--space-2); font-size: var(--text-lg); font-weight: 600;
+    margin: var(--space-5) 0 var(--space-2); font-size: var(--text-lg); font-weight: var(--weight-semibold);
     color: var(--fg-0); background: var(--bg-0);
   }
   p { margin: 0 0 var(--space-3); max-width: 68ch; line-height: 1.55; background: var(--bg-0); }

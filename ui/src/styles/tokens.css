@@ -330,10 +330,46 @@
   --space-5: 24px;
   --space-6: 32px;
 
-  /* One step for controls, one for panels that float above the window, one for a pill. */
+  /*
+   * A mark (a badge, a key cap, a status letter), a control, a tab's corner, a card or
+   * anything floating, and a pill. A card is the commit list, a diff or the right panel,
+   * sitting on the window's ground.
+   */
+  --radius-0: 3px;
   --radius-1: 6px;
   --radius-2: 10px;
+  --radius-3: 12px;
   --radius-pill: 999px;
+
+  /*
+   * Four weights. Inter is variable, so any number would render, and that is exactly how a
+   * window ends up with a 550 next to a 600 that nobody can tell apart.
+   */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* One line between two things. Named so a rule is visibly the same rule everywhere. */
+  --hairline: 1px;
+
+  /*
+   * The letter-spacing of a small uppercase label: a sidebar section, a group in a menu.
+   * Capitals set at the size of the text around them read as shouting without it.
+   */
+  --tracking-label: 0.06em;
+
+  /*
+   * How tall a control is: a toolbar button, a menu row, a field. The small one is for a
+   * control inside a row, which cannot be taller than the row.
+   */
+  --control-h: 28px;
+  --control-h-sm: 22px;
+
+  /* The three bars that frame the window. */
+  --strip-h: 40px;
+  --toolbar-h: 40px;
+  --statusbar-h: 24px;
 
   /*
    * Short enough that a hover feels immediate and long enough that it is not a flicker.

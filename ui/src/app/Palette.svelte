@@ -88,8 +88,8 @@
   }
   .panel {
     width: min(600px, 90vw); max-height: 60vh; display: flex; flex-direction: column;
-    background: var(--bg-0); border: 1px solid var(--border-strong);
-    border-radius: var(--radius-2); box-shadow: var(--elevate-2);
+    background: var(--bg-0); border: var(--hairline) solid var(--border-strong);
+    border-radius: var(--radius-3); box-shadow: var(--elevate-2);
     overflow: hidden;
   }
   /*
@@ -98,7 +98,7 @@
    */
   input {
     font: inherit; font-size: var(--text-lg); padding: var(--space-3) var(--space-4);
-    border: 0; border-bottom: 1px solid var(--border);
+    border: 0; border-bottom: var(--hairline) solid var(--border);
     background: var(--bg-0); color: var(--fg-0); outline: none;
   }
   input::placeholder { color: var(--fg-2); }
@@ -106,14 +106,14 @@
   button {
     display: flex; align-items: center; gap: var(--space-3);
     width: 100%; text-align: left; cursor: pointer; font: inherit; font-size: var(--text-base);
-    padding: 5px var(--space-2); background: var(--bg-0); border: 0;
+    min-height: var(--control-h); padding: 0 var(--space-2); background: var(--bg-0); border: 0;
     border-radius: var(--radius-1); color: var(--fg-1);
     transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
   }
   /* The row the arrow keys are on is filled; a hover only tints, so the two never look alike
      and the keyboard stays the thing driving the list. */
-  button:hover { background: var(--bg-2); color: var(--fg-0); }
-  button.on { background: var(--accent-soft); color: var(--fg-0); font-weight: 500; }
+  button:hover { background: var(--bg-1); color: var(--fg-0); }
+  button.on { background: var(--accent-soft); color: var(--fg-0); font-weight: var(--weight-medium); }
   .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .group {
     flex: 0 0 auto; font-size: var(--text-xs); color: var(--fg-2);

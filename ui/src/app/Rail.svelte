@@ -74,7 +74,7 @@
   .rail {
     flex: 0 0 auto; display: flex; flex-direction: column; gap: var(--space-1);
     padding: var(--space-2) 0; width: 36px;
-    background: var(--bg-1); border-right: 1px solid var(--border);
+    background: var(--bg-1);
   }
   .rail button {
     display: flex; align-items: center; justify-content: center;

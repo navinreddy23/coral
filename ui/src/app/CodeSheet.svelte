@@ -118,11 +118,18 @@
   .line .text { flex: 1; min-width: 0; color: var(--fg-0); overflow: hidden; }
 
   /* A conflicting line is tinted by which side it is on, and marked when it has been taken.
-     The bar down the left is what carries that at a glance while scrolling. */
-  .code.ours .line.in-conflict { background: var(--lane-7-soft); box-shadow: inset 3px 0 0 var(--lane-7); }
-  .code.theirs .line.in-conflict { background: var(--lane-3-soft); box-shadow: inset 3px 0 0 var(--lane-3); }
+     The bar down the edge of the code is what carries that at a glance while scrolling. It is
+     drawn on the gutter's inner edge rather than the line's left one: the gutter paints its own
+     ground over the line's edge, and a bar there was never seen. */
+  .code.ours .line.in-conflict { background: var(--lane-7-soft); }
+  .code.ours .line.in-conflict .no { box-shadow: inset -3px 0 0 var(--lane-7); }
+  .code.theirs .line.in-conflict { background: var(--lane-3-soft); }
+  .code.theirs .line.in-conflict .no { box-shadow: inset -3px 0 0 var(--lane-3); }
   .code.base .line.in-conflict { background: var(--bg-2); }
-  .line.in-conflict.taken { font-weight: 600; }
-  .code.result .line.in-conflict { background: var(--lane-2-soft); box-shadow: inset 3px 0 0 var(--lane-2); }
-  .code.result .line.in-conflict.here { outline: 1px solid var(--lane-2); outline-offset: -1px; }
+  .line.in-conflict.taken { font-weight: var(--weight-semibold); }
+  .code.result .line.in-conflict { background: var(--lane-2-soft); }
+  .code.result .line.in-conflict .no { box-shadow: inset -3px 0 0 var(--lane-2); }
+  /* The conflict being worked on carries a wider bar rather than a box. Outlined, every line of
+     it was a box of its own, and a conflict reads as one block. */
+  .code.result .line.in-conflict.here .no { box-shadow: inset -6px 0 0 var(--lane-2); }
 </style>

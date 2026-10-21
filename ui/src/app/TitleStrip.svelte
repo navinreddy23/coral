@@ -25,6 +25,7 @@
     decorated,
     maximised,
     onDrag,
+    onDoubleClick,
     onMenu,
     onOpenTab,
     onCloseNew,
@@ -51,6 +52,8 @@
     maximised: boolean;
     /** Dragging the strip moves the window; right-clicking it opens the desktop's menu. */
     onDrag: (event: MouseEvent) => void;
+    /** Maximises or restores, when the double click landed on the strip itself. */
+    onDoubleClick: (event: MouseEvent) => void;
     onMenu: (event: MouseEvent) => void;
     onOpenTab: () => void;
     onCloseNew: () => void;
@@ -66,7 +69,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<header class="strip" onmousedown={onDrag} oncontextmenu={onMenu}>
+<header class="strip" onmousedown={onDrag} ondblclick={onDoubleClick} oncontextmenu={onMenu}>
   <!-- The application's own mark, the same one the icon carries: one commit and the two
        branches that leave it. -->
   <span class="logo sit"><Mark size={18} /></span>
@@ -172,7 +175,7 @@
   /* The wordmark is not a control, so it does not wear the accent. The mark beside it carries
      the colour; the name is set in the page's own strongest text, which is what a name is. */
   h1 {
-    font-size: var(--text-md); font-weight: 600; margin: 0; color: var(--fg-0);
+    font-size: var(--text-md); font-weight: var(--weight-semibold); margin: 0; color: var(--fg-0);
     letter-spacing: -0.01em; flex: 0 0 auto; background: var(--bg-1);
   }
   .tools { display: flex; align-items: center; gap: 2px; margin-left: auto; }

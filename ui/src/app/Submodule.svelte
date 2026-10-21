@@ -192,7 +192,7 @@
     border-bottom: 1px solid var(--border);
   }
   .glyph { color: var(--fg-2); }
-  h2 { margin: 0; font-size: var(--text-lg); font-weight: 600; flex: 1; }
+  h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); flex: 1; }
   .shut {
     display: flex; font: inherit; line-height: 1; cursor: pointer;
     background: var(--bg-1); border: 0; color: var(--fg-2); padding: 0 var(--space-2);
@@ -239,10 +239,10 @@
   .revision { width: 100%; max-width: 44em; }
   h3 {
     display: flex; align-items: baseline; gap: var(--space-2);
-    margin: 0 0 var(--space-2); font-size: var(--text-sm); font-weight: 700;
-    font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-2);
+    margin: 0 0 var(--space-2); font-size: var(--text-sm); font-weight: var(--weight-bold);
+    font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: var(--tracking-label); color: var(--fg-2);
   }
-  .when { text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .when { text-transform: none; letter-spacing: 0; font-weight: var(--weight-regular); }
   dl {
     display: grid; grid-template-columns: fit-content(30%) minmax(0, 1fr);
     gap: var(--space-2) var(--space-3); margin: 0;
@@ -261,7 +261,7 @@
   button:disabled { opacity: 0.5; cursor: default; }
   .primary {
     background: var(--accent); border-color: var(--accent); color: var(--accent-fg);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
   }
   .primary:hover:not(:disabled) { background: var(--accent-hover); color: var(--accent-fg); }
   .danger { color: var(--danger); }

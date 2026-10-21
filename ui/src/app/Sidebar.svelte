@@ -755,7 +755,7 @@
 <style>
   aside {
     width: var(--sidebar-w, 240px); flex: 0 0 auto; overflow-y: auto;
-    border-right: 1px solid var(--border); background: var(--bg-1);
+    background: var(--bg-1);
     padding: var(--space-2);
   }
   /* A count, not a heading: it says how much of the repository the graph is drawn from, and
@@ -765,7 +765,7 @@
     font-size: var(--text-sm); color: var(--fg-2);
   }
   .viewing strong {
-    color: var(--fg-1); font-weight: 600; font-variant-numeric: tabular-nums;
+    color: var(--fg-1); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums;
   }
   .icon {
     width: 1.1em; color: var(--fg-2); flex: 0 0 auto;
@@ -794,7 +794,8 @@
   }
   .clear:hover { color: var(--fg-0); background: var(--bg-2); }
 
-  section + section { border-top: 1px solid var(--border); }
+  /* Sections are told apart by their labels and the air between them, not by rules. */
+  section + section { margin-top: var(--space-2); }
   /*
    * Every row that carries text paints its own opaque background.
    *
@@ -806,8 +807,8 @@
    */
   .head {
     display: flex; align-items: center; gap: var(--space-2);
-    width: 100%; font: inherit; font-size: var(--text-base); font-weight: 600;
-    color: var(--fg-2);
+    width: 100%; font: inherit; font-size: var(--text-xs); font-weight: var(--weight-semibold);
+    text-transform: uppercase; letter-spacing: var(--tracking-label); color: var(--fg-2);
     background: var(--bg-1); border: 0; padding: var(--space-1) var(--space-1); cursor: pointer;
     border-radius: var(--radius-1);
     transition: color var(--fast) var(--ease), background var(--fast) var(--ease);
@@ -816,13 +817,14 @@
   /* A remote is a row inside the section, so it is indented and set in the ordinary face: it
      names a thing, where the section above it names a kind. */
   .head.remote {
-    padding-left: var(--space-3); font-weight: 500; color: var(--fg-1);
+    padding-left: var(--space-3); font-weight: var(--weight-medium); color: var(--fg-1);
+    font-size: var(--text-base); text-transform: none; letter-spacing: normal;
   }
   .head.remote:hover { color: var(--fg-0); background: var(--bg-2); }
   /* A pill rather than a bare number: a count is a different kind of thing from the name
      beside it, and at this size only shape says so. */
   .count {
-    margin-left: auto; color: var(--fg-2); font-size: var(--text-xs); font-weight: 600;
+    margin-left: auto; color: var(--fg-2); font-size: var(--text-xs); font-weight: var(--weight-semibold);
     background: var(--bg-2); border-radius: var(--radius-pill); padding: 1px 6px; min-width: 18px;
     text-align: center; flex: 0 0 auto; font-variant-numeric: tabular-nums;
   }
@@ -900,7 +902,7 @@
    * solo is on; this only has to make the row findable underneath it.
    */
   .row.soloed .ref {
-    color: var(--fg-0); font-weight: 600;
+    color: var(--fg-0); font-weight: var(--weight-semibold);
     box-shadow: inset 2px 0 0 var(--accent-line);
   }
   /*
@@ -915,18 +917,18 @@
   }
   .solo-banner.quiet { background: var(--bg-2); box-shadow: inset 2px 0 0 var(--border-strong); }
   .solo-banner .tag {
-    flex: 0 0 auto; font-size: var(--text-mark); font-weight: 700; letter-spacing: 0.08em;
-    color: var(--accent); background: var(--bg-0); border-radius: 3px;
+    flex: 0 0 auto; font-size: var(--text-mark); font-weight: var(--weight-bold); letter-spacing: var(--tracking-label);
+    color: var(--accent); background: var(--bg-0); border-radius: var(--radius-0);
     padding: 1px var(--space-1);
   }
   .solo-banner .who {
     flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    font-size: var(--text-sm); font-weight: 600; color: var(--fg-0);
+    font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--fg-0);
   }
   .solo-banner .leave {
     flex: 0 0 auto; font: inherit; font-size: var(--text-xs); cursor: pointer;
     padding: 1px var(--space-2); border: 1px solid var(--border-strong);
-    border-radius: 3px; background: var(--bg-0); color: var(--fg-1);
+    border-radius: var(--radius-0); background: var(--bg-0); color: var(--fg-1);
   }
   .solo-banner .leave:hover { color: var(--fg-0); border-color: var(--accent); }
   /*
@@ -935,7 +937,7 @@
    * be findable at a glance.
    */
   .ref.current {
-    color: var(--fg-0); font-weight: 600; background: var(--accent-soft);
+    color: var(--fg-0); font-weight: var(--weight-semibold); background: var(--accent-soft);
     box-shadow: inset 2px 0 0 var(--accent-line);
   }
   .ref.dragging { opacity: 0.5; }
@@ -947,14 +949,14 @@
   .state {
     flex: 0 0 auto; width: 14px; height: 13px; margin-right: var(--space-1);
     line-height: 13px; text-align: center;
-    border-radius: 50%; font-size: var(--text-mark); font-weight: 700; color: var(--bg-0);
+    border-radius: 50%; font-size: var(--text-mark); font-weight: var(--weight-bold); color: var(--bg-0);
   }
   .state.open { background: var(--ok); }
   .state.draft { background: var(--fg-2); }
   .state.merged { background: var(--accent); }
   .state.closed { background: var(--danger); }
   /* The drop target, outlined rather than filled so the branch name stays readable under it. */
-  .ref.over { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 3px; }
+  .ref.over { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius-0); }
   .tick { color: var(--accent); flex: 0 0 auto; }
   .track { margin-left: auto; font-size: var(--text-xs); color: var(--fg-2); flex: 0 0 auto; }
   .none { margin: 0 0 var(--space-2) var(--space-4); font-size: var(--text-sm); color: var(--fg-2); }

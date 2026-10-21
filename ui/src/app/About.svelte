@@ -73,15 +73,15 @@
 </section>
 
 <style>
-  section { padding: var(--space-4); overflow: auto; flex: 1; }
+  section { padding: var(--space-4) var(--space-5); overflow: auto; flex: 1; }
   h2 { margin: 0 0 var(--space-3); font-size: var(--text-lg); }
   dl {
     display: grid; grid-template-columns: max-content 1fr;
     gap: var(--space-2) var(--space-3); margin: 0 0 var(--space-4); align-items: baseline;
   }
   dt {
-    font-size: var(--text-xs); font-weight: 600; text-transform: uppercase;
-    letter-spacing: 0.06em; color: var(--fg-2);
+    font-size: var(--text-xs); font-weight: var(--weight-semibold); text-transform: uppercase;
+    letter-spacing: var(--tracking-label); color: var(--fg-2);
   }
   dd { margin: 0; font-size: var(--text-md); color: var(--fg-0); }
   .mono { font-family: var(--font-mono); font-variant-ligatures: none; }
