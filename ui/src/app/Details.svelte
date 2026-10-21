@@ -312,7 +312,7 @@
 <style>
   aside {
     width: var(--details-w, 340px); flex: 0 0 auto; overflow-y: auto;
-    border: var(--hairline) solid var(--border); border-radius: var(--radius-3); background: var(--bg-1);
+    border: var(--hairline) solid var(--border); border-radius: var(--radius-3); background: var(--bg-0);
     padding: var(--space-3); font-size: var(--text-base);
   }
   /*
@@ -323,7 +323,7 @@
    * transparent, so text on it drops from subpixel to grayscale antialiasing and the whole
    * column reads soft. Naming the colour on the text elements themselves is what fixes it.
    */
-  h2, h3, dt, dd, .muted, .error, .all, .name, .mail, .when { background: var(--bg-1); }
+  h2, h3, dt, dd, .muted, .error, .all, .name, .mail, .when { background: var(--bg-0); }
   h2 {
     font-size: var(--text-lg); font-weight: var(--weight-semibold); line-height: 1.3;
     margin: 0 0 var(--space-3); color: var(--fg-0);
@@ -371,11 +371,12 @@
    */
   h3 {
     display: flex; align-items: center; gap: var(--space-2);
-    font-size: var(--text-base); font-weight: var(--weight-semibold);
+    font-size: var(--text-xs); font-weight: var(--weight-semibold);
+    text-transform: uppercase; letter-spacing: var(--tracking-label);
     color: var(--fg-2); margin: var(--space-4) 0 var(--space-2);
   }
   h3::after {
-    content: ''; flex: 1; height: 1px; background: var(--border);
+    content: ''; flex: 1; height: var(--hairline); background: var(--border);
   }
   /* Going back to one commit, which is a step out of a mode rather than an action on the
      repository, so it is set as a link rather than as a button with a fill. */
@@ -386,9 +387,8 @@
   .single:hover { text-decoration: underline; }
   .body {
     margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3);
-    /* The page, and the strongest text on it. A grey message on a grey plate is the body of
-       the commit set as though it were a caption on it. */
-    background: var(--bg-0); border-radius: var(--radius-1);
+    /* A plate one step off the panel, holding the strongest text on it. */
+    background: var(--bg-1); border-radius: var(--radius-1);
     /* A rule down the leading edge, as a quoted message is set everywhere else. */
     box-shadow: inset 2px 0 0 var(--border-strong);
     font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm);
@@ -413,10 +413,10 @@
   .oid { min-width: 0; }
   .copy {
     flex: 0 0 auto; display: flex; padding: 2px; margin-top: -1px; cursor: pointer;
-    background: var(--bg-1); border: 0; border-radius: var(--radius-1); color: var(--fg-2);
+    background: var(--bg-0); border: 0; border-radius: var(--radius-1); color: var(--fg-2);
     transition: color var(--fast) var(--ease), background var(--fast) var(--ease);
   }
-  .copy:hover { color: var(--fg-0); background: var(--bg-2); }
+  .copy:hover { color: var(--fg-0); background: var(--bg-1); }
   .parent { display: block; }
   .muted { color: var(--fg-2); }
   .error { color: var(--danger); }
@@ -426,16 +426,20 @@
     display: flex; align-items: center; gap: var(--space-3);
     margin-bottom: var(--space-2);
   }
+  /* A segmented control: the choice that is on is a raised face in a sunken track. */
   .toggle {
-    display: flex; border: 1px solid var(--border); border-radius: var(--radius-1);
-    overflow: hidden;
+    display: flex; gap: var(--space-0); padding: var(--space-0);
+    background: var(--bg-1); border-radius: var(--radius-1);
   }
   .toggle button {
     font: inherit; font-size: var(--text-sm); cursor: pointer; padding: 1px var(--space-2);
-    background: var(--bg-0); border: 0; color: var(--fg-2);
+    background: var(--bg-1); border: 0; border-radius: var(--radius-0); color: var(--fg-2);
   }
   .toggle button:hover { color: var(--fg-0); }
-  .toggle button.on { background: var(--accent); color: var(--accent-fg); font-weight: var(--weight-semibold); }
+  .toggle button.on {
+    background: var(--bg-0); color: var(--fg-0); font-weight: var(--weight-semibold);
+    box-shadow: 0 0 0 var(--hairline) var(--border);
+  }
   .all { display: flex; align-items: center; gap: var(--space-1); font-size: var(--text-sm); color: var(--fg-2); }
   /* The directory gives way first; a truncated path that has lost its file name identifies
      nothing, which is the one part that must always survive. */
@@ -453,10 +457,10 @@
     display: flex; align-items: center; gap: var(--space-2);
     width: 100%; text-align: left; font: inherit; font-size: var(--text-base);
     padding: 2px var(--space-2); margin: 0 calc(-1 * var(--space-2));
-    background: var(--bg-1); border: 0; border-radius: var(--radius-1); cursor: pointer;
+    background: var(--bg-0); border: 0; border-radius: var(--radius-1); cursor: pointer;
     color: var(--fg-1); overflow: hidden;
   }
-  .file:hover { background: var(--bg-2); }
+  .file:hover { background: var(--bg-1); }
   .file.open {
     background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent-line);
   }

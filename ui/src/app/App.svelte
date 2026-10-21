@@ -5081,7 +5081,7 @@
 
   .wip-panel {
     width: var(--details-w, 340px); flex: 0 0 auto; min-height: 0;
-    border: var(--hairline) solid var(--border); border-radius: var(--radius-3); background: var(--bg-1);
+    border: var(--hairline) solid var(--border); border-radius: var(--radius-3); background: var(--bg-0);
     padding: var(--space-3);
     /* The panel itself does not scroll: the two file lists inside it do, each with half the
        height, so the commit box stays where it is and both lists are always visible. */

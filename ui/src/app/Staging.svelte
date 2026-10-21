@@ -337,30 +337,37 @@
   .discard {
     flex: 0 0 auto; display: flex; font: inherit; cursor: pointer;
     padding: 3px; border-radius: var(--radius-1);
-    background: var(--bg-1); border: 1px solid var(--border); color: var(--fg-2);
+    background: var(--bg-0); border: var(--hairline) solid var(--border); color: var(--fg-2);
     transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
   }
   .discard:hover:not(:disabled) {
     background: var(--danger-soft); border-color: var(--danger); color: var(--danger);
   }
   .discard:disabled { opacity: 0.4; cursor: default; }
+  /* A segmented control: the choice that is on is a raised face in a sunken track. */
   .toggle {
-    display: flex; margin-left: auto;
-    border: 1px solid var(--border); border-radius: var(--radius-1); overflow: hidden;
+    display: flex; margin-left: auto; gap: var(--space-0); padding: var(--space-0);
+    background: var(--bg-1); border-radius: var(--radius-1);
   }
   .toggle button {
-    font: inherit; font-size: var(--text-sm); cursor: pointer; padding: 2px var(--space-2);
-    background: var(--bg-0); border: 0; color: var(--fg-2);
+    font: inherit; font-size: var(--text-sm); cursor: pointer; padding: 1px var(--space-2);
+    background: var(--bg-1); border: 0; border-radius: var(--radius-0); color: var(--fg-2);
   }
   .toggle button:hover { color: var(--fg-0); }
-  .toggle button.on { background: var(--accent); color: var(--accent-fg); font-weight: var(--weight-semibold); }
+  .toggle button.on {
+    background: var(--bg-0); color: var(--fg-0); font-weight: var(--weight-semibold);
+    box-shadow: 0 0 0 var(--hairline) var(--border);
+  }
 
   h3 {
     display: flex; align-items: center; gap: var(--space-1);
-    font-size: var(--text-base); font-weight: var(--weight-semibold); color: var(--fg-1);
+    font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--fg-2);
+    text-transform: uppercase; letter-spacing: var(--tracking-label);
     margin: var(--space-2) 0 var(--space-1);
   }
   h3.conflict { color: var(--danger); }
+  /* The heading is a label; the buttons on it are still sentences. */
+  h3 button { text-transform: none; letter-spacing: normal; }
   .caret { color: var(--fg-2); }
   /* The whole-list action, set apart from the heading it belongs to rather than looking like
      part of the count. */
@@ -375,7 +382,7 @@
      list is drawn, where the button beside it changes what is in the index. */
   .expand {
     margin-left: auto; font: inherit; font-size: var(--text-xs); cursor: pointer;
-    padding: 0; background: var(--bg-1); border: 0; color: var(--accent);
+    padding: 0; background: var(--bg-0); border: 0; color: var(--accent);
   }
   .expand:hover { text-decoration: underline; }
   /* With the link before it taking the leftover room, the button no longer needs to. */
@@ -390,12 +397,12 @@
 
   .flat { list-style: none; margin: 0; padding: 0; }
   .flat li { display: flex; align-items: center; }
-  .flat li:hover { background: var(--bg-2); }
+  .flat li:hover, .flat li:hover .file:not(.open) { background: var(--bg-1); }
   .file {
     display: flex; align-items: center; gap: var(--space-2);
     flex: 1; min-width: 0; text-align: left; cursor: pointer;
     font: inherit; font-size: var(--text-base); padding: 2px var(--space-2);
-    background: var(--bg-1); border: 0; color: var(--fg-1);
+    background: var(--bg-0); border: 0; border-radius: var(--radius-0); color: var(--fg-1);
   }
   .file.open { background: var(--accent-soft); color: var(--fg-0); }
   /* The end of a path identifies the file, so a long one is cut from the left. */
@@ -432,9 +439,9 @@
   .compose {
     position: sticky; bottom: 0; margin-top: var(--space-3);
     display: flex; flex-direction: column; gap: var(--space-2);
-    padding: var(--space-3); border: 1px solid var(--border);
+    padding: var(--space-3); border: var(--hairline) solid var(--border);
     border-radius: var(--radius-2);
-    background: var(--bg-2);
+    background: var(--bg-1);
   }
   .amend {
     display: flex; align-items: center; gap: var(--space-2);
