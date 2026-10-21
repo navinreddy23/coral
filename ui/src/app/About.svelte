@@ -81,7 +81,7 @@
   }
   dt {
     font-size: var(--text-xs); font-weight: var(--weight-semibold); text-transform: uppercase;
-    letter-spacing: 0.06em; color: var(--fg-2);
+    letter-spacing: var(--tracking-label); color: var(--fg-2);
   }
   dd { margin: 0; font-size: var(--text-md); color: var(--fg-0); }
   .mono { font-family: var(--font-mono); font-variant-ligatures: none; }

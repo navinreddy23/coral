@@ -725,7 +725,7 @@
     display: flex; align-items: center; gap: var(--space-2);
     margin: 0 0 var(--space-1) var(--space-1);
     font-size: var(--text-xs); font-weight: var(--weight-semibold); text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: var(--tracking-label);
     color: var(--fg-2);
   }
   .heading .tally {

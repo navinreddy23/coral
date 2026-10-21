@@ -89,7 +89,7 @@
   }
   legend {
     padding: 0; font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--fg-2);
-    text-transform: uppercase; letter-spacing: 0.06em;
+    text-transform: uppercase; letter-spacing: var(--tracking-label);
   }
 
   /* Three cards rather than a dropdown: there are exactly three, they are not going to grow,

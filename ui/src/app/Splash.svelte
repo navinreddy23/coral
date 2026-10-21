@@ -206,7 +206,7 @@
   }
 
   .label {
-    font-size: var(--text-xs); font-weight: var(--weight-semibold); letter-spacing: 0.06em;
+    font-size: var(--text-xs); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-label);
     text-transform: uppercase; color: var(--fg-2);
   }
   .rail li.done .label { color: var(--fg-1); }

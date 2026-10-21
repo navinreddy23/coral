@@ -55,7 +55,7 @@
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); }
   h3 {
     font-size: var(--text-xs); font-weight: var(--weight-semibold); text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: var(--tracking-label);
     color: var(--fg-2); margin: 0 0 var(--space-2);
   }
   .row {

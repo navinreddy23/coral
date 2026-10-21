@@ -226,7 +226,7 @@
          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .badge {
     font-size: var(--text-xs); font-weight: var(--weight-semibold); text-transform: uppercase;
-    letter-spacing: 0.06em; color: var(--accent);
+    letter-spacing: var(--tracking-label); color: var(--accent);
   }
 
   /* Eight small squares rather than a menu: the palette is the whole choice, and it is
