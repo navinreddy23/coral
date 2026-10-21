@@ -30,6 +30,11 @@ export interface LaneStyle {
   headRow?: number | null;
   /** What to ring that row with. The brand colour, read from the stylesheet by the caller. */
   headRing?: string;
+  /**
+   * The interface face, from `--font-ui`, so the initials are set in what the rest of the
+   * window is. A canvas cannot read a custom property, so the caller passes it in.
+   */
+  fontFamily?: string;
 }
 
 /**
@@ -106,7 +111,7 @@ export function drawLanes(
   ctx.lineWidth = NODE_STROKE;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = `600 ${labelSize(metrics)}px system-ui, sans-serif`;
+  ctx.font = `600 ${labelSize(metrics)}px ${style.fontFamily ?? 'system-ui, sans-serif'}`;
 
   for (let row = window.first; row <= window.last; row++) {
     const local = rowOf(row);

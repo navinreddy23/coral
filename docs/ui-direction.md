@@ -12,8 +12,6 @@ window is drawn in.
 
 - **Hard rules everywhere.** Every zone met its neighbour at a full-height line, so the window
   read as a spreadsheet of panes rather than as a workspace.
-- **Heavy graph.** 2px elbow edges and a 10px disc on every commit made the lanes the loudest
-  thing on the screen, ahead of the summaries they exist to organise.
 - **Solid branch pills** in eight saturated fills, competing with the lanes they label.
 - **One weight of heading.** Section names, panel titles and labels were all sentence-case
   `base` text, so nothing told the eye where a panel began.
@@ -26,9 +24,9 @@ window is drawn in.
   views, and the right panel are cards on it: `--bg-0`, a hairline border and `--radius-3`,
   separated from the frame and from each other by `--space-2`. The sidebar sits directly on
   the frame, with no card and no rule. The splitters live in the gaps.
-- **A lighter graph.** Edges are 1.5px and leave a lane on a curve rather than an elbow.
-  Nodes are smaller, with a 1.5px ring, and initials are set in Inter. Merge commits draw
-  hollow, so a run of merges reads as structure rather than as content.
+- **The graph is unchanged.** Right-angled elbows and an initialled disc on every commit,
+  merges included. Curved edges with merges drawn as dots were tried and taken back at the
+  owner's request. Only the initials changed: they are now set in Inter.
 - **Tinted pills.** A branch or tag is labelled with its lane's soft tint, a lane-coloured
   hairline and lane-coloured text. Only the checked-out branch is solid. The pill is where
   the lane gets its name, not a second lane.
