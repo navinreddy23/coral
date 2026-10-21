@@ -38,7 +38,7 @@ worth of DOM. The panel on the right is the commit under the cursor.*
 | [![The dark theme](docs/screenshots/08-dark.png)](docs/screenshots/08-dark.png) | [![The embedded terminal](docs/screenshots/09-terminal.png)](docs/screenshots/09-terminal.png) |
 | **A dark theme**, chosen or followed from the desktop. | **A terminal** in the repository, on ``Ctrl+` ``. |
 
-![A branch soloed on the kernel](docs/screenshots/10-solo.png)
+![A branch soloed](docs/screenshots/10-solo.png)
 
 *Solo. One branch walked and every other ref left out, so the graph is that branch's history
 and nothing else. The banner names it and gives it back; every other row stays clickable and
