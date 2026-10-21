@@ -99,9 +99,9 @@
   .splitter {
     flex: 0 0 auto; width: 9px; margin: 0 -4px; z-index: 3;
     cursor: col-resize; background: none; border: 0; padding: 0;
-    /* The line itself is one pixel; the rest of the width is target area, which is why the
-       handle is pulled back over its neighbours with a negative margin. */
-    background-image: linear-gradient(to right, transparent 4px, var(--border) 4px 5px, transparent 5px);
+    /* Nothing is drawn at rest: the panes are cards, and the gap between two cards is the
+       line. The width beyond the gap is target area, pulled back over the neighbours with a
+       negative margin. */
   }
   .splitter:hover, .splitter.dragging, .splitter:focus-visible {
     background-image: linear-gradient(to right, transparent 3px, var(--accent) 3px 6px, transparent 6px);
@@ -110,7 +110,6 @@
   /* A handle between stacked panes: the same strip turned through a right angle. */
   .splitter.vertical {
     width: auto; height: 9px; margin: -4px 0; cursor: row-resize;
-    background-image: linear-gradient(to bottom, transparent 4px, var(--border) 4px 5px, transparent 5px);
   }
   .splitter.vertical:hover,
   .splitter.vertical.dragging,

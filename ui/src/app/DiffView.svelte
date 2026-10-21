@@ -646,7 +646,10 @@
 </section>
 
 <style>
-  .diff { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-0); }
+  .diff {
+    flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-0);
+    border: var(--hairline) solid var(--border); border-radius: var(--radius-3); overflow: hidden;
+  }
   header {
     display: flex; align-items: center; gap: var(--space-2);
     height: 36px; padding: 0 var(--space-2) 0 var(--space-3); flex: 0 0 auto;

@@ -755,7 +755,7 @@
 <style>
   aside {
     width: var(--sidebar-w, 240px); flex: 0 0 auto; overflow-y: auto;
-    border-right: 1px solid var(--border); background: var(--bg-1);
+    background: var(--bg-1);
     padding: var(--space-2);
   }
   /* A count, not a heading: it says how much of the repository the graph is drawn from, and
@@ -915,7 +915,7 @@
   }
   .solo-banner.quiet { background: var(--bg-2); box-shadow: inset 2px 0 0 var(--border-strong); }
   .solo-banner .tag {
-    flex: 0 0 auto; font-size: var(--text-mark); font-weight: var(--weight-bold); letter-spacing: 0.08em;
+    flex: 0 0 auto; font-size: var(--text-mark); font-weight: var(--weight-bold); letter-spacing: var(--tracking-label);
     color: var(--accent); background: var(--bg-0); border-radius: var(--radius-0);
     padding: 1px var(--space-1);
   }

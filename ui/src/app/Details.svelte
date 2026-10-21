@@ -312,7 +312,7 @@
 <style>
   aside {
     width: var(--details-w, 340px); flex: 0 0 auto; overflow-y: auto;
-    border-left: 1px solid var(--border); background: var(--bg-1);
+    border: var(--hairline) solid var(--border); border-radius: var(--radius-3); background: var(--bg-1);
     padding: var(--space-3); font-size: var(--text-base);
   }
   /*

@@ -101,8 +101,8 @@
 <style>
   .status {
     display: flex; align-items: center; gap: var(--space-3);
-    flex: 0 0 auto; height: 24px; padding: 0 var(--space-3);
-    border-top: 1px solid var(--border); background: var(--bg-1);
+    flex: 0 0 auto; height: var(--statusbar-h); padding: 0 var(--space-3);
+    background: var(--bg-1);
     font-size: var(--text-sm); color: var(--fg-2);
     /* Nothing here may reflow the window: it is the one strip that must stay put while an
        operation runs and the counts either side of it change. */

@@ -214,7 +214,7 @@
   }
 </script>
 
-<section class="terminal" class:right={session.dock === 'right'}>
+<section class="terminal">
   <header>
     <span class="title">Terminal</span>
     <span class="shell mono">{shell}</span>
@@ -256,9 +256,8 @@
 <style>
   .terminal {
     display: flex; flex-direction: column; min-width: 0; min-height: 0;
-    background: var(--bg-0); border-top: 1px solid var(--border);
+    background: var(--bg-0);
   }
-  .terminal.right { border-top: 0; border-left: 1px solid var(--border); }
   header {
     display: flex; align-items: center; gap: var(--space-2);
     height: 24px; flex: 0 0 auto; padding: 0 var(--space-2);

@@ -325,8 +325,8 @@
    */
   .toolbar {
     display: flex; align-items: center; gap: var(--space-4);
-    height: 40px; box-sizing: border-box; padding: 0 var(--space-3) 0 var(--space-4);
-    border-bottom: 1px solid var(--border); background: var(--bg-1);
+    height: var(--toolbar-h); box-sizing: border-box; padding: 0 var(--space-3) 0 var(--space-4);
+    background: var(--bg-1);
   }
   /*
    * A column of its own width, not of its contents'.
@@ -354,7 +354,7 @@
      label overflowed its own box and painted over the next one: "REPOSITORY" and "BRANCH"
      came out as "REPOSITOR'BRANCH". */
   .label {
-    font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em;
+    font-size: var(--text-xs); text-transform: uppercase; letter-spacing: var(--tracking-label);
     color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   /* Wide enough for a real branch name. `gitlab-ci-local-support` is 23 characters and came

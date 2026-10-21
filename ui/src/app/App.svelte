@@ -4709,15 +4709,26 @@
      window's own chrome. */
   /* The workspace and the terminal. Side by side when it is docked right, stacked when it is
      docked at the bottom, which is the only difference between the two positions. */
-  .workspace { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+  /*
+   * The window's ground. The commit list, a diff, the right panel and the terminal are cards
+   * on it; the sidebar sits on it directly. The splitters are what is in the gaps, so a gap is
+   * also where a pane is resized from.
+   */
+  .workspace {
+    display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0;
+    gap: var(--space-1); padding: 0 var(--space-2) var(--space-2); background: var(--bg-1);
+  }
   .workspace.beside { flex-direction: row; }
-  .term { flex: 0 0 auto; display: flex; min-height: 0; min-width: 0; }
+  .term {
+    flex: 0 0 auto; display: flex; min-height: 0; min-width: 0;
+    border: var(--hairline) solid var(--border); border-radius: var(--radius-3); overflow: hidden;
+  }
   .term .pane { flex: 1; display: flex; min-width: 0; min-height: 0; }
   .term .pane[hidden] { display: none; }
   .term :global(.terminal) { flex: 1; min-width: 0; }
   /* Positioned, so the preferences screen can cover the panes without covering the
      window's own chrome. */
-  .body { display: flex; flex: 1; min-height: 0; position: relative; }
+  .body { display: flex; flex: 1; min-height: 0; position: relative; gap: var(--space-1); }
   .graph { flex: 1; overflow-y: auto; position: relative; background: var(--bg-0); }
   /* Hidden rather than unmounted: remounting would refetch the frame and lose the scroll
      position every time a file is opened and closed. The wrapper is what carries the class
@@ -4764,7 +4775,10 @@
    * What it did carry was the handles, so they moved here — outside the scroller, spanning its
    * whole height, so they stay put while the list moves under them.
    */
-  .plot { position: relative; flex: 1; min-width: 0; display: flex; }
+  .plot {
+    position: relative; flex: 1; min-width: 0; display: flex;
+    background: var(--bg-0); border: var(--hairline) solid var(--border); border-radius: var(--radius-3); overflow: hidden;
+  }
   .plot.hidden { display: none; }
   .handle {
     position: absolute; top: 0; bottom: 0; z-index: 4;
@@ -5062,7 +5076,7 @@
 
   .wip-panel {
     width: var(--details-w, 340px); flex: 0 0 auto; min-height: 0;
-    border-left: 1px solid var(--border); background: var(--bg-1);
+    border: var(--hairline) solid var(--border); border-radius: var(--radius-3); background: var(--bg-1);
     padding: var(--space-3);
     /* The panel itself does not scroll: the two file lists inside it do, each with half the
        height, so the commit box stays where it is and both lists are always visible. */
