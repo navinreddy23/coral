@@ -25,6 +25,7 @@
     decorated,
     maximised,
     onDrag,
+    onDoubleClick,
     onMenu,
     onOpenTab,
     onCloseNew,
@@ -51,6 +52,8 @@
     maximised: boolean;
     /** Dragging the strip moves the window; right-clicking it opens the desktop's menu. */
     onDrag: (event: MouseEvent) => void;
+    /** Maximises or restores, when the double click landed on the strip itself. */
+    onDoubleClick: (event: MouseEvent) => void;
     onMenu: (event: MouseEvent) => void;
     onOpenTab: () => void;
     onCloseNew: () => void;
@@ -66,7 +69,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<header class="strip" onmousedown={onDrag} oncontextmenu={onMenu}>
+<header class="strip" onmousedown={onDrag} ondblclick={onDoubleClick} oncontextmenu={onMenu}>
   <!-- The application's own mark, the same one the icon carries: one commit and the two
        branches that leave it. -->
   <span class="logo sit"><Mark size={18} /></span>

@@ -996,11 +996,33 @@
   const DRAG_SLOP = 4;
 
   /**
-   * Moves the window, by dragging anywhere in the strip that is not something to press.
+   * Whether a press landed on the strip itself rather than on something in it.
    *
-   * Written here rather than left to `data-tauri-drag-region`, whose handler also maximises
-   * the window on a double click. A tab strip is somewhere people click twice by accident and
-   * having the window jump to full screen for it is not worth the gesture.
+   * Tabs are dragged with the pointer too, and every control has its own job. A panel's dismiss
+   * backdrop is the subtle one: the tab drawer mounts its own inside this strip, and taking the
+   * pointer to the window manager meant the click that closes it was never delivered, so
+   * pressing outside the drawer did nothing at all.
+   */
+  function onBareStrip(event: MouseEvent): boolean {
+    const target = event.target as HTMLElement | null;
+    return !target?.closest('button, a, input, textarea, select, .tab, .scrim');
+  }
+
+  /**
+   * Maximises or restores the window on a double click of the bare strip, as a desktop's own
+   * title bar does.
+   *
+   * Not `data-tauri-drag-region`, whose double click also lands on a tab: a tab strip is
+   * somewhere people click twice by accident, and the window jumping to full size for that is
+   * why this was once turned off altogether.
+   */
+  function stripDoubleClick(event: MouseEvent) {
+    if (event.button !== 0 || !onBareStrip(event)) return;
+    void toggleMaximise();
+  }
+
+  /**
+   * Moves the window, by dragging anywhere in the strip that is not something to press.
    *
    * The pointer reaches the window manager only once it has actually moved. Handing it over on
    * the press itself made a plain click a drag of zero distance, and a window manager that
@@ -1008,13 +1030,7 @@
    * strip, which is at the top of the screen by definition, threw the window full size.
    */
   function stripDrag(event: MouseEvent) {
-    if (event.button !== 0) return;
-    const target = event.target as HTMLElement | null;
-    // Tabs are dragged with the pointer too, and every control has its own job. A panel's
-    // dismiss backdrop is the subtle one: the tab drawer mounts its own inside this strip, and
-    // taking the pointer to the window manager meant the click that closes it was never
-    // delivered, so pressing outside the drawer did nothing at all.
-    if (target?.closest('button, a, input, textarea, select, .tab, .scrim')) return;
+    if (event.button !== 0 || !onBareStrip(event)) return;
     event.preventDefault();
 
     const from = { x: event.clientX, y: event.clientY };
@@ -3994,6 +4010,7 @@
     {decorated}
     {maximised}
     onDrag={stripDrag}
+    onDoubleClick={stripDoubleClick}
     onMenu={stripMenu}
     onOpenTab={openAnother}
     onCloseNew={() => (showStart = false)}
