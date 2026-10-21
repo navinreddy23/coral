@@ -73,7 +73,7 @@
 </section>
 
 <style>
-  section { padding: var(--space-4); overflow: auto; flex: 1; }
+  section { padding: var(--space-4) var(--space-5); overflow: auto; flex: 1; }
   h2 { margin: 0 0 var(--space-3); font-size: var(--text-lg); }
   dl {
     display: grid; grid-template-columns: max-content 1fr;

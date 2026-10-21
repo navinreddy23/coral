@@ -77,7 +77,7 @@
 
 <style>
   .pane {
-    flex: 1; min-width: 0; overflow-y: auto; padding: var(--space-4);
+    flex: 1; min-width: 0; overflow-y: auto; padding: var(--space-4) var(--space-5);
     background: var(--bg-0); color: var(--fg-1); font-size: var(--text-base);
   }
   h2 {

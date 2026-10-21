@@ -237,7 +237,7 @@
 
 <style>
   .pane { padding: var(--space-4) var(--space-5); overflow-y: auto; flex: 1; min-width: 0; }
-  h2 { margin: 0 0 var(--space-4); font-size: var(--text-xl); font-weight: var(--weight-semibold); color: var(--fg-0); }
+  h2 { margin: 0 0 var(--space-4); font-size: var(--text-lg); font-weight: var(--weight-semibold); color: var(--fg-0); }
 
   .level { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-4); }
   .level button {

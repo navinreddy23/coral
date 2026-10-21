@@ -141,6 +141,7 @@
     {/each}
   </nav>
 
+  <div class="page">
   {#if active === 'appearance'}
     <Appearance {theme} {views} />
   {:else if active === 'profiles'}
@@ -164,19 +165,20 @@
     <About {onCopied} />
   {/if}
   </div>
+  </div>
 </div>
 
 <style>
   .prefs {
     position: absolute; inset: 0; z-index: 12; display: flex; flex-direction: column;
-    background: var(--bg-0);
+    background: var(--bg-1);
   }
   /* Opaque, like every surface here that carries text: WebKit antialiases with subpixel
      precision only where it knows what is behind. */
   header {
     display: flex; align-items: center; gap: var(--space-3);
     flex: 0 0 auto; padding: var(--space-2) var(--space-3);
-    background: var(--bg-1); border-bottom: 1px solid var(--border);
+    background: var(--bg-1);
   }
   h2 {
     margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); color: var(--fg-0);
@@ -201,13 +203,20 @@
     margin-left: auto; flex: 0 0 auto; cursor: pointer;
     font: inherit; font-size: var(--text-base);
     padding: 4px var(--space-2); border-radius: var(--radius-1);
-    background: var(--bg-2); border: 1px solid var(--border); color: var(--fg-1);
+    background: var(--bg-2); border: var(--hairline) solid var(--border); color: var(--fg-1);
   }
   .shut:hover { background: var(--bg-3); color: var(--fg-0); }
-  .body { flex: 1; min-height: 0; display: flex; }
-  nav {
-    width: 240px; flex: 0 0 auto; padding: var(--space-2);
-    border-right: 1px solid var(--border); background: var(--bg-1);
+  /* The same ground and card as the main window: the list of panes on the ground, the pane
+     itself a card beside it. */
+  .body {
+    flex: 1; min-height: 0; display: flex; gap: var(--space-2);
+    padding: 0 var(--space-2) var(--space-2);
+  }
+  nav { width: 240px; flex: 0 0 auto; padding: var(--space-2); background: var(--bg-1); }
+  .page {
+    flex: 1; min-width: 0; display: flex; overflow: hidden;
+    background: var(--bg-0); border: var(--hairline) solid var(--border);
+    border-radius: var(--radius-3);
   }
   .pane {
     display: flex; align-items: center; gap: var(--space-2);

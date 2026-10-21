@@ -80,7 +80,10 @@
 </section>
 
 <style>
-  .pane { display: flex; flex-direction: column; gap: var(--space-5); align-items: flex-start; }
+  .pane {
+    flex: 1; min-width: 0; overflow-y: auto; padding: var(--space-4) var(--space-5); background: var(--bg-0);
+    display: flex; flex-direction: column; gap: var(--space-5); align-items: flex-start;
+  }
   h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); }
 
   fieldset {
