@@ -147,12 +147,12 @@
   /* The row is the file and its one action; the action appears on hover so a long list is not
      a column of buttons. */
   .row { display: flex; align-items: center; }
-  .row:hover { background: var(--bg-2); }
+  .row:hover, .row:hover .dir, .row:hover .file:not(.open) { background: var(--bg-1); }
   .dir, .file {
     display: flex; align-items: center; gap: var(--space-2);
     flex: 1; min-width: 0; text-align: left; cursor: pointer;
     font: inherit; font-size: var(--text-base); padding: 2px var(--space-2) 2px 4px;
-    background: var(--bg-1); border: 0; color: var(--fg-1);
+    background: var(--bg-0); border: 0; color: var(--fg-1);
   }
   .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dir { color: var(--fg-1); font-weight: var(--weight-semibold); }

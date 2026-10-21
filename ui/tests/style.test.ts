@@ -75,6 +75,26 @@ describe('the component stylesheets', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('paints the file trees in the right panel on the panel\'s own ground', () => {
+    // The panel is the page's white. A tree whose rows still painted the frame's grey drew a
+    // grey bar across the panel for every folder and file, stopping short of its edge.
+    for (const [file, rule] of [
+      ['FileTree.svelte', /\n {2}button \{([^}]*)\}/u],
+      ['Changes.svelte', /\.dir, \.file \{([^}]*)\}/u],
+    ] as const) {
+      const css = STYLES.find((s) => s.name === file)?.css ?? '';
+      expect(rule.exec(css)?.[1], file).toMatch(/background:\s*var\(--bg-0\)/u);
+    }
+  });
+
+  it('marks the conflict being resolved where the gutter cannot paint over it', () => {
+    // The gutter paints its own ground over the line's left edge, so a bar drawn on the line
+    // was never seen, and with the outline gone it was the only mark the current conflict had.
+    const css = STYLES.find((s) => s.name === 'CodeSheet.svelte')?.css ?? '';
+    expect(css).toMatch(/\.line\.in-conflict\.here \.no \{[^}]*box-shadow:\s*inset -\d+px/u);
+    expect(css).not.toMatch(/\.line\.in-conflict(\.here)? \{[^}]*box-shadow/u);
+  });
+
   it('round every corner from the radius scale', () => {
     // Ten different radii were in use before this held: 1, 2, 3, 4, 5, 6, 7 and 10 pixels,
     // and 999 written out where the pill token said the same thing.

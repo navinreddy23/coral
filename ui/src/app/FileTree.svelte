@@ -97,13 +97,13 @@
     display: flex; align-items: center; gap: var(--space-2);
     width: 100%; box-sizing: border-box; text-align: left; cursor: pointer;
     font: inherit; font-size: var(--text-base); padding: 1px var(--space-2) 1px 4px;
-    background: var(--bg-1); border: 0; color: var(--fg-1);
+    background: var(--bg-0); border: 0; color: var(--fg-1);
     overflow: hidden; white-space: nowrap;
   }
   /* The name is what gives, since the mark and the caret are what the row is read by. Ellipsis
      on the button itself does nothing: a flex item does not shrink, so it was cut mid-letter. */
   .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  button:hover { background: var(--bg-2); }
+  button:hover { background: var(--bg-1); }
   .file.open { background: var(--accent-soft); color: var(--fg-0); }
   .dir { color: var(--fg-2); }
   .caret { width: 9px; flex: 0 0 auto; }
