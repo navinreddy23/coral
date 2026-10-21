@@ -49,7 +49,7 @@
     width: 100%; box-sizing: border-box;
     padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
     background: var(--bg-0); color: var(--fg-0);
-    border: 1px solid var(--border-strong); border-radius: var(--radius-2);
+    border: var(--hairline) solid var(--border-strong); border-radius: var(--radius-3);
     /* It floats over the window, so it needs to read as above the page rather than in it. */
     box-shadow: var(--elevate-2);
     font-size: var(--text-base);

@@ -145,7 +145,7 @@
   .panel {
     width: min(440px, 90vw); padding: var(--space-4);
     background: var(--bg-0); border: 1px solid var(--border-strong);
-    border-radius: var(--radius-2); box-shadow: var(--elevate-2);
+    border-radius: var(--radius-3); box-shadow: var(--elevate-2);
   }
   h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); color: var(--fg-0); }
   /* `pre-line`, so a detail can put the thing being destroyed on a line of its own and the

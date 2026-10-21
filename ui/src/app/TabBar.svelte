@@ -711,7 +711,7 @@
     max-height: 60vh; overflow-y: auto;
     padding: var(--space-2);
     background: var(--bg-0); color: var(--fg-0);
-    border: 1px solid var(--border-strong); border-radius: var(--radius-2);
+    border: var(--hairline) solid var(--border-strong); border-radius: var(--radius-3);
     box-shadow: var(--elevate-2);
   }
   .finder input {
@@ -766,7 +766,7 @@
     position: fixed; z-index: 41; width: 15em;
     padding: var(--space-2);
     background: var(--bg-0); color: var(--fg-0);
-    border: 1px solid var(--border-strong); border-radius: var(--radius-2);
+    border: var(--hairline) solid var(--border-strong); border-radius: var(--radius-3);
     box-shadow: var(--elevate-2);
   }
   .grid {
