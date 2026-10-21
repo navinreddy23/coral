@@ -71,6 +71,7 @@
   import { beside, elideRef } from './path';
   import { askUntilAccepted, nameWasRefused } from './prompt';
   import { checkoutOf, divergence, remoteOf, withoutRemote } from './refname';
+  import { splitPrefix } from './subject';
   import { orderRefs, pillChars, pillNamed } from './pill';
   import {
     checkoutItems,
@@ -4381,6 +4382,8 @@
             -->
             {@const local = localRow(graph.frame, row)}
             {@const labels = orderRefs(refs.byRow.get(row) ?? [], headName, (n) => scope.hides(n))}
+            {@const subject = visibleMeta.get(row)?.summary ?? ''}
+            {@const split = splitPrefix(subject)}
             <li
               class="row"
               class:merge={hasFlag(graph.frame.rowFlags[local ?? -1] ?? 0, RowFlag.Merge)}
@@ -4500,7 +4503,9 @@
               >
                 <span class="lane-strip" aria-hidden="true" style:--lane-gap="{laneGap(row)}px"
                 ></span>
-                <span class="summary">{visibleMeta.get(row)?.summary ?? ''}</span>
+                <span class="summary"
+                  >{#if split}<span class="prefix">{split.prefix}</span> {split.rest}{:else}{subject}{/if}</span
+                >
                 {#if showBody}
                   <span class="detail">{flatten(visibleMeta.get(row)?.body ?? '')}</span>
                 {/if}
@@ -5036,6 +5041,8 @@
     flex: 0 1 auto; min-width: 0; color: var(--fg-0);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  /* The `ui:` or `smb/client:` a subject leads with, set back so the sentence leads instead. */
+  .prefix { color: var(--fg-2); font-family: var(--font-mono); font-size: var(--text-base); }
   /* Dimmer than the summary it continues, but not the dimmest thing on the row: at `fg-2` the
      half of the line that carries the body read as grey filler beside the date and the id. */
   .detail {
