@@ -1,0 +1,43 @@
+name: Advisories
+
+# A new advisory against a dependency used to be found by whichever push next ran CI, which
+# then failed for a reason the push had nothing to do with. This looks once a week and says so
+# in an issue, before anyone's work is held up by it.
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  advisories:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      # Whatever rust-toolchain.toml names, components included.
+      - run: rustup toolchain install
+      - run: cargo install cargo-deny --locked --version 0.20.2
+      - id: deny
+        run: cargo deny check advisories 2>&1 | tee deny.log
+        shell: bash -o pipefail {0}
+      # One open issue at a time: a second week of the same advisory adds a comment to it
+      # rather than a second issue beside it.
+      - name: Report
+        if: failure() && steps.deny.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="cargo deny: an advisory affects a dependency"
+          body="$(printf 'Found by the weekly check on %s.\n\n```\n%s\n```\n' \
+            "$(date -u +%Y-%m-%d)" "$(grep -E '^(error|warning)\[|ID:|Solution' deny.log | head -60)")"
+          open=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
