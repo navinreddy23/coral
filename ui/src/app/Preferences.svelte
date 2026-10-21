@@ -14,9 +14,11 @@
   import type { ProfilesState } from '../state/profiles.svelte';
   import type { ThemeState } from '../state/theme.svelte';
   import type { ViewsState } from '../state/views.svelte';
+  import type { UpdateState } from '../state/update.svelte';
   import type { IdentityScopes } from '../ipc/types';
 
   const {
+    updates,
     signing,
     ssh,
     experimental,
@@ -34,6 +36,7 @@
     onDeleteProfile,
     onApplyProfileHere,
   }: {
+    updates: UpdateState;
     signing: SigningState;
     ssh: SshState;
     experimental: ExperimentalState;
@@ -162,7 +165,7 @@
   {:else if active === 'experimental'}
     <Experimental {experimental} {onPickGit} />
   {:else if active === 'about'}
-    <About {onCopied} />
+    <About {onCopied} {updates} />
   {/if}
   </div>
   </div>

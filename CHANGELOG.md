@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Coral can update itself
+
+About has an **Install and restart** button once a newer release is found, and the palette has
+**Check for updates** and, after a check finds one, **Install Coral … and restart**. The
+download is verified against Coral's signing key before anything is replaced. An AppImage
+replaces itself; a .deb asks for your password and installs with dpkg; the macOS app and the
+Windows installer update in place. A build from source is offered the release page.
+
+Coral still asks GitHub nothing until you press the button. **Check for updates when Coral
+starts**, in About, does it at launch, and a newer release then shows in the status bar.
+
 ## 1.2.3
 
 ### The window looked older than it is

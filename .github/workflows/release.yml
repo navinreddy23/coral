@@ -36,6 +36,9 @@ jobs:
 
       - id: read
         shell: bash
+        env:
+          # Only whether it is set is looked at; the key itself never reaches this job's log.
+          SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           version=$(sed -n 's/^version *= *"\(.*\)".*/\1/p' Cargo.toml | head -1)
@@ -56,6 +59,10 @@ jobs:
               || { echo "::error::tag ${{ github.ref_name }} but the crates say $version"; exit 1; }
             grep -qx "## $version" CHANGELOG.md \
               || { echo "::error::CHANGELOG.md has no '## $version' section"; exit 1; }
+            # Without it nothing is signed, there is no latest.json, and every installed copy
+            # would be told the release does not exist.
+            [ -n "$SIGNING_KEY" ] \
+              || { echo "::error::the TAURI_SIGNING_PRIVATE_KEY secret is not set"; exit 1; }
           fi
 
   bundle:
@@ -95,6 +102,9 @@ jobs:
       # build.rs prefers this to `git rev-parse`, so the About pane names the exact commit
       # whatever shape the checkout has.
       CORAL_COMMIT: ${{ github.sha }}
+      # What Tauri signs each update download with. The public half is in tauri.conf.json.
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
     steps:
       - uses: actions/checkout@v4
@@ -151,10 +161,23 @@ jobs:
             target/x86_64-apple-darwin/release/coral
           lipo -info target/release/coral
 
+      # Update downloads are signed only where the key is: switched on in tauri.conf.json, a
+      # build without it fails outright, which would stop every local bundle and every
+      # rehearsal on a fork. meta has already refused a tag without it. The bundler reads this
+      # from --config and not from TAURI_CONFIG.
+      - id: updater
+        shell: bash
+        run: |
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "args=--config '{\"bundle\":{\"createUpdaterArtifacts\":true}}'" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::no signing key, so this build carries no update signatures"
+          fi
+
       - uses: tauri-apps/tauri-action@v0
         with:
           projectPath: crates/coral-app
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} ${{ steps.updater.outputs.args }}
 
       # Tauri names its output for the architecture in three different vocabularies — amd64, x64,
       # x86_64 — and says nothing about which platform a .deb came from. One naming, so the
@@ -174,6 +197,13 @@ jobs:
             for f in "$root"/appimage/*.AppImage; do cp "$f" "dist/Coral_${v}_${id}.AppImage"; done
             for f in "$root"/dmg/*.dmg;           do cp "$f" "dist/Coral_${v}_${id}.dmg"; done
             for f in "$root"/nsis/*-setup.exe;    do cp "$f" "dist/Coral_${v}_${id}-setup.exe"; done
+            # What an installed copy updates from, each beside the signature it is checked by.
+            # macOS updates from the app in a tarball, not from the disk image.
+            for f in "$root"/deb/*.deb.sig;           do cp "$f" "dist/Coral_${v}_${id}.deb.sig"; done
+            for f in "$root"/appimage/*.AppImage.sig; do cp "$f" "dist/Coral_${v}_${id}.AppImage.sig"; done
+            for f in "$root"/nsis/*-setup.exe.sig;    do cp "$f" "dist/Coral_${v}_${id}-setup.exe.sig"; done
+            for f in "$root"/macos/*.app.tar.gz;      do cp "$f" "dist/Coral_${v}_${id}.app.tar.gz"; done
+            for f in "$root"/macos/*.app.tar.gz.sig;  do cp "$f" "dist/Coral_${v}_${id}.app.tar.gz.sig"; done
           done
 
           # Only the .deb installs the CLI, so every other platform gets it as its own download
@@ -229,6 +259,13 @@ jobs:
           [ -s NOTES.md ] || { echo "::error::the changelog section is empty"; exit 1; }
           printf '\n---\n\nBuilt from `%s`. Neither signed nor notarised: macOS will refuse the\n' "$GITHUB_SHA" >> NOTES.md
           printf 'bundle until it is cleared in System Settings, and Windows will show SmartScreen.\n' >> NOTES.md
+
+      # Written into the release it describes, so /releases/latest/download/latest.json, the
+      # address in tauri.conf.json, follows whichever release is newest once it is published.
+      - name: Describe the update for installed copies
+        run: >-
+          .github/release/updater.sh '${{ needs.meta.outputs.version }}' dist
+          'https://github.com/navinreddy23/coral/releases/download/${{ github.ref_name }}' NOTES.md
 
       - name: Checksums
         run: |

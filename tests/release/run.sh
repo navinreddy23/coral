@@ -58,8 +58,12 @@ for name in Coral_1.2.0_linux-aarch64.AppImage Coral_1.2.0_linux-aarch64.deb \
         Coral_1.2.0_windows-x86_64-setup.exe coral_1.2.0_windows-x86_64.exe SHA256SUMS.txt; do
     : > "$DIR/v1.2.0/$name"
 done
-"$MANIFEST" 1.2.0 "$DIR/v1.2.0" >/dev/null || fail "the files 1.2.0 shipped with are refused"
-ok "the files 1.2.0 actually shipped with pass"
+# 1.2.0 shipped before updates could be installed in place. A release now carries the signature
+# every in-place update is checked against, so 1.2.0's files are no longer a whole release.
+if out=$("$MANIFEST" 1.2.0 "$DIR/v1.2.0" 2>&1); then fail "a release without signatures passes"; fi
+grep -q 'Coral_1.2.0_linux-x86_64.AppImage.sig' <<<"$out" || fail "the missing signature is not named"
+grep -q 'Coral_1.2.0_macos-universal.app.tar.gz' <<<"$out" || fail "the missing macOS update is not named"
+ok "the files 1.2.0 shipped with are refused now, for want of update signatures"
 
 # Publishing, against a stand-in gh that records what it was asked and answers as told.
 PUBLISH="$ROOT/.github/release/publish.sh"
@@ -92,6 +96,45 @@ ok "a draft from an earlier run of the tag is refilled"
 publish false && fail "files were uploaded into a published release"
 grep -q '^release upload' "$DIR/calls" && fail "something was uploaded into a published release"
 ok "a release already published is left alone, and the job fails"
+
+# latest.json, which installed copies read to find an update and check its signature.
+UPDATER="$ROOT/.github/release/updater.sh"
+complete "$DIR/signed" 1.2.4
+for sig in "$DIR"/signed/*.sig; do printf 'sig-of-%s' "$(basename "$sig" .sig)" > "$sig"; done
+printf 'Faster blame.\n\nAnd more.\n' > "$DIR/notes.md"
+"$UPDATER" 1.2.4 "$DIR/signed" "https://example.invalid/v1.2.4" "$DIR/notes.md" >/dev/null \
+    || fail "latest.json was not written for a complete signed release"
+python3 - "$DIR/signed/latest.json" <<'PY' || fail "latest.json is not what the updater reads"
+import json, sys
+doc = json.load(open(sys.argv[1]))
+assert doc["version"] == "1.2.4", doc["version"]
+assert doc["notes"].startswith("Faster blame."), doc["notes"]
+assert doc["pub_date"].endswith("Z"), doc["pub_date"]
+want = {
+    "linux-x86_64-appimage": "Coral_1.2.4_linux-x86_64.AppImage",
+    "linux-x86_64-deb": "Coral_1.2.4_linux-x86_64.deb",
+    "linux-aarch64-appimage": "Coral_1.2.4_linux-aarch64.AppImage",
+    "linux-aarch64-deb": "Coral_1.2.4_linux-aarch64.deb",
+    "darwin-x86_64-app": "Coral_1.2.4_macos-universal.app.tar.gz",
+    "darwin-aarch64-app": "Coral_1.2.4_macos-universal.app.tar.gz",
+    "windows-x86_64-nsis": "Coral_1.2.4_windows-x86_64-setup.exe",
+    "windows-aarch64-nsis": "Coral_1.2.4_windows-aarch64-setup.exe",
+}
+# A plain os-arch key is what the updater falls back to for a copy it cannot place.
+assert not any(k.count("-") == 1 for k in doc["platforms"]), sorted(doc["platforms"])
+assert set(doc["platforms"]) == set(want), sorted(doc["platforms"])
+for platform, name in want.items():
+    entry = doc["platforms"][platform]
+    assert entry["url"] == "https://example.invalid/v1.2.4/" + name, entry["url"]
+    assert entry["signature"] == "sig-of-" + name, (platform, entry["signature"])
+PY
+ok "latest.json names every kind of install, its download and its signature"
+
+rm "$DIR/signed/latest.json" "$DIR/signed/Coral_1.2.4_windows-aarch64-setup.exe.sig"
+"$UPDATER" 1.2.4 "$DIR/signed" "https://example.invalid/v1.2.4" "$DIR/notes.md" >/dev/null 2>&1 \
+    && fail "latest.json was written with a signature missing"
+[ ! -e "$DIR/signed/latest.json" ] || fail "a partial latest.json was left behind"
+ok "no latest.json is written when a signature is missing"
 
 # The manifest's platforms are the build matrix's: a platform added to one and not the other
 # would either never be checked or never be built.

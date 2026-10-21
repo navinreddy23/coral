@@ -47,6 +47,18 @@ function bar(over: Record<string, unknown> = {}) {
 }
 
 describe('the status bar', () => {
+  it('shows a newer release only once one has been found, and opens About from it', async () => {
+    expect(bar().container.textContent).not.toContain('Coral 1.2.4');
+    const opened: string[] = [];
+    const { container } = bar({ update: '1.2.4', onUpdate: () => opened.push('about') });
+    const chip = [...container.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Coral 1.2.4'),
+    );
+    expect(chip, 'a chip naming the version').toBeDefined();
+    chip?.click();
+    expect(opened).toEqual(['about']);
+  });
+
   it('names the branch and the commit count', () => {
     const { container } = bar();
     expect(container.textContent).toContain('master');

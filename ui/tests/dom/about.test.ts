@@ -8,8 +8,10 @@ const openUrl = vi.hoisted(() => vi.fn());
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 vi.mock('../../src/ipc/invoke', () => ({ invoke, isPreview: () => false }));
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl }));
+vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => undefined }));
 
 import About from '../../src/app/About.svelte';
+import { UpdateState } from '../../src/state/update.svelte';
 
 const BUILD = { number: '1.2.3', commit: 'abc1234', debug: false };
 
@@ -20,6 +22,7 @@ function answering(update: unknown) {
       if (update instanceof Error) throw update;
       return update;
     }
+    if (command === 'install_update') return undefined;
     throw new Error(`unexpected ${command}`);
   });
 }
@@ -33,15 +36,21 @@ function checkButton(container: HTMLElement): HTMLButtonElement {
 }
 
 async function mounted() {
-  const view = render(About, { props: { onCopied: () => {} } });
+  const updates = new UpdateState();
+  const view = render(About, { props: { onCopied: () => {}, updates } });
   await waitFor(() => checkButton(view.container));
-  return view;
+  return { ...view, updates };
+}
+
+function named(container: HTMLElement, text: string): HTMLButtonElement | undefined {
+  return [...container.querySelectorAll('button')].find((b) => b.textContent?.includes(text));
 }
 
 describe('checking for a newer Coral', () => {
   beforeEach(() => {
     invoke.mockReset();
     openUrl.mockReset();
+    localStorage.clear();
   });
 
   it('asks nothing until the button is pressed', async () => {
@@ -51,9 +60,23 @@ describe('checking for a newer Coral', () => {
     expect(invoke.mock.calls.map((c) => c[0])).not.toContain('check_for_update');
   });
 
-  it('names a newer release and opens its page', async () => {
+  it('installs a newer release in place where this copy can be updated', async () => {
     const url = 'https://github.com/navinreddy23/coral/releases/tag/v1.2.4';
-    answering({ current: '1.2.3', latest: '1.2.4', newer: true, url });
+    answering({ current: '1.2.3', latest: '1.2.4', newer: true, url, installable: true });
+    const { container } = await mounted();
+    await fireEvent.click(checkButton(container));
+    await waitFor(() => {
+      if (!named(container, 'Install and restart')) throw new Error('no install button');
+    });
+    await fireEvent.click(named(container, 'Install and restart') as HTMLButtonElement);
+    await waitFor(() => {
+      if (!invoke.mock.calls.some((c) => c[0] === 'install_update')) throw new Error('not installed');
+    });
+  });
+
+  it('names a newer release and opens its page where it cannot be installed in place', async () => {
+    const url = 'https://github.com/navinreddy23/coral/releases/tag/v1.2.4';
+    answering({ current: '1.2.3', latest: '1.2.4', newer: true, url, installable: false });
     const { container } = await mounted();
     await fireEvent.click(checkButton(container));
     await waitFor(() => {
@@ -63,8 +86,19 @@ describe('checking for a newer Coral', () => {
       b.textContent?.includes('release page'),
     );
     expect(open).toBeDefined();
+    expect(named(container, 'Install and restart')).toBeUndefined();
     await fireEvent.click(open as HTMLButtonElement);
     expect(openUrl).toHaveBeenCalledWith(url);
+  });
+
+  it('turns the check at launch on and off, off to begin with', async () => {
+    answering({ current: '1.2.3', latest: '1.2.3', newer: false, url: 'https://x.invalid', installable: false });
+    const { container, updates } = await mounted();
+    const box = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    await fireEvent.click(box);
+    expect(updates.automatic).toBe(true);
+    expect(localStorage.getItem('coral.updates.automatic')).toBe('true');
   });
 
   it('says so when this is the newest release, and offers no page', async () => {

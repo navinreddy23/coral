@@ -845,6 +845,42 @@ describe('the shell', () => {
     expect(offered.some((t) => t.includes('Stash changes'))).toBe(false);
   });
 
+  it('checks for an update from the palette, and installs one only once it has been found', async () => {
+    const found = {
+      current: '1.2.3',
+      latest: '1.2.4',
+      newer: true,
+      url: 'https://github.com/navinreddy23/coral/releases/tag/v1.2.4',
+      installable: true,
+    };
+    const { container } = await shell({ check_for_update: found, install_update: null });
+    const offered = async (query: string) => {
+      await fireEvent.keyDown(window, { key: 'p', ctrlKey: true });
+      const input = await waitFor(() => {
+        const field = container.querySelector('.panel input') as HTMLInputElement | null;
+        if (!field) throw new Error('no palette');
+        return field;
+      });
+      await fireEvent.input(input, { target: { value: query } });
+      return { input, rows: [...container.querySelectorAll('.panel li')].map((r) => r.textContent ?? '') };
+    };
+
+    // Nothing has been asked of GitHub yet, so there is nothing to install.
+    const before = await offered('update');
+    expect(before.rows.some((t) => t.includes('Check for updates'))).toBe(true);
+    expect(before.rows.some((t) => t.includes('Install Coral'))).toBe(false);
+    await fireEvent.keyDown(before.input, { key: 'Enter' });
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('check_for_update'));
+    // The answer is shown where the install button is.
+    await waitFor(() => expect(container.textContent).toContain('Coral 1.2.4 is out'));
+
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    const after = await offered('install');
+    expect(after.rows.some((t) => t.includes('Install Coral 1.2.4 and restart'))).toBe(true);
+    await fireEvent.keyDown(after.input, { key: 'Enter' });
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('install_update'));
+  });
+
   it('turns a pull it cannot fast-forward into the choice it actually is', async () => {
     // The button pulls fast-forward only, which is the safe reading of "bring me up to date".
     // When both sides have moved git refuses, and refusing is right — but it said so by

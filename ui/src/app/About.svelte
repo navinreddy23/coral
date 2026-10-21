@@ -1,14 +1,12 @@
 <script lang="ts">
-  import {
-    appVersion,
-    checkForUpdate,
-    openInBrowser,
-    type AppVersion,
-    type UpdateCheck,
-  } from '../ipc/commands';
+  import { appVersion, openInBrowser, type AppVersion } from '../ipc/commands';
   import { messageOf } from '../ipc/error';
+  import type { UpdateState } from '../state/update.svelte';
 
-  const { onCopied }: { onCopied: (ok: boolean, what: string) => void } = $props();
+  const {
+    onCopied,
+    updates,
+  }: { onCopied: (ok: boolean, what: string) => void; updates: UpdateState } = $props();
 
   let build = $state<AppVersion | null>(null);
   let error = $state<string | null>(null);
@@ -33,23 +31,8 @@
         `${build.debug ? ' debug build' : ''}`,
   );
 
-  let update = $state<UpdateCheck | null>(null);
-  let checking = $state(false);
-  let updateError = $state<string | null>(null);
-
-  /** Asked only here, on the button: the window contacts nothing on its own. */
-  async function check(): Promise<void> {
-    checking = true;
-    updateError = null;
-    try {
-      update = await checkForUpdate();
-    } catch (e) {
-      update = null;
-      updateError = messageOf(e);
-    } finally {
-      checking = false;
-    }
-  }
+  const update = $derived(updates.result);
+  const percent = $derived(updates.fraction === null ? null : Math.round(updates.fraction * 100));
 
   async function copy(): Promise<void> {
     try {
@@ -91,15 +74,26 @@
     </p>
 
     <p class="line">
-      <button onclick={() => void check()} disabled={checking}>
-        {checking ? 'Checking…' : 'Check for updates'}
+      <button
+        onclick={() => void updates.check()}
+        disabled={updates.checking || updates.installing}
+      >
+        {updates.checking ? 'Checking…' : 'Check for updates'}
       </button>
-      {#if updateError !== null}
-        <span class="bad">{updateError}</span>
+      {#if updates.installing}
+        <span>
+          Installing Coral {update?.latest}{percent === null ? '…' : `, ${percent}%`}
+          It restarts when it is done.
+        </span>
+      {:else if updates.error !== null}
+        <span class="bad">{updates.error}</span>
       {:else if update === null}
         <span class="muted">Asks GitHub for the newest release, only when pressed.</span>
       {:else if update.newer}
         <span>Coral {update.latest} is out.</span>
+        {#if update.installable}
+          <button class="primary" onclick={() => void updates.install()}>Install and restart</button>
+        {/if}
         <button onclick={() => update && void openInBrowser(update.url)}>Open the release page</button>
       {:else if update.latest === update.current}
         <span class="muted">This is the newest release.</span>
@@ -107,6 +101,15 @@
         <span class="muted">This build is ahead of the newest release, {update.latest}.</span>
       {/if}
     </p>
+
+    <label class="line">
+      <input
+        type="checkbox"
+        checked={updates.automatic}
+        onchange={(e) => updates.setAutomatic(e.currentTarget.checked)}
+      />
+      <span>Check for updates when Coral starts</span>
+    </label>
   {/if}
 
   <p class="muted">
@@ -136,5 +139,8 @@
     background: var(--bg-2); border: 1px solid var(--border-strong); color: var(--fg-0);
   }
   button:hover:not(:disabled) { background: var(--bg-3); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  button.primary:hover { background: var(--accent-hover); }
+  label.line { font-size: var(--text-base); color: var(--fg-1); cursor: pointer; }
   button:disabled { cursor: default; color: var(--fg-2); }
 </style>

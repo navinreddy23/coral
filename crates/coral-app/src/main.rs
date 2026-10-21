@@ -211,6 +211,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         tabs::group_close,
         version::app_version,
         update::check_for_update,
+        update::install_update,
         graph::binary_self_test
     ]
 }
@@ -219,6 +220,7 @@ fn window() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(graph::GraphCache::default())
         .manage(terminal::Terminals::default())
         .manage(watcher::Watchers::default())

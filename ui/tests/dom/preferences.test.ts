@@ -16,6 +16,7 @@ import { SigningState } from '../../src/state/signing.svelte';
 import { SshState } from '../../src/state/ssh.svelte';
 import { ThemeState } from '../../src/state/theme.svelte';
 import { ViewsState } from '../../src/state/views.svelte';
+import { UpdateState } from '../../src/state/update.svelte';
 
 afterEach(cleanup);
 
@@ -25,6 +26,7 @@ function prefs(over: Record<string, unknown> = {}) {
     onClose,
     ...render(Preferences, {
       props: {
+        updates: new UpdateState(),
         signing: new SigningState(),
         ssh: new SshState(),
         experimental: new ExperimentalState(),
