@@ -110,7 +110,8 @@ jobs:
         # xdg-utils is for /usr/bin/xdg-open, which the AppImage bundler copies into the
         # AppDir: the x86-64 runner image happens to carry it and the arm64 one does not.
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Whatever rust-toolchain.toml names, components included.
+      - run: rustup toolchain install
 
       - name: Add the macOS targets
         if: runner.os == 'macOS'
