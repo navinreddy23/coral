@@ -4791,10 +4791,10 @@
        two columns rather than a step to the left of it. */
     margin-left: var(--space-3); display: flex;
   }
-  /* Invisible until it is wanted. A rule between the branch pills and the nodes they point at
-     would cut the one thing that ties them together, and one through the lanes would be worse
-     than none — so the boundary shows on hover and is otherwise not there. */
-  .handle :global(.splitter) { background-image: none; }
+  /* Invisible until it is wanted, which the splitter already is at rest. A rule between the
+     branch pills and the nodes they point at would cut the one thing that ties them together,
+     and one through the lanes would be worse than none — so the boundary shows on hover and
+     is otherwise not there. */
 
   .spacer { position: relative; }
   /* The canvas tracks the scroll position rather than being as tall as the graph: a canvas
