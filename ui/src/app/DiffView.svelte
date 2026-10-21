@@ -1,6 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
-  import { firstChangedRow, marksOf, splitRows, windowAround } from '../diff/split';
+  import { firstChangedRow, marksOf, onScreen, splitRows, windowAround } from '../diff/split';
   import { wordMarks } from '../diff/word';
   import CodeLine from './CodeLine.svelte';
   import { elidePath } from './path';
@@ -220,11 +220,7 @@
   const isDirectory = $derived(diff.path?.endsWith('/') ?? false);
 
   /** The part of the file on screen, drawn over the marks so the strip says where you are. */
-  const here = $derived.by(() => {
-    const height = split.rows.length * ROW;
-    if (height <= 0) return { at: 0, size: 1 };
-    return { at: Math.min(1, scrolled / height), size: Math.min(1, viewport / height) };
-  });
+  const here = $derived(onScreen(split.rows.length, ROW, scrolled, viewport));
 
   /** Where each changed run starts, as a row, for the next and previous buttons. */
   const changeRows = $derived(marks.map((mark) => Math.round(mark.at * split.rows.length)));
@@ -639,7 +635,9 @@
           style:height="max(2px, {mark.size * 100}%)"
         ></span>
       {/each}
-      <span class="here" style:top="{here.at * 100}%" style:height="{here.size * 100}%"></span>
+      {#if here !== null}
+        <span class="here" style:top="{here.at * 100}%" style:height="{here.size * 100}%"></span>
+      {/if}
     </button>
   {/if}
   </div>

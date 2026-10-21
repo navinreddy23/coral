@@ -82,6 +82,25 @@ export interface Mark {
 }
 
 /**
+ * The part of a file on screen, as fractions of its height, for the outline on the change strip.
+ *
+ * Null when the whole file is already on screen, or there is nothing to measure yet: a file
+ * that fits has nowhere else to be, and outlining all of it drew a hollow box the height of
+ * the strip that read as an empty scrollbar track.
+ */
+export function onScreen(
+  rows: number,
+  rowPx: number,
+  scrolled: number,
+  viewport: number,
+): { at: number; size: number } | null {
+  const height = rows * rowPx;
+  if (height <= 0 || viewport <= 0 || viewport >= height) return null;
+  const size = viewport / height;
+  return { at: Math.min(Math.max(0, scrolled / height), 1 - size), size };
+}
+
+/**
  * The changes in a file, as runs to mark on a strip beside it.
  *
  * A whole-file diff is mostly unchanged text, and the scrollbar says nothing about where the
