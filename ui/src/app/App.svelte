@@ -134,6 +134,7 @@
   import Rail from './Rail.svelte';
   import { TabsState, type Session } from '../state/tabs.svelte';
   import { ViewsState, type PanelState } from '../state/views.svelte';
+  import { UpdateState } from '../state/update.svelte';
   import { isTextTarget, resolve, tabJump } from '../state/shortcuts';
   import Shortcuts from './Shortcuts.svelte';
   import TabBar from './TabBar.svelte';
@@ -496,6 +497,24 @@
   const signing = new SigningState();
   const ssh = new SshState();
   const toasts = new ToastsState();
+  const updates = new UpdateState();
+
+  /*
+   * The check at launch, which runs only if it has been turned on in About. Once, untracked:
+   * turning it on later is not a launch, and the button beside the setting is how to ask now.
+   */
+  $effect(() => {
+    untrack(() =>
+      void updates.atLaunch().then((found) => {
+        if (found?.newer !== true) return;
+        toasts.push(
+          'info',
+          `Coral ${found.latest} is out`,
+          found.installable ? 'Install it from About.' : 'Its release page has the downloads.',
+        );
+      }),
+    );
+  });
   const remotes = new RemotesState();
   const stashes = new StashesState();
   const startPage = new StartState();
@@ -2827,6 +2846,27 @@
         group: 'View',
         run: openActivity,
       },
+      {
+        id: 'updates',
+        label: 'Check for updates',
+        group: 'View',
+        run: () => {
+          openPreferences('about');
+          void updates.check();
+        },
+      },
+      // Only once a check has found something this copy can install over itself.
+      ...(updates.result?.installable === true
+        ? [{
+            id: 'install-update',
+            label: `Install Coral ${updates.result.latest} and restart`,
+            group: 'View',
+            run: () => {
+              openPreferences('about');
+              void updates.install();
+            },
+          } satisfies Command]
+        : []),
     ];
 
     for (const r of refs.groups.local) {
@@ -4080,6 +4120,7 @@
   {#if showPrefs}
     <div class="screen">
     <Preferences
+      {updates}
       {signing}
       {ssh}
       {experimental}
@@ -4623,6 +4664,8 @@
       host={hosting.view}
       onLogs={() => openActivity()}
       onHost={() => (showHostAccount = true)}
+      update={updates.available ? (updates.result?.latest ?? null) : null}
+      onUpdate={() => openPreferences('about')}
       report={actions.report}
       busy={actions.busy || worktree.busy || merge.busy}
       onDismiss={() => actions.clear()}

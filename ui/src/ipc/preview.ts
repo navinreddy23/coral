@@ -243,6 +243,7 @@ const FIXTURES: Record<string, unknown> = {
     current: '1.2.3',
     latest: '1.2.3',
     newer: false,
+    installable: false,
     url: 'https://github.com/navinreddy23/coral/releases/tag/v1.2.3',
   },
   open_repo: {

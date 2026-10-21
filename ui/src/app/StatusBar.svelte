@@ -16,6 +16,8 @@
     onDismiss,
     onLogs,
     onHost,
+    update = null,
+    onUpdate = () => {},
   }: {
     branch: string | null;
     /** The ref for the current branch, for its ahead and behind counts. */
@@ -31,6 +33,10 @@
     onLogs: () => void;
     /** Opens the host's account, which is what the chip saying "no token" is about. */
     onHost: () => void;
+    /** A newer Coral that the check at launch found, or null. */
+    update?: string | null;
+    /** Opens About, where it can be installed. */
+    onUpdate?: () => void;
   } = $props();
 
   /** Exact counts stop being useful past a point; the reference caps them at 99+. */
@@ -67,6 +73,12 @@
   {/if}
 
   <span class="spacer"></span>
+
+  {#if update !== null}
+    <button class="host update" onclick={onUpdate} title="Install it from About">
+      Coral {update} is out
+    </button>
+  {/if}
 
   <!--
     A button, not a label. It said "no token" and there was nowhere in the window to give it
@@ -120,6 +132,7 @@
     background: none; border: 0; padding: 1px var(--space-2); border-radius: var(--radius-pill);
   }
   .host:hover { background: var(--bg-2); color: var(--fg-0); }
+  .host.update { background: var(--accent-soft); color: var(--accent); }
   .muted { color: var(--fg-2); }
 
   .report {
