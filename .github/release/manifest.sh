@@ -13,14 +13,21 @@ set -euo pipefail
 
 PLATFORMS=(linux-x86_64 linux-aarch64 macos-universal windows-x86_64 windows-aarch64)
 
-# The installer, and the command-line front end where it is a download of its own. The .deb
-# installs the CLI as well, but the tarball beside it is what an AppImage user reaches for.
+# The installer, the command-line front end where it is a download of its own, and what an
+# installed copy updates itself from with the signature it checks first. The .deb installs the
+# CLI as well, but the tarball beside it is what an AppImage user reaches for. The .deb, the
+# AppImage and the Windows installer are their own update; macOS updates from the app in a
+# tarball.
 files_for() {
     local v=$1 id=$2
     case "$id" in
-        linux-*)   printf '%s\n' "Coral_${v}_${id}.deb" "Coral_${v}_${id}.AppImage" "coral_${v}_${id}.tar.gz" ;;
-        macos-*)   printf '%s\n' "Coral_${v}_${id}.dmg" "coral_${v}_${id}.tar.gz" ;;
-        windows-*) printf '%s\n' "Coral_${v}_${id}-setup.exe" "coral_${v}_${id}.exe" ;;
+        linux-*)   printf '%s\n' "Coral_${v}_${id}.deb" "Coral_${v}_${id}.deb.sig" \
+                       "Coral_${v}_${id}.AppImage" "Coral_${v}_${id}.AppImage.sig" \
+                       "coral_${v}_${id}.tar.gz" ;;
+        macos-*)   printf '%s\n' "Coral_${v}_${id}.dmg" "Coral_${v}_${id}.app.tar.gz" \
+                       "Coral_${v}_${id}.app.tar.gz.sig" "coral_${v}_${id}.tar.gz" ;;
+        windows-*) printf '%s\n' "Coral_${v}_${id}-setup.exe" "Coral_${v}_${id}-setup.exe.sig" \
+                       "coral_${v}_${id}.exe" ;;
         *) echo "no files known for platform $id" >&2; exit 2 ;;
     esac
 }
