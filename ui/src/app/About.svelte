@@ -1,5 +1,11 @@
 <script lang="ts">
-  import { appVersion, type AppVersion } from '../ipc/commands';
+  import {
+    appVersion,
+    checkForUpdate,
+    openInBrowser,
+    type AppVersion,
+    type UpdateCheck,
+  } from '../ipc/commands';
   import { messageOf } from '../ipc/error';
 
   const { onCopied }: { onCopied: (ok: boolean, what: string) => void } = $props();
@@ -26,6 +32,24 @@
       : `Coral ${build.number}${build.commit === null ? '' : ` (${build.commit})`}` +
         `${build.debug ? ' debug build' : ''}`,
   );
+
+  let update = $state<UpdateCheck | null>(null);
+  let checking = $state(false);
+  let updateError = $state<string | null>(null);
+
+  /** Asked only here, on the button: the window contacts nothing on its own. */
+  async function check(): Promise<void> {
+    checking = true;
+    updateError = null;
+    try {
+      update = await checkForUpdate();
+    } catch (e) {
+      update = null;
+      updateError = messageOf(e);
+    } finally {
+      checking = false;
+    }
+  }
 
   async function copy(): Promise<void> {
     try {
@@ -65,6 +89,24 @@
       <button onclick={() => void copy()}>Copy for a bug report</button>
       <span class="mono muted">{summary}</span>
     </p>
+
+    <p class="line">
+      <button onclick={() => void check()} disabled={checking}>
+        {checking ? 'Checking…' : 'Check for updates'}
+      </button>
+      {#if updateError !== null}
+        <span class="bad">{updateError}</span>
+      {:else if update === null}
+        <span class="muted">Asks GitHub for the newest release, only when pressed.</span>
+      {:else if update.newer}
+        <span>Coral {update.latest} is out.</span>
+        <button onclick={() => update && void openInBrowser(update.url)}>Open the release page</button>
+      {:else if update.latest === update.current}
+        <span class="muted">This is the newest release.</span>
+      {:else}
+        <span class="muted">This build is ahead of the newest release, {update.latest}.</span>
+      {/if}
+    </p>
   {/if}
 
   <p class="muted">
@@ -93,5 +135,6 @@
     padding: 4px var(--space-3); border-radius: var(--radius-1);
     background: var(--bg-2); border: 1px solid var(--border-strong); color: var(--fg-0);
   }
-  button:hover { background: var(--bg-3); }
+  button:hover:not(:disabled) { background: var(--bg-3); }
+  button:disabled { cursor: default; color: var(--fg-2); }
 </style>

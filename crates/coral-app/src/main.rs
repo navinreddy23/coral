@@ -3,7 +3,7 @@
 
 use coral_app_lib::{
     actions, activity, commands, conflicts, experimental, graph, hosting, profile, recent, remotes,
-    scope, signing, ssh, tabs, terminal, transfer, version, watcher,
+    scope, signing, ssh, tabs, terminal, transfer, update, version, watcher,
 };
 
 fn main() {
@@ -210,6 +210,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         tabs::group_dissolve,
         tabs::group_close,
         version::app_version,
+        update::check_for_update,
         graph::binary_self_test
     ]
 }

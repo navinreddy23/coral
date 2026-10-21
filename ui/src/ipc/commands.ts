@@ -734,3 +734,16 @@ export function patchRangeSize(path: string, from: string, to: string): Promise<
 export function appVersion(): Promise<AppVersion> {
   return invoke<AppVersion>('app_version');
 }
+
+/** What the update check in About found: this build, the newest release, and its page. */
+export interface UpdateCheck {
+  current: string;
+  latest: string;
+  newer: boolean;
+  url: string;
+}
+
+/** Asks GitHub for the newest published release. Only ever on a button press. */
+export function checkForUpdate(): Promise<UpdateCheck> {
+  return invoke<UpdateCheck>('check_for_update');
+}

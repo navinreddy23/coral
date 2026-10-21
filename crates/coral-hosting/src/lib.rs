@@ -9,6 +9,7 @@ pub mod github;
 pub mod gitlab;
 pub mod provider;
 pub mod pull_request;
+pub mod release;
 pub mod token;
 
 pub use client::Client;
