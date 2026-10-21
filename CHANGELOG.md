@@ -1,5 +1,45 @@
 # Changelog
 
+## 1.2.3
+
+### The window looked older than it is
+
+The interface has been redrawn without moving anything: every pane, control, shortcut and
+gesture is where it was.
+
+- **Cards.** The commit list, a diff or the merge tool, the right panel, the terminal and a
+  Preferences pane are rounded cards on the window's ground, instead of panes meeting at
+  full-height rules. The sidebar sits on the ground, and the splitters are the gaps between
+  cards.
+- **The right panel is white**, like the list beside it. Its sections, and the sidebar's, are
+  headed by small uppercase labels, and Path/Tree is a segmented switch.
+- **Branch pills** are tinted in their lane's colour with a coloured edge, rather than carrying
+  a solid block of it. The checked-out branch is still filled.
+- **A subject's prefix**, such as `ui:` or `smb/client:`, is set back in dim mono so the sentence
+  after it leads.
+- **Floating panels** (menus, the palette, prompts and toasts) are rounder, with rows of one
+  height.
+- **Preferences** panes share one padding. Appearance had none, so its heading touched the list.
+- **Merge tool:** the conflict being resolved was outlined line by line. It now carries a wider
+  bar down the gutter.
+
+The lanes keep the elbows and the initialled disc on every commit. Their initials are now set in
+the interface's own face.
+
+### Double-clicking the title bar did nothing
+
+It maximises and restores the window again, as a desktop's own title bar does. It had been
+turned off because the strip also carries the tabs, and a tab is somewhere people click twice
+by accident; a double click on a tab or a button is still left alone.
+
+### Security
+
+- **rustls is 0.23.46**, for RUSTSEC-2026-0346, -0347, -0348 and -0349: session secrets in
+  `Debug` output, data sent after an ECH rejection, a Brotli allocation before authentication,
+  and a downgrade to classical key exchange.
+- **rustls-webpki is 0.103.16** and **webpki-root-certs 1.0.10**, for RUSTSEC-2026-0382 and
+  -0383: distrusted intermediates could still be accepted.
+
 ## 1.2.2
 
 ### A new repository under a profile was left on the ssh agent
