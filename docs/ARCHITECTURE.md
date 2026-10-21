@@ -352,6 +352,15 @@ A Tauri bundle links the platform's own webview — WebKitGTK on Linux, WebKit o
 WebView2 on Windows — so each is built on its own machine. `just build` produces whatever the
 machine it runs on can, and `.github/workflows/release.yml` does all three on three runners.
 
+**Updates** go through Tauri's updater. A tagged build signs each download that can install
+over itself (the AppImage, the .deb, the macOS app tarball, the NSIS installer) with the key in
+the `TAURI_SIGNING_PRIVATE_KEY` secret, and `.github/release/updater.sh` writes `latest.json`
+into the release, keyed by installer, never by bare platform: the updater falls back to a bare
+`linux-x86_64` for a copy it cannot place, which would put an AppImage over a .deb. Installed
+copies read `/releases/latest/download/latest.json`, verify against the public key in
+`tauri.conf.json`, and check only when asked or when the user has turned on the check at
+launch. `just update-test` runs the whole path on a private display with a throwaway key.
+
 Windows is the one that can also be cross-compiled, and `just build-windows-cross` does it:
 `cargo-xwin` fetches the MSVC CRT and the Windows SDK and links with lld, no Windows machine
 involved. Only NSIS comes out — the MSI bundler is WiX, which needs Windows — and the result
