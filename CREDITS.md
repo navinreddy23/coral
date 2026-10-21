@@ -21,6 +21,11 @@ paper, it is added here in the same commit with a link and its license.
   somebody who already uses it does not have to relearn anything, and the node shapes in the
   graph — a ring for a commit, filled for a merge, dotted for the working tree. The visual
   design is Coral's own; see `docs/ui-spec.md`. <https://www.gitkraken.com/>
+- **Nori** (1.12.1) — visual reference for the 2026 interface refresh, studied by running it on
+  fixture repositories. Taken from it, as ideas rather than as anything shipped: panes as cards
+  on a tinted ground, small uppercase section labels, branch labels tinted by their lane, and a
+  commit subject's Conventional Commits prefix set back. No assets, icons, wording or code are
+  used. Proprietary.
 - **gitk** and `git log --graph` — prior art for commit graph lane assignment.
 - **lazygit** and **gitui** — prior art for driving the git binary from a client.
 - **Git Credential Manager** — the pattern of a binary acting as its own credential helper.
