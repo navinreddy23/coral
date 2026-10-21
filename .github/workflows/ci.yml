@@ -1,8 +1,11 @@
 name: CI
 
+# The website is static files that nothing here builds or checks; pages.yml deploys it.
 on:
   push:
+    paths-ignore: ['site/**']
   pull_request:
+    paths-ignore: ['site/**']
 
 # A second push supersedes the first rather than leaving three runners finishing work nobody
 # is waiting for any more.

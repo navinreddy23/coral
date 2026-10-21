@@ -12,6 +12,8 @@ crates/
   coral-hosting  GitHub and GitLab. Never on the graph's critical path.
   coral-cli      Binary `coral`. Exposes the engine headlessly; the test surface.
   coral-app      Tauri backend. Thin wrappers over coral-core.
+site/          The website: static files, deployed to GitHub Pages by pages.yml.
+tests/clients/ Measures Coral beside other clients on the kernel, for the website.
 ```
 
 `coral-cli` and `coral-app` are peers over the same engine. Anything the app can do, the CLI
