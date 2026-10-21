@@ -11,12 +11,16 @@ interface Segment {
   y1: number;
 }
 
-interface Corner {
-  cx: number;
-  cy: number;
-  x: number;
-  y: number;
-  radius: number;
+/** A cubic edge from one point to another, with the two control points that shape it. */
+interface Curve {
+  x0: number;
+  y0: number;
+  c1x: number;
+  c1y: number;
+  c2x: number;
+  c2y: number;
+  x1: number;
+  y1: number;
 }
 
 interface Disc {
@@ -37,19 +41,19 @@ interface Label {
 /**
  * Records the straight strokes a render produces.
  *
- * Only the geometry matters here, so curves and fills are accepted and dropped rather than
- * mocked faithfully; a bezier is always an edge between two adjacent rows.
+ * Only the geometry matters here, so fills are accepted and dropped rather than mocked
+ * faithfully; a bezier is always an edge between two adjacent rows.
  */
 function recorder(): {
   ctx: CanvasRenderingContext2D;
   segments: Segment[];
-  corners: Corner[];
+  curves: Curve[];
   discs: Disc[];
   rings: Disc[];
   labels: Label[];
 } {
   const segments: Segment[] = [];
-  const corners: Corner[] = [];
+  const curves: Curve[] = [];
   const labels: Label[] = [];
   const discs: Disc[] = [];
   const rings: Disc[] = [];
@@ -72,20 +76,9 @@ function recorder(): {
       pending = { x0: at.x, y0: at.y, x1: x, y1: y };
       at = { x, y };
     },
-    bezierCurveTo() {
-      pending = null;
-    },
-    /**
-     * The rounded corner an edge turns through when it changes lane. The arc ends on the
-     * segment towards the second point, `radius` away from the corner, which is where the
-     * straight run that follows it starts.
-     */
-    arcTo(cx: number, cy: number, x: number, y: number, radius: number) {
-      corners.push({ cx, cy, x, y, radius });
-      const dx = x - cx;
-      const dy = y - cy;
-      const len = Math.hypot(dx, dy) || 1;
-      at = { x: cx + (dx / len) * radius, y: cy + (dy / len) * radius };
+    bezierCurveTo(c1x: number, c1y: number, c2x: number, c2y: number, x: number, y: number) {
+      curves.push({ x0: at.x, y0: at.y, c1x, c1y, c2x, c2y, x1: x, y1: y });
+      at = { x, y };
       pending = null;
     },
     arc(x: number, y: number, radius: number) {
@@ -114,7 +107,7 @@ function recorder(): {
   return {
     ctx: ctx as unknown as CanvasRenderingContext2D,
     segments,
-    corners,
+    curves,
     discs,
     rings,
     labels,
@@ -245,9 +238,11 @@ describe('drawing a node', () => {
     // One per visible row, on its own lane.
     expect(discs.length).toBe(4);
     expect(discs.every((d) => d.x === laneX(0, DEFAULT_METRICS))).toBe(true);
-    // Filled from the node palette, ringed in the lane's own colour.
-    expect(discs.every((d) => d.fill === '#fill')).toBe(true);
-    expect(discs.every((d) => d.stroke === '#a')).toBe(true);
+    // Filled from the node palette, ringed in the lane's own colour. Row 0 is a merge, which
+    // is drawn differently and has a test of its own.
+    const plain = discs.slice(1);
+    expect(plain.every((d) => d.fill === '#fill')).toBe(true);
+    expect(plain.every((d) => d.stroke === '#a')).toBe(true);
   });
 
   it('carries the author initials inside the ring', () => {
@@ -270,11 +265,11 @@ describe('drawing a node', () => {
     const fills = ['#f0', '#f1', '#f2', '#f3'];
     const { ctx, discs, labels } = recorder();
 
-    drawLanes(ctx, frame, { first: 0, last: 1 }, DEFAULT_METRICS, 200, 200, {
+    drawLanes(ctx, frame, { first: 1, last: 2 }, DEFAULT_METRICS, 200, 200, {
       colours: ['#lane'],
       fills,
       initials: () => 'LT',
-      author: (row) => (row === 0 ? 'a@example.com' : 'b@example.com'),
+      author: (row) => (row === 1 ? 'a@example.com' : 'b@example.com'),
     });
 
     // Two authors, two fills; the same author would give the same one on every row.
@@ -310,40 +305,62 @@ describe('drawing a node', () => {
 
     expect(discs.length).toBe(4);
     expect(discs.every((d) => d.radius < DEFAULT_METRICS.nodeRadius)).toBe(true);
-    expect(discs.every((d) => d.radius >= DEFAULT_METRICS.nodeRadius - 1)).toBe(true);
+    expect(discs.slice(1).every((d) => d.radius >= DEFAULT_METRICS.nodeRadius - 1)).toBe(true);
+  });
+
+  it('draws a merge as a smaller dot in its lane colour, with no letters on it', () => {
+    // A run of merges is structure, not content: the kernel's first-parent line is thousands
+    // of them, each the same author's initials in the same disc. The two edges leaving the dot
+    // already say what it is.
+    const frame = longRunFrame(20, 2);
+    const { ctx, discs, labels } = recorder();
+    drawLanes(ctx, frame, { first: 0, last: 1 }, DEFAULT_METRICS, 200, 200, {
+      colours: ['#lane'],
+      fills: ['#fill'],
+      initials: () => 'LT',
+    });
+
+    const [merge, plain] = discs;
+    expect(merge?.fill, 'filled in its lane colour').toBe('#lane');
+    expect(merge?.radius ?? 0).toBeLessThan((plain?.radius ?? 0) / 2 + 1);
+    expect(merge?.radius ?? 0).toBeGreaterThan(2);
+    expect(labels.map((l) => l.y), 'letters on the plain node only').toEqual([
+      rowY(1, 0, DEFAULT_METRICS) + 0.5,
+    ]);
   });
 });
 
 describe('an edge that changes lane', () => {
-  it('turns through a rounded corner rather than a lazy diagonal', () => {
+  it('leaves its node heading down and arrives in the parent lane heading down', () => {
+    // Not a diagonal: a curve that is vertical at both ends says which lane it left and which
+    // it reached, and a diagonal across the row says neither.
     const frame = longRunFrame(20, 3);
-    const { ctx, corners } = recorder();
+    const { ctx, curves } = recorder();
     drawLanes(ctx, frame, { first: 0, last: 3 }, DEFAULT_METRICS, 200, 200, {
       colours: ['#a', '#b', '#c', '#d'],
       fills: ['#fill'],
     });
 
     // Row 0 opens lane 3 for its second parent; that is the only lane change in the window.
-    expect(corners).toHaveLength(1);
-    const corner = corners[0];
-    // Horizontal out of the node, then straight down the parent's lane: the corner sits at the
-    // parent lane's x on the node's own row, and the arc ends heading downwards.
-    expect(corner?.cx).toBe(laneX(3, DEFAULT_METRICS));
-    expect(corner?.cy).toBe(rowY(0, 0, DEFAULT_METRICS));
-    expect(corner?.x).toBe(laneX(3, DEFAULT_METRICS));
-    expect(corner?.y).toBeGreaterThan(corner?.cy ?? 0);
-    expect(corner?.radius).toBeGreaterThan(0);
+    expect(curves).toHaveLength(1);
+    const curve = curves[0];
+    const from = laneX(0, DEFAULT_METRICS);
+    const to = laneX(3, DEFAULT_METRICS);
+    expect([curve?.x0, curve?.y0]).toEqual([from, rowY(0, 0, DEFAULT_METRICS)]);
+    expect([curve?.x1, curve?.y1]).toEqual([to, rowY(1, 0, DEFAULT_METRICS)]);
+    expect(curve?.c1x, 'leaves vertically').toBe(from);
+    expect(curve?.c2x, 'arrives vertically').toBe(to);
   });
 
-  it('draws no corner where the edge stays in its lane', () => {
+  it('draws no curve where the edge stays in its lane', () => {
     const frame = longRunFrame(20, 3);
-    const { ctx, corners } = recorder();
+    const { ctx, curves } = recorder();
     // A window past row 0 has only the straight first-parent run in it.
     drawLanes(ctx, frame, { first: 5, last: 8 }, DEFAULT_METRICS, 200, 200, {
       colours: ['#a', '#b', '#c', '#d'],
       fills: ['#fill'],
     });
-    expect(corners).toHaveLength(0);
+    expect(curves).toHaveLength(0);
   });
 });
 
