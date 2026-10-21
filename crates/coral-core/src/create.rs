@@ -300,7 +300,8 @@ mod tests {
         // Nothing usable, but a name that is empty would make the destination the parent
         // directory itself, and cloning into it would be a surprise nobody could undo.
         assert_eq!(name_from_url("https://example.invalid"), "example.invalid");
-        assert!(!name_from_url("https://example.invalid/").is_empty());
+        let name = name_from_url("https://example.invalid/");
+        assert!(!name.is_empty(), "{name:?}");
     }
 
     #[test]

@@ -303,7 +303,8 @@ mod tests {
 
     #[test]
     fn keeps_nothing_when_there_is_nothing() {
-        assert!(one_per_binary(Vec::new()).is_empty());
+        let kept = one_per_binary(Vec::new());
+        assert!(kept.is_empty(), "{kept:?}");
     }
 
     #[test]

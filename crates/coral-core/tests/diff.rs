@@ -175,7 +175,7 @@ async fn a_binary_file_reports_no_counts_and_no_hunks() {
     let f = &files[0];
     assert!(f.binary);
     assert_eq!((f.added, f.removed), (None, None));
-    assert!(f.hunks.is_empty());
+    assert!(f.hunks.is_empty(), "{:?}", f.hunks);
 }
 
 /// A path Git LFS holds has no lines of its own to show.
@@ -207,10 +207,11 @@ async fn a_path_git_lfs_holds_reports_no_counts_and_no_hunks() {
     let asset = find("logo.png");
     assert!(asset.binary);
     assert_eq!((asset.added, asset.removed), (None, None));
-    assert!(asset.hunks.is_empty());
+    assert!(asset.hunks.is_empty(), "{:?}", asset.hunks);
     // And an ordinary file in the same diff still carries its lines.
     assert_eq!(find("plain.txt").added, Some(1));
-    assert!(!find("plain.txt").hunks.is_empty());
+    let hunks = &find("plain.txt").hunks;
+    assert!(!hunks.is_empty(), "{hunks:?}");
 }
 
 /// A mode change carries no hunks; the file must still be reported.
@@ -222,7 +223,7 @@ async fn a_mode_only_change_is_reported_without_hunks() {
     let f = files.iter().find(|f| f.path == "mode.txt").unwrap();
 
     assert_eq!((f.added, f.removed), (Some(0), Some(0)));
-    assert!(f.hunks.is_empty());
+    assert!(f.hunks.is_empty(), "{:?}", f.hunks);
 }
 
 #[tokio::test]
@@ -250,7 +251,8 @@ async fn hunks_land_on_the_right_files_when_several_change_at_once() {
 #[tokio::test]
 async fn a_clean_repository_diffs_to_nothing() {
     let repo = TestRepo::new().write("a.txt", "a\n").commit("base");
-    assert!(staged(&repo).await.is_empty());
+    let files = staged(&repo).await;
+    assert!(files.is_empty(), "{files:?}");
 }
 
 /// Regression: splitting a patch on newlines leaves a trailing empty element, which is
@@ -476,7 +478,7 @@ fn an_untracked_file_is_a_diff_against_nothing() {
             .diff(&runner, false, &["new.sh"], DiffOptions::default())
             .await
             .unwrap();
-        assert!(tracked.is_empty());
+        assert!(tracked.is_empty(), "{tracked:?}");
 
         let file = loc
             .untracked_diff(&runner, "new.sh", DiffOptions::default())
@@ -538,7 +540,7 @@ fn ignoring_whitespace_leaves_a_reformatting_commit_with_nothing_in_it() {
             .await
             .unwrap();
         assert_eq!((counted[0].added, counted[0].removed), (Some(1), Some(1)));
-        assert!(!counted[0].hunks.is_empty());
+        assert!(!counted[0].hunks.is_empty(), "{:?}", counted[0].hunks);
 
         let ignored = loc
             .commit_diff(
@@ -552,7 +554,7 @@ fn ignoring_whitespace_leaves_a_reformatting_commit_with_nothing_in_it() {
         // The counts as well as the hunks: heading a diff of nothing with "+1 −1" is the panel
         // disagreeing with itself.
         assert_eq!((ignored[0].added, ignored[0].removed), (Some(0), Some(0)));
-        assert!(ignored[0].hunks.is_empty());
+        assert!(ignored[0].hunks.is_empty(), "{:?}", ignored[0].hunks);
     });
 }
 
@@ -678,7 +680,7 @@ fn a_patch_past_the_guard_is_reported_without_its_hunks() {
     coral_core::diff::apply_patch(&mut files, &patch, coral_core::diff::DiffOptions::default())
         .unwrap();
     assert!(files[0].too_large);
-    assert!(files[0].hunks.is_empty());
+    assert!(files[0].hunks.is_empty(), "{:?}", files[0].hunks);
 }
 
 #[test]
@@ -766,7 +768,7 @@ async fn an_untracked_file_past_the_guard_is_not_read() {
         .expect("an untracked file has a diff against nothing");
 
     assert!(file.too_large);
-    assert!(file.hunks.is_empty());
+    assert!(file.hunks.is_empty(), "{:?}", file.hunks);
     assert!(!file.binary);
     // And it still says how much of it there is, which the guard used to answer with zero.
     assert_eq!(file.added, Some(200_000));

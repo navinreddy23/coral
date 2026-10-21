@@ -114,13 +114,10 @@ fn rejects_a_first_step_that_has_nothing_to_squash_into() {
 
 #[test]
 fn an_empty_or_comment_only_file_parses_to_nothing() {
-    assert!(Todo::parse(b"").unwrap().items.is_empty());
-    assert!(
-        Todo::parse(b"# nothing to do\n\n")
-            .unwrap()
-            .items
-            .is_empty()
-    );
+    let items = Todo::parse(b"").unwrap().items;
+    assert!(items.is_empty(), "{items:?}");
+    let items = Todo::parse(b"# nothing to do\n\n").unwrap().items;
+    assert!(items.is_empty(), "{items:?}");
     assert!(Todo::default().render().is_empty());
 }
 

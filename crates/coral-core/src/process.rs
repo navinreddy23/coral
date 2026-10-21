@@ -1211,7 +1211,8 @@ mod tests {
         // one is the copy this build shipped.
         assert_eq!(bundle_prefixes(None, Some(&appdir)).len(), 1);
         assert_eq!(bundle_prefixes(Some(&exe), None).len(), 1);
-        assert!(bundle_prefixes(None, None).is_empty());
+        let prefixes = bundle_prefixes(None, None);
+        assert!(prefixes.is_empty(), "{prefixes:?}");
     }
 
     #[test]

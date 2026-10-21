@@ -121,7 +121,7 @@ async fn log_narrows_by_limit_author_path_and_message() {
         )
         .await
         .unwrap();
-    assert!(missing.is_empty());
+    assert!(missing.is_empty(), "{missing:?}");
 }
 
 #[tokio::test]
@@ -217,7 +217,8 @@ async fn an_empty_history_is_not_an_error() {
     let repo = TestRepo::new();
     let (runner, loc) = open(&repo).await;
     // An unborn HEAD makes git log fail; the parser itself must handle emptiness.
-    assert!(coral_core::history::parse(b"").unwrap().is_empty());
+    let commits = coral_core::history::parse(b"").unwrap();
+    assert!(commits.is_empty(), "{commits:?}");
     assert!(loc.log(&runner, &LogQuery::default()).await.is_err());
 }
 
@@ -251,12 +252,8 @@ fn searching_matches_the_message_the_author_or_the_id() {
                 .len(),
             1
         );
-        assert!(
-            loc.search_commits(&runner, "par.er", 50)
-                .await
-                .unwrap()
-                .is_empty()
-        );
+        let found = loc.search_commits(&runner, "par.er", 50).await.unwrap();
+        assert!(found.is_empty(), "{found:?}");
 
         // An abbreviated object id names that commit and comes back first.
         let head = &by_message[0];
@@ -264,18 +261,13 @@ fn searching_matches_the_message_the_author_or_the_id() {
         assert_eq!(by_oid.first(), Some(head));
 
         // A hash nothing answers to is an empty result, not a failure.
-        assert!(
-            loc.search_commits(&runner, "0123456789abcdef", 50)
-                .await
-                .unwrap()
-                .is_empty()
-        );
-        assert!(
-            loc.search_commits(&runner, "   ", 50)
-                .await
-                .unwrap()
-                .is_empty()
-        );
+        let found = loc
+            .search_commits(&runner, "0123456789abcdef", 50)
+            .await
+            .unwrap();
+        assert!(found.is_empty(), "{found:?}");
+        let found = loc.search_commits(&runner, "   ", 50).await.unwrap();
+        assert!(found.is_empty(), "{found:?}");
     });
 }
 
@@ -354,12 +346,11 @@ fn searching_matches_a_file_path() {
         );
 
         // A path nothing has is not a match, and not an error either.
-        assert!(
-            loc.search_commits(&runner, "nowhere.txt", 50)
-                .await
-                .unwrap()
-                .is_empty()
-        );
+        let found = loc
+            .search_commits(&runner, "nowhere.txt", 50)
+            .await
+            .unwrap();
+        assert!(found.is_empty(), "{found:?}");
     });
 }
 

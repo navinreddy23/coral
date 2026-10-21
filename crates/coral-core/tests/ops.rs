@@ -119,7 +119,8 @@ async fn creates_renames_checks_out_and_deletes_branches() {
 
     loc.checkout(&runner, "main").await.unwrap();
     loc.branch_delete(&runner, "renamed", false).await.unwrap();
-    assert!(repo.git(["branch", "--list", "renamed"]).is_empty());
+    let output = repo.git(["branch", "--list", "renamed"]);
+    assert!(output.is_empty(), "{output:?}");
 }
 
 /// git refuses to delete an unmerged branch without force; that refusal must reach the caller.
@@ -135,7 +136,8 @@ async fn refuses_to_delete_an_unmerged_branch_without_force() {
 
     assert!(loc.branch_delete(&runner, "work", false).await.is_err());
     loc.branch_delete(&runner, "work", true).await.unwrap();
-    assert!(repo.git(["branch", "--list", "work"]).is_empty());
+    let output = repo.git(["branch", "--list", "work"]);
+    assert!(output.is_empty(), "{output:?}");
 }
 
 /// A repository that signs its tags can still be given one without a message.
@@ -183,7 +185,8 @@ async fn creates_lightweight_and_annotated_tags() {
     );
 
     loc.tag_delete(&runner, "light").await.unwrap();
-    assert!(repo.git(["tag", "--list", "light"]).is_empty());
+    let output = repo.git(["tag", "--list", "light"]);
+    assert!(output.is_empty(), "{output:?}");
 }
 
 #[tokio::test]
@@ -210,7 +213,8 @@ async fn stashes_applies_pops_and_drops() {
     );
 
     loc.stash_drop(&runner, 0).await.unwrap();
-    assert!(repo.git(["stash", "list"]).is_empty());
+    let output = repo.git(["stash", "list"]);
+    assert!(output.is_empty(), "{output:?}");
 }
 
 #[tokio::test]
@@ -286,7 +290,7 @@ async fn a_stash_that_applies_cleanly_is_a_completed_outcome() {
 
     let outcome = loc.stash_apply(&runner, 0, true).await.unwrap();
     assert!(outcome.completed);
-    assert!(outcome.conflicts.is_empty());
+    assert!(outcome.conflicts.is_empty(), "{:?}", outcome.conflicts);
     assert!(
         repo.git(["stash", "list"]).is_empty(),
         "a clean pop drops it"
@@ -356,7 +360,7 @@ async fn merges_cleanly_and_records_a_merge_commit() {
         .unwrap();
 
     assert!(outcome.completed);
-    assert!(outcome.conflicts.is_empty());
+    assert!(outcome.conflicts.is_empty(), "{:?}", outcome.conflicts);
     assert_eq!(loc.op_state(), OpState::Clean);
     assert_eq!(repo.git(["rev-list", "--count", "--merges", "HEAD"]), "1");
 }

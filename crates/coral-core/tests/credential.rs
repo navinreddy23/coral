@@ -160,11 +160,8 @@ fn store_then_get_then_erase_round_trips() {
 
     respond(&store, Action::Erase, REQUEST, true).unwrap();
     assert_eq!(store.len(), 0);
-    assert!(
-        respond(&store, Action::Get, REQUEST, true)
-            .unwrap()
-            .is_empty()
-    );
+    let answer = respond(&store, Action::Get, REQUEST, true).unwrap();
+    assert!(answer.is_empty(), "{answer:?}");
 }
 
 /// A helper that errors aborts the whole git operation, so "I have nothing" must be an empty
