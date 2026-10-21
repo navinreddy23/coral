@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Coral, a fast Git client</title>
+  <meta name="description" content="A free, open-source Git client for Linux, macOS and Windows. Rust engine, the system's own web view, and a commit graph that stays quick on the Linux kernel.">
+  <meta property="og:title" content="Coral, a fast Git client">
+  <meta property="og:description" content="Free and open source. Quick on a repository of 1.48 million commits.">
+  <meta property="og:image" content="https://navinreddy23.github.io/coral/screenshots/01-graph.png">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="coral.svg" type="image/svg+xml">
+  <link rel="preload" href="fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="nav">
+    <div class="wrap">
+      <a class="brand" href="#top"><img src="coral.svg" alt="">Coral</a>
+      <ul>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#performance">Performance</a></li>
+        <li><a href="#compare">Compare</a></li>
+        <li><a href="https://github.com/navinreddy23/coral/blob/master/CHANGELOG.md">Changelog</a></li>
+        <li><a href="https://github.com/navinreddy23/coral">Source</a></li>
+      </ul>
+      <a class="button" href="#download">Download</a>
+    </div>
+  </nav>
+
+  <header class="hero" id="top">
+    <div class="wrap">
+      <span class="eyebrow">Free and open source · <b>MIT</b></span>
+      <h1>The Git client that keeps up.</h1>
+      <p class="lede">
+        Coral lays out every one of the Linux kernel's 1.48 million commits in about
+        6.2 seconds, holds them in under 300 MB, and sits at zero CPU when
+        you stop. Rust engine, the system's own web view, no Electron.
+      </p>
+      <div class="actions">
+        <a class="button" href="#download" data-primary-download>Download</a>
+        <a class="button quiet" href="https://github.com/navinreddy23/coral">View on GitHub</a>
+      </div>
+      <p class="platform-note">Linux, macOS and Windows · x86-64 and Arm</p>
+
+      <ul class="facts">
+        <li><b>Free, no account</b><span>Every feature, on every repository.</span></li>
+        <li><b>No telemetry</b><span>It talks to git and your Git host, nothing else.</span></li>
+        <li><b>Open source</b><span>MIT licensed, built in the open.</span></li>
+        <li><b>A CLI too</b><span>The same engine, with JSON output.</span></li>
+      </ul>
+
+      <div class="shot">
+        <img src="screenshots/01-graph.png" width="1440" height="900"
+             alt="Coral showing the Linux kernel's commit graph, with branches in their own colours and a commit's message open on the right">
+      </div>
+    </div>
+  </header>
+
+  <section id="features">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="kicker">Features</span>
+        <h2>All of Git, in one window you can see through.</h2>
+        <p>Every branch in its own lane, every change one click from staged, and an undo for the moments Git usually punishes.</p>
+      </div>
+
+      <div class="band">
+        <div class="copy">
+          <h3>A graph that holds a million commits.</h3>
+          <p>The graph is drawn on a canvas from a compact store of rows, so the kernel's whole history scrolls as smoothly as a repository of ten commits.</p>
+          <ul>
+            <li>Solo a branch or hide one; Coral remembers it per repository</li>
+            <li>Find any commit by message, author, path or id</li>
+            <li>Drag one branch label onto another to merge, push or pull</li>
+          </ul>
+        </div>
+        <div class="frame"><img src="screenshots/10-solo.png" alt="One branch soloed in the graph, the rest dimmed" loading="lazy"></div>
+      </div>
+
+      <div class="band flip">
+        <div class="copy">
+          <h3>Interactive rebase, planned in a list.</h3>
+          <p>Pick, reword, edit, squash, fixup, drop and reorder from one list, then start when it is right. If Git stops part-way, continue, skip or abort from the same place.</p>
+          <ul>
+            <li>Merge, rebase, cherry-pick, revert and reset</li>
+            <li>Force pushes are always <code>--force-with-lease</code></li>
+            <li>Patches out and in</li>
+          </ul>
+        </div>
+        <div class="frame"><img src="screenshots/06-rebase.png" alt="The interactive rebase list with an action per commit" loading="lazy"></div>
+      </div>
+
+      <div class="band">
+        <div class="copy">
+          <h3>Stage the line you mean.</h3>
+          <p>Read the diff inline or side by side, with the changed words marked, then stage a file, a hunk or a single line.</p>
+          <ul>
+            <li>Commit, amend and discard</li>
+            <li>Commit signing, per repository</li>
+            <li>Blame and file history for any line</li>
+          </ul>
+        </div>
+        <div class="frame"><img src="screenshots/04-staging.png" alt="Staging individual lines from a diff" loading="lazy"></div>
+      </div>
+
+      <div class="band flip">
+        <div class="copy">
+          <h3>Conflicts, with both sides named.</h3>
+          <p>A three-pane merge tool shows your side and theirs, each named after the branch it came from, with the result underneath. Take a line, a block or a whole side.</p>
+          <ul>
+            <li>Continue or abort a merge, rebase or cherry-pick at any step</li>
+            <li>Large and LFS files handled without loading them whole</li>
+            <li>Undo and redo for every operation</li>
+          </ul>
+        </div>
+        <div class="frame"><img src="screenshots/05-conflicts.png" alt="The three-pane conflict tool" loading="lazy"></div>
+      </div>
+
+      <div class="band">
+        <div class="copy">
+          <h3>Keys at your fingertips.</h3>
+          <p>A command palette on <kbd>Ctrl</kbd> <kbd>P</kbd> reaches every action, and a terminal opens on <kbd>Ctrl</kbd> <kbd>`</kbd> in the repository you are looking at. Every shortcut can be rebound.</p>
+        </div>
+        <div class="frame"><img src="screenshots/07-palette.png" alt="The command palette open over the graph" loading="lazy"></div>
+      </div>
+
+      <div class="grid" style="margin-top: 48px">
+        <div class="card">
+          <h3>GitHub and GitLab</h3>
+          <p>Pull and merge requests in the sidebar, and a new one opened from the branch you are on, drafts included. Enterprise and self-hosted too.</p>
+        </div>
+        <div class="card">
+          <h3>Profiles</h3>
+          <p>Work and personal, each with its own tabs, identity, ssh key and signing, so a commit never goes out under the wrong name.</p>
+        </div>
+        <div class="card">
+          <h3>Tokens in the keyring</h3>
+          <p>Host tokens live in the operating system's keyring, and Coral answers git's credential requests itself.</p>
+        </div>
+        <div class="card">
+          <h3>Worktrees, stashes, submodules</h3>
+          <p>Plus shallow and blobless clones and SHA-256 repositories. The window refreshes as files change on disk.</p>
+        </div>
+        <div class="card">
+          <h3>Tabs that stay</h3>
+          <p>One tab per repository, grouped and coloured the way you like, restored on the next launch.</p>
+        </div>
+        <div class="card">
+          <h3>A command line, too</h3>
+          <p>Fifty-four commands over the same engine as the window, each with a <code>--json</code> output for scripts.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="performance" class="alt">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="kicker">Performance</span>
+        <h2>Measured on the Linux kernel.</h2>
+        <p>1,481,528 commits, 944 tags and a 96,000-file working tree: the repository that makes most clients wait. Coral's engine is Rust, its window is the system's own web view, and git is the one already on your computer.</p>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><b>6.2 s</b><span>from launch to all 1,481,528 commits laid out</span></div>
+        <div class="stat"><b>283 MB</b><span>of memory with the whole kernel graph loaded</span></div>
+        <div class="stat"><b>0%</b><span>CPU while the window sits idle</span></div>
+        <div class="stat"><b>90 ms</b><span>to check the status of all 96,025 files</span></div>
+      </div>
+
+      <div class="charts">
+        <div class="chart">
+          <h3>Time until the window is still</h3>
+          <p class="unit">Seconds from launch to the last repaint. Coral's includes ordering the whole history; the others load it as you scroll.</p>
+          <ul class="bars">
+            <li><span>Sublime Merge</span><span class="track" style="--w: 12.8%"><span class="fill"></span><span class="value">1.2 s</span></span></li>
+            <li><span>GitHub Desktop</span><span class="track" style="--w: 14.0%"><span class="fill"></span><span class="value">1.3 s</span></span></li>
+            <li><span>GitKraken</span><span class="track" style="--w: 58.2%"><span class="fill"></span><span class="value">5.4 s</span></span></li>
+            <li class="us"><span>Coral</span><span class="track" style="--w: 66.0%"><span class="fill"></span><span class="value">6.2 s</span></span></li>
+          </ul>
+        </div>
+        <div class="chart">
+          <h3>Memory with the kernel open</h3>
+          <p class="unit">MB, all of the client's processes together. Lower is better.</p>
+          <ul class="bars">
+            <li class="us"><span>Coral</span><span class="track" style="--w: 10.8%"><span class="fill"></span><span class="value">283 MB</span></span></li>
+            <li><span>GitHub Desktop</span><span class="track" style="--w: 10.8%"><span class="fill"></span><span class="value">283 MB</span></span></li>
+            <li><span>Sublime Merge</span><span class="track" style="--w: 58.6%"><span class="fill"></span><span class="value">1,534 MB</span></span></li>
+            <li><span>GitKraken</span><span class="track" style="--w: 66.0%"><span class="fill"></span><span class="value">1,727 MB</span></span></li>
+          </ul>
+        </div>
+        <div class="chart">
+          <h3>Idle CPU</h3>
+          <p class="unit">Percent of one core, thirty seconds with no input. Lower is better.</p>
+          <ul class="bars">
+            <li class="us"><span>Coral</span><span class="track" style="--w: 0.4%"><span class="fill"></span><span class="value">0.0%</span></span></li>
+            <li><span>Sublime Merge</span><span class="track" style="--w: 0.4%"><span class="fill"></span><span class="value">0.0%</span></span></li>
+            <li><span>GitHub Desktop</span><span class="track" style="--w: 5.2%"><span class="fill"></span><span class="value">0.3%</span></span></li>
+            <li><span>GitKraken</span><span class="track" style="--w: 66.0%"><span class="fill"></span><span class="value">3.4%</span></span></li>
+          </ul>
+        </div>
+        <div class="chart">
+          <h3>Installed size</h3>
+          <p class="unit">MB on disk. Coral uses the system's web view rather than bundling one.</p>
+          <ul class="bars">
+            <li><span>Sublime Merge</span><span class="track" style="--w: 2.5%"><span class="fill"></span><span class="value">27 MB</span></span></li>
+            <li class="us"><span>Coral</span><span class="track" style="--w: 3.8%"><span class="fill"></span><span class="value">40 MB</span></span></li>
+            <li><span>GitHub Desktop</span><span class="track" style="--w: 41.8%"><span class="fill"></span><span class="value">443 MB</span></span></li>
+            <li><span>GitKraken</span><span class="track" style="--w: 66.0%"><span class="fill"></span><span class="value">699 MB</span></span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="method">
+        <p><strong>How this was measured.</strong> Measured on 2026-10-21 on an Intel Core Ultra 9 285H, 16 threads with 64 GB of memory, running Ubuntu 24.04.5, Linux 6.17 and git 2.43.0. Each client opened the same local clone of the Linux kernel, alone on a nested X display, from a fresh profile, three times; the medians are shown. Memory is the proportional set size of all the client's processes twenty seconds after the window stopped changing. Status is the <code>coral status</code> command, warm, process start included.</p>
+        <p>The script and every run's numbers are in the repository: <a href="https://github.com/navinreddy23/coral/tree/master/tests/clients">tests/clients</a>. Fork and Sourcetree have no Linux build and SmartGit was left out because its setup requires agreeing to its licence, so none of them were measured.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="compare">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="kicker">Compare</span>
+        <h2>How Coral sits beside the others.</h2>
+        <p>Facts that can be checked: what each one is built on, what it costs, and the numbers above.</p>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th class="us">Coral</th>
+              <th>GitKraken</th>
+              <th>Sublime Merge</th>
+              <th>GitHub Desktop</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><th>Built with</th><td class="us">Rust, and the system's own web view</td><td>Electron</td><td>C++, its own native interface</td><td>Electron</td></tr>
+            <tr><th>Licence</th><td class="us">MIT, open source</td><td>Proprietary</td><td>Proprietary</td><td>MIT, open source</td></tr>
+            <tr><th>Price</th><td class="us">Free</td><td>Free for public repositories; paid for private ones</td><td>Paid licence, with a free evaluation</td><td>Free</td></tr>
+            <tr><th>On Linux</th><td class="us">Official builds, x86-64 and Arm</td><td>Official builds</td><td>Official builds</td><td>Community build<span class="note">shiftkey/desktop</span></td></tr>
+            <tr><th>Commit graph</th><td class="us">Yes</td><td>Yes</td><td>Yes</td><td>No<span class="note">a list of commits</span></td></tr>
+            <tr><th>Time until the window is still</th><td class="us">6.2 s</td><td>5.4 s</td><td>1.2 s</td><td>1.3 s</td></tr>
+            <tr><th>Memory, kernel open</th><td class="us">283 MB</td><td>1,727 MB</td><td>1,534 MB</td><td>283 MB</td></tr>
+            <tr><th>Idle CPU</th><td class="us">0.0%</td><td>3.4%</td><td>0.0%</td><td>0.3%</td></tr>
+            <tr><th>Installed size</th><td class="us">40 MB</td><td>699 MB</td><td>27 MB</td><td>443 MB</td></tr>
+            <tr><th>Version measured</th><td class="us">1.2.2</td><td>12.4.1</td><td>build 2132</td><td>3.4.13-linux1 (community Linux build)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="download" class="alt">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="kicker">Download</span>
+        <h2>Try it on your own repository.</h2>
+        <p>Free, with no account and no card. Builds come from the project's own release workflow on GitHub.</p>
+      </div>
+      <div class="downloads">
+        <div class="card download" data-os="linux">
+          <h3>Linux</h3>
+          <div class="links">
+            <a data-asset="linux-x86_64.deb" href="https://github.com/navinreddy23/coral/releases">.deb for x86-64</a>
+            <a data-asset="linux-x86_64.AppImage" href="https://github.com/navinreddy23/coral/releases">AppImage for x86-64</a>
+            <a data-asset="linux-aarch64.deb" href="https://github.com/navinreddy23/coral/releases">.deb for Arm</a>
+            <a data-asset="linux-aarch64.AppImage" href="https://github.com/navinreddy23/coral/releases">AppImage for Arm</a>
+          </div>
+          <p class="needs">Debian 12, Ubuntu 22.04, RHEL 9 or newer. Git 2.40 or newer.</p>
+        </div>
+        <div class="card download" data-os="mac">
+          <h3>macOS</h3>
+          <div class="links">
+            <a data-asset="macos-universal.dmg" href="https://github.com/navinreddy23/coral/releases">.dmg for Apple silicon and Intel</a>
+          </div>
+          <p class="needs">Git 2.40 or newer.</p>
+        </div>
+        <div class="card download" data-os="windows">
+          <h3>Windows</h3>
+          <div class="links">
+            <a data-asset="windows-x86_64-setup.exe" href="https://github.com/navinreddy23/coral/releases">Installer for x86-64</a>
+            <a data-asset="windows-aarch64-setup.exe" href="https://github.com/navinreddy23/coral/releases">Installer for Arm</a>
+          </div>
+          <p class="needs">Windows 10 or 11. Git 2.40 or newer.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <span>Coral is MIT licensed. Not affiliated with Axosoft, Sublime HQ, GitHub or any client named here.</span>
+      <ul>
+        <li><a href="https://github.com/navinreddy23/coral">Source</a></li>
+        <li><a href="https://github.com/navinreddy23/coral/releases">Releases</a></li>
+        <li><a href="https://github.com/navinreddy23/coral/blob/master/CHANGELOG.md">Changelog</a></li>
+        <li><a href="https://github.com/navinreddy23/coral/blob/master/CREDITS.md">Credits</a></li>
+        <li><a href="https://github.com/navinreddy23/coral/issues">Issues</a></li>
+      </ul>
+    </div>
+  </footer>
+
+  <script>
+    // Each platform links to the newest release that has a build for it: a release can ship
+    // without one platform, and the page should not send anybody to a missing file.
+    (async () => {
+      const os = /Mac/.test(navigator.platform) ? 'mac'
+        : /Win/.test(navigator.platform) ? 'windows' : 'linux';
+      document.querySelector(`[data-os="${os}"]`)?.classList.add('here');
+      let releases;
+      try {
+        const answer = await fetch('https://api.github.com/repos/navinreddy23/coral/releases?per_page=10');
+        if (!answer.ok) return;
+        releases = (await answer.json()).filter((r) => !r.draft && !r.prerelease);
+      } catch {
+        return;
+      }
+      for (const link of document.querySelectorAll('[data-asset]')) {
+        const suffix = `_${link.dataset.asset}`;
+        for (const release of releases) {
+          const asset = release.assets.find((a) => a.name.endsWith(suffix));
+          if (asset) {
+            link.href = asset.browser_download_url;
+            link.textContent += ` · ${release.tag_name}`;
+            break;
+          }
+        }
+      }
+    })();
+  </script>
+</body>
+</html>

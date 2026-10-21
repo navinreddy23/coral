@@ -4,6 +4,8 @@ A desktop Git client that stays quick on a repository nobody else is quick on. R
 Tauri 2 shell, Svelte 5 interface, and a command-line front end over the same engine, so
 everything the window does can be driven and tested without one.
 
+Website and downloads: <https://navinreddy23.github.io/coral/>
+
 The interface is modelled on GitKraken: someone who uses that daily should be able to sit down
 at Coral and work without reading anything. The layout, density and interactions follow it
 deliberately. None of its assets, icons or code are used — the icons are Lucide, the faces are

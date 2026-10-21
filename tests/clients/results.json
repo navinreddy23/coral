@@ -1,0 +1,137 @@
+{
+  "machine": {
+    "cpu": "Intel Core Ultra 9 285H, 16 threads",
+    "memory": "64 GB",
+    "os": "Ubuntu 24.04.5, Linux 6.17",
+    "git": "2.43.0",
+    "display": "Xephyr 1500x950, X11",
+    "repository": "Linux kernel, 1,481,528 commits, 944 tags, commit-graph written",
+    "date": "2026-10-21"
+  },
+  "clients": [
+    {
+      "client": "Coral",
+      "version": "1.2.2",
+      "median": {
+        "seconds_to_still": 6.16,
+        "pss_mib": 283,
+        "idle_cpu_percent": 0.0
+      },
+      "installed_mib": 40,
+      "installed_note": "the .deb's Installed-Size; the system's WebKitGTK is not counted",
+      "runs": [
+        {
+          "seconds_to_still": 5.92,
+          "pss_mib": 283,
+          "idle_cpu_percent": 0.0,
+          "processes": 3
+        },
+        {
+          "seconds_to_still": 6.54,
+          "pss_mib": 291,
+          "idle_cpu_percent": 0.0,
+          "processes": 3
+        },
+        {
+          "seconds_to_still": 6.16,
+          "pss_mib": 279,
+          "idle_cpu_percent": 0.0,
+          "processes": 3
+        }
+      ]
+    },
+    {
+      "client": "GitKraken",
+      "version": "12.4.1",
+      "median": {
+        "seconds_to_still": 5.43,
+        "pss_mib": 1727,
+        "idle_cpu_percent": 3.37
+      },
+      "installed_mib": 699,
+      "installed_note": "the unpacked Linux tarball",
+      "runs": [
+        {
+          "seconds_to_still": 5.37,
+          "pss_mib": 1787,
+          "idle_cpu_percent": 3.1,
+          "processes": 11
+        },
+        {
+          "seconds_to_still": 5.43,
+          "pss_mib": 1727,
+          "idle_cpu_percent": 3.37,
+          "processes": 11
+        },
+        {
+          "seconds_to_still": 5.46,
+          "pss_mib": 1719,
+          "idle_cpu_percent": 3.63,
+          "processes": 11
+        }
+      ]
+    },
+    {
+      "client": "Sublime Merge",
+      "version": "build 2132",
+      "median": {
+        "seconds_to_still": 1.19,
+        "pss_mib": 1534,
+        "idle_cpu_percent": 0.0
+      },
+      "installed_mib": 27,
+      "installed_note": "the unpacked Linux tarball",
+      "runs": [
+        {
+          "seconds_to_still": 1.19,
+          "pss_mib": 1534,
+          "idle_cpu_percent": 0.0,
+          "processes": 2
+        },
+        {
+          "seconds_to_still": 1.19,
+          "pss_mib": 1531,
+          "idle_cpu_percent": 0.0,
+          "processes": 2
+        },
+        {
+          "seconds_to_still": 1.17,
+          "pss_mib": 1614,
+          "idle_cpu_percent": 0.0,
+          "processes": 2
+        }
+      ]
+    },
+    {
+      "client": "GitHub Desktop",
+      "version": "3.4.13-linux1 (community Linux build)",
+      "median": {
+        "seconds_to_still": 1.3,
+        "pss_mib": 283,
+        "idle_cpu_percent": 0.27
+      },
+      "installed_mib": 443,
+      "installed_note": "the extracted AppImage",
+      "runs": [
+        {
+          "seconds_to_still": 1.29,
+          "pss_mib": 283,
+          "idle_cpu_percent": 0.27,
+          "processes": 7
+        },
+        {
+          "seconds_to_still": 1.31,
+          "pss_mib": 283,
+          "idle_cpu_percent": 0.27,
+          "processes": 7
+        },
+        {
+          "seconds_to_still": 1.3,
+          "pss_mib": 283,
+          "idle_cpu_percent": 0.2,
+          "processes": 7
+        }
+      ]
+    }
+  ]
+}

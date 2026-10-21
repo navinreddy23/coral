@@ -1,0 +1,38 @@
+name: Pages
+
+on:
+  push:
+    branches: [master]
+    paths: ['site/**', 'docs/screenshots/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deployment at a time, and a newer push waits rather than cancelling one half-published.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      # The screenshots are the README's too, so they are copied in rather than kept twice.
+      - name: Assemble
+        run: |
+          cp -r site _site
+          cp -r docs/screenshots _site/screenshots
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
