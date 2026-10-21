@@ -30,11 +30,6 @@ export interface LaneStyle {
   headRow?: number | null;
   /** What to ring that row with. The brand colour, read from the stylesheet by the caller. */
   headRing?: string;
-  /**
-   * The interface face, from `--font-ui`, so the initials are set in what the rest of the
-   * window is. A canvas cannot read a custom property, so the caller passes it in.
-   */
-  fontFamily?: string;
 }
 
 /**
@@ -89,12 +84,12 @@ export function drawLanes(
         // covers the rest of it.
         ctx.lineTo(x1, y1);
       } else {
-        // A curve that is vertical where it leaves the node and vertical where it reaches the
-        // parent's lane, turning across the row in between. Both ends say which lane they are
-        // in, which a straight diagonal does not, and it is lighter than the right-angled elbow
-        // it replaces, whose horizontal run drew a bar across the row on every branch point.
-        const mid = (y0 + y1) / 2;
-        ctx.bezierCurveTo(x0, mid, x1, mid, x1, y1);
+        // A right-angled elbow with a rounded corner, as the reference draws it: the edge
+        // leaves the node horizontally on the node's own row, turns through a short arc, and
+        // runs straight down the parent's lane. A bezier spread over the row instead reads as
+        // a lazy diagonal and makes it hard to tell which lane a line ended up in.
+        ctx.arcTo(x1, y0, x1, y1, cornerRadius(metrics));
+        ctx.lineTo(x1, y1);
       }
       ctx.stroke();
     }
@@ -106,13 +101,12 @@ export function drawLanes(
   // A disc in the author's colour, ringed in its lane's, with the author's initials on it in
   // white. The ring says which line the commit is on, the fill and the letters say who wrote
   // it. Both are drawn at full size whether or not the row's metadata has arrived, so a node
-  // does not change size under the pointer as a scroll settles. A merge is a smaller dot in
-  // the lane's own colour instead: a run of merges is structure rather than content, and the
-  // kernel's first-parent line is thousands of them with the same initials in every one.
+  // does not change size under the pointer as a scroll settles. Merges are left unmarked: the
+  // two edges leaving the node already say it.
   ctx.lineWidth = NODE_STROKE;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = `600 ${labelSize(metrics)}px ${style.fontFamily ?? 'system-ui, sans-serif'}`;
+  ctx.font = `600 ${labelSize(metrics)}px system-ui, sans-serif`;
 
   for (let row = window.first; row <= window.last; row++) {
     const local = rowOf(row);
@@ -123,17 +117,6 @@ export function drawLanes(
 
     const x = laneX(lane, metrics);
     const y = rowY(row, first, metrics);
-    const merge = parentLanesOf(frame, local).length > 1;
-    if (merge) {
-      ctx.fillStyle = laneColour(lane, colours);
-      ctx.strokeStyle = laneColour(lane, colours);
-      ctx.beginPath();
-      ctx.arc(x, y, mergeRadius(metrics), 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      if (row === style.headRow) ringHead(ctx, x, y, metrics, style.headRing ?? laneColour(lane, colours));
-      continue;
-    }
     // Stroked inside the radius, so the outer edge is where the metrics say it is whatever the
     // ring is drawn at.
     const radius = metrics.nodeRadius - NODE_STROKE / 2;
@@ -152,7 +135,12 @@ export function drawLanes(
     // The commit that is checked out, ringed clear of its own node so the lane colour under it
     // stays readable. The gap is left unpainted rather than filled: the canvas is transparent
     // over the row, so what shows through is the row's own background, selected or not.
-    if (row === style.headRow) ringHead(ctx, x, y, metrics, style.headRing ?? laneColour(lane, colours));
+    if (row === style.headRow) {
+      ctx.strokeStyle = style.headRing ?? laneColour(lane, colours);
+      ctx.beginPath();
+      ctx.arc(x, y, headRadius(metrics), 0, Math.PI * 2);
+      ctx.stroke();
+    }
 
     // Only where there is room for them to be read. In a merge region the lanes are drawn
     // tight and the node is a few pixels across; two letters in it are a smudge, and a smudge
@@ -163,21 +151,6 @@ export function drawLanes(
       ctx.fillText(label, x, y + 0.5);
     }
   }
-}
-
-function ringHead(ctx: CanvasRenderingContext2D, x: number, y: number, m: Metrics, colour: string): void {
-  ctx.strokeStyle = colour;
-  ctx.beginPath();
-  ctx.arc(x, y, headRadius(m), 0, Math.PI * 2);
-  ctx.stroke();
-}
-
-/**
- * Radius of a merge's dot: under half a full node, and never so small it reads as a speck on
- * the line rather than as a commit on it.
- */
-function mergeRadius(m: Metrics): number {
-  return Math.max(3, Math.round(m.nodeRadius * 0.45));
 }
 
 /**
@@ -204,6 +177,16 @@ function headRadius(m: Metrics): number {
  */
 function labelSize(m: Metrics): number {
   return Math.round(m.nodeRadius * 0.85);
+}
+
+/**
+ * Radius of the turn where an edge changes lane.
+ *
+ * A third of the lane pitch, matching the reference: large enough to read as a curve rather
+ * than a mitre, small enough that the horizontal and vertical runs either side stay obvious.
+ */
+function cornerRadius(m: Metrics): number {
+  return Math.min(m.laneWidth, m.rowHeight) / 3;
 }
 
 /**

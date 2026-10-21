@@ -231,12 +231,6 @@ export function brandColour(root: HTMLElement): string {
   return found.length > 0 ? found : NO_STYLESHEET;
 }
 
-/** The interface face from `--font-ui`, for lettering drawn on the canvas. */
-export function interfaceFont(root: HTMLElement): string {
-  const found = getComputedStyle(root).getPropertyValue('--font-ui').trim();
-  return found.length > 0 ? found : 'system-ui, sans-serif';
-}
-
 /**
  * What to draw with when the stylesheet cannot be read at all.
  *

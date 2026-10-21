@@ -7,7 +7,6 @@
     DEFAULT_METRICS,
     fittedMetrics,
     GRAPH_COLUMN_PX,
-    interfaceFont,
     laneColours,
     nodeColours,
     type Metrics,
@@ -67,14 +66,12 @@
   let colours: string[] = $state([]);
   let fills: string[] = $state([]);
   let brand = $state('');
-  let font = $state('');
   let pending = false;
 
   function readTokens() {
     colours = laneColours(document.documentElement);
     fills = nodeColours(document.documentElement);
     brand = brandColour(document.documentElement);
-    font = interfaceFont(document.documentElement);
   }
 
   onMount(readTokens);
@@ -118,7 +115,6 @@
       author,
       headRow,
       headRing: brand,
-      fontFamily: font,
     });
   }
 
