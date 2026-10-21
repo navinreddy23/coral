@@ -198,6 +198,11 @@ ssh-test:
 
 # Photographs every surface of the window in both themes, in a real browser. Needs Chrome,
 # which is why it is not part of `check`.
+# The release binary itself under WebKitGTK, on a private X display, through a fixed tour.
+# Needs Xephyr and ImageMagick, so it is not part of `just check`.
+window-real: app
+    bash tests/window-real/run.sh
+
 window-test *ARGS:
     bash tests/window/run.sh {{ARGS}}
 
