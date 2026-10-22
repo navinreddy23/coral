@@ -485,7 +485,7 @@
     {:else if diff.file.binary}
       {@const sides = diff.sides}
       {#if sides !== null && isImage(sides.after.file)}
-        <ImageDiff repo={sides.repo} before={sides.before} after={sides.after} />
+        <ImageDiff repo={sides.repo} before={sides.before} after={sides.after} stamp={diff.file} />
       {:else}
         <p class="muted">Binary file — no textual diff.</p>
       {/if}

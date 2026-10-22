@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { cleanup, render, waitFor } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const invoke = vi.hoisted(() => vi.fn());
@@ -75,5 +76,47 @@ describe('an image before and after', () => {
     await waitFor(() => expect(container.querySelectorAll('img')).toHaveLength(2));
     unmount();
     expect(revoked.sort()).toEqual([...made].sort());
+  });
+
+  it('fetches nothing again for the same commit handed over as new objects', async () => {
+    // The diff is read again on every change in the working tree, and hands over fresh
+    // objects each time; a commit's images cannot have changed.
+    answer({ parent: 10, commit: 10 });
+    const view = render(ImageDiff, { props: { repo: '/repo', before, after, stamp: 1 } });
+    await waitFor(() => expect(view.container.querySelectorAll('img')).toHaveLength(2));
+    await view.rerender({ repo: '/repo', before: { ...before }, after: { ...after }, stamp: 2 });
+    await tick();
+    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(view.container.querySelectorAll('img')).toHaveLength(2);
+  });
+
+  it('reads a side on disk again when the diff is reread, keeping the old one up meanwhile', async () => {
+    const disk = { side: { kind: 'worktree' } as const, file: 'img/logo.png' };
+    const index = { side: { kind: 'index' } as const, file: 'img/logo.png' };
+    answer({ parent: 10, commit: 10 });
+    invoke.mockImplementation(async () => new Uint8Array(10).buffer);
+    const view = render(ImageDiff, { props: { repo: '/repo', before: index, after: disk, stamp: 1 } });
+    await waitFor(() => expect(view.container.querySelectorAll('img')).toHaveLength(2));
+    const waiting: ((v: unknown) => void)[] = [];
+    invoke.mockImplementation(() => new Promise((r) => waiting.push(r)));
+    await view.rerender({ repo: '/repo', before: index, after: disk, stamp: 2 });
+    await tick();
+    expect(view.container.querySelectorAll('img'), 'still the old pictures').toHaveLength(2);
+    expect(view.container.textContent).not.toContain('Loading');
+    for (const r of waiting) r(new Uint8Array(12).buffer);
+    await waitFor(() => expect(made.length).toBe(4));
+    // The two replaced are let go once the new pair is up.
+    await waitFor(() => expect(revoked.length).toBe(2));
+  });
+
+  it('lets go of the side that read when the other is refused', async () => {
+    invoke.mockImplementation(async (_cmd: string, args: { side: { kind: string } }) => {
+      if (args.side.kind === 'commit') throw { code: 'refused', message: 'it is 40 MB' };
+      return new Uint8Array(10).buffer;
+    });
+    const { container } = render(ImageDiff, { props: { repo: '/repo', before, after } });
+    await waitFor(() => expect(container.textContent).toContain('40 MB'));
+    expect(made).toHaveLength(1);
+    expect(revoked).toEqual(made);
   });
 });
