@@ -34,6 +34,11 @@
         <button class="link" onclick={() => onShow(b.found ?? '')}>{short(b.found)}</button>
         {#if subject !== null}<span class="subject">{subject}</span>{/if}
       </span>
+    {:else if b.mistaken}
+      <span class="news">
+        A commit marked {b.terms.good} is newer than the one marked {b.terms.bad}, as if the two
+        were swapped. End the bisect and start again.
+      </span>
     {:else if b.onlySkippedLeft}
       <span class="news">Only skipped commits are left; git cannot narrow it further.</span>
     {:else if b.bad === null}
@@ -45,7 +50,10 @@
         Testing
         <button class="link" onclick={() => onShow(b.testing ?? '')}>{short(b.testing)}</button>
         {#if b.steps !== null}
-          · about {b.steps} more {b.steps === 1 ? 'step' : 'steps'}, {b.suspects} suspects
+          <!-- git's count is of the steps after this one, so at none this is the last. -->
+          · {b.steps === 0
+            ? 'the last to test'
+            : `about ${b.steps} more ${b.steps === 1 ? 'step' : 'steps'} after this`}, {b.suspects} suspects
         {/if}
       </span>
       <span class="verdicts">

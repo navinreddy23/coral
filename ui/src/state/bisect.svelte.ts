@@ -30,14 +30,22 @@ export class BisectState {
     return out;
   });
 
+  /** Which read the held answer is for, so a slow one for another tab cannot replace it. */
+  #token = 0;
+
   async load(path: string): Promise<void> {
+    const token = ++this.#token;
+    let found: Bisection | null;
     try {
-      this.current = await repoBisection(path);
+      found = await repoBisection(path);
     } catch {
       // Unreadable is treated as none: the bar offers nothing that would act on a guess, and
       // the next change in the repository reads it again.
-      this.current = null;
+      found = null;
     }
+    // A bisect read for the tab left behind, landing after the one switched to, would put that
+    // repository's verdict buttons over this one, and they act on whichever is open.
+    if (token === this.#token) this.current = found;
   }
 
   /** What to call a verdict, in the words this bisection was started with. */

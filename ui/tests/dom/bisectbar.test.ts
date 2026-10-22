@@ -26,6 +26,7 @@ function bisection(over: Partial<Bisection> = {}): Bisection {
     steps: 3,
     found: null,
     onlySkippedLeft: false,
+    mistaken: false,
     verdicts: [],
     ...over,
   };
@@ -59,13 +60,19 @@ describe('the bisect bar', () => {
     const { container, calls, button } = bar(bisection());
     expect(container.textContent).toContain('Testing');
     expect(container.textContent).toContain('cccccccc');
-    expect(container.textContent).toContain('about 3 more steps, 7 suspects');
+    expect(container.textContent).toContain('about 3 more steps after this, 7 suspects');
     await fireEvent.click(button('Good') as HTMLElement);
     await fireEvent.click(button('Bad') as HTMLElement);
     await fireEvent.click(button('Skip') as HTMLElement);
     await fireEvent.click(button('End bisect') as HTMLElement);
     expect(calls.mark).toEqual(['good', 'bad', 'skip']);
     expect(calls.end).toBe(1);
+  });
+
+  it('says the commit being tested is the last when git counts no steps after it', () => {
+    const { container } = bar(bisection({ steps: 0, suspects: 2 }));
+    expect(container.textContent).toContain('the last to test, 2 suspects');
+    expect(container.textContent).not.toContain('0 more');
   });
 
   it('asks for the side it is missing, and offers no verdict until then', () => {
@@ -89,6 +96,16 @@ describe('the bisect bar', () => {
   it('says when only skipped commits are left', () => {
     const { container } = bar(bisection({ onlySkippedLeft: true, testing: null }));
     expect(container.textContent).toContain('Only skipped commits are left');
+  });
+
+  it('says good and bad look swapped, and still offers the way out', async () => {
+    const { container, calls, button } = bar(
+      bisection({ mistaken: true, testing: null, suspects: null, steps: null }),
+    );
+    expect(container.textContent?.replace(/\s+/g, ' ')).toContain('as if the two were swapped');
+    expect(button('Good')).toBeUndefined();
+    await fireEvent.click(button('End bisect') as HTMLElement);
+    expect(calls.end).toBe(1);
   });
 
   it('speaks in the terms the bisect was started with', () => {
@@ -121,5 +138,24 @@ describe('the verdicts given so far', () => {
     expect(bisect.marks.get(GOOD)).toBe('good');
     expect(bisect.marks.get('d'.repeat(40))).toBe('skip');
     expect(bisect.marks.get(TESTING)).toBeUndefined();
+  });
+});
+
+describe('reading the bisection', () => {
+  it('keeps the answer for the repository asked about last, whichever arrives last', async () => {
+    const { invoke } = await import('../../src/ipc/invoke');
+    const mock = vi.mocked(invoke);
+    let releaseSlow: (v: unknown) => void = () => undefined;
+    mock.mockImplementation(async (_cmd, args) => {
+      const path = (args as { path: string }).path;
+      if (path === '/slow') return new Promise((r) => (releaseSlow = r));
+      return null;
+    });
+    const bisect = new BisectState();
+    const slow = bisect.load('/slow');
+    await bisect.load('/fast');
+    releaseSlow(bisection());
+    await slow;
+    expect(bisect.current).toBeNull();
   });
 });
