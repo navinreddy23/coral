@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Checkboxes that fit the theme
+
+Checkboxes are drawn in the window's own colours. In the dark theme an unticked one was a
+bright white square, and a ticked one took the desktop's orange rather than the window's
+accent.
+
 ## 1.2.6
 
 ### Fixes

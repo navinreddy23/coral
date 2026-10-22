@@ -54,6 +54,40 @@ code, .mono { font-family: var(--font-mono); font-variant-ligatures: none; }
   z-index: 1;
 }
 
+/*
+ * Checkboxes drawn from the tokens rather than by the web view.
+ *
+ * WebKitGTK paints an unticked box white whatever `color-scheme` says, so in the dark theme
+ * every one in the window was a bright square on a dark panel, and a ticked one took the
+ * desktop's orange rather than the window's accent. The tick is a clip-path, so it scales with
+ * the box and needs no image.
+ */
+input[type='checkbox'] {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-0);
+  background: var(--bg-0);
+  cursor: pointer;
+}
+input[type='checkbox']::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  background: var(--accent-fg);
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+  transform: scale(0);
+}
+input[type='checkbox']:checked { background: var(--accent); border-color: var(--accent); }
+input[type='checkbox']:checked::before { transform: scale(1); }
+input[type='checkbox']:hover:not(:disabled) { border-color: var(--accent); }
+input[type='checkbox']:disabled { cursor: default; opacity: 0.5; }
+
 ::selection { background: var(--accent-soft); color: var(--fg-0); }
 
 /*
