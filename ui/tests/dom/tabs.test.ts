@@ -161,6 +161,8 @@ function wire() {
               },
             ]
           : [];
+      case 'repo_bisection':
+        return null;
       default:
         return [];
     }

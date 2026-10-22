@@ -74,8 +74,17 @@ export class MergeState {
 
   #path = '';
 
-  /** True while git is mid-merge, mid-rebase, or otherwise stopped. */
-  inProgress = $derived(this.operation !== null && this.operation.state !== 'clean');
+  /**
+   * True while git is mid-merge, mid-rebase, or otherwise stopped.
+   *
+   * Not during a bisect, which stops nothing: there is no conflict to settle, and taking the
+   * main pane for it hid the very list the commits are judged from.
+   */
+  inProgress = $derived(
+    this.operation !== null &&
+      this.operation.state !== 'clean' &&
+      this.operation.state !== 'bisect',
+  );
 
   /** Conflicting regions of the open file, in order. */
   conflicts = $derived((this.blocks?.blocks ?? []).filter((b) => b.kind === 'conflict'));
