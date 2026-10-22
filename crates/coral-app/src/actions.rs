@@ -1,5 +1,6 @@
 use coral_core::ops::MergeMode;
 use coral_core::process::GitRunner;
+use coral_core::proposal::CheckedOut;
 use coral_core::remote::{PullMode, PushOpts};
 use coral_core::repo::RepoLocation;
 
@@ -196,6 +197,11 @@ pub enum Action {
     },
     /// End the bisection and go back to where it started.
     BisectReset,
+    /// Fetch a pull or merge request from the repository's host and check it out as a
+    /// branch of its own.
+    CheckoutProposal {
+        number: u64,
+    },
     Undo,
     Redo,
 }
@@ -416,6 +422,7 @@ impl Action {
                 }
             }
             Self::BisectReset => "end the bisect".to_owned(),
+            Self::CheckoutProposal { number } => format!("check out #{number}"),
             Self::Undo => "undo".to_owned(),
             Self::Redo => "redo".to_owned(),
         }
@@ -433,14 +440,17 @@ impl Action {
         matches!(self, Self::Undo | Self::Redo)
     }
 
-    /// True for the three bounded by somebody else's server rather than by this machine.
+    /// True for the actions bounded by somebody else's server rather than by this machine.
     ///
     /// Only these are worth reporting and worth being able to stop: everything else finishes
     /// before a bar could be drawn, and a cancel button on a checkout would be furniture.
     const fn reaches_network(&self) -> bool {
         matches!(
             self,
-            Self::Fetch { .. } | Self::Pull { .. } | Self::Push { .. }
+            Self::Fetch { .. }
+                | Self::Pull { .. }
+                | Self::Push { .. }
+                | Self::CheckoutProposal { .. }
         )
     }
 }
@@ -653,9 +663,10 @@ async fn run(
     report: &(dyn Fn(&coral_core::remote::Progress) + Sync),
 ) -> Result<Done, coral_core::CoralError> {
     match action {
-        Action::Fetch { .. } | Action::Pull { .. } | Action::Push { .. } => {
-            run_remote(loc, runner, action, report).await
-        }
+        Action::Fetch { .. }
+        | Action::Pull { .. }
+        | Action::Push { .. }
+        | Action::CheckoutProposal { .. } => run_remote(loc, runner, action, report).await,
         Action::Checkout { .. }
         | Action::BranchCreate { .. }
         | Action::BranchDelete { .. }
@@ -675,7 +686,7 @@ async fn run(
     }
 }
 
-/// The three that reach the network.
+/// The actions that reach the network.
 async fn run_remote(
     loc: &RepoLocation,
     runner: &GitRunner,
@@ -723,6 +734,21 @@ async fn run_remote(
             Ok(Done {
                 conflicted: results.iter().any(|r| r.flag.is_failure()),
                 message,
+            })
+        }
+        Action::CheckoutProposal { number } => {
+            let (remote, proposal) = crate::hosting::proposal(loc, runner, number).await?;
+            let did = loc
+                .checkout_proposal(runner, &remote, proposal, |p| report(&p))
+                .await?;
+            let branch = proposal.branch();
+            Ok(Done {
+                conflicted: false,
+                message: match did {
+                    CheckedOut::Created => format!("#{number} is checked out as {branch}"),
+                    CheckedOut::Updated => format!("{branch} is brought up to #{number}"),
+                    CheckedOut::Unchanged => format!("{branch} already has all of #{number}"),
+                },
             })
         }
         _ => unreachable!("routed by `run`"),

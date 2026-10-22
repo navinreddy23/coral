@@ -26,6 +26,7 @@
     onOpenSubmodule,
     onDropRef,
     onOpenPullRequest,
+    onPullRequestMenu = () => undefined,
     onRemoteMenu,
     onRefMenu,
     onStashMenu,
@@ -83,6 +84,8 @@
     /** `source` was dragged onto `target`; the shell decides what that means. */
     onDropRef: (source: string, target: string) => void;
     onOpenPullRequest: (pr: PullRequest) => void;
+    /** Right-click on a proposal: check it out here, or open it on the host. */
+    onPullRequestMenu?: (event: MouseEvent, pr: PullRequest) => void;
     /** Right-click on a remote, or on the section itself when `remote` is null. */
     onRemoteMenu: (event: MouseEvent, remote: string | null) => void;
     /** Fetches a working copy for every submodule that has none. */
@@ -655,7 +658,7 @@
       {#if !collapsed['prs']}
         <ul>
           {#each pullRequests as pr (pr.number)}
-            <li>
+            <li oncontextmenu={(e) => onPullRequestMenu(e, pr)}>
               <button
                 class="ref pr"
                 onclick={() => onOpenPullRequest(pr)}

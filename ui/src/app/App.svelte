@@ -3819,6 +3819,39 @@
   }
 
   /**
+   * What a right-click on a pull or merge request offers.
+   *
+   * Checking one out fetches its tip by the name the host keeps it under, so it works for a
+   * request from a fork as well as for one from a branch of this repository.
+   */
+  function pullRequestMenu(event: MouseEvent, pr: PullRequest) {
+    event.preventDefault();
+    event.stopPropagation();
+    menu = {
+      x: event.clientX,
+      y: event.clientY,
+      items: [
+        {
+          kind: 'item',
+          label: `Check out #${pr.number} locally`,
+          run: () => void act({ kind: 'checkoutProposal', number: pr.number }),
+        },
+        { kind: 'separator' },
+        {
+          kind: 'item',
+          label: 'Open it in the browser',
+          run: () => void openInBrowser(pr.webUrl),
+        },
+        {
+          kind: 'item',
+          label: 'Copy its link',
+          run: () => void copyUrl(pr.webUrl),
+        },
+      ],
+    };
+  }
+
+  /**
    * Takes a working tree away, with the files in it.
    *
    * Asked twice over when it holds changes, because those are the one thing here that exists
@@ -4323,6 +4356,7 @@
         collapsed={views.current.collapsed}
         onCollapse={(section, closed) => views.setCollapsed(section, closed)}
         onOpenPullRequest={(pr: PullRequest) => void openInBrowser(pr.webUrl)}
+        onPullRequestMenu={pullRequestMenu}
         scope={{ solo: scope.solo, hidden: scope.hidden }}
         onToggleHidden={(r) => void toggleHidden(r)}
         onLeaveSolo={() => void soloRef(null)}
