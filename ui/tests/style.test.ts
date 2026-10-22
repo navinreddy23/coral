@@ -95,6 +95,15 @@ describe('the component stylesheets', () => {
     expect(css).not.toMatch(/\.line\.in-conflict(\.here)? \{[^}]*box-shadow/u);
   });
 
+  it('cuts a long proposal title before the checks mark beside it', () => {
+    // A title the width of the sidebar pushed the mark past its edge, so the one proposal
+    // whose checks had passed showed nothing at all.
+    const css = STYLES.find((s) => s.name === 'Sidebar.svelte')?.css ?? '';
+    expect(css).toMatch(/\.pr \.title \{[^}]*min-width:\s*0[^}]*text-overflow:\s*ellipsis/u);
+    expect(css).toMatch(/\.checks \{[^}]*flex:\s*0 0 auto/u);
+    expect(css).toMatch(/\.pr \{[^}]*width:\s*100%/u);
+  });
+
   it('shows a commit-list column handle once the pointer is on it', () => {
     // The spec says the two handles are invisible until the pointer is on them. They were
     // invisible after it too: the list switched the splitter's line off outright, hover and

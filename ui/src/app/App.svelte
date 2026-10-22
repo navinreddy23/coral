@@ -4223,6 +4223,8 @@
         onWorktreeMenu={worktreeMenu}
         onDropRef={dropRef}
         pullRequests={hosting.pullRequests}
+        checks={hosting.checks}
+        onOpenChecks={(pr, found) => void openInBrowser(found.url ?? pr.webUrl)}
         pullRequestLabel={hosting.view?.host?.kind === 'gitlab' ? 'Merge requests' : 'Pull requests'}
         focusFilter={filterTick}
         reveal={revealSection}

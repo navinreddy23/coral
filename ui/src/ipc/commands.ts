@@ -449,6 +449,24 @@ export interface PullRequest {
   targetBranch: string;
   webUrl: string;
   updatedAt: string;
+  /** The commit at the tip of the source branch, which checks run on. Empty if unknown. */
+  headSha: string;
+}
+
+/** Where a commit's checks stand, worst first. */
+export type CheckState = 'failing' | 'running' | 'passing' | 'none';
+
+/** What a proposal's checks came to. */
+export interface Checks {
+  state: CheckState;
+  /** The whole of it in a few words, such as "3 of 4 checks passed". */
+  summary: string;
+  /** Where to see them: the first failure, or else the first still running. */
+  url: string | null;
+}
+
+export function hostingChecks(path: string, sha: string): Promise<Checks> {
+  return invoke<Checks>('hosting_checks', { path, sha });
 }
 
 export function hostingStatus(path: string): Promise<HostView> {

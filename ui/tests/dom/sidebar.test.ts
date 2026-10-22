@@ -209,6 +209,7 @@ describe('the sidebar', () => {
         targetBranch: 'main',
         webUrl: 'https://gitlab.com/g/p/-/merge_requests/42',
         updatedAt: '2026-01-01T00:00:00Z',
+        headSha: 'a'.repeat(40),
       },
     ];
     const { container } = mount({
@@ -226,6 +227,42 @@ describe('the sidebar', () => {
     expect(row.querySelector('.state')?.className).toContain('draft');
     await fireEvent.click(row);
     expect(opened[0]?.number).toBe(42);
+  });
+
+  it('marks a proposal with its checks, and opens them without opening the proposal', async () => {
+    const proposal = (number: number): PullRequest => ({
+      number,
+      title: `Proposal ${number}`,
+      state: 'open',
+      author: 'alice',
+      sourceBranch: `topic-${number}`,
+      targetBranch: 'main',
+      webUrl: `https://github.com/o/r/pull/${number}`,
+      updatedAt: '2026-01-01T00:00:00Z',
+      headSha: String(number).repeat(40).slice(0, 40),
+    });
+    const opened: string[] = [];
+    const { container } = mount({
+      pullRequests: [proposal(1), proposal(2), proposal(3), proposal(4)],
+      pullRequestLabel: 'Pull requests',
+      checks: {
+        1: { state: 'passing', summary: 'all 3 checks passed', url: null },
+        2: { state: 'failing', summary: '1 of 3 checks failed', url: 'https://ci/2' },
+        3: { state: 'none', summary: 'no checks', url: null },
+      },
+      onOpenPullRequest: (pr: PullRequest) => opened.push(`pr ${pr.number}`),
+      onOpenChecks: (pr: PullRequest) => opened.push(`checks ${pr.number}`),
+    });
+    const row = (n: number) =>
+      [...container.querySelectorAll('button.pr')].find((b) => b.textContent?.includes(`#${n}`));
+    expect(row(1)?.querySelector('.checks.passing')?.getAttribute('title')).toBe('all 3 checks passed');
+    expect(row(2)?.querySelector('.checks.failing')).not.toBeNull();
+    // Nothing ran, or not asked yet: no mark at all rather than an empty one.
+    expect(row(3)?.querySelector('.checks')).toBeNull();
+    expect(row(4)?.querySelector('.checks')).toBeNull();
+
+    await fireEvent.click(row(2)?.querySelector('.checks') as HTMLElement);
+    expect(opened).toEqual(['checks 2']);
   });
 
   it('reports a branch dropped onto another', async () => {
