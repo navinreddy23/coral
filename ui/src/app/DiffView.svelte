@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ImageDiff, { isImage } from './ImageDiff.svelte';
   import Icon from './Icon.svelte';
   import { firstChangedRow, marksOf, onScreen, splitRows, windowAround } from '../diff/split';
   import { wordMarks } from '../diff/word';
@@ -482,7 +483,12 @@
     {:else if !diff.file}
       <p class="muted">Nothing to show.</p>
     {:else if diff.file.binary}
-      <p class="muted">Binary file — no textual diff.</p>
+      {@const sides = diff.sides}
+      {#if sides !== null && isImage(sides.after.file)}
+        <ImageDiff repo={sides.repo} before={sides.before} after={sides.after} />
+      {:else}
+        <p class="muted">Binary file — no textual diff.</p>
+      {/if}
     {:else if diff.file.tooLarge}
       <!--
         The guard is there because one generated file the size of a kernel header dump costs a

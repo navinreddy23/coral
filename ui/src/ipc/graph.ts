@@ -1,4 +1,5 @@
 import { invoke } from './invoke';
+import { toArrayBuffer } from './bytes';
 
 import { decodeFrame, type Frame } from '../graph/frame';
 import type { CommitMeta } from './types';
@@ -66,16 +67,6 @@ export async function checkBinaryTransport(): Promise<TransportCheck> {
   return { binary: true, detail: 'binary IPC confirmed' };
 }
 
-/** Normalises what `invoke` hands back for a raw-bytes command. */
-function toArrayBuffer(raw: unknown): ArrayBuffer {
-  if (raw instanceof ArrayBuffer) return raw;
-  if (ArrayBuffer.isView(raw)) {
-    const view = raw as ArrayBufferView;
-    return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as ArrayBuffer;
-  }
-  if (Array.isArray(raw)) return new Uint8Array(raw as number[]).buffer;
-  throw new TypeError('graph command did not return bytes');
-}
 
 /**
  * Forgets the walk held for a repository, so the next frame walks it again.
