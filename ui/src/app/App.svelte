@@ -24,10 +24,11 @@
     revAncestry,
     type PullRequest,
   } from '../ipc/commands';
-  import type { Ancestry } from '../ipc/types';
+  import type { Ancestry, Verdict } from '../ipc/types';
   import { ActionsState } from '../state/actions.svelte';
   import { CommitState } from '../state/commit.svelte';
   import MergeTool from './MergeTool.svelte';
+  import BisectBar from './BisectBar.svelte';
   import NewRequest from './NewRequest.svelte';
   import { MergeState } from '../state/merge.svelte';
   import RebasePicker from './RebasePicker.svelte';
@@ -56,6 +57,7 @@
   import { StashesState } from '../state/stashes.svelte';
   import { StartState } from '../state/start.svelte';
   import { FindState } from '../state/find.svelte';
+  import { BisectState } from '../state/bisect.svelte';
   import type { PlacedStash } from '../ipc/stash';
   import { ExperimentalState } from '../state/experimental.svelte';
   import SubmodulePanel from './Submodule.svelte';
@@ -519,6 +521,7 @@
   const stashes = new StashesState();
   const startPage = new StartState();
   const find = new FindState();
+  const bisect = new BisectState();
   let showStart = $state(false);
   /** Whether the start page is what the window is showing, asked for or for want of a tab. */
   const onStart = $derived(showStart || tabs.session.tabs.length === 0);
@@ -837,7 +840,7 @@
     // says the repository is in a state it is no longer in.
     actions.clear();
     const path = info.path;
-    await Promise.all([worktree.load(path), merge.load(path)]);
+    await Promise.all([worktree.load(path), merge.load(path), bisect.load(path)]);
     // The walk first, then the refs and stashes that are placed on it, which is the order the
     // watcher and the transfer path both take and for the same reason: a ref carries the row
     // it sits on, and an operation that records a commit renumbers every row under it. Loaded
@@ -1141,6 +1144,7 @@
       refs.load(path),
       worktree.load(path),
       merge.load(path),
+      bisect.load(path),
       stashes.load(path),
     ]);
     const after = refSignature();
@@ -1901,6 +1905,34 @@
   }
 
   /**
+   * The verdicts a commit can be given, which is also how a bisect is started: marking the
+   * first commit bad or good begins one.
+   */
+  function bisectFor(oid: string): MenuItem[] {
+    const mark = (verdict: Verdict) => () => void act({ kind: 'bisectMark', verdict, rev: oid });
+    if (!bisect.active) {
+      return [
+        { kind: 'item', label: 'Bisect: this commit is bad', hint: 'find what broke it', run: mark('bad') },
+        { kind: 'item', label: 'Bisect: this commit is good', run: mark('good') },
+      ];
+    }
+    const given = bisect.marks.get(oid);
+    return [
+      { kind: 'item', label: `Mark ${bisect.word('bad')}`, hint: 'bisect', disabled: given === 'bad', run: mark('bad') },
+      { kind: 'item', label: `Mark ${bisect.word('good')}`, hint: 'bisect', disabled: given === 'good', run: mark('good') },
+      { kind: 'item', label: 'Skip in the bisect', disabled: given === 'skip', run: mark('skip') },
+      { kind: 'item', label: 'End bisect', run: () => void act({ kind: 'bisectReset' }) },
+    ];
+  }
+
+  /** Selects a commit by its object id, wherever it is in the list. */
+  async function showCommit(oid: string) {
+    if (!info) return;
+    const row = await graphRowOf(info.path, oid).catch(() => null);
+    if (row !== null) await revealAt(row, oid);
+  }
+
+  /**
    * What right-clicking a commit offers.
    *
    * Grouped as the reference groups them: where to go, what to bring in, what to make here,
@@ -1991,6 +2023,8 @@
           worktree: true,
           run: () => void act({ kind: 'rewrite', rev: oid, how: 'moveOlder', message: null }),
         },
+        { kind: 'separator' },
+        ...bisectFor(oid),
         { kind: 'separator' },
         { kind: 'item', label: 'Copy commit sha', hint: short, run: () => void copySha(oid) },
         { kind: 'item', label: 'Copy link to this commit', run: () => void copyLink(oid) },
@@ -2771,6 +2805,14 @@
    */
   const commands = $derived.by<Command[]>(() => {
     const out: Command[] = [
+      ...(bisect.active
+        ? ([
+            { id: 'bisect-good', label: `Bisect: the checked-out commit is ${bisect.word('good')}`, group: 'Bisect', run: () => void act({ kind: 'bisectMark', verdict: 'good', rev: null }) },
+            { id: 'bisect-bad', label: `Bisect: the checked-out commit is ${bisect.word('bad')}`, group: 'Bisect', run: () => void act({ kind: 'bisectMark', verdict: 'bad', rev: null }) },
+            { id: 'bisect-skip', label: 'Bisect: skip the checked-out commit', group: 'Bisect', run: () => void act({ kind: 'bisectMark', verdict: 'skip', rev: null }) },
+            { id: 'bisect-end', label: 'End bisect', group: 'Bisect', run: () => void act({ kind: 'bisectReset' }) },
+          ] satisfies Command[])
+        : []),
       { id: 'fetch', label: 'Fetch', group: 'Remote', run: () => void act({ kind: 'fetch', remote: null }) },
       { id: 'pull', label: 'Pull (fast-forward only)', group: 'Remote', run: () => void act({ kind: 'pull', remote: null, mode: 'ffOnly' }) },
       { id: 'pull-rebase', label: 'Pull, rebasing', group: 'Remote', run: () => void act({ kind: 'pull', remote: null, mode: 'rebase' }) },
@@ -3209,6 +3251,7 @@
       // A repository can be opened mid-merge, so the tool has to be there on arrival rather
       // than only after an action of ours stopped.
       await merge.load(info.path);
+      void bisect.load(info.path);
       void remotes.load(info.path);
       // Deliberately not awaited: a host that is slow or unreachable must not hold up the
       // window, and the section simply appears when the answer arrives.
@@ -3459,7 +3502,7 @@
       // to say is worse than no diff at all.
       await diff.reload(path);
     }
-    if (change.ops) await merge.load(path);
+    if (change.ops) await Promise.all([merge.load(path), bisect.load(path)]);
     if (!change.refs && !change.graph) return;
 
     info = await open(path).catch(() => info);
@@ -4294,6 +4337,15 @@
       <DiffView {diff} onClose={() => diff.close()} onPart={applyPart} />
     {/if}
     <div class="plot" class:hidden={diff.path !== null || merge.inProgress}>
+      <!-- Above the list it is about, and above the column handles, which run full height. -->
+      <BisectBar
+        {bisect}
+        busy={actions.busy}
+        subjectOf={(oid) => graph.meta.get(oid)?.summary ?? null}
+        onMark={(verdict) => void act({ kind: 'bisectMark', verdict, rev: null })}
+        onEnd={() => void act({ kind: 'bisectReset' })}
+        onShow={(oid) => void showCommit(oid)}
+      />
       <!--
         The column handles, which used to be the right edge of a header cell. Full height and
         invisible until the pointer is on them: there is no line to draw between the branch
@@ -4548,6 +4600,12 @@
               >
                 <span class="lane-strip" aria-hidden="true" style:--lane-gap="{laneGap(row)}px"
                 ></span>
+                {#if bisect.active && local !== null}
+                  {@const verdict = bisect.marks.get(oidOf(graph.frame, local))}
+                  {#if verdict !== undefined}
+                    <span class="verdict {verdict}">{verdict === 'skip' ? 'skipped' : bisect.word(verdict)}</span>
+                  {/if}
+                {/if}
                 <span class="summary"
                   >{#if split}<span class="prefix">{split.prefix}</span> {split.rest}{:else}{subject}{/if}</span
                 >
@@ -4781,7 +4839,7 @@
   /* Positioned, so the preferences screen can cover the panes without covering the
      window's own chrome. */
   .body { display: flex; flex: 1; min-height: 0; position: relative; gap: var(--space-1); }
-  .graph { flex: 1; overflow-y: auto; position: relative; background: var(--bg-0); }
+  .graph { flex: 1; min-height: 0; overflow-y: auto; position: relative; background: var(--bg-0); }
   /* Hidden rather than unmounted: remounting would refetch the frame and lose the scroll
      position every time a file is opened and closed. The wrapper is what carries the class
      now, so the handles go with it. */
@@ -4830,7 +4888,7 @@
    * whole height, so they stay put while the list moves under them.
    */
   .plot {
-    position: relative; flex: 1; min-width: 0; display: flex;
+    position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column;
     background: var(--bg-0); border: var(--hairline) solid var(--border); border-radius: var(--radius-3); overflow: hidden;
   }
   .plot.hidden { display: none; }
@@ -5064,6 +5122,14 @@
   .pill.head:hover { background: var(--accent); }
   /* A statement rather than a control: everything it could do, the row already does. */
   .pill.detached { cursor: default; }
+  /* A bisect verdict, at the head of the message it judges. */
+  .verdict {
+    flex: 0 0 auto; margin-right: var(--space-2); padding: 0 var(--space-2);
+    border-radius: var(--radius-1); font-size: var(--text-sm); line-height: 16px;
+    background: var(--bg-2); color: var(--fg-1);
+  }
+  .verdict.bad { background: var(--danger-soft); color: var(--danger); }
+  .verdict.good { background: var(--ok-soft); color: var(--ok); }
   /* A control, not a label: the count opens the refs it stands for. */
   .more {
     display: inline-flex; align-items: center; gap: 3px;

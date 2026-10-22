@@ -10,6 +10,41 @@
  */
 export type Ancestry = "same" | "behind" | "ahead" | "diverged";
 
+/**
+ * Where a bisection has got to.
+ */
+export type Bisection = { terms: Terms, 
+/**
+ * The newest commit marked bad. git keeps only one: a second bad mark replaces it.
+ */
+bad: string | null, good: Array<string>, skipped: Array<string>, 
+/**
+ * The commit checked out to be tested next, once both sides are known.
+ */
+testing: string | null, 
+/**
+ * How many commits could still be the first bad one, the bad one included.
+ */
+suspects: number | null, 
+/**
+ * Roughly how many more verdicts it will take.
+ */
+steps: number | null, 
+/**
+ * The first bad commit, once it is the only suspect left.
+ */
+found: string | null, 
+/**
+ * True when every suspect but the bad commit was skipped, so git cannot say which of
+ * them it was.
+ */
+onlySkippedLeft: boolean, 
+/**
+ * Every verdict given, oldest first. The refs keep only the newest bad commit, so this is
+ * what can say that an earlier one was judged bad too.
+ */
+verdicts: Array<Judged>, };
+
 export type Blame = { chunks: Array<BlameChunk>, 
 /**
  * Keyed by oid. Git sends a commit's details once and then refers back to it, so this is
@@ -186,6 +221,11 @@ export type Identity = { name: string | null, email: string | null, };
  * the repository sets of its own.
  */
 export type IdentityScopes = { effective: Identity, global: Identity, local: Identity, };
+
+/**
+ * One verdict on one commit, as `BISECT_LOG` records it.
+ */
+export type Judged = { oid: string, verdict: Verdict, };
 
 export type Line = { kind: LineKind, text: string, oldNo: number | null, newNo: number | null, 
 /**
@@ -607,6 +647,14 @@ key: string | null,
 inherited: string, };
 
 /**
+ * The words a bisection calls its two sides.
+ *
+ * `bad` and `good` unless it was started with `--term-new`/`--term-old`, or as `new`/`old`,
+ * which is the same search under names that fit a change that is not a fault.
+ */
+export type Terms = { bad: string, good: string, };
+
+/**
  * A rebase todo list, in the order the commits will be replayed.
  *
  * Note that this is the reverse of how the graph shows them: git replays oldest first, while
@@ -622,6 +670,11 @@ export type TodoItem = { step: Step, oid: string, summary: string,
  * The replacement message for a [`Step::Reword`]. Never written to the todo file.
  */
 message: string | null, };
+
+/**
+ * What a commit was found to be.
+ */
+export type Verdict = "bad" | "good" | "skip";
 
 /**
  * Why a conflicted path has no lines of its own to choose between.

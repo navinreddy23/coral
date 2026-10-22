@@ -1,3 +1,4 @@
+import type { Verdict } from './types';
 import { invoke } from './invoke';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -363,6 +364,8 @@ export type Action =
   | { kind: 'submoduleRemove'; path: string; force: boolean }
   | { kind: 'patch'; rev: string; from: string | null; directory: string }
   | { kind: 'applyPatch'; files: string[]; commit: boolean }
+  | { kind: 'bisectMark'; verdict: Verdict; rev: string | null }
+  | { kind: 'bisectReset' }
   | { kind: 'undo' }
   | { kind: 'redo' };
 

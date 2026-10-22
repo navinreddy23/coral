@@ -3,6 +3,7 @@
 
 pub mod actions;
 pub mod activity;
+pub mod bisect;
 pub mod commands;
 pub mod conflicts;
 pub mod credentials;

@@ -1,4 +1,5 @@
 pub mod attributes;
+pub mod bisect;
 pub mod blame;
 pub mod bytes;
 pub mod commit;

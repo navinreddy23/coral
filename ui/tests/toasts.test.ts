@@ -147,6 +147,12 @@ describe('what to call an outcome that did not complete', () => {
     );
   });
 
+  it('leads a bisect verdict with where the search has got to', () => {
+    expect(
+      outcomeToast('bisectMark', 'mark this commit bad', 'fd90b123 is the first bad commit', false),
+    ).toEqual({ kind: 'ok', title: 'fd90b123 is the first bad commit', detail: '' });
+  });
+
   it('completes the sentence for every other action', () => {
     expect(outcomeToast('fetch', 'fetch', 'From origin', false)).toEqual({
       kind: 'ok',

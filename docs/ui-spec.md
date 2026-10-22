@@ -247,6 +247,18 @@ merged; for a rebase, the `onto` ref and the summary of the commit being replaye
 in the UI, that during a rebase "current" is the branch being rebased onto — this confuses
 everyone.
 
+## Bisect
+
+Started from a commit's menu, "Bisect: this commit is bad" or "…is good", and carried on from
+the same menu on any row (mark bad, mark good, skip, end). While it runs, a strip across the
+top of the commit list says what is wanted next or which commit is checked out to be tested,
+with Good, Bad and Skip for it and End bisect, and the palette offers the same verdicts. Every
+judged commit carries its verdict at the head of its message. When one suspect is left the strip
+names it and links to it. The words are the bisection's own terms, so a bisect started in a
+terminal with `--term-new` reads in those. A bisect is not a stop: the graph stays on screen and
+the merge tool never opens for it, and its steps stay out of undo, since ending it is the way
+back.
+
 ## Cloning
 
 URL, destination, and the name it lands under. For a URL that will be reached over ssh — a

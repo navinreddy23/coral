@@ -106,6 +106,11 @@ export function outcomeToast(
   if (action === 'undo' || action === 'redo') {
     return { kind: 'ok', title: what, detail: '' };
   }
+  // A verdict's news is where the search has got to, which the engine has put in a sentence;
+  // "mark this commit bad complete" said only that a button had been pressed.
+  if (action === 'bisectMark' && message !== '') {
+    return { kind: 'ok', title: message, detail: '' };
+  }
   return describe(what, message, conflicted);
 }
 

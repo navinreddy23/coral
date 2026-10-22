@@ -881,6 +881,40 @@ describe('the shell', () => {
     await waitFor(() => expect(invoke).toHaveBeenCalledWith('install_update'));
   });
 
+  it('keeps the commit list on screen while a bisect is running', async () => {
+    // A bisect stops nothing, but it is an operation git reports, and the merge tool took the
+    // main pane for it: the list the commits are judged from vanished the moment one started.
+    const operation = {
+      state: 'bisect',
+      labels: { ours: 'ours', theirs: 'theirs', swapped: false },
+      progress: null,
+      headName: null,
+      stoppedAt: null,
+      interactive: false,
+      resumable: true,
+      applying: false,
+      prepared: null,
+    };
+    const bisecting = {
+      terms: { bad: 'bad', good: 'good' },
+      bad: frameOids[0],
+      good: [frameOids[4]],
+      skipped: [],
+      testing: frameOids[2],
+      suspects: 4,
+      steps: 2,
+      found: null,
+      onlySkippedLeft: false,
+      verdicts: [],
+    };
+    const { container } = await shell({ repo_operation: operation, repo_bisection: bisecting });
+    await waitFor(() => {
+      if (!container.querySelector('.bisect')) throw new Error('no bisect bar yet');
+    });
+    expect(container.querySelector('.plot')?.classList.contains('hidden')).toBe(false);
+    expect(container.querySelectorAll('li.row').length).toBeGreaterThan(0);
+  });
+
   it('turns a pull it cannot fast-forward into the choice it actually is', async () => {
     // The button pulls fast-forward only, which is the safe reading of "bring me up to date".
     // When both sides have moved git refuses, and refusing is right — but it said so by

@@ -119,8 +119,15 @@ pub fn parse(input: &[u8]) -> Result<Vec<GitRef>, CoralError> {
         .split(|b| *b == b'\n')
         .filter(|line| !line.is_empty())
         .map(parse_line)
-        .filter(|r| !matches!(r, Ok(g) if is_remote_head(&g.name)))
+        .filter(|r| !matches!(r, Ok(g) if is_remote_head(&g.name) || is_bisect_verdict(&g.name)))
         .collect()
+}
+
+/// Whether a name is one of the verdicts a bisection records. They name commits, not lines of
+/// work: the window marks them on the rows they judge, and as a branch pill each was a label
+/// reading `refs/bisect/good-1a2b…` taking the room of a real one.
+fn is_bisect_verdict(name: &str) -> bool {
+    name.starts_with("refs/bisect/")
 }
 
 /// Whether a name is a remote's own `HEAD`, which is not a branch.
@@ -206,6 +213,18 @@ mod tests {
 
     fn line(fields: &[&str]) -> Vec<u8> {
         fields.join("\0").into_bytes()
+    }
+
+    #[test]
+    fn leaves_out_the_verdicts_a_bisection_records() {
+        let input = [
+            line(&["refs/heads/main", "aaa", "commit", "", "", ""]),
+            line(&["refs/bisect/bad", "bbb", "commit", "", "", ""]),
+            line(&["refs/bisect/good-ccc", "ccc", "commit", "", "", ""]),
+        ]
+        .join(&b'\n');
+        let names: Vec<String> = parse(&input).unwrap().into_iter().map(|r| r.name).collect();
+        assert_eq!(names, ["refs/heads/main"]);
     }
 
     #[test]
