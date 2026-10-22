@@ -1640,6 +1640,73 @@ describe('moving down the list with the keyboard', () => {
       if (container.querySelector('section.diff')) throw new Error('the panel is still up');
     });
   });
+  it('stashes one file from its menu, and the staged changes when there are some', async () => {
+    const { container } = await shell({
+      repo_status: {
+        entries: [
+          { path: 'one.txt', index: 'unmodified', worktree: 'modified' },
+          { path: 'two.txt', index: 'modified', worktree: 'unmodified' },
+        ],
+        conflicted: [],
+      },
+      repo_action: { what: 'stash one.txt', conflicted: false, message: '' },
+    });
+    const wip = await waitFor(() => {
+      const found = container.querySelector('button.row.wip');
+      if (!found) throw new Error('no WIP row yet');
+      return found as HTMLButtonElement;
+    });
+    await fireEvent.click(wip);
+
+    const open = async (file: string) => {
+      const row = await waitFor(() => {
+        const found = [...container.querySelectorAll('aside li')].find(
+          (li) => li.querySelector('div.row') !== null && li.textContent?.includes(file),
+        );
+        if (!found) throw new Error('no staging row yet');
+        return found as HTMLElement;
+      });
+      await fireEvent.contextMenu(row.querySelector('div.row') as HTMLElement);
+      return waitFor(() => {
+        const found = [...document.querySelectorAll('.menu .label')];
+        if (found.length === 0) throw new Error('no menu yet');
+        return found;
+      });
+    };
+    const click = async (labels: Element[], name: string) => {
+      const item = labels.find((e) => e.textContent?.trim() === name);
+      expect(item, name).toBeDefined();
+      const button = item?.closest('button') as HTMLButtonElement;
+      expect(button.disabled, `${name} is offered`).toBe(false);
+      await fireEvent.click(button);
+    };
+    const sent = () =>
+      invoke.mock.calls.filter(([cmd]) => cmd === 'repo_action').map(([, a]) => a.action);
+
+    await click(await open('one.txt'), 'Stash this file');
+    await waitFor(() =>
+      expect(sent()).toContainEqual({ kind: 'stashPush', message: null, paths: ['one.txt'] }),
+    );
+
+    // The window holds its menus disabled until it has reloaded after the first stash, so the
+    // menu is opened again until the item is on offer, as a person would.
+    await waitFor(async () => {
+      await fireEvent.keyDown(window, { key: 'Escape' });
+      const labels = await open('one.txt');
+      const item = labels.find((e) => e.textContent?.trim() === 'Stash the staged changes');
+      if ((item?.closest('button') as HTMLButtonElement | null)?.disabled !== false) {
+        throw new Error('not offered yet');
+      }
+    });
+    await click(
+      [...document.querySelectorAll('.menu .label')],
+      'Stash the staged changes',
+    );
+    await waitFor(() =>
+      expect(sent()).toContainEqual({ kind: 'stashPush', message: null, staged: true }),
+    );
+  });
+
   it('does not offer to take an untracked file back to a commit it was never in', async () => {
     // The item read "Discard its changes — back to the last commit" about a file whose only
     // copy is on disk, and did exactly what the line under it does.
