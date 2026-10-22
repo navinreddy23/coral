@@ -8,6 +8,12 @@ Checkboxes are drawn in the window's own colours. In the dark theme an unticked 
 bright white square, and a ticked one took the desktop's orange rather than the window's
 accent.
 
+### The palette finds the command you named
+
+A command whose name contains what you typed now comes before one that only has the same
+letters scattered through it. Typing "theme" offered "Move the terminal to the right" ahead of
+the theme commands.
+
 ## 1.2.6
 
 ### Fixes
