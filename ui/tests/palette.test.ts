@@ -30,4 +30,12 @@ describe('command ranking', () => {
   it('needs every character of the query, in order', () => {
     expect(rankCommand('merge', 'gem')).toBeNull();
   });
+
+  it('puts a label holding the query whole ahead of one that only scatters it', () => {
+    const whole = rankCommand('switch to the light theme', 'theme');
+    const scattered = rankCommand('move the terminal to the right', 'theme');
+    expect(whole).not.toBeNull();
+    expect(scattered).not.toBeNull();
+    expect(whole as number).toBeLessThan(scattered as number);
+  });
 });
