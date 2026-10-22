@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### A large repository's first screen is its final one
+
+With a commit-graph, the first screen is drawn in the order the full graph will have, and it
+already knows how many commits there are. Before, it was drawn by commit time and rearranged
+a few seconds later, when the full walk landed. On the Linux kernel the rows, lanes and
+messages are final within two seconds, nothing on the graph moves when the full walk lands,
+and that walk is ready in about 3.5 s instead of 6. Commit
+messages on the first screen no longer wait for the full walk, and the working tree's status
+is read alongside the walk rather than after it.
+
 ### Recover lost work
 
 **Recover lost work** in the command palette lists every commit HEAD has been on, newest
