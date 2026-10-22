@@ -53,6 +53,8 @@
   import Start from './Start.svelte';
   import Remotes from './Remotes.svelte';
   import Activity from './Activity.svelte';
+  import Recover from './Recover.svelte';
+  import { ReflogState } from '../state/reflog.svelte';
   import { ActivityState } from '../state/activity.svelte';
   import { StashesState } from '../state/stashes.svelte';
   import { StartState } from '../state/start.svelte';
@@ -535,6 +537,8 @@
   /** Who the open repository commits as, read for the Profiles pane rather than for the graph. */
   let identity = $state<IdentityScopes | null>(null);
   let showActivity = $state(false);
+  const reflog = new ReflogState();
+  let showRecover = $state(false);
   /** Whether the host's sign-in dialog is up. */
   let showHostAccount = $state(false);
   /** The submodule whose panel is open, and its recorded commit once that has been read. */
@@ -2405,6 +2409,18 @@
     if (hosting.error === null) showHostAccount = false;
   }
 
+  function openRecover() {
+    if (!info) return;
+    showRecover = true;
+    void reflog.load(info.path);
+  }
+
+  /** Closes the sheet first, so the branch prompt and what it does are seen over the graph. */
+  function recoverBy(run: () => Promise<unknown>) {
+    showRecover = false;
+    void run();
+  }
+
   function openActivity() {
     if (info) activity.repo(info.path);
     showActivity = true;
@@ -2912,6 +2928,12 @@
         run: openPreferences,
       },
       {
+        id: 'recover',
+        label: 'Recover lost work',
+        group: 'View',
+        run: openRecover,
+      },
+      {
         id: 'activity',
         label: 'Activity logs',
         group: 'View',
@@ -3316,6 +3338,7 @@
     menu = null;
     showRemotes = null;
     showActivity = false;
+    showRecover = false;
     // Everything the panels show belongs to the repository being left. Left up, it is another
     // repository's branches and another repository's changes under the new one's name — and it
     // is what the loading screen exists to replace.
@@ -4271,6 +4294,16 @@
   {#if showActivity}
     <div class="screen">
       <Activity {activity} onClose={() => (showActivity = false)} />
+    </div>
+  {/if}
+  {#if showRecover}
+    <div class="screen">
+      <Recover
+        {reflog}
+        onBranch={(oid) => recoverBy(() => branchAt(oid))}
+        onCheckout={(oid) => recoverBy(() => act({ kind: 'checkout', rev: oid }))}
+        onClose={() => (showRecover = false)}
+      />
     </div>
   {/if}
 
