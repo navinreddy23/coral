@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Authors' pictures
+
+Commits in the graph and the details panel show their author's picture in place of their
+initials, where one can be found. A GitHub noreply address is looked up on GitHub; any other
+address is looked up on Gravatar, which is sent a SHA-256 hash of it and nothing else. Each
+author is asked about once and kept on disk, and an author with no picture keeps their
+initials. **Appearance → Authors** turns it off.
+
 ## 1.2.4
 
 ### Lanes read as ribbons

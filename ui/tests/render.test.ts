@@ -47,12 +47,15 @@ function recorder(): {
   discs: Disc[];
   rings: Disc[];
   labels: Label[];
+  images: { x: number; y: number; size: number; clipped: boolean }[];
 } {
   const segments: Segment[] = [];
   const corners: Corner[] = [];
   const labels: Label[] = [];
   const discs: Disc[] = [];
   const rings: Disc[] = [];
+  const images: { x: number; y: number; size: number; clipped: boolean }[] = [];
+  let clipped = false;
   let pendingArc: Disc | null = null;
   let at = { x: 0, y: 0 };
   let pending: Segment | null = null;
@@ -96,6 +99,16 @@ function recorder(): {
     fill() {
       if (pendingArc) pendingArc.fill = String(ctx.fillStyle);
     },
+    save() {},
+    restore() {
+      clipped = false;
+    },
+    clip() {
+      clipped = true;
+    },
+    drawImage(_image: unknown, x: number, y: number, w: number) {
+      images.push({ x: x + w / 2, y: y + w / 2, size: w, clipped });
+    },
     fillText(text: string, x: number, y: number) {
       labels.push({ text, x, y, fill: String(ctx.fillStyle) });
     },
@@ -118,6 +131,7 @@ function recorder(): {
     discs,
     rings,
     labels,
+    images,
   };
 }
 
@@ -348,6 +362,41 @@ describe('an edge that changes lane', () => {
 });
 
 describe('a graph drawn tight', () => {
+  it('puts the author’s picture inside the ring, in place of the initials', () => {
+    const frame = longRunFrame(20, 2);
+    const { ctx, discs, labels, images } = recorder();
+    const face = {} as CanvasImageSource;
+
+    drawLanes(ctx, frame, { first: 0, last: 3 }, DEFAULT_METRICS, 200, 200, {
+      colours: ['#lane'],
+      fills: ['#fill'],
+      initials: () => 'LT',
+      picture: (row) => (row === 1 ? face : null),
+    });
+
+    // Row 1 has a picture, clipped to its disc and centred on it; the rest keep their letters.
+    expect(images).toHaveLength(1);
+    expect(images[0]?.clipped).toBe(true);
+    expect(images[0]?.x).toBe(laneX(0, DEFAULT_METRICS));
+    expect(images[0]?.size).toBeLessThan(DEFAULT_METRICS.nodeRadius * 2);
+    expect(labels).toHaveLength(3);
+    // Every node is still ringed in its lane, picture or not.
+    expect(discs).toHaveLength(4);
+    expect(discs.every((d) => d.stroke === '#lane')).toBe(true);
+  });
+
+  it('leaves the picture off a node too small to show it', () => {
+    const frame = longRunFrame(20, 2);
+    const tight = { ...DEFAULT_METRICS, laneWidth: 7, nodeRadius: 3, laneOrigin: 5 };
+    const { ctx, images } = recorder();
+    drawLanes(ctx, frame, { first: 0, last: 3 }, tight, 200, 200, {
+      colours: ['#a'],
+      fills: ['#fill'],
+      picture: () => ({}) as CanvasImageSource,
+    });
+    expect(images).toHaveLength(0);
+  });
+
   it('leaves the letters off a node too small to hold them', () => {
     const frame = longRunFrame(20, 2);
     const tight = { ...DEFAULT_METRICS, laneWidth: 7, nodeRadius: 3, laneOrigin: 5 };

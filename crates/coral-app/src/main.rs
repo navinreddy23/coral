@@ -2,9 +2,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use coral_app_lib::{
-    actions, activity, bisect, blob, commands, conflicts, experimental, graph, hosting, profile,
-    recent, remotes, scope, search, signing, ssh, tabs, terminal, transfer, update, version,
-    watcher,
+    actions, activity, avatar, bisect, blob, commands, conflicts, experimental, graph, hosting,
+    profile, recent, remotes, scope, search, signing, ssh, tabs, terminal, transfer, update,
+    version, watcher,
 };
 
 fn main() {
@@ -86,6 +86,12 @@ fn load_state(app: &tauri::App) {
     app.manage(recent::Recents::load(profiles.recent_path(&current)));
     app.manage(profiles);
     app.manage(scope::Scopes::load(dir.join("scope.json")));
+    // A cache, so with the other caches rather than beside the settings.
+    let cache = app
+        .path()
+        .app_cache_dir()
+        .unwrap_or_else(|_| std::env::temp_dir());
+    app.manage(avatar::Avatars::new(cache.join("avatars")));
 
     // Before anything can run git, since this is what decides which git that is.
     let settings = experimental::Experimental::load(dir.join("settings.json"));
@@ -158,6 +164,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         search::stop_search,
         bisect::repo_bisection,
         blob::file_blob,
+        avatar::author_avatar,
         graph::compare_commits,
         graph::compare_file_diff,
         graph::commit_tree,

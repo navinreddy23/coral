@@ -4,6 +4,7 @@
 //! M8. Nothing here is ever on the graph's critical path — every failure must degrade to
 //! plain git rather than block a paint.
 
+pub mod avatar;
 pub mod checks;
 pub mod client;
 pub mod github;
