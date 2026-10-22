@@ -128,7 +128,7 @@
     startDragging,
     toggleMaximize as toggleMaximise,
   } from '../ipc/window';
-  import { ThemeState } from '../state/theme.svelte';
+  import { ThemeState, type ThemeChoice } from '../state/theme.svelte';
   import { SelectionState } from '../state/selection.svelte';
   import { WorktreeState } from '../state/worktree.svelte';
   import { WorktreesState } from '../state/worktrees.svelte';
@@ -212,16 +212,6 @@
    * It has to mention the desktop while the desktop is deciding, because pressing it takes
    * the choice away from it and nothing else on the button would say so.
    */
-  const themeHint = $derived(
-    theme.following
-      ? `Following the desktop, which is ${theme.current}. Press to set ${
-          theme.current === 'light' ? 'dark' : 'light'
-        } instead`
-      : theme.current === 'light'
-        ? 'Switch to the dark theme'
-        : 'Switch to the light theme',
-  );
-
   $effect(() => {
     let off: (() => void) | null = null;
     void (async () => {
@@ -3397,6 +3387,35 @@
    * Built here rather than inside the chip so it goes through the window's own `Menu`, which
    * already dismisses on an outside click and already knows to stay inside the window.
    */
+  /**
+   * What the gear in the title strip offers: settings, and the theme.
+   *
+   * The theme is named here rather than drawn as a sun or a moon, and the choice in force is
+   * ticked, including following the desktop, which a single switch could never show.
+   */
+  function settingsMenu(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const themed = (choice: ThemeChoice, label: string): MenuItem => ({
+      kind: 'item',
+      label,
+      checked: theme.choice === choice,
+      run: () => theme.set(choice),
+    });
+    menu = {
+      x: box.right,
+      y: box.bottom + 4,
+      items: [
+        { kind: 'item', label: 'Settings…', hint: 'Ctrl ,', run: () => openPreferences() },
+        { kind: 'separator' },
+        themed('light', 'Light theme'),
+        themed('dark', 'Dark theme'),
+        themed('system', 'Follow the desktop'),
+      ],
+    };
+  }
+
   function profileMenu(event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
@@ -4199,8 +4218,6 @@
     newTab={onStart}
     profile={profiles.current}
     provisional={graph.provisional}
-    dark={theme.current === 'dark'}
-    {themeHint}
     {decorated}
     {maximised}
     onDrag={stripDrag}
@@ -4211,8 +4228,7 @@
     onPickTab={() => (showStart = false)}
     onAsk={askText}
     onProfileMenu={profileMenu}
-    onPreferences={() => openPreferences()}
-    onToggleTheme={() => theme.toggle()}
+    onSettings={settingsMenu}
     onMinimise={() => void minimise()}
     onMaximise={() => void toggleMaximise()}
     onClose={() => void shut()}

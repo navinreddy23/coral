@@ -45,12 +45,22 @@ const STOPS = [
   { name: 'palette', at: APP, go: (b) => b.hotkey('p', { ctrl: true }) },
   { name: 'shortcuts', at: APP, go: (b) => b.hotkey('/', { ctrl: true }) },
   { name: 'commit-menu', at: APP, go: (b) => b.rightClick('li.row', 4) },
-  { name: 'preferences', at: APP, go: (b) => b.press('.tools .chrome', 0) },
+  // The gear opens a menu: settings, and the three theme choices.
+  { name: 'settings-menu', at: APP, go: (b) => b.press('.tools .chrome', 0) },
+  {
+    name: 'preferences',
+    at: APP,
+    go: async (b) => {
+      await b.press('.tools .chrome', 0);
+      await b.press('.menu button.row', 0);
+    },
+  },
   {
     name: 'appearance',
     at: APP,
     go: async (b) => {
       await b.press('.tools .chrome', 0);
+      await b.press('.menu button.row', 0);
       await b.press('.prefs nav .pane', 0);
     },
   },

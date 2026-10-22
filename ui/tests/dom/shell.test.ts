@@ -151,6 +151,19 @@ async function shell(over: Record<string, unknown> = {}) {
   return view;
 }
 
+/** The gear opens a menu; Settings is its first item. */
+async function openSettings(view: { getByLabelText: (label: string) => HTMLElement }) {
+  await fireEvent.click(view.getByLabelText('Settings'));
+  const item = await waitFor(() => {
+    const found = [...document.querySelectorAll('.menu button.row')].find((b) =>
+      b.textContent?.includes('Settings…'),
+    );
+    if (!found) throw new Error('no settings item yet');
+    return found as HTMLElement;
+  });
+  await fireEvent.click(item);
+}
+
 describe('the shell', () => {
   beforeEach(() => {
     invoke.mockReset();
@@ -1088,7 +1101,7 @@ describe('a git too old to open anything', () => {
       if (!view.container.textContent?.includes('too old')) throw new Error('no error yet');
     });
 
-    await fireEvent.click(view.getByLabelText('Settings'));
+    await openSettings(view);
 
     // The page arrives before its answer does, so wait for the answer: what matters is that a
     // usable git is offered, not that the heading rendered.
@@ -1108,7 +1121,7 @@ describe('a git too old to open anything', () => {
       if (!view.container.textContent?.includes('too old')) throw new Error('no error yet');
     });
 
-    await fireEvent.click(view.getByLabelText('Settings'));
+    await openSettings(view);
     await waitFor(() => {
       if (!view.container.textContent?.includes('Experimental')) throw new Error('not yet');
     });
@@ -1163,7 +1176,7 @@ describe('the settings page and the tab strip', () => {
     await waitFor(() => {
       if (view.container.querySelectorAll('li.row').length === 0) throw new Error('no rows yet');
     });
-    await fireEvent.click(view.getByLabelText('Settings'));
+    await openSettings(view);
     await waitFor(() => {
       if (asked.length === 0) throw new Error('the ssh pane has not loaded');
     });

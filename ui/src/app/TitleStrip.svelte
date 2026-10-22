@@ -7,8 +7,8 @@
   import type { Profile } from '../ipc/profiles';
 
   /**
-   * The window's own top line: the mark, the name, the profile, the tabs, and the three
-   * buttons that act on the window rather than on the repository.
+   * The window's own top line: the mark, the name, the profile, the tabs, the settings menu,
+   * and the buttons that act on the window rather than on the repository.
    *
    * It is the title bar. Coral asks the desktop not to draw one, which buys back a whole row
    * on a laptop screen and is why the window controls are here — and why a window manager
@@ -20,8 +20,6 @@
     newTab,
     profile,
     provisional,
-    dark,
-    themeHint,
     decorated,
     maximised,
     onDrag,
@@ -32,8 +30,7 @@
     onPickTab,
     onAsk,
     onProfileMenu,
-    onPreferences,
-    onToggleTheme,
+    onSettings,
     onMinimise,
     onMaximise,
     onClose,
@@ -44,9 +41,6 @@
     profile: Profile;
     /** True while the graph is in commit-time order, waiting for the topological walk. */
     provisional: boolean;
-    dark: boolean;
-    /** What the theme button's tooltip says, which depends on what it is following. */
-    themeHint: string;
     /** True when the desktop draws its own title bar, in which case this one draws no buttons. */
     decorated: boolean;
     maximised: boolean;
@@ -60,8 +54,8 @@
     onPickTab: () => void;
     onAsk: (title: string, detail: string, initial: string) => Promise<string | null>;
     onProfileMenu: (event: MouseEvent) => void;
-    onPreferences: () => void;
-    onToggleTheme: () => void;
+    /** The gear: settings, and the theme, which used to be a second button beside it. */
+    onSettings: (event: MouseEvent) => void;
     onMinimise: () => void;
     onMaximise: () => void;
     onClose: () => void;
@@ -99,27 +93,18 @@
   <!-- The activity log is not here: its way in is the corner of the status bar, beside the
        work it reports on rather than beside the window's own buttons. -->
   <div class="tools sit">
-    <button
-      class="chrome"
-      onclick={onPreferences}
-      title="SSH keys, signing and preferences"
-      aria-label="Settings"
-    ><Icon name="settings" /></button>
     <!--
-      Both faces are drawn and one is turned away, rather than swapped in and out. A theme
-      switch that changes under the pointer with no movement reads as a redraw; turning is
-      the one thing that says the button did something.
+      One button, not two. The theme had a moon beside the gear, and two monochrome glyphs of
+      the same size side by side read as a pair nobody could tell apart. The theme is in the
+      gear's menu instead, a click further away and named.
     -->
     <button
-      class="chrome swap"
-      class:dark
-      onclick={onToggleTheme}
-      title={themeHint}
-      aria-label="Switch theme"
-    >
-      <span class="face moon"><Icon name="moon" /></span>
-      <span class="face sun"><Icon name="sun" /></span>
-    </button>
+      class="chrome"
+      onclick={onSettings}
+      title="Settings and theme"
+      aria-label="Settings"
+      aria-haspopup="menu"
+    ><Icon name="settings" /></button>
   </div>
 
   {#if !decorated}
@@ -217,18 +202,4 @@
   }
   .chrome:hover { background: var(--bg-2); border-color: var(--border); color: var(--fg-0); }
 
-  /* The two faces occupy the same 16 pixels; only their rotation says which is showing. */
-  .swap { position: relative; }
-  .face {
-    position: absolute; inset: 0; display: grid; place-items: center;
-    transition: transform var(--slower) var(--ease-spring), opacity var(--slow) var(--ease);
-  }
-  .swap .moon { transform: rotate(0deg) scale(1); opacity: 1; }
-  .swap .sun { transform: rotate(-90deg) scale(0.4); opacity: 0; }
-  .swap.dark .moon { transform: rotate(90deg) scale(0.4); opacity: 0; }
-  .swap.dark .sun { transform: rotate(0deg) scale(1); opacity: 1; }
-
-  @media (prefers-reduced-motion: reduce) {
-    .face { transition: none; }
-  }
 </style>

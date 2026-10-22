@@ -134,13 +134,31 @@ describe('the title bar Coral draws', () => {
     expect(strip, 'the strip').not.toBeNull();
     // The tabs live in it rather than on a row of their own, which is the whole point.
     expect(strip?.querySelector('nav.bar'), 'the tabs').not.toBeNull();
-    for (const label of ['Settings', 'Switch theme']) {
-      expect(named(container, label), label).not.toBeNull();
-    }
+    expect(named(container, 'Settings'), 'Settings').not.toBeNull();
+    // The theme is in the gear's menu, not a second glyph beside it that reads as its twin.
+    expect(named(container, 'Switch theme'), 'no separate theme button').toBeNull();
     // The log is reached from the corner of the status bar instead, beside the work it
     // reports on rather than beside the buttons that close the window.
     expect(named(container, 'Activity logs'), 'not in the strip').toBeNull();
     expect(container.querySelector('.status .logs'), 'in the status bar').not.toBeNull();
+  });
+
+  it('offers settings and the theme from the gear, with the theme in force ticked', async () => {
+    const { container } = await shell();
+    await fireEvent.click(named(container, 'Settings') as HTMLElement);
+    const menu = await waitFor(() => {
+      const found = document.querySelector('.menu[role="menu"]');
+      if (!found) throw new Error('no menu yet');
+      return found as HTMLElement;
+    });
+    const rows = [...menu.querySelectorAll('button.row')].map((b) => b.textContent ?? '');
+    expect(rows.some((r) => r.includes('Settings…'))).toBe(true);
+    const dark = [...menu.querySelectorAll('button.row')].find((b) =>
+      b.textContent?.includes('Dark theme'),
+    ) as HTMLElement;
+    expect(dark).toBeTruthy();
+    await fireEvent.click(dark);
+    await waitFor(() => expect(document.documentElement.dataset['theme']).toBe('dark'));
   });
 
   it('minimises, maximises and closes the window', async () => {

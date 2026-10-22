@@ -51,8 +51,8 @@
     </div>
     {#if theme.following}
       <p class="hint">
-        The desktop is currently asking for {theme.current}. The switch in the title bar sets
-        light or dark outright; this is how to hand the choice back.
+        The desktop is currently asking for {theme.current}. The gear in the title bar offers
+        the same three choices.
       </p>
     {/if}
   </fieldset>
