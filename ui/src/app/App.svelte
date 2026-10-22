@@ -5123,8 +5123,9 @@
   /* A statement rather than a control: everything it could do, the row already does. */
   .pill.detached { cursor: default; }
   /* A bisect verdict, at the head of the message it judges. */
+  /* No margin of its own: the message cell's gap already spaces it from the summary. */
   .verdict {
-    flex: 0 0 auto; margin-right: var(--space-2); padding: 0 var(--space-2);
+    flex: 0 0 auto; padding: 0 var(--space-2);
     border-radius: var(--radius-1); font-size: var(--text-sm); line-height: 16px;
     background: var(--bg-2); color: var(--fg-1);
   }

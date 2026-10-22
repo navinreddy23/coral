@@ -80,6 +80,32 @@
 
       <div class="band flip">
         <div class="copy">
+          <h3>Find what the code said, not only the message.</h3>
+          <p>The find box searches what each commit changed as well as what it says about itself. <code>code:render_row</code> finds the commits that added or removed it, whatever their messages claim, and <code>after:</code> and <code>before:</code> bound it by date.</p>
+          <ul>
+            <li><code>code:"/fn [a-z_]+_row/"</code> for a regular expression</li>
+            <li>Dates as <code>2026-05-01</code> or <code>2.weeks</code></li>
+            <li>A new search stops the one still running, so typing stays quick on the kernel</li>
+          </ul>
+        </div>
+        <div class="frame"><img src="screenshots/12-find.png" alt="The find box searching for the commit that added NO_LANE, landing on it" loading="lazy"></div>
+      </div>
+
+      <div class="band">
+        <div class="copy">
+          <h3>Find the commit that broke it.</h3>
+          <p>Mark a commit bad and one that was good, and Coral checks out the one halfway between. Say whether it is good or bad, or skip it, and it halves again until one commit is left, named at the top of the list.</p>
+          <ul>
+            <li>Every verdict marked on its row</li>
+            <li>Picks up a bisect started in the terminal, in its own terms</li>
+            <li>End it to go back to where you were</li>
+          </ul>
+        </div>
+        <div class="frame"><img src="screenshots/11-bisect.png" alt="A finished bisect: the first bad commit named above the list, with good and bad marked on the commits judged" loading="lazy"></div>
+      </div>
+
+      <div class="band flip">
+        <div class="copy">
           <h3>Interactive rebase, planned in a list.</h3>
           <p>Pick, reword, edit, squash, fixup, drop and reorder from one list, then start when it is right. If Git stops part-way, continue, skip or abort from the same place.</p>
           <ul>
@@ -106,6 +132,18 @@
 
       <div class="band flip">
         <div class="copy">
+          <h3>Images, before and after.</h3>
+          <p>A changed image is drawn rather than called binary: the two versions side by side, each with its size in pixels and bytes, on a checkerboard so transparency shows.</p>
+          <ul>
+            <li>PNG, JPEG, GIF, WebP, BMP, ICO and AVIF</li>
+            <li>In a commit, a comparison, or what you are about to commit</li>
+          </ul>
+        </div>
+        <div class="frame"><img src="screenshots/13-image.png" alt="A logo changed in a commit, the old one beside the new with their sizes" loading="lazy"></div>
+      </div>
+
+      <div class="band">
+        <div class="copy">
           <h3>Conflicts, with both sides named.</h3>
           <p>A three-pane merge tool shows your side and theirs, each named after the branch it came from, with the result underneath. Take a line, a block or a whole side.</p>
           <ul>
@@ -117,7 +155,7 @@
         <div class="frame"><img src="screenshots/05-conflicts.png" alt="The three-pane conflict tool" loading="lazy"></div>
       </div>
 
-      <div class="band">
+      <div class="band flip">
         <div class="copy">
           <h3>Keys at your fingertips.</h3>
           <p>A command palette on <kbd>Ctrl</kbd> <kbd>P</kbd> reaches every action, and a terminal opens on <kbd>Ctrl</kbd> <kbd>`</kbd> in the repository you are looking at. Every shortcut can be rebound.</p>
@@ -131,6 +169,14 @@
           <p>Pull and merge requests in the sidebar, and a new one opened from the branch you are on, drafts included. Enterprise and self-hosted too.</p>
         </div>
         <div class="card">
+          <h3>Checks at a glance</h3>
+          <p>Each open pull or merge request is marked passing, failing or running, from GitHub's checks or GitLab's pipeline. One click opens the check that failed.</p>
+        </div>
+        <div class="card">
+          <h3>Updates itself</h3>
+          <p>Install a new release from About, checked against Coral's signing key before anything is replaced. It only looks when you ask, or at launch if you turn that on.</p>
+        </div>
+        <div class="card">
           <h3>Profiles</h3>
           <p>Work and personal, each with its own tabs, identity, ssh key and signing, so a commit never goes out under the wrong name.</p>
         </div>
@@ -140,7 +186,11 @@
         </div>
         <div class="card">
           <h3>Worktrees, stashes, submodules</h3>
-          <p>Plus shallow and blobless clones and SHA-256 repositories. The window refreshes as files change on disk.</p>
+          <p>Stash one file, or only what is staged. Plus shallow and blobless clones and SHA-256 repositories, and a window that refreshes as files change on disk.</p>
+        </div>
+        <div class="card">
+          <h3>Light and dark</h3>
+          <p>Two themes drawn from the same set of colour tokens, so dark is designed rather than inverted. Switch from the title bar or the palette.</p>
         </div>
         <div class="card">
           <h3>Tabs that stay</h3>
