@@ -2,10 +2,22 @@
 //! milestone depends on.
 
 use coral_core::conflict::Resolution;
-use coral_core::ops::{CommitOpts, MergeMode, OpAction, ResetMode};
+use coral_core::ops::{CommitOpts, MergeMode, OpAction, ResetMode, StashScope};
 use coral_core::process::GitRunner;
 use coral_core::repo::{Head, OpState, RepoLocation};
 use coral_core::testutil::TestRepo;
+
+fn tracked() -> StashScope {
+    StashScope::Everything {
+        include_untracked: false,
+    }
+}
+
+fn everything() -> StashScope {
+    StashScope::Everything {
+        include_untracked: true,
+    }
+}
 
 async fn open(repo: &TestRepo) -> (GitRunner, RepoLocation) {
     let runner = GitRunner::discover().await.unwrap();
@@ -195,7 +207,9 @@ async fn stashes_applies_pops_and_drops() {
     let repo = repo.write("a.txt", "work in progress\n");
     let (runner, loc) = open(&repo).await;
 
-    loc.stash_push(&runner, Some("wip"), false).await.unwrap();
+    loc.stash_push(&runner, Some("wip"), &tracked())
+        .await
+        .unwrap();
     assert_eq!(
         std::fs::read_to_string(repo.path().join("a.txt")).unwrap(),
         "committed\n"
@@ -236,7 +250,7 @@ async fn a_stash_that_lands_on_conflicts_has_stopped_rather_than_failed() {
 ",
     );
     let (runner, loc) = open(&repo).await;
-    loc.stash_push(&runner, None, false).await.unwrap();
+    loc.stash_push(&runner, None, &tracked()).await.unwrap();
     let repo = repo
         .write(
             "a.txt",
@@ -286,7 +300,7 @@ async fn a_stash_that_applies_cleanly_is_a_completed_outcome() {
 ",
     );
     let (runner, loc) = open(&repo).await;
-    loc.stash_push(&runner, None, true).await.unwrap();
+    loc.stash_push(&runner, None, &everything()).await.unwrap();
 
     let outcome = loc.stash_apply(&runner, 0, true).await.unwrap();
     assert!(outcome.completed);
@@ -303,13 +317,13 @@ async fn stashes_untracked_files_only_when_asked() {
     let repo = repo.write("untracked.txt", "u\n");
     let (runner, loc) = open(&repo).await;
 
-    loc.stash_push(&runner, None, false).await.unwrap();
+    loc.stash_push(&runner, None, &tracked()).await.unwrap();
     assert!(
         repo.path().join("untracked.txt").exists(),
         "left alone by default"
     );
 
-    loc.stash_push(&runner, None, true).await.unwrap();
+    loc.stash_push(&runner, None, &everything()).await.unwrap();
     assert!(
         !repo.path().join("untracked.txt").exists(),
         "taken with --include-untracked"
@@ -831,4 +845,144 @@ async fn continuing_with_nothing_in_progress_is_an_error() {
 
     let err = loc.op(&runner, OpAction::Continue).await.unwrap_err();
     assert_eq!(err.code(), "refused");
+}
+
+/// Three changed files and a new one; the stash takes the two named and leaves the rest.
+#[tokio::test]
+async fn stashes_only_the_files_it_is_given() {
+    let repo = TestRepo::new()
+        .write("a.txt", "a\n")
+        .write("b.txt", "b\n")
+        .write("c.txt", "c\n")
+        .commit("start")
+        .write("a.txt", "a changed\n")
+        .write("b.txt", "b changed\n")
+        .write("c.txt", "c changed\n")
+        .write("new.txt", "new\n");
+    let (runner, loc) = open(&repo).await;
+
+    let scope = StashScope::Paths(vec!["a.txt".into(), "new.txt".into()]);
+    loc.stash_push(&runner, Some("two of them"), &scope)
+        .await
+        .unwrap();
+
+    let read = |p: &str| std::fs::read_to_string(repo.path().join(p)).ok();
+    assert_eq!(
+        read("a.txt").as_deref(),
+        Some("a\n"),
+        "stashed, so back as committed"
+    );
+    assert_eq!(read("new.txt"), None, "a new file named is stashed too");
+    assert_eq!(
+        read("b.txt").as_deref(),
+        Some("b changed\n"),
+        "not named, left alone"
+    );
+    assert_eq!(read("c.txt").as_deref(), Some("c changed\n"));
+
+    let stashed = repo.git([
+        "stash",
+        "show",
+        "--include-untracked",
+        "--name-only",
+        "stash@{0}",
+    ]);
+    let mut names: Vec<&str> = stashed.lines().collect();
+    names.sort_unstable();
+    assert_eq!(names, ["a.txt", "new.txt"]);
+}
+
+/// A name with glob characters in it is that file, not a pattern matching others.
+///
+/// Not on Windows, which does not allow `*` in a file name, so the case cannot arise there.
+#[cfg(not(windows))]
+#[tokio::test]
+async fn a_path_is_matched_literally() {
+    let repo = TestRepo::new()
+        .write("a*.txt", "star\n")
+        .write("ab.txt", "ab\n")
+        .commit("start")
+        .write("a*.txt", "star changed\n")
+        .write("ab.txt", "ab changed\n");
+    let (runner, loc) = open(&repo).await;
+    loc.stash_push(&runner, None, &StashScope::Paths(vec!["a*.txt".into()]))
+        .await
+        .unwrap();
+    let read = |p: &str| std::fs::read_to_string(repo.path().join(p)).unwrap();
+    assert_eq!(read("a*.txt"), "star\n");
+    assert_eq!(
+        read("ab.txt"),
+        "ab changed\n",
+        "a glob would have taken this too"
+    );
+}
+
+/// Staged changes go; what is unstaged in the same file and elsewhere stays.
+#[tokio::test]
+async fn stashes_only_what_is_staged() {
+    let repo = TestRepo::new()
+        .write("a.txt", "a\n")
+        .write("b.txt", "b\n")
+        .commit("start")
+        .write("a.txt", "a staged\n")
+        .write("b.txt", "b unstaged\n");
+    repo.git(["add", "a.txt"]);
+    let (runner, loc) = open(&repo).await;
+
+    loc.stash_push(&runner, None, &StashScope::Staged)
+        .await
+        .unwrap();
+
+    let read = |p: &str| std::fs::read_to_string(repo.path().join(p)).unwrap();
+    assert_eq!(read("a.txt"), "a\n");
+    assert_eq!(read("b.txt"), "b unstaged\n");
+    assert_eq!(
+        repo.git(["diff", "--cached", "--name-only"]).trim(),
+        "",
+        "nothing staged now"
+    );
+    let stashed = repo.git(["stash", "show", "--name-only", "stash@{0}"]);
+    assert_eq!(stashed.trim(), "a.txt");
+}
+
+/// A staged rename is stashed by its new name. git will not take the old one: a pathspec that
+/// matches nothing on disk or in the index is refused, and after `git mv` it is in neither. The
+/// deletion of the old name stays staged until the stash comes back.
+#[tokio::test]
+async fn stashes_a_rename_by_its_new_name() {
+    let repo = TestRepo::new()
+        .write("old.txt", "contents\n")
+        .write("other.txt", "other\n")
+        .commit("start")
+        .write("other.txt", "other changed\n");
+    repo.git(["mv", "old.txt", "new.txt"]);
+    let (runner, loc) = open(&repo).await;
+
+    let refused = loc
+        .stash_push(
+            &runner,
+            None,
+            &StashScope::Paths(vec!["new.txt".into(), "old.txt".into()]),
+        )
+        .await;
+    assert!(refused.is_err(), "git refuses the old name");
+
+    loc.stash_push(&runner, None, &StashScope::Paths(vec!["new.txt".into()]))
+        .await
+        .unwrap();
+    assert!(!repo.path().join("new.txt").exists(), "stashed");
+    assert!(
+        !repo.path().join("old.txt").exists(),
+        "its deletion is still staged"
+    );
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("other.txt")).unwrap(),
+        "other changed\n"
+    );
+    loc.stash_apply(&runner, 0, true).await.unwrap();
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("new.txt")).unwrap(),
+        "contents\n",
+        "and comes back with the stash"
+    );
 }

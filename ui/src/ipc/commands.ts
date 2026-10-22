@@ -347,7 +347,14 @@ export type Action =
   | { kind: 'rebase'; onto: string }
   | { kind: 'cherryPick'; revs: string[]; commit: boolean; mainline?: number }
   | { kind: 'revert'; revs: string[]; mainline?: number }
-  | { kind: 'stashPush'; message: string | null }
+  | {
+      kind: 'stashPush';
+      message: string | null;
+      /** These files only; everything, new files included, when absent. */
+      paths?: string[] | null;
+      /** What is staged only. */
+      staged?: boolean;
+    }
   | { kind: 'stashApply'; index: number; pop: boolean }
   | { kind: 'stashDrop'; index: number }
   | { kind: 'tagCreate'; name: string; at: string | null; message: string | null }

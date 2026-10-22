@@ -2679,6 +2679,30 @@
             disabled: busy,
             run: () => void worktree.stage([entry.path], true),
           },
+      { kind: 'separator' },
+      {
+        kind: 'item',
+        label: 'Stash this file',
+        // git finds a file to stash by its name on disk or in the index, and a staged deletion
+        // is in neither: it refuses with a message about pathspecs that says nothing useful.
+        hint: entry.index === 'deleted' ? 'git cannot stash a deletion by name' : 'leave the rest',
+        disabled: busy || actions.busy || entry.index === 'deleted',
+        // By its new name alone for a rename: git refuses the old one, which is on disk and in
+        // the index nowhere, so the deletion stays staged until the stash comes back.
+        run: () => void act({ kind: 'stashPush', message: null, paths: [entry.path] }),
+      },
+      ...(worktree.staged.length > 0
+        ? [
+            {
+              kind: 'item' as const,
+              label: 'Stash the staged changes',
+              hint: `${worktree.staged.length} ${worktree.staged.length === 1 ? 'file' : 'files'}`,
+              disabled: busy || actions.busy,
+              run: () => void act({ kind: 'stashPush', message: null, staged: true }),
+            },
+          ]
+        : []),
+      { kind: 'separator' },
       // Only for a file git already has a copy of. An untracked one has no last commit to go
       // back to, so this read "Discard its changes — back to the last commit" about a file
       // whose only copy is on disk, and did the same thing as the line under it.
@@ -2822,6 +2846,9 @@
       // did nothing at all.
       ...(worktree.dirty
         ? [{ id: 'stash', label: 'Stash changes', group: 'Stash', run: () => void act({ kind: 'stashPush', message: null }) } satisfies Command]
+        : []),
+      ...(worktree.staged.length > 0
+        ? [{ id: 'stash-staged', label: 'Stash the staged changes', group: 'Stash', run: () => void act({ kind: 'stashPush', message: null, staged: true }) } satisfies Command]
         : []),
       ...(stashes.list.length > 0
         ? [{ id: 'pop', label: 'Pop the latest stash', group: 'Stash', run: () => void act({ kind: 'stashApply', index: 0, pop: true }) } satisfies Command]
