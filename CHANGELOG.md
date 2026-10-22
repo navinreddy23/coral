@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Find commits by what they changed, and when
+
+The find box (`Ctrl+F`) reads three qualifiers beside the words it already matched:
+
+- **`code:render_row`** finds the commits that added or removed the text, whatever their
+  messages say. **`code:"/fn [a-z_]+_row/"`** takes a regular expression instead.
+- **`after:2024-05-01`** and **`before:2.weeks`** bound the search by date. A rebased commit
+  carrying an old date does not hide the newer ones beneath it.
+
+A qualifier on its own lists every commit it lets through. A date Coral cannot read is said
+under the field, rather than looking like a search that found nothing.
+
+Typing a new search now stops the one still running, and closing the box stops it too. Before,
+a phrase typed with pauses in it on a large repository queued a walk of the whole history per
+pause.
+
 ### Coral can update itself
 
 About has an **Install and restart** button once a newer release is found, and the palette has
