@@ -3,7 +3,7 @@
 
 use coral_app_lib::{
     actions, activity, commands, conflicts, experimental, graph, hosting, profile, recent, remotes,
-    scope, signing, ssh, tabs, terminal, transfer, update, version, watcher,
+    scope, search, signing, ssh, tabs, terminal, transfer, update, version, watcher,
 };
 
 fn main() {
@@ -153,7 +153,8 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         graph::file_blame,
         graph::file_history,
         graph::file_text,
-        graph::search_commits,
+        search::search_commits,
+        search::stop_search,
         graph::compare_commits,
         graph::compare_file_diff,
         graph::commit_tree,
@@ -222,6 +223,7 @@ fn window() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(graph::GraphCache::default())
+        .manage(search::Searches::default())
         .manage(terminal::Terminals::default())
         .manage(watcher::Watchers::default())
         .manage(transfer::Transfers::default())
