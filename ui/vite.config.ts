@@ -18,5 +18,9 @@ export default defineConfig({
   build: { target: 'es2022', sourcemap: true },
   // Component styles are injected into the test document, so a rule can be checked the way the
   // window applies it rather than by reading the source for a selector.
-  test: { css: true },
+  //
+  // The first test in a suite that mounts the whole window pays for its first render, and on
+  // GitHub's Windows runners that was close enough to the five-second default to fail one run
+  // in a few. A test that hangs still fails, only later.
+  test: { css: true, testTimeout: 20_000 },
 });
