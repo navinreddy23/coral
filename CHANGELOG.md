@@ -2,6 +2,13 @@
 
 ## 1.2.6
 
+### Settings and the theme under one gear
+
+The gear in the title bar now opens a menu: **Settings…**, then **Light theme**, **Dark theme**
+and **Follow the desktop**, with the one in force ticked. The separate sun-and-moon button
+beside it is gone; two glyphs of the same size side by side were easy to mistake for each
+other, and neither said what it did.
+
 ### A large repository's first screen is its final one
 
 With a commit-graph, the first screen is drawn in the order the full graph will have, and it

@@ -81,9 +81,9 @@ bundle arrives — so the window opened dark for half a second and then turned w
 
 `system` is the shipped choice, and `light` and `dark` remain as explicit ones. The migration
 is lossless: nothing ever wrote a bare theme into `coral.theme` except somebody pressing the
-switch, so a stored value is an explicit choice and is honoured. The switch in the title bar
-still toggles light and dark, which sets an explicit choice; Preferences, Appearance is where
-the choice is handed back. A `matchMedia` listener means a desktop that goes dark in the
+switch, so a stored value is an explicit choice and is honoured. The gear's menu in the title
+bar offers all three choices (it replaced a separate theme button on 2026-10-22), as does
+Preferences, Appearance. A `matchMedia` listener means a desktop that goes dark in the
 evening takes Coral with it without a restart.
 
 Dark is still `data-theme="dark"` on the root element, so the bare `:root` block holds the

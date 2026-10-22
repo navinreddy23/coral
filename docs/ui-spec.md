@@ -424,5 +424,7 @@ three, because three made a Y and a Y is the branch glyph. `Mark.svelte` is the 
 the seven bundled application icons are generated from the same shape.
 
 **The theme** follows the desktop and keeps following it, so a desktop that goes dark in the
-evening takes Coral with it. The switch in the title bar sets light or dark outright;
-Preferences, Appearance is where the choice is handed back.
+evening takes Coral with it. The gear in the title bar opens a menu with Settings and the three
+choices — light, dark, follow the desktop — with the one in force ticked; Preferences,
+Appearance has the same three. There is no separate theme button: a moon beside the gear read as
+its twin, and neither glyph said what it did.
