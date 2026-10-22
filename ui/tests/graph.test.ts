@@ -45,6 +45,46 @@ function wire(watch?: (firstPaint: boolean) => void) {
   });
 }
 
+describe('reading messages for the first screen', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  it('reads them from the quick walk while the full one is still running', async () => {
+    // With a commit-graph the quick walk is already in its final order, so its rows are not
+    // provisional. Asking the full walk for their messages anyway left the first screen of the
+    // kernel without a word on it for three seconds.
+    let finish: (v: ArrayBuffer) => void = () => undefined;
+    const asked: boolean[] = [];
+    invoke.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === 'binary_self_test') {
+        return Uint8Array.from({ length: 4096 }, (_, i) => i % 251).buffer;
+      }
+      if (cmd === 'graph_rewalk') return null;
+      if (cmd === 'graph_frame') {
+        if ((args as { firstPaint: boolean }).firstPaint) return frame();
+        return new Promise<ArrayBuffer>((r) => (finish = r));
+      }
+      if (cmd === 'row_metadata') {
+        asked.push((args as { quick: boolean }).quick);
+        return [];
+      }
+      throw new Error(`unstubbed ${cmd}`);
+    });
+    const graph = new GraphState();
+    const opening = graph.open('/alpha');
+    await vi.waitFor(() => expect(graph.frame).not.toBeNull());
+    expect(graph.provisional, 'a first walk in its final order').toBe(false);
+    await graph.loadMetadata(0, 10);
+    expect(asked).toEqual([true]);
+
+    finish(frame());
+    await opening;
+    await graph.loadMetadata(0, 10);
+    expect(asked).toEqual([true, false]);
+  });
+});
+
 describe('reloading the graph', () => {
   beforeEach(() => {
     invoke.mockReset();

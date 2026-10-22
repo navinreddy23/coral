@@ -8,7 +8,7 @@
     "repository": "Linux kernel, 1,481,528 commits, 944 tags, commit-graph written",
     "date": "2026-10-22"
   },
-  "purpose": "Coral 1.2.4 beside 1.2.2, measured the same day, to tell a change in the code from a change in the day's conditions.",
+  "purpose": "Coral 1.2.4 beside 1.2.2, then 1.2.6 beside 1.2.5, each pair measured the same day, to tell a change in the code from a change in the day's conditions.",
   "clients": [
     {
       "client": "Coral",
@@ -63,6 +63,64 @@
         {
           "seconds_to_still": 6.01,
           "pss_mib": 372,
+          "idle_cpu_percent": 0.0,
+          "processes": 3
+        }
+      ]
+    },
+    {
+      "client": "Coral",
+      "version": "1.2.5",
+      "median": {
+        "seconds_to_still": 5.77,
+        "pss_mib": 318,
+        "idle_cpu_percent": 0.0
+      },
+      "runs": [
+        {
+          "seconds_to_still": 6.58,
+          "pss_mib": 318,
+          "idle_cpu_percent": 0.0,
+          "processes": 3
+        },
+        {
+          "seconds_to_still": 5.77,
+          "pss_mib": 316,
+          "idle_cpu_percent": 0.0,
+          "processes": 3
+        },
+        {
+          "seconds_to_still": 5.71,
+          "pss_mib": 329,
+          "idle_cpu_percent": 0.0,
+          "processes": 3
+        }
+      ]
+    },
+    {
+      "client": "Coral",
+      "version": "1.2.6",
+      "median": {
+        "seconds_to_still": 2.72,
+        "pss_mib": 308,
+        "idle_cpu_percent": 0.0
+      },
+      "runs": [
+        {
+          "seconds_to_still": 2.8,
+          "pss_mib": 309,
+          "idle_cpu_percent": 0.0,
+          "processes": 3
+        },
+        {
+          "seconds_to_still": 2.55,
+          "pss_mib": 305,
+          "idle_cpu_percent": 0.03,
+          "processes": 3
+        },
+        {
+          "seconds_to_still": 2.72,
+          "pss_mib": 308,
           "idle_cpu_percent": 0.0,
           "processes": 3
         }

@@ -17,6 +17,14 @@ export class GraphState {
   transportWarning = $state<string | null>(null);
   /** True while showing commit-time rows that the topological pass will replace. */
   provisional = $state(false);
+  /**
+   * True while the rows on screen come from the quick walk, in either order. With a
+   * commit-graph that walk is already topological and nothing is provisional, but it is still
+   * a different walk from the full one, and reading a row's message from the full one means
+   * waiting for it: the messages on the first screen of the kernel arrived three seconds
+   * after its rows.
+   */
+  #quick = false;
 
   totalRows = $derived(this.frame?.totalRows ?? 0);
 
@@ -57,9 +65,9 @@ export class GraphState {
     // Which walk this block belongs to. What it reads is keyed by object id and stays true
     // whatever happens next; it is only the record of having read it that a rewalk invalidates.
     const walk = this.#walk;
-    // Which walk the rows on screen came from. The engine holds both for a moment, and a row
-    // means a different commit in each.
-    const provisional = this.provisional;
+    // Which walk the rows on screen came from. The engine holds both for a moment, and in
+    // commit-time order a row means a different commit in each.
+    const quick = this.#quick;
     const block = 256;
     const first = Math.max(0, Math.floor(startRow / block) * block);
     const last = Math.min(this.totalRows, startRow + count);
@@ -68,7 +76,7 @@ export class GraphState {
       if (this.#loaded.has(at) || this.#inFlight.has(at)) continue;
       this.#inFlight.add(at);
       try {
-        const rows = await rowMetadata(this.#path, at, block, provisional);
+        const rows = await rowMetadata(this.#path, at, block, quick);
         const next = new Map(this.meta);
         for (const m of rows) next.set(m.oid, m);
         this.meta = next;
@@ -164,6 +172,7 @@ export class GraphState {
   clear(): void {
     this.frame = null;
     this.provisional = false;
+    this.#quick = false;
     this.#path = '';
     this.#framePath = '';
     this.#wantedStart = -1;
@@ -224,6 +233,7 @@ export class GraphState {
         // asking for a quick one can be answered with the topological walk it still has, and
         // saying the rows are out of order when they are not is a badge nobody can dismiss.
         this.provisional = (first.flags & FrameFlag.Provisional) !== 0;
+        this.#quick = true;
       }
 
       const full = await graphFrame(path, 0, false);
@@ -231,6 +241,7 @@ export class GraphState {
       this.frame = full;
       this.#framePath = path;
       this.provisional = false;
+      this.#quick = false;
       // The rows have been renumbered, so what was read for which row is no longer true. What
       // was read is kept: it is keyed by object id, so a commit already on screen stays named.
       this.#walk += 1;

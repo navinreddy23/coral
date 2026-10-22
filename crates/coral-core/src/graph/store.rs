@@ -44,6 +44,7 @@ pub struct RowStore {
     /// map. A `HashMap<ObjectId, u32>` would cost about 60 MB here; this costs 6 MB.
     by_oid: Vec<u32>,
     max_lane: u16,
+    total: u32,
 }
 
 impl RowStore {
@@ -55,6 +56,18 @@ impl RowStore {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.lane.is_empty()
+    }
+
+    /// The rows the walk this store starts has: its own length, or more for the start of a
+    /// walk that was stopped early and counted.
+    #[must_use]
+    pub const fn total(&self) -> u32 {
+        self.total
+    }
+
+    /// Records how many rows the full walk has, for a store that holds only its start.
+    pub fn claim_total(&mut self, total: u32) {
+        self.total = total.max(self.len());
     }
 
     #[must_use]
@@ -271,6 +284,7 @@ impl RowStoreBuilder {
             parent_lane: self.parent_lane,
             by_oid,
             max_lane: self.assigner.max_width().saturating_sub(1),
+            total: u32::try_from(rows).unwrap_or(u32::MAX),
         }
     }
 }

@@ -373,6 +373,8 @@ export type Action =
   | { kind: 'applyPatch'; files: string[]; commit: boolean }
   | { kind: 'bisectMark'; verdict: Verdict; rev: string | null }
   | { kind: 'bisectReset' }
+  /** Fetch a pull or merge request from the host and check it out as `pr/N` or `mr/N`. */
+  | { kind: 'checkoutProposal'; number: number }
   | { kind: 'undo' }
   | { kind: 'redo' };
 

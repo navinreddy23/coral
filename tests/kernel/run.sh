@@ -134,9 +134,16 @@ scenario_graph() {
     else
         bad "first paint took ${elapsed}ms, over budget ${limit}ms"
     fi
-    [ "$(jq -r .result.provisional <<<"$out")" = "true" ] \
-        && ok "first paint rows are marked provisional" \
-        || bad "first paint rows are not marked provisional"
+    # With a commit-graph the first paint is the start of the topological walk itself, so
+    # nothing it draws is reordered when the full walk lands.
+    local full_start
+    full_start="$("$CORAL" --repo "$REPO" --json graph --limit 4096)"
+    if [ "$(jq -r .result.provisional <<<"$out")" = "false" ] \
+        && [ "$(jq -c '[.result.rows[].oid]' <<<"$out")" = "$(jq -c '[.result.rows[].oid]' <<<"$full_start")" ]; then
+        ok "first paint is the start of the topological walk, in its final order"
+    else
+        bad "first paint is not the start of the topological walk"
+    fi
 
     start=$(date +%s%N)
     out="$("$CORAL" --repo "$REPO" --json graph --from 4294967295)"

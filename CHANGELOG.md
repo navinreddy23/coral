@@ -1,5 +1,41 @@
 # Changelog
 
+## Unreleased
+
+### A large repository's first screen is its final one
+
+With a commit-graph, the first screen is drawn in the order the full graph will have, and it
+already knows how many commits there are. Before, it was drawn by commit time and rearranged
+a few seconds later, when the full walk landed. On the Linux kernel the rows, lanes and
+messages are final within two seconds, nothing on the graph moves when the full walk lands,
+and that walk is ready in about 3.5 s instead of 6. The graph's scrollbar now stays put
+rather than appearing and fading on its own a few seconds after opening. Commit
+messages on the first screen no longer wait for the full walk, and the working tree's status
+is read alongside the walk rather than after it.
+
+### Sharper authors' pictures
+
+Pictures are fetched at twice the size, so they are no longer enlarged on a high-density
+screen, and they are shrunk to the node in halving steps rather than in one, which left them
+jagged.
+
+### Recover lost work
+
+**Recover lost work** in the command palette lists every commit HEAD has been on, newest
+first, from git's reflog. The ones no branch, tag or stash reaches any more are marked
+**lost**: these are what a hard reset, a rebase or a deleted branch left behind. Each row has
+**Branch here…** to keep the commit, or **Check out** to look at it first. **Only lost**
+hides the rest.
+
+### Check out a pull or merge request
+
+Right-click a request in the sidebar and choose **Check out #N locally**. Coral fetches the
+request's tip by the name the host keeps it under, so a request from a fork works as well as
+one from a branch here. It then checks it out as `pr/N`, or `mr/N` on GitLab. Doing it again
+after the request has moved on brings the branch up to date. A branch that would lose commits
+is left alone and the reason is shown, because that means the request was force-pushed or
+something was committed to it here.
+
 ## 1.2.5
 
 ### Authors' pictures

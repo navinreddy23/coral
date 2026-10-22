@@ -158,6 +158,18 @@
 
       <div class="band flip">
         <div class="copy">
+          <h3>Lost work, found again.</h3>
+          <p>A hard reset, a rebase or a deleted branch leaves commits nothing points at. Coral lists every commit HEAD has been on, marks the ones that are lost, and makes a branch at one in a click.</p>
+          <ul>
+            <li>Read from git's own reflog, so it finds work lost in the terminal too</li>
+            <li>Check a commit out first to see what is in it</li>
+          </ul>
+        </div>
+        <div class="frame"><img src="screenshots/14-recover.png" alt="The recovery sheet listing where HEAD has been, three commits marked lost" loading="lazy"></div>
+      </div>
+
+      <div class="band">
+        <div class="copy">
           <h3>Keys at your fingertips.</h3>
           <p>A command palette on <kbd>Ctrl</kbd> <kbd>P</kbd> reaches every action, and a terminal opens on <kbd>Ctrl</kbd> <kbd>`</kbd> in the repository you are looking at. Every shortcut can be rebound.</p>
         </div>
@@ -167,7 +179,7 @@
       <div class="grid" style="margin-top: 48px">
         <div class="card">
           <h3>GitHub and GitLab</h3>
-          <p>Pull and merge requests in the sidebar, and a new one opened from the branch you are on, drafts included. Enterprise and self-hosted too.</p>
+          <p>Pull and merge requests in the sidebar, checked out locally from a right-click, forks included, and a new one opened from the branch you are on. Enterprise and self-hosted too.</p>
         </div>
         <div class="card">
           <h3>Checks at a glance</h3>
@@ -214,7 +226,7 @@
       </div>
 
       <div class="stats">
-        <div class="stat"><b>6.2 s</b><span>from launch to all 1,481,528 commits laid out</span></div>
+        <div class="stat"><b>2.7 s</b><span>from launch to a still window, the first screen already in its final order</span></div>
         <div class="stat"><b>283 MB</b><span>of memory with the whole kernel graph loaded</span></div>
         <div class="stat"><b>0%</b><span>CPU while the window sits idle</span></div>
         <div class="stat"><b>90 ms</b><span>to check the status of all 96,025 files</span></div>
@@ -223,12 +235,12 @@
       <div class="charts">
         <div class="chart">
           <h3>Time until the window is still</h3>
-          <p class="unit">Seconds from launch to the last repaint. Coral's includes ordering the whole history; the others load it as you scroll.</p>
+          <p class="unit">Seconds from launch to the last repaint. Coral orders the whole history in the background; the others load it as you scroll.</p>
           <ul class="bars">
             <li><span>Sublime Merge</span><span class="track" style="--w: 12.8%"><span class="fill"></span><span class="value">1.2 s</span></span></li>
             <li><span>GitHub Desktop</span><span class="track" style="--w: 14.0%"><span class="fill"></span><span class="value">1.3 s</span></span></li>
-            <li><span>GitKraken</span><span class="track" style="--w: 58.2%"><span class="fill"></span><span class="value">5.4 s</span></span></li>
-            <li class="us"><span>Coral</span><span class="track" style="--w: 66.0%"><span class="fill"></span><span class="value">6.2 s</span></span></li>
+            <li class="us"><span>Coral</span><span class="track" style="--w: 29.0%"><span class="fill"></span><span class="value">2.7 s</span></span></li>
+            <li><span>GitKraken</span><span class="track" style="--w: 66.0%"><span class="fill"></span><span class="value">5.4 s</span></span></li>
           </ul>
         </div>
         <div class="chart">
@@ -265,7 +277,7 @@
 
       <div class="method">
         <p><strong>How this was measured.</strong> Measured on 2026-10-21 on an Intel Core Ultra 9 285H, 16 threads with 64 GB of memory, running Ubuntu 24.04.5, Linux 6.17 and git 2.43.0. Each client opened the same local clone of the Linux kernel, alone on a nested X display, from a fresh profile, three times; the medians are shown. Memory is the proportional set size of all the client's processes twenty seconds after the window stopped changing. Status is the <code>coral status</code> command, warm, process start included.</p>
-        <p><strong>Coral 1.2.4.</strong> Measured again on 2026-10-22, beside 1.2.2 on the same machine the same day, it came out the same: 6.0 s against 6.0 s to still, 372 MB against 370 MB of memory, and no CPU at idle for either. Both used more memory that day than 1.2.2 did on the 21st, so the change is the day's, not the code's; the comparison above stays the one where every client was measured together.</p>
+        <p><strong>Coral 1.2.6.</strong> Its time to still is from 2026-10-22, measured beside 1.2.5 on the same machine the same day: 2.7 s against 5.8 s, at 308 MB against 318 MB of memory and no CPU at idle for either. The first screen of the kernel is now drawn in its final order and does not change when the full history has been ordered. The other clients' figures, and Coral's memory, are from 2026-10-21, when every client was measured together; on the 22nd 1.2.4 measured the same as 1.2.2 to the tenth of a second, so the conditions held.</p>
         <p>The script and every run's numbers are in the repository: <a href="https://github.com/navinreddy23/coral/tree/master/tests/clients">tests/clients</a>. Fork and Sourcetree have no Linux build and SmartGit was left out because its setup requires agreeing to its licence, so none of them were measured.</p>
       </div>
     </div>
@@ -295,11 +307,11 @@
             <tr><th>Price</th><td class="us">Free</td><td>Free for public repositories; paid for private ones</td><td>Paid licence, with a free evaluation</td><td>Free</td></tr>
             <tr><th>On Linux</th><td class="us">Official builds, x86-64 and Arm</td><td>Official builds</td><td>Official builds</td><td>Community build<span class="note">shiftkey/desktop</span></td></tr>
             <tr><th>Commit graph</th><td class="us">Yes</td><td>Yes</td><td>Yes</td><td>No<span class="note">a list of commits</span></td></tr>
-            <tr><th>Time until the window is still</th><td class="us">6.2 s</td><td>5.4 s</td><td>1.2 s</td><td>1.3 s</td></tr>
+            <tr><th>Time until the window is still</th><td class="us">2.7 s</td><td>5.4 s</td><td>1.2 s</td><td>1.3 s</td></tr>
             <tr><th>Memory, kernel open</th><td class="us">283 MB</td><td>1,727 MB</td><td>1,534 MB</td><td>283 MB</td></tr>
             <tr><th>Idle CPU</th><td class="us">0.0%</td><td>3.4%</td><td>0.0%</td><td>0.3%</td></tr>
             <tr><th>Installed size</th><td class="us">40 MB</td><td>699 MB</td><td>27 MB</td><td>443 MB</td></tr>
-            <tr><th>Version measured</th><td class="us">1.2.2<span class="note">1.2.4 measures the same</span></td><td>12.4.1</td><td>build 2132</td><td>3.4.13-linux1 (community Linux build)</td></tr>
+            <tr><th>Version measured</th><td class="us">1.2.2<span class="note">time to still: 1.2.6</span></td><td>12.4.1</td><td>build 2132</td><td>3.4.13-linux1 (community Linux build)</td></tr>
           </tbody>
         </table>
       </div>

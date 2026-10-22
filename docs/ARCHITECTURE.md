@@ -62,20 +62,23 @@ Parent *rows* cannot be known during the walk — topological order puts a paren
 child, so the child is written first. Parent object ids are buffered and resolved in one pass
 at the end, against a sorted lookup index built at the same time.
 
-Measured on the kernel: 1,481,528 rows and 1,601,455 edges build in 4.2 s into 85.8 MB, at
-60.7 bytes per row and a maximum width of 214 lanes.
+Measured on the kernel: 1,481,528 rows and 1,601,455 edges build in 2.2 s into 93.8 MB, at
+66.4 bytes per row and a maximum width of 214 lanes.
 
 Every row also carries a 32-bit mask of the lanes entering it. The renderer only ever holds a
 window, so it cannot see the commit that opened a lane running to a parent half a million rows
 below; without the mask the lane went undrawn for its whole span and the graph broke into
 fragments between merges. Lanes past 31 are omitted — the column cannot show them.
 
-First paint is two-phase and that is not optional. Topological order must prepaint indegrees
-across the entire graph before it can emit one row, so a screenful costs the same as the whole
-thing — 1.5 s against a 300 ms budget. The engine paints a commit-time walk first (96 ms) with
-every row flagged provisional, then swaps in topological rows when the full walk lands. A
-`--limit` does not avoid this, which is why `coral graph --limit N` is no faster than the full
-walk while `--first-paint` is.
+First paint is two walks, but with a commit-graph the first is already in final order.
+git's incremental topological walk (and gix's port) counts children down to the *lowest* tip's
+generation before emitting a row, which on the kernel is the whole history. `graph/topo.rs`
+bounds it per commit instead: a commit is emitted once discovery has passed below its own
+generation, so 4096 rows cost 14 ms and are exactly the start of the full walk, and the full
+walk takes 0.74 s rather than 2.7 s. The first frame also carries the total row count, counted
+over the commit-graph, so when the full walk lands nothing on screen moves. Without a
+commit-graph, or in a shallow clone, the first paint falls back to a commit-time walk with
+every row flagged provisional, replaced when the topological walk lands.
 
 Which refs the walk starts from is `Tips`: all of them, all but a named few, or only a named
 few. Names rather than object ids, because the walk is redone every time the repository moves

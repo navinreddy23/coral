@@ -9,6 +9,7 @@
 #
 # - every request carries the token;
 # - the checks are asked for every open proposal and no other;
+# - the menu on a proposal checks it out, fetched from the host by the name it keeps it under;
 # - the sidebar is photographed into target/hosting-test for a person to look at.
 #
 # `run.sh [github|gitlab]` picks the host, GitHub when none is named. `run.sh <host> --hold
@@ -55,7 +56,7 @@ trap cleanup EXIT
 
 port="$(python3 -c 'import socket; s = socket.socket(socket.AF_INET6); s.bind(("::1", 0)); print(s.getsockname()[1])')"
 : > "$work/requests.log"
-python3 "$here/server.py" "$port" "$work/requests.log" &
+python3 "$here/server.py" "$port" "$work/requests.log" "$work/git" &
 pids+=($!)
 
 repo="$work/repo"
@@ -63,6 +64,18 @@ GIT_CONFIG_GLOBAL=/dev/null git init -q -b main "$repo"
 (cd "$repo" && echo x > a && git add a \
     && GIT_CONFIG_GLOBAL=/dev/null git -c user.name=Ada -c user.email=ada@fixture.invalid commit -qm start \
     && git remote add origin "http://$provider.localhost:$port/o/r.git")
+
+# The host's copy, with proposal 12's tip kept only where the host keeps a fork's: under its
+# own ref, on no branch, so checking it out has to fetch it by that name.
+GIT_CONFIG_GLOBAL=/dev/null git clone -q --bare "$repo" "$work/git/o/r.git"
+contribution="$work/contribution"
+GIT_CONFIG_GLOBAL=/dev/null git clone -q "$work/git/o/r.git" "$contribution"
+(cd "$contribution" && echo y > lanes && git add lanes \
+    && GIT_CONFIG_GLOBAL=/dev/null git -c user.name=Grace -c user.email=grace@fixture.invalid \
+        commit -qm "Speed up the lane walk")
+if [ "$provider" = github ]; then proposal=refs/pull/12/head; branch=pr/12; else
+    proposal=refs/merge-requests/12/head; branch=mr/12; fi
+GIT_CONFIG_GLOBAL=/dev/null git -C "$work/git/o/r.git" fetch -q "$contribution" "HEAD:$proposal"
 
 home="$work/home"
 mkdir -p "$home/.config/dev.coral.app" "$home/.local/share/keyrings" "$work/bin"
@@ -129,6 +142,8 @@ else
     done
     check "[ \"\$(grep -c '/pipelines' '$log')\" -eq 3 ]" "and of nothing else"
 fi
+check "[ \"\$(git -C '$repo' symbolic-ref --short HEAD)\" = $branch ]" "#12 is checked out as $branch"
+check "[ -e '$repo/lanes' ]" "with the request's own change in it"
 check "[ \"\$(sha256sum '$keyring')\" != '$before' ]" "the token went to the test's own keyring"
 
 echo "photographs in $out"

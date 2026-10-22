@@ -53,6 +53,8 @@
   import Start from './Start.svelte';
   import Remotes from './Remotes.svelte';
   import Activity from './Activity.svelte';
+  import Recover from './Recover.svelte';
+  import { ReflogState } from '../state/reflog.svelte';
   import { ActivityState } from '../state/activity.svelte';
   import { StashesState } from '../state/stashes.svelte';
   import { StartState } from '../state/start.svelte';
@@ -535,6 +537,8 @@
   /** Who the open repository commits as, read for the Profiles pane rather than for the graph. */
   let identity = $state<IdentityScopes | null>(null);
   let showActivity = $state(false);
+  const reflog = new ReflogState();
+  let showRecover = $state(false);
   /** Whether the host's sign-in dialog is up. */
   let showHostAccount = $state(false);
   /** The submodule whose panel is open, and its recorded commit once that has been read. */
@@ -2405,6 +2409,18 @@
     if (hosting.error === null) showHostAccount = false;
   }
 
+  function openRecover() {
+    if (!info) return;
+    showRecover = true;
+    void reflog.load(info.path);
+  }
+
+  /** Closes the sheet first, so the branch prompt and what it does are seen over the graph. */
+  function recoverBy(run: () => Promise<unknown>) {
+    showRecover = false;
+    void run();
+  }
+
   function openActivity() {
     if (info) activity.repo(info.path);
     showActivity = true;
@@ -2912,6 +2928,12 @@
         run: openPreferences,
       },
       {
+        id: 'recover',
+        label: 'Recover lost work',
+        group: 'View',
+        run: openRecover,
+      },
+      {
         id: 'activity',
         label: 'Activity logs',
         group: 'View',
@@ -3272,10 +3294,15 @@
       // of leaving it saying the kernel has no branches for the six seconds the real walk
       // takes. It is asked again below, once the rows are the real ones.
       void refs.load(info.path);
+      // Beside the walk rather than after it. It needs nothing the walk gives, and read after
+      // it the toolbar greyed out and "Working…" came and went as the kernel's last seconds of
+      // walking ended: the first screen kept changing for a reason that had nothing to do
+      // with it.
+      const status = worktree.load(info.path);
       await graph.open(info.path);
       await refs.load(info.path);
       await stashes.load(info.path);
-      await worktree.load(info.path);
+      await status;
       void worktrees.load(info.path);
       // A repository can be opened mid-merge, so the tool has to be there on arrival rather
       // than only after an action of ours stopped.
@@ -3316,6 +3343,7 @@
     menu = null;
     showRemotes = null;
     showActivity = false;
+    showRecover = false;
     // Everything the panels show belongs to the repository being left. Left up, it is another
     // repository's branches and another repository's changes under the new one's name — and it
     // is what the loading screen exists to replace.
@@ -3819,6 +3847,39 @@
   }
 
   /**
+   * What a right-click on a pull or merge request offers.
+   *
+   * Checking one out fetches its tip by the name the host keeps it under, so it works for a
+   * request from a fork as well as for one from a branch of this repository.
+   */
+  function pullRequestMenu(event: MouseEvent, pr: PullRequest) {
+    event.preventDefault();
+    event.stopPropagation();
+    menu = {
+      x: event.clientX,
+      y: event.clientY,
+      items: [
+        {
+          kind: 'item',
+          label: `Check out #${pr.number} locally`,
+          run: () => void act({ kind: 'checkoutProposal', number: pr.number }),
+        },
+        { kind: 'separator' },
+        {
+          kind: 'item',
+          label: 'Open it in the browser',
+          run: () => void openInBrowser(pr.webUrl),
+        },
+        {
+          kind: 'item',
+          label: 'Copy its link',
+          run: () => void copyUrl(pr.webUrl),
+        },
+      ],
+    };
+  }
+
+  /**
    * Takes a working tree away, with the files in it.
    *
    * Asked twice over when it holds changes, because those are the one thing here that exists
@@ -4240,6 +4301,16 @@
       <Activity {activity} onClose={() => (showActivity = false)} />
     </div>
   {/if}
+  {#if showRecover}
+    <div class="screen">
+      <Recover
+        {reflog}
+        onBranch={(oid) => recoverBy(() => branchAt(oid))}
+        onCheckout={(oid) => recoverBy(() => act({ kind: 'checkout', rev: oid }))}
+        onClose={() => (showRecover = false)}
+      />
+    </div>
+  {/if}
 
   <!--
     Shown when asked for, and whenever there is nothing else to show. It takes the place of the
@@ -4323,6 +4394,7 @@
         collapsed={views.current.collapsed}
         onCollapse={(section, closed) => views.setCollapsed(section, closed)}
         onOpenPullRequest={(pr: PullRequest) => void openInBrowser(pr.webUrl)}
+        onPullRequestMenu={pullRequestMenu}
         scope={{ solo: scope.solo, hidden: scope.hidden }}
         onToggleHidden={(r) => void toggleHidden(r)}
         onLeaveSolo={() => void soloRef(null)}
@@ -4895,6 +4967,13 @@
      window's own chrome. */
   .body { display: flex; flex: 1; min-height: 0; position: relative; gap: var(--space-1); }
   .graph { flex: 1; min-height: 0; overflow-y: auto; position: relative; background: var(--bg-0); }
+  /*
+   * A scrollbar that stays, rather than WebKitGTK's overlay one. The overlay bar flashed on its
+   * own a few seconds after the kernel's first screen was final and took two more to fade, so
+   * the graph kept moving long after it had anything new to show. Resetting the standard
+   * properties is what lets the `::-webkit-scrollbar` styles in base.css apply.
+   */
+  .graph { scrollbar-width: auto; scrollbar-color: auto; }
   /* Hidden rather than unmounted: remounting would refetch the frame and lose the scroll
      position every time a file is opened and closed. The wrapper is what carries the class
      now, so the handles go with it. */

@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, PoisonError};
 
 use coral_core::CoralError;
-use coral_core::graph::{GixCommitStream, RowStore, StreamOpts, build, wire};
+use coral_core::graph::{GixCommitStream, Order, RowStore, StreamOpts, build, wire};
 
 use crate::scope::{RepoScope, Scopes};
 use tokio::sync::Mutex;
@@ -185,7 +185,10 @@ impl GraphCache {
             let opts = if first_paint {
                 StreamOpts {
                     tips,
-                    ..StreamOpts::first_paint(StreamOpts::FIRST_PAINT_ROWS)
+                    ..StreamOpts::first_paint(
+                        StreamOpts::FIRST_PAINT_ROWS,
+                        stream.first_paint_order(),
+                    )
                 }
             } else {
                 StreamOpts {
@@ -193,7 +196,17 @@ impl GraphCache {
                     ..StreamOpts::default()
                 }
             };
-            build(&stream, &opts)
+            let mut store = build(&stream, &opts)?;
+            // A first screen already in its final order can say how long the history is, so
+            // the scroll range and the commit count do not jump when the full walk lands: that
+            // jump was the last thing still moving on the kernel's first screen.
+            if first_paint
+                && opts.order == Order::Topological
+                && let Some(total) = stream.count(&opts)?
+            {
+                store.claim_total(u32::try_from(total).unwrap_or(u32::MAX));
+            }
+            Ok::<_, CoralError>(store)
         })
         .await
         .map_err(|e| CoralError::Protocol {
@@ -254,7 +267,8 @@ pub async fn graph_frame(
 /// Kept separate from the frame because the commit-graph carries neither, so these cost an
 /// object read each. Fetching them only for rows on screen is what keeps scrolling cheap.
 ///
-/// `provisional` says which walk the rows being asked about came from.
+/// `quick` says which walk the rows being asked about came from: the quick first walk or the
+/// full one.
 /// # Errors
 /// Propagates git failures.
 #[tauri::command]
@@ -264,11 +278,11 @@ pub async fn row_metadata(
     path: String,
     start_row: u32,
     count: u32,
-    provisional: bool,
+    quick: bool,
 ) -> Result<Vec<coral_core::commit::CommitMeta>, crate::commands::IpcError> {
     // Against the walk the window is showing, not the one it will show next: a row is a
     // position in a particular walk, and reading it from the other one names a different commit.
-    let store = cache.store(&path, provisional, &scopes.read(&path)).await?;
+    let store = cache.store(&path, quick, &scopes.read(&path)).await?;
     let end = (start_row + count).min(store.len());
     tracing::info!(
         start_row,

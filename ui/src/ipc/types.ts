@@ -348,6 +348,31 @@ summary: string, };
 export type RefKind = { "kind": "local_branch" } | { "kind": "remote_branch", remote: string, } | { "kind": "tag", annotated: boolean, } | { "kind": "stash" } | { "kind": "other" };
 
 /**
+ * One move of HEAD.
+ */
+export type ReflogEntry = { 
+/**
+ * Where HEAD was moved to.
+ */
+oid: string, 
+/**
+ * Counted from the newest, as `HEAD@{n}` counts.
+ */
+index: number, 
+/**
+ * What moved it, in git's words: `reset: moving to HEAD~2`.
+ */
+action: string, 
+/**
+ * When HEAD moved, in seconds since the epoch, which is not when the commit was made.
+ */
+time: number, summary: string, 
+/**
+ * No branch, tag, remote branch or stash reaches it: it is here only because HEAD was.
+ */
+lost: boolean, };
+
+/**
  * A configured remote.
  */
 export type Remote = { name: string, fetchUrl: string, 

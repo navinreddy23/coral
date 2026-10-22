@@ -1,13 +1,13 @@
 //! The two-phase graph sequence the app performs on open, and the framing that carries it.
 
-use coral_core::graph::{GixCommitStream, StreamOpts, build, wire};
+use coral_core::graph::{GixCommitStream, Order, StreamOpts, build, wire};
 use coral_core::testutil::TestRepo;
 
 /// Mirrors what `GraphCache` builds, so the sequence is exercised without Tauri.
 fn build_store(path: &std::path::Path, first_paint: bool) -> coral_core::graph::RowStore {
     let stream = GixCommitStream::open(path).unwrap();
     let opts = if first_paint {
-        StreamOpts::first_paint(u64::from(wire::ROWS_PER_FRAME))
+        StreamOpts::first_paint(u64::from(wire::ROWS_PER_FRAME), Order::CommitTime)
     } else {
         StreamOpts::default()
     };

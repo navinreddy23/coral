@@ -4,6 +4,7 @@ pub mod shallow;
 pub mod store;
 pub mod stream;
 pub mod subprocess;
+pub mod topo;
 pub mod wire;
 
 pub use gix_stream::GixCommitStream;

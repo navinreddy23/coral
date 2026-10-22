@@ -43,7 +43,7 @@ impl RepoLocation {
     ///
     /// `merge-base --is-ancestor` writes nothing and answers by exiting 0 or 1, so 1 has to be
     /// allowed through as a result rather than raised as a failure.
-    async fn is_ancestor(
+    pub(crate) async fn is_ancestor(
         &self,
         runner: &GitRunner,
         older: &str,

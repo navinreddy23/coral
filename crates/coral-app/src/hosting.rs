@@ -2,10 +2,11 @@
 #![allow(clippy::needless_pass_by_value)]
 
 use coral_core::process::GitRunner;
+use coral_core::proposal::Proposal;
 use coral_core::repo::RepoLocation;
 use coral_hosting::pull_request::NewPullRequest;
 use coral_hosting::token::Account;
-use coral_hosting::{Client, Host, PullRequest, token};
+use coral_hosting::{Client, Host, HostKind, PullRequest, token};
 
 use crate::commands::IpcError;
 
@@ -66,16 +67,43 @@ fn account_of(view: &HostView, profile: &str) -> Account {
     }
 }
 
+/// The remote whose host the window speaks to: `origin`, or else the first there is.
+fn chosen(remotes: &[coral_core::remote::Remote]) -> Option<&coral_core::remote::Remote> {
+    remotes
+        .iter()
+        .find(|r| r.name == "origin")
+        .or_else(|| remotes.first())
+}
+
+/// Request `number` on the host behind the chosen remote, and that remote's name.
+///
+/// # Errors
+/// [`coral_core::CoralError::Refused`] when there is no remote, or its host is not one whose
+/// requests can be fetched by name.
+pub async fn proposal(
+    loc: &RepoLocation,
+    runner: &GitRunner,
+    number: u64,
+) -> Result<(String, Proposal), coral_core::CoralError> {
+    let remotes = loc.remotes(runner).await?;
+    let remote = chosen(&remotes).ok_or_else(|| coral_core::CoralError::Refused {
+        label: "check out the request",
+        detail: "the repository has no remotes".to_owned(),
+    })?;
+    let host = Host::detect(&remote.fetch_url).map_err(|e| refused("check out the request", &e))?;
+    let proposal = match host.kind {
+        HostKind::GitHub => Proposal::Pull(number),
+        HostKind::GitLab => Proposal::MergeRequest(number),
+    };
+    Ok((remote.name.clone(), proposal))
+}
+
 async fn host_of(path: &str, profile: &str) -> Result<HostView, IpcError> {
     let runner = GitRunner::discover().await?;
     let loc = RepoLocation::discover(&runner, std::path::Path::new(path)).await?;
     let remotes = loc.remotes(&runner).await?;
 
-    let Some(remote) = remotes
-        .iter()
-        .find(|r| r.name == "origin")
-        .or_else(|| remotes.first())
-    else {
+    let Some(remote) = chosen(&remotes) else {
         return Ok(HostView {
             host: None,
             detail: Some("the repository has no remotes".to_owned()),
