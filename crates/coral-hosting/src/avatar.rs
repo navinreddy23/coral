@@ -13,8 +13,9 @@ use sha2::{Digest, Sha256};
 
 use crate::provider::HostingError;
 
-/// Pixels on a side asked for: twice the largest node, for a sharp disc on a high-density screen.
-const SIZE: u32 = 64;
+/// Pixels on a side asked for. A node is up to about 30 pixels across and a high-density screen
+/// doubles that; a 64-pixel picture was being enlarged there, and looked it.
+pub const SIZE: u32 = 128;
 /// A picture this size is not a picture anybody uploaded as an avatar.
 const LIMIT: usize = 512 * 1024;
 
@@ -137,11 +138,11 @@ mod tests {
     fn a_github_noreply_address_asks_github_for_that_account() {
         assert_eq!(
             sources("12345+octocat@users.noreply.github.com")[0],
-            "https://avatars.githubusercontent.com/u/12345?s=64"
+            "https://avatars.githubusercontent.com/u/12345?s=128"
         );
         assert_eq!(
             sources("octocat@users.noreply.github.com")[0],
-            "https://github.com/octocat.png?size=64"
+            "https://github.com/octocat.png?size=128"
         );
     }
 
@@ -152,7 +153,7 @@ mod tests {
         assert_eq!(
             sources("  MyEmailAddress@example.com "),
             [
-                "https://gravatar.com/avatar/84059b07d4be67b806386c0aad8070a23f18836bbaae342275dc0a83414c32ee?s=64&d=404"
+                "https://gravatar.com/avatar/84059b07d4be67b806386c0aad8070a23f18836bbaae342275dc0a83414c32ee?s=128&d=404"
             ]
         );
     }

@@ -11,7 +11,7 @@
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
-use coral_hosting::avatar::{Fetcher, key};
+use coral_hosting::avatar::{Fetcher, SIZE, key};
 use tokio::sync::Semaphore;
 
 use crate::commands::IpcError;
@@ -36,11 +36,12 @@ impl Avatars {
     }
 
     /// The file a picture for `email` is kept in, and the one that says there is none. Named by
-    /// a hash, so the cache does not hold a list of every address the user has looked at.
+    /// a hash, so the cache does not hold a list of every address the user has looked at, and
+    /// by size, so a picture kept at a size no longer asked for is not shown again.
     fn files(&self, email: &str) -> (PathBuf, PathBuf) {
         let key = key(email);
         (
-            self.dir.join(format!("{key}.img")),
+            self.dir.join(format!("{key}-{SIZE}.img")),
             self.dir.join(format!("{key}.none")),
         )
     }
@@ -108,7 +109,7 @@ mod tests {
         let (img, none) = avatars.files("  Ada@Example.org ");
         let name = img.file_name().unwrap().to_string_lossy().into_owned();
         assert!(!name.contains("example"), "{name}");
-        assert_eq!(name.len(), 64 + ".img".len());
+        assert_eq!(name.len(), 64 + "-128.img".len());
         // The same author however the address was written.
         assert_eq!(avatars.files("ada@example.org"), (img, none));
     }

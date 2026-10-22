@@ -1,6 +1,7 @@
 import { NO_LANE, parentLanesOf, type Frame } from './frame';
 import { authorColourIndex } from './initials';
 import { laneColour, laneX, rowY, type Metrics, type Window } from './layout';
+import { face as shrink } from './face';
 
 /** Thickness of a node's ring. Two whole pixels, for the reason `lineWidth` is set to two. */
 const NODE_STROKE = 2;
@@ -144,7 +145,11 @@ export function drawLanes(
     if (face !== null) {
       ctx.save();
       ctx.clip();
-      ctx.drawImage(face, x - radius, y - radius, radius * 2, radius * 2);
+      // In device pixels, which is what the shrunk copy has to match to stay sharp.
+      const across = radius * 2 * (globalThis.devicePixelRatio || 1);
+      const small = shrink(face, across);
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(small, x - radius, y - radius, radius * 2, radius * 2);
       ctx.restore();
     }
     ctx.strokeStyle = laneColour(lane, colours);
