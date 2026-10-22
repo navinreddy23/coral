@@ -1,0 +1,72 @@
+{
+  "machine": {
+    "cpu": "Intel Core Ultra 9 285H, 16 threads",
+    "memory": "64 GB",
+    "os": "Ubuntu 24.04.5, Linux 6.17",
+    "git": "2.43.0",
+    "display": "Xephyr 1500x950, X11",
+    "repository": "Linux kernel, 1,481,528 commits, 944 tags, commit-graph written",
+    "date": "2026-10-22"
+  },
+  "purpose": "Coral 1.2.4 beside 1.2.2, measured the same day, to tell a change in the code from a change in the day's conditions.",
+  "clients": [
+    {
+      "client": "Coral",
+      "version": "1.2.2",
+      "median": {
+        "seconds_to_still": 6.03,
+        "pss_mib": 370,
+        "idle_cpu_percent": 0.0
+      },
+      "runs": [
+        {
+          "seconds_to_still": 6.21,
+          "pss_mib": 371,
+          "idle_cpu_percent": 0.0,
+          "processes": 3
+        },
+        {
+          "seconds_to_still": 6.03,
+          "pss_mib": 369,
+          "idle_cpu_percent": 0.03,
+          "processes": 3
+        },
+        {
+          "seconds_to_still": 5.98,
+          "pss_mib": 370,
+          "idle_cpu_percent": 0.0,
+          "processes": 3
+        }
+      ]
+    },
+    {
+      "client": "Coral",
+      "version": "1.2.4",
+      "median": {
+        "seconds_to_still": 5.98,
+        "pss_mib": 372,
+        "idle_cpu_percent": 0.0
+      },
+      "runs": [
+        {
+          "seconds_to_still": 5.98,
+          "pss_mib": 361,
+          "idle_cpu_percent": 0.0,
+          "processes": 3
+        },
+        {
+          "seconds_to_still": 5.93,
+          "pss_mib": 374,
+          "idle_cpu_percent": 0.0,
+          "processes": 3
+        },
+        {
+          "seconds_to_still": 6.01,
+          "pss_mib": 372,
+          "idle_cpu_percent": 0.0,
+          "processes": 3
+        }
+      ]
+    }
+  ]
+}
