@@ -63,10 +63,25 @@ describe('the token file', () => {
     );
     const missing: string[] = [];
     for (const [name, value] of tokens('light')) {
-      if (!isColour(value) || SHARED.has(name) || dark.has(name)) continue;
+      // A colour mixed from other tokens follows the theme by itself: it resolves on the root,
+      // where the theme's own values are.
+      const derived = /var\(--/u.test(value);
+      if (!isColour(value) || derived || SHARED.has(name) || dark.has(name)) continue;
       missing.push(name);
     }
     expect(missing, 'colours declared for light only').toEqual([]);
+  });
+
+  it('mixes each lane’s hover and selected shade from that theme’s own colours', () => {
+    const light = tokens('light');
+    for (let lane = 1; lane <= 8; lane++) {
+      for (const shade of ['hover', 'strong']) {
+        const value = light.get(`lane-${lane}-${shade}`) ?? '';
+        expect(value, `--lane-${lane}-${shade}`).toMatch(
+          new RegExp(`color-mix\\(in srgb, var\\(--lane-${lane}\\) \\d+%, var\\(--bg-0\\)\\)`, 'u'),
+        );
+      }
+    }
   });
 
   it('defines nothing for dark that light has never heard of', () => {

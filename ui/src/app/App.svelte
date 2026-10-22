@@ -4625,6 +4625,8 @@
               <span
                 class="cell message"
                 style:--row-tint="var(--lane-{laneOf(row)}-soft)"
+                style:--row-hover="var(--lane-{laneOf(row)}-hover)"
+                style:--row-strong="var(--lane-{laneOf(row)}-strong)"
                 style:--row-line="var(--lane-{laneOf(row)})"
               >
                 <span class="lane-strip" aria-hidden="true" style:--lane-gap="{laneGap(row)}px"
@@ -4997,26 +4999,24 @@
   .wip .wip-node { border-color: var(--brand); }
 
   /*
-   * The lane's colour sits in the gap between the node and the text, not across the message.
+   * The lane's colour runs from the commit's node across its message, one ribbon per row, as
+   * the reference client draws it. A band that stopped at a white message cell read as cut off,
+   * all the more so beside the next row's, which began somewhere else.
    *
-   * It used to wash the whole message cell, and that is what made the selected commit hard to
-   * find: every row was already tinted something, so the one tint that means "this is the row
-   * you picked" was just another colour in a column of colours. A strip at the leading edge
-   * still ties the line of text to a node three columns away, and leaves the cell itself plain
-   * for the accent to land on. The reference client paints the same gap for the same reason.
+   * The selected row is told apart by strength rather than by being the one plain row: its own
+   * lane colour, a good deal deeper, across both the band and the text.
    */
   .row .cell.message {
-    background: var(--bg-0);
-    /* The band stops at this edge and the bar starts it, so the eye is handed from the lane to
-       the text rather than left to cross a gap. State replaces the colour, never the bar. */
+    background: var(--row-tint, var(--bg-0));
+    /* The leading bar hands the eye from the lane to the text. State replaces the colour,
+       never the bar. */
     box-shadow: inset 2px 0 0 var(--row-line, transparent);
   }
-  .row:hover .cell.message { background: var(--bg-1); }
+  .row:hover .cell.message, .row:hover .lane-strip { background: var(--row-hover); }
   /*
-   * The band filling that corridor. It takes no room in the row: the width and the negative
-   * margin are the same number, so it is drawn entirely leftwards into the lane column and
-   * stops exactly where the message cell begins, leaving that cell's own leading bar to show
-   * which row is selected.
+   * The band in the lane column, from the commit's node to the message. It takes no room in
+   * the row: it is drawn entirely leftwards into the lane column and stops exactly where the
+   * message cell begins, which carries the same colour on.
    *
    * Square, and deliberately: consecutive commits in one lane then run into a single ribbon,
    * which is the point — a branch reads as one colour from its label to its last commit.
@@ -5039,7 +5039,9 @@
    * that all look alike a tint alone is easy to lose, and the bar survives a hover passing
    * over a neighbour.
    */
-  .row.selected .cell.message, .wip.selected {
+  .row.selected .cell.message, .row.selected .lane-strip { background: var(--row-strong); }
+  .row.selected .cell.message { box-shadow: inset 3px 0 0 var(--row-line); }
+  .wip.selected {
     background: var(--accent-soft);
     box-shadow: inset 2px 0 0 var(--accent-line);
   }

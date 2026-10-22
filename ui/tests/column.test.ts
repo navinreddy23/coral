@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { bandWidth, columnWidth, laneToken } from '../src/graph/column';
 import type { Frame } from '../src/graph/frame';
-import { DEFAULT_METRICS, graphWidthFor } from '../src/graph/layout';
+import { DEFAULT_METRICS, fittedMetrics, graphWidthFor, laneX } from '../src/graph/layout';
 
 /** A frame whose row `n` sits in lane `lanes[n]`, which is all these three read. */
 function frameOf(lanes: number[]): Frame {
@@ -50,19 +50,22 @@ describe('how wide the lane column wants to be', () => {
 });
 
 describe('the band between a row’s lane and its message', () => {
-  it('fills the corridor a linear row leaves in a column sized for a merge', () => {
-    // The column is as wide as the widest row on screen and never narrows again, so a row in
-    // lane 0 has most of it empty. That emptiness is what the lane colour fills.
-    const frame = frameOf([0, 0, 6, 0]);
+  it('starts at the row’s own node, whatever runs past it', () => {
+    // It used to start after the outermost lane crossing the row, so its left edge jumped
+    // from row to row with the lines beside it and looked cut off. The reference client starts
+    // it at the node and draws the lines over it, which reads as one clean ribbon.
     const px = graphWidthFor(6, DEFAULT_METRICS);
-    const wide = bandWidth(frame, 0, px, DEFAULT_METRICS, [0, 1, 2, 3]);
-    const tight = bandWidth(frame, 2, px, DEFAULT_METRICS, [0, 1, 2, 3]);
-    expect(wide).toBeGreaterThan(tight);
-    // On the widest row there is no corridor: what is left is the margin the column reserves
-    // past the last node so a ring is not drawn against the text.
-    expect(tight, 'the widest row keeps its lanes').toBeLessThanOrEqual(
-      DEFAULT_METRICS.nodeRadius + 10,
+    const rows = [0, 1, 2, 3];
+    // Rows 0 and 3 both sit in lane 0; the frame's lanes past them do not move their band.
+    const frame = frameOf([0, 0, 6, 0]);
+    const alone = bandWidth(frame, 0, px, DEFAULT_METRICS, rows);
+    expect(bandWidth(frame, 3, px, DEFAULT_METRICS, rows)).toBe(alone);
+    // A node further right has less of the column to its right, by exactly its lanes.
+    const fitted = fittedMetrics(6, px, DEFAULT_METRICS);
+    expect(alone - bandWidth(frame, 2, px, DEFAULT_METRICS, rows)).toBeCloseTo(
+      laneX(6, fitted) - laneX(0, fitted),
     );
+    expect(alone).toBeCloseTo(px - laneX(0, fitted));
   });
 
   it('is nothing for a row the frame does not reach', () => {

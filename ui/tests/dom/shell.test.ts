@@ -205,29 +205,26 @@ describe('the shell', () => {
     }
   });
 
-  it('puts the lane colour in the strip beside the message, not across it', async () => {
-    // A message cell washed with its lane colour is what made the selected commit hard to
-    // find: every row was tinted something, so the one tint that means "you picked this" was
-    // just another colour in the column.
+  it('carries the lane colour from the node across the message, deeper on the selected row', async () => {
+    // A band that stopped at a white message cell read as cut off; the reference client runs
+    // it across the text, and tells the selected row apart by strength instead.
     const { container } = await shell();
     const row = container.querySelectorAll('li.row')[1] as HTMLElement;
     const cell = row.querySelector('.cell.message') as HTMLElement;
-    const strip = cell.querySelector('.lane-strip');
-    expect(strip, 'every commit row carries a lane strip').not.toBeNull();
-
-    // The lane colour is named on the cell as a custom property and spent by the strip alone.
+    expect(cell.querySelector('.lane-strip'), 'every commit row carries a lane strip').not.toBeNull();
     expect(cell.style.getPropertyValue('--row-tint')).toMatch(/lane-\d+-soft/u);
+
     const rules = [...document.styleSheets]
       .flatMap((sheet) => [...(sheet.cssRules ?? [])])
       .map((rule) => rule.cssText);
-    const cellPaint = rules.filter(
-      (text) => /\.row[^{]*\.cell\.message[^{]*\{/u.test(text) && /--row-tint/u.test(text),
-    );
-    expect(cellPaint, 'the message cell must not wear the lane colour').toEqual([]);
-    expect(
-      rules.some((text) => /lane-strip/u.test(text) && /--row-tint/u.test(text)),
-      'the strip must be what wears it',
-    ).toBe(true);
+    const wears = (selector: RegExp, colour: RegExp) =>
+      rules.some((text) => selector.test(text) && colour.test(text));
+    expect(wears(/\.row[^{]*\.cell\.message[^{]*\{/u, /--row-tint/u), 'the message cell').toBe(true);
+    expect(wears(/\.lane-strip[^{]*\{/u, /--row-tint/u), 'the strip').toBe(true);
+    // Selected: the row's own lane colour, stronger, on both.
+    expect(wears(/\.row\.selected[^{]*\.cell\.message/u, /--row-strong/u)).toBe(true);
+    expect(wears(/\.row\.selected[^{]*\.lane-strip/u, /--row-strong/u)).toBe(true);
+    expect(cell.style.getPropertyValue('--row-strong')).toMatch(/lane-\d+-strong/u);
   });
 
   it('commits from the keyboard, and keeps the message when the panel is not showing', async () => {

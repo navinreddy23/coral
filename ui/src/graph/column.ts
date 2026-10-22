@@ -30,15 +30,11 @@ export function columnWidth(
 }
 
 /**
- * The empty pixels on one row between its outermost lane and the commit message.
+ * How far the row's lane colour reaches back into the lane column: from its commit's node to
+ * the commit message.
  *
- * The column is as wide as the widest row on screen and never narrows again, so on a linear
- * stretch of a repository that has merge regions elsewhere this is most of the column: a
- * corridor of nothing between a commit's node and the text about it. The lane colour fills it,
- * which is what ties the two together.
- *
- * Measured per row rather than for the screen, because the row beside a thirty-lane merge has
- * no gap at all and painting one would cover the lanes.
+ * The band runs behind every lane line to the right of the node, which the canvas draws over
+ * it, so a branch reads as one ribbon of colour from its node to its text.
  */
 export function bandWidth(
   frame: Frame | null,
@@ -48,12 +44,14 @@ export function bandWidth(
   /** The rows on screen, which is what the lanes were fitted to. */
   rows: readonly number[],
 ): number {
-  if (frame === null || localRow(frame, row) === null) return 0;
+  const local = localRow(frame, row);
+  if (frame === null || local === null) return 0;
   const fitted = fittedMetrics(widestLane(frame, rows), columnPx, metrics);
-  // To the centre of the outermost node, not past its edge: the band runs under the right half
-  // of it, which is what ties the colour to the commit rather than leaving it floating beside
-  // one. The canvas is drawn over the top, so the node stays a circle.
-  return Math.max(0, columnPx - laneX(widestLane(frame, [row]), fitted));
+  // From the centre of the row's own node, as the reference client draws it. Measured from the
+  // outermost lane crossing the row instead, the band began after whichever line ran furthest
+  // right, so its left edge jumped from row to row and looked cut off. The canvas is drawn
+  // over the top, so the node stays a circle and the lines crossing the band stay on it.
+  return Math.max(0, columnPx - laneX(frame.lanes[local] ?? 0, fitted));
 }
 
 /**
