@@ -1,10 +1,10 @@
-"""A fake GitHub Enterprise on loopback: three pull requests and the checks on each.
+"""A fake GitHub Enterprise and GitLab on loopback: three proposals and the checks on each.
 
     server.py <port> <request-log>
 
-Serves the documented shapes Coral reads, on `github.localhost`, which resolves to loopback and
-which Coral takes for an Enterprise instance. Every request is logged with the start of its
-Authorization header, so the test can tell the token was sent.
+Serves the documented shapes Coral reads, on `github.localhost` or `gitlab.localhost`, which
+resolve to loopback and which Coral takes for a self-hosted instance of each. Every request is logged with the start of its
+Authorization or PRIVATE-TOKEN header, so the test can tell the token was sent.
 """
 import json, socket, sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -22,6 +22,23 @@ def pr(n, title, sha, branch, draft=False):
 PULLS = [pr(12, "Speed up the lane walk", A, "fast-lanes"),
          pr(11, "Teach blame to follow renames", B, "blame-renames"),
          pr(10, "Draft: rework the palette", C, "palette", draft=True)]
+def mr(iid, title, sha, branch, draft=False):
+    return {"iid": iid, "title": title, "state": "opened", "draft": draft,
+            "author": {"username": "ada"}, "source_branch": branch, "target_branch": "main",
+            "web_url": f"http://gitlab.localhost:{PORT}/o/r/-/merge_requests/{iid}",
+            "updated_at": "2026-10-20T10:00:00Z", "sha": sha}
+
+MERGE_REQUESTS = [mr(12, "Speed up the lane walk", A, "fast-lanes"),
+                  mr(11, "Teach blame to follow renames", B, "blame-renames"),
+                  mr(10, "Draft: rework the palette", C, "palette", draft=True)]
+# By merge request, as GitLab lists them: the newest first. 12's newest failed after an older
+# success, so only the newest may count.
+PIPELINES = {
+    12: [{"id": 9, "status": "failed", "web_url": f"http://gitlab.localhost:{PORT}/o/r/-/pipelines/9"},
+         {"id": 7, "status": "success"}],
+    11: [{"id": 8, "status": "success"}],
+    10: [{"id": 6, "status": "running"}],
+}
 RUNS = {
     A: [{"status": "completed", "conclusion": "success", "html_url": "http://ci/a1"},
         {"status": "completed", "conclusion": "failure", "html_url": f"http://github.localhost:{PORT}/o/r/runs/2"}],
@@ -33,11 +50,16 @@ RUNS = {
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         with open(LOG, "a") as log:
-            log.write(f"{self.path} auth={self.headers.get('Authorization', '')[:12]}\n")
+            log.write(f"{self.path} auth={self.headers.get('Authorization', '')[:12]}"
+                      f" private={self.headers.get('PRIVATE-TOKEN', '')[:5]}\n")
         path = self.path.split("?")[0]
         body = None
         if path == "/api/v3/repos/o/r/pulls":
             body = PULLS
+        elif path == "/api/v4/projects/o%2Fr/merge_requests":
+            body = MERGE_REQUESTS
+        elif path.startswith("/api/v4/projects/o%2Fr/merge_requests/") and path.endswith("/pipelines"):
+            body = PIPELINES.get(int(path.split("/")[-2]), [])
         elif path.endswith("/check-runs"):
             sha = path.split("/")[-2]
             body = {"total_count": len(RUNS.get(sha, [])), "check_runs": RUNS.get(sha, [])}

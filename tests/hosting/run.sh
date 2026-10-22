@@ -2,7 +2,7 @@
 #
 # The window talking to a code host, with nothing leaving this machine.
 #
-# A fake GitHub Enterprise answers on github.localhost, and Coral runs in a D-Bus session of
+# A fake GitHub Enterprise or GitLab answers on loopback, and Coral runs in a D-Bus session of
 # its own with a throwaway keyring in a home of its own, so the token typed in reaches neither
 # the desktop's keyring nor any real host. Signed in, the window lists the pull requests and
 # asks for each open one's checks, and:
@@ -11,7 +11,8 @@
 # - the checks are asked for every open proposal and no other;
 # - the sidebar is photographed into target/hosting-test for a person to look at.
 #
-# `run.sh --hold [seconds]` sets the same up and leaves it open instead.
+# `run.sh [github|gitlab]` picks the host, GitHub when none is named. `run.sh <host> --hold
+# [seconds]` sets the same up and leaves it open instead.
 #
 # Needs Xephyr, ImageMagick, dbus-run-session and gnome-keyring-daemon.
 set -euo pipefail
@@ -31,6 +32,8 @@ if [ ! -x "$venv/bin/python" ]; then
     "$venv/bin/pip" install --quiet python-xlib
 fi
 
+provider="${1:-github}"
+case "$provider" in github | gitlab) shift || true ;; *) provider=github ;; esac
 work="$(mktemp -d)"
 pids=()
 cleanup() {
@@ -59,7 +62,7 @@ repo="$work/repo"
 GIT_CONFIG_GLOBAL=/dev/null git init -q -b main "$repo"
 (cd "$repo" && echo x > a && git add a \
     && GIT_CONFIG_GLOBAL=/dev/null git -c user.name=Ada -c user.email=ada@fixture.invalid commit -qm start \
-    && git remote add origin "http://github.localhost:$port/o/r.git")
+    && git remote add origin "http://$provider.localhost:$port/o/r.git")
 
 home="$work/home"
 mkdir -p "$home/.config/dev.coral.app" "$home/.local/share/keyrings" "$work/bin"
@@ -89,11 +92,12 @@ HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_DATA_HOME="$home/.local/share" 
 pids+=($!)
 
 if [ "${1:-}" = "--hold" ]; then
-    echo "holding on DISPLAY=:$n, host on github.localhost:$port, for ${2:-600}s"
+    echo "holding on DISPLAY=:$n, host on $provider.localhost:$port, for ${2:-600}s"
     sleep "${2:-600}"
     exit 0
 fi
 
+out="$out/$provider"
 mkdir -p "$out"
 rm -f "$out"/*.png
 status=0
@@ -108,12 +112,23 @@ check() {
     if eval "$1"; then echo "ok   $2"; else echo "FAIL $2"; status=1; fi
 }
 log="$work/requests.log"
-check "grep -q '/pulls?' '$log'" "the proposals were asked for"
-check "! grep -v 'auth=Bearer dumm' '$log' | grep -q ." "every request carried the token"
-for sha in aaaaaaaa bbbbbbbb cccccccc; do
-    check "grep -q 'commits/$sha.*/check-runs' '$log'" "the checks on ${sha:0:1}… were asked for"
-done
-check "[ \"\$(grep -c '/check-runs' '$log')\" -eq 3 ]" "and on nothing else"
+if [ "$provider" = github ]; then
+    check "grep -q '/pulls?' '$log'" "the proposals were asked for"
+    check "! grep -v 'auth=Bearer dumm' '$log' | grep -q ." "every request carried the token"
+    for sha in aaaaaaaa bbbbbbbb cccccccc; do
+        check "grep -q 'commits/$sha.*/check-runs' '$log'" "the checks on ${sha:0:1}… were asked for"
+    done
+    check "[ \"\$(grep -c '/check-runs' '$log')\" -eq 3 ]" "and on nothing else"
+else
+    check "grep -q '/merge_requests?' '$log'" "the merge requests were asked for"
+    # GitLab takes the token in a header of its own rather than as a bearer.
+    check "! grep -v 'private=dummy' '$log' | grep -q ." "every request carried the token"
+    check "! grep -q 'auth=Bearer' '$log'" "in GitLab's header, not GitHub's"
+    for iid in 12 11 10; do
+        check "grep -q 'merge_requests/$iid/pipelines' '$log'" "the pipelines of !$iid were asked for"
+    done
+    check "[ \"\$(grep -c '/pipelines' '$log')\" -eq 3 ]" "and of nothing else"
+fi
 check "[ \"\$(sha256sum '$keyring')\" != '$before' ]" "the token went to the test's own keyring"
 
 echo "photographs in $out"

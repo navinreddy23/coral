@@ -201,7 +201,8 @@ update-test:
 # The window signed in to a fake GitHub on loopback, with a throwaway keyring on a private
 # D-Bus session. Needs Xephyr and gnome-keyring-daemon, so not part of check.
 hosting-test: app
-    bash tests/hosting/run.sh
+    bash tests/hosting/run.sh github
+    bash tests/hosting/run.sh gitlab
 
 ssh-test:
     bash tests/ssh/run.sh
