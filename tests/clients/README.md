@@ -5,6 +5,10 @@ screen stops changing, how much memory the client holds once it has, and how muc
 uses doing nothing afterwards. The website's comparison comes from `results.json`, which
 records every run on the machine named in it.
 
+Numbers from different days are not compared. The same machine measured 1.2.2 at 283 MB one
+day and 370 MB the next, so a later Coral is measured beside the earlier one on the same day
+(`results-2026-10-22.json`) to tell a change in the code from a change in the conditions.
+
 The method is the same for every client:
 - Each client runs alone on a nested X server, so the screen being watched holds that client
   and nothing else.
