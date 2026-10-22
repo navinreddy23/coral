@@ -60,13 +60,19 @@ describe('the bisect bar', () => {
     const { container, calls, button } = bar(bisection());
     expect(container.textContent).toContain('Testing');
     expect(container.textContent).toContain('cccccccc');
-    expect(container.textContent).toContain('about 3 more steps, 7 suspects');
+    expect(container.textContent).toContain('about 3 more steps after this, 7 suspects');
     await fireEvent.click(button('Good') as HTMLElement);
     await fireEvent.click(button('Bad') as HTMLElement);
     await fireEvent.click(button('Skip') as HTMLElement);
     await fireEvent.click(button('End bisect') as HTMLElement);
     expect(calls.mark).toEqual(['good', 'bad', 'skip']);
     expect(calls.end).toBe(1);
+  });
+
+  it('says the commit being tested is the last when git counts no steps after it', () => {
+    const { container } = bar(bisection({ steps: 0, suspects: 2 }));
+    expect(container.textContent).toContain('the last to test, 2 suspects');
+    expect(container.textContent).not.toContain('0 more');
   });
 
   it('asks for the side it is missing, and offers no verdict until then', () => {

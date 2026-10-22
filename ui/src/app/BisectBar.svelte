@@ -50,7 +50,10 @@
         Testing
         <button class="link" onclick={() => onShow(b.testing ?? '')}>{short(b.testing)}</button>
         {#if b.steps !== null}
-          · about {b.steps} more {b.steps === 1 ? 'step' : 'steps'}, {b.suspects} suspects
+          <!-- git's count is of the steps after this one, so at none this is the last. -->
+          · {b.steps === 0
+            ? 'the last to test'
+            : `about ${b.steps} more ${b.steps === 1 ? 'step' : 'steps'} after this`}, {b.suspects} suspects
         {/if}
       </span>
       <span class="verdicts">

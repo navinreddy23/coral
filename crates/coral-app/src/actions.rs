@@ -613,8 +613,10 @@ fn bisect_news(state: Option<&coral_core::bisect::Bisection>) -> String {
         return "Only skipped commits are left, so git cannot narrow it further".to_owned();
     }
     match (state.testing.as_deref(), state.steps) {
+        // git counts the steps after this one, so at none this is the last to test.
+        (Some(testing), Some(0)) => format!("Testing {}, the last one", short(testing)),
         (Some(testing), Some(steps)) => format!(
-            "Testing {}, about {steps} more {} to go",
+            "Testing {}, about {steps} more {} after this",
             short(testing),
             if steps == 1 { "step" } else { "steps" }
         ),
@@ -929,7 +931,54 @@ fn coral_binary() -> Result<std::path::PathBuf, coral_core::CoralError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Action, ResetKind, named};
+    use super::{Action, ResetKind, bisect_news, named};
+    use coral_core::bisect::Bisection;
+
+    fn testing(steps: u32) -> Bisection {
+        Bisection {
+            bad: Some("b".repeat(40)),
+            good: vec!["a".repeat(40)],
+            testing: Some("c".repeat(40)),
+            steps: Some(steps),
+            suspects: Some(4),
+            ..Bisection::default()
+        }
+    }
+
+    #[test]
+    fn a_verdict_says_where_the_bisect_has_got_to() {
+        assert_eq!(
+            bisect_news(Some(&testing(2))),
+            "Testing cccccccc, about 2 more steps after this"
+        );
+        assert_eq!(
+            bisect_news(Some(&testing(1))),
+            "Testing cccccccc, about 1 more step after this"
+        );
+        // git counts the steps after this one; none after it is the last, not "0 more".
+        assert_eq!(
+            bisect_news(Some(&testing(0))),
+            "Testing cccccccc, the last one"
+        );
+        let found = Bisection {
+            found: Some("d".repeat(40)),
+            ..testing(0)
+        };
+        assert_eq!(
+            bisect_news(Some(&found)),
+            "dddddddd is the first bad commit"
+        );
+        let waiting = Bisection {
+            good: Vec::new(),
+            testing: None,
+            ..testing(0)
+        };
+        assert_eq!(
+            bisect_news(Some(&waiting)),
+            "Now mark a commit that was good"
+        );
+        assert_eq!(bisect_news(None), "");
+    }
 
     #[test]
     fn an_object_id_is_shortened_and_a_ref_name_is_not() {
