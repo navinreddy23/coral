@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Recover lost work
+
+**Recover lost work** in the command palette lists every commit HEAD has been on, newest
+first, from git's reflog. The ones no branch, tag or stash reaches any more are marked
+**lost**: these are what a hard reset, a rebase or a deleted branch left behind. Each row has
+**Branch here…** to keep the commit, or **Check out** to look at it first. **Only lost**
+hides the rest.
+
 ### Check out a pull or merge request
 
 Right-click a request in the sidebar and choose **Check out #N locally**. Coral fetches the
