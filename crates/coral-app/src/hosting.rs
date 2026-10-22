@@ -191,6 +191,31 @@ pub async fn hosting_pull_requests(
         .map_err(|e| refused(listing, &e))?)
 }
 
+/// Whether a proposal's tip commit passes its checks.
+///
+/// Asked per proposal by the window once the list is up, so a slow host never holds the list
+/// itself back.
+///
+/// # Errors
+/// As [`hosting_pull_requests`].
+#[tauri::command]
+pub async fn hosting_checks(
+    profiles: tauri::State<'_, crate::profile::Profiles>,
+    path: String,
+    sha: String,
+) -> Result<coral_hosting::Checks, IpcError> {
+    let profile = current(&profiles);
+    let view = host_of(&path, &profile).await?;
+    let host = view.host.as_ref().ok_or_else(|| no_host(&view))?;
+    let reading = "read the checks";
+    let secret = secret_for(&view, host, &profile, reading)?;
+    let client = Client::new(secret).map_err(|e| refused(reading, &e))?;
+    Ok(client
+        .checks(host, &sha)
+        .await
+        .map_err(|e| refused(reading, &e))?)
+}
+
 /// Opens a new pull or merge request.
 ///
 /// # Errors

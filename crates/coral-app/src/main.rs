@@ -177,6 +177,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         hosting::hosting_login,
         hosting::hosting_logout,
         hosting::hosting_pull_requests,
+        hosting::hosting_checks,
         hosting::hosting_create,
         signing::signing_read,
         signing::signing_set_app,
