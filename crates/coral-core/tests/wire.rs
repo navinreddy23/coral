@@ -116,6 +116,21 @@ fn a_first_paint_frame_is_marked_provisional() {
 }
 
 #[test]
+fn the_start_of_a_counted_walk_says_how_long_the_whole_one_is() {
+    let mut store = fixture_store();
+    let held = store.len();
+    store.claim_total(held + 1000);
+
+    let f = decode(&encode(&store, 0, 20)).unwrap();
+    assert_eq!(f.row_count, held, "only the rows it has");
+    assert_eq!(f.total_rows, held + 1000, "the length of the whole walk");
+    assert!(
+        f.flags & frame::FINAL == 0,
+        "not the last frame: the rest is still to come"
+    );
+}
+
+#[test]
 fn a_frame_past_the_end_is_empty_but_still_valid() {
     let store = fixture_store();
     let f = decode(&encode(&store, store.len() + 100, 20)).unwrap();

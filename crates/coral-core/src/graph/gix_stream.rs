@@ -11,7 +11,7 @@ use crate::error::CoralError;
 ///
 /// The commit-graph stores parents as positions within the file rather than as object ids, so
 /// the topology walk is a pointer chase over an mmap with no hashing and no zlib. That is what
-/// makes the full kernel walk 2.7 s instead of tens of seconds.
+/// makes the full kernel walk 0.74 s instead of tens of seconds.
 pub struct GixCommitStream {
     repo: gix::ThreadSafeRepository,
 }
@@ -42,6 +42,24 @@ impl GixCommitStream {
         } else {
             Order::CommitTime
         }
+    }
+
+    /// How many rows a full walk with `opts` will have, when that can be counted without
+    /// doing the walk: with a commit-graph, and not in a shallow clone. `None` otherwise.
+    ///
+    /// # Errors
+    /// Propagates repository read failures.
+    pub fn count(&self, opts: &StreamOpts) -> Result<Option<u64>, CoralError> {
+        let repo = self.repo.to_thread_local();
+        if !boundary(&repo).is_empty() {
+            return Ok(None);
+        }
+        let Some(graph) = repo.commit_graph_if_enabled().ok().flatten() else {
+            return Ok(None);
+        };
+        let tips = Self::tips_for(&repo, &opts.tips)?;
+        let (_, hidden) = Self::stash_plumbing(&repo);
+        super::topo::count(&repo, &graph, &tips, opts.first_parent, &hidden).map(Some)
     }
 
     /// The commits git keeps for a stash that are not the stash itself.

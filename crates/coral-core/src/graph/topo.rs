@@ -70,6 +70,51 @@ pub fn walk(
     w.run(visit)
 }
 
+/// How many of the commits reachable from `tips` are not in `hidden`: the row count a full
+/// [`walk`] of them will have, for a fraction of its cost, so the first screen can already
+/// say how long the history is and scroll as far as it goes.
+///
+/// # Errors
+/// [`CoralError::Protocol`] for a commit-graph or a commit that cannot be read.
+pub fn count<S: std::hash::BuildHasher>(
+    repo: &gix::Repository,
+    graph: &Graph,
+    tips: &[ObjectId],
+    first_parent: bool,
+    hidden: &std::collections::HashSet<ObjectId, S>,
+) -> Result<u64, CoralError> {
+    let mut w = Walk::new(repo, graph, first_parent);
+    let mut todo = Vec::with_capacity(tips.len());
+    for tip in tips {
+        let node = w.node_of(*tip)?;
+        if w.state[node as usize] & DISCOVERED == 0 {
+            w.state[node as usize] |= DISCOVERED;
+            todo.push(node);
+        }
+    }
+    let mut reached = 0_u64;
+    while let Some(node) = todo.pop() {
+        reached += 1;
+        for p in w.walked_parents(node)? {
+            if w.state[p as usize] & DISCOVERED == 0 {
+                w.state[p as usize] |= DISCOVERED;
+                todo.push(p);
+            }
+        }
+    }
+    let mut skipped = 0_u64;
+    for id in hidden {
+        let node = match graph.lookup(id) {
+            Some(Position(pos)) => Some(pos),
+            None => w.loose_nodes.get(id).copied(),
+        };
+        if node.is_some_and(|n| w.state[n as usize] & DISCOVERED != 0) {
+            skipped += 1;
+        }
+    }
+    Ok(reached - skipped)
+}
+
 struct Walk<'a> {
     repo: &'a gix::Repository,
     graph: &'a Graph,

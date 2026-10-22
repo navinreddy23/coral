@@ -106,7 +106,7 @@ pub fn encode(store: &RowStore, start: u32, hash_len: usize) -> Vec<u8> {
     ];
 
     let mut header_flags = 0_u8;
-    if end >= store.len() {
+    if end >= store.total() {
         header_flags |= frame::FINAL;
     }
     if provisional {
@@ -122,7 +122,7 @@ pub fn encode(store: &RowStore, start: u32, hash_len: usize) -> Vec<u8> {
     out.extend_from_slice(&u16::try_from(sections.len()).unwrap_or(0).to_le_bytes());
     out.extend_from_slice(&start.to_le_bytes());
     out.extend_from_slice(&rows.to_le_bytes());
-    out.extend_from_slice(&store.len().to_le_bytes());
+    out.extend_from_slice(&store.total().to_le_bytes());
     out.push(header_flags);
     out.push(u8::try_from(hash_len).unwrap_or(20));
     out.extend_from_slice(&[0, 0]);

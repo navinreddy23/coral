@@ -130,6 +130,11 @@ async fn check(repo: &TestRepo) {
         collect(&gix, &StreamOpts::default()),
         "the same walk twice"
     );
+    assert_eq!(
+        gix.count(&StreamOpts::default()).unwrap(),
+        Some(full.len() as u64),
+        "counted without walking, the same number of rows"
+    );
 
     let first = StreamOpts {
         first_parent: true,
@@ -140,6 +145,7 @@ async fn check(repo: &TestRepo) {
     let git: HashSet<_> = collect(&sub, &first).into_iter().map(|n| n.id).collect();
     assert_eq!(ids, git, "first-parent reaches what git's does");
     assert_prefixes(&gix, &mainline, true);
+    assert_eq!(gix.count(&first).unwrap(), Some(mainline.len() as u64));
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -181,4 +187,23 @@ async fn a_merge_shows_the_line_it_brought_in_before_the_one_it_was_made_on() {
         summaries,
         ["merge topic", "topic work", "main work", "start"]
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_stash_is_counted_as_the_one_row_it_is_drawn_as() {
+    let repo = tangled();
+    std::fs::write(repo.path().join("base.txt"), "changed\n").unwrap();
+    std::fs::write(repo.path().join("new.txt"), "untracked\n").unwrap();
+    repo.git(["stash", "push", "--quiet", "--include-untracked"]);
+    write_graph(&repo);
+    let (gix, _) = streams(repo.path()).await;
+    let rows = collect(&gix, &StreamOpts::default()).len() as u64;
+    assert_eq!(gix.count(&StreamOpts::default()).unwrap(), Some(rows));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn without_a_commit_graph_nothing_is_counted() {
+    let repo = tangled();
+    let (gix, _) = streams(repo.path()).await;
+    assert_eq!(gix.count(&StreamOpts::default()).unwrap(), None);
 }
