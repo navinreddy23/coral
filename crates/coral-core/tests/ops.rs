@@ -893,6 +893,9 @@ async fn stashes_only_the_files_it_is_given() {
 }
 
 /// A name with glob characters in it is that file, not a pattern matching others.
+///
+/// Not on Windows, which does not allow `*` in a file name, so the case cannot arise there.
+#[cfg(not(windows))]
 #[tokio::test]
 async fn a_path_is_matched_literally() {
     let repo = TestRepo::new()
