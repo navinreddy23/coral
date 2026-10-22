@@ -176,4 +176,47 @@ describe('finding a commit', () => {
       { timeout: 3000 },
     );
   });
+
+  /** Opens the bar and types into it, answering the search with `answer`. */
+  async function search(query: string, answer: () => Promise<unknown>) {
+    const view = await shell({ stop_search: true });
+    const stubbed = invoke.getMockImplementation();
+    invoke.mockImplementation(async (cmd: string, args?: unknown) =>
+      cmd === 'search_commits' ? answer() : stubbed?.(cmd, args),
+    );
+    await fireEvent.keyDown(window, { key: 'f', ctrlKey: true });
+    const input = await waitFor(() => {
+      const found = view.container.querySelector('.find input') as HTMLInputElement | null;
+      if (!found) throw new Error('no search field yet');
+      return found;
+    });
+    await fireEvent.input(input, { target: { value: query } });
+    return view.container;
+  }
+
+  it('puts a qualifier it could not read on a line of its own, not "no matches"', async () => {
+    const container = await search('after:soon', () =>
+      Promise.reject({
+        code: 'refused',
+        message: 'cannot search by date: after:soon is not a date; write after:2024-05-01 or after:2.weeks',
+      }),
+    );
+    const problem = await waitFor(
+      () => {
+        const p = container.querySelector('.find .problem');
+        if (!p) throw new Error('no problem shown yet');
+        return p;
+      },
+      { timeout: 3000 },
+    );
+    expect(problem.textContent).toContain('after:2024-05-01');
+    expect(container.querySelector('.find .tally')?.textContent).not.toContain('no matches');
+  });
+
+  it('says a code: search is reading changes while it runs', async () => {
+    const container = await search('code:render_row', () => new Promise(() => undefined));
+    await waitFor(() => {
+      expect(container.querySelector('.find .tally')?.textContent).toContain('reading changes');
+    });
+  });
 });

@@ -93,11 +93,20 @@ export interface FoundCommit {
   row: number;
 }
 
-/** Commits whose message, author or object id matches, in graph order. */
+/**
+ * Commits whose message, author, path or changes match, in graph order.
+ *
+ * A newer search of the same repository stops this one, which then rejects as `cancelled`.
+ */
 export function searchCommits(
   path: string,
   query: string,
   limit: number,
 ): Promise<FoundCommit[]> {
   return invoke<FoundCommit[]>('search_commits', { path, query, limit });
+}
+
+/** Stops the search running in `path`, if there is one. */
+export function stopSearch(path: string): Promise<boolean> {
+  return invoke<boolean>('stop_search', { path });
 }

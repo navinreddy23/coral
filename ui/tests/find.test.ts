@@ -83,27 +83,47 @@ describe('finding a commit', () => {
     expect(find.query).toBe('');
     expect(find.matches).toHaveLength(0);
   });
-  it('never has more than one search out with the engine', async () => {
-    // A search of the kernel is a walk of 1.8 million commits and the engine has no way to
-    // call one off. Typing a phrase with a pause in it queued thirteen of them at once, and
-    // the answer to the last had to wait behind the twelve nobody wanted.
-    let release: (value: unknown) => void = () => {};
-    invoke.mockImplementationOnce(() => new Promise((r) => (release = r)));
+  it('asks for the newest search at once, and lets the one it replaced go quietly', async () => {
+    // The engine stops the older search when the newer one arrives; it answers `cancelled`,
+    // which is not something the reader did wrong and must not be shown as an error.
+    let refuse: (reason: unknown) => void = () => {};
+    invoke.mockImplementationOnce(() => new Promise((_, r) => (refuse = r)));
     invoke.mockResolvedValue(found([9]));
 
     const find = new FindState();
     const first = find.run('/repo', 'b');
-    void find.run('/repo', 'bc');
-    void find.run('/repo', 'bcm');
-    void find.run('/repo', 'bcm2835');
-    expect(invoke, 'the three behind it are not asked for yet').toHaveBeenCalledTimes(1);
-
-    release(found([1]));
-    await first;
-    await vi.waitFor(() => expect(find.matches.map((m) => m.row)).toEqual([9]));
-    // The first, then the newest. The two in between were dropped before they were asked.
+    await find.run('/repo', 'bcm2835');
     expect(invoke).toHaveBeenCalledTimes(2);
     expect(invoke.mock.calls[1]?.[1]).toMatchObject({ query: 'bcm2835' });
+
+    refuse({ code: 'cancelled', message: 'search was cancelled' });
+    await first;
+    expect(find.matches.map((m) => m.row)).toEqual([9]);
+    expect(find.error).toBeNull();
     expect(find.searching).toBe(false);
+  });
+
+  it('stops the search still running when the box is closed or emptied', async () => {
+    invoke.mockImplementation((cmd: string) =>
+      cmd === 'stop_search' ? Promise.resolve(true) : new Promise(() => undefined),
+    );
+    const find = new FindState();
+    find.show();
+    void find.run('/kernel', 'code:render_row');
+    find.close();
+    expect(invoke).toHaveBeenCalledWith('stop_search', { path: '/kernel' });
+    expect(find.searching).toBe(false);
+
+    invoke.mockClear();
+    void find.run('/kernel', 'code:x');
+    find.type('/kernel', '');
+    expect(invoke).toHaveBeenCalledWith('stop_search', { path: '/kernel' });
+  });
+
+  it('shows a qualifier it could not read', async () => {
+    invoke.mockRejectedValue({ code: 'refused', message: 'cannot after: soon is not a date' });
+    const find = new FindState();
+    await find.run('/repo', 'after:soon');
+    expect(find.error).toContain('not a date');
   });
 });
