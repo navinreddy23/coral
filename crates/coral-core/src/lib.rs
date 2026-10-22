@@ -19,6 +19,7 @@ pub mod process;
 pub mod refs;
 pub mod remote;
 pub mod repo;
+pub mod search;
 pub mod sequence;
 pub mod signing;
 pub mod ssh;
