@@ -808,7 +808,7 @@ dependencies = [
 
 [[package]]
 name = "coral-app"
-version = "1.2.3"
+version = "1.2.4"
 dependencies = [
  "coral-core",
  "coral-hosting",
@@ -830,7 +830,7 @@ dependencies = [
 
 [[package]]
 name = "coral-cli"
-version = "1.2.3"
+version = "1.2.4"
 dependencies = [
  "clap",
  "coral-core",
@@ -848,7 +848,7 @@ dependencies = [
 
 [[package]]
 name = "coral-core"
-version = "1.2.3"
+version = "1.2.4"
 dependencies = [
  "bstr",
  "getrandom 0.3.4",
@@ -869,7 +869,7 @@ dependencies = [
 
 [[package]]
 name = "coral-hosting"
-version = "1.2.3"
+version = "1.2.4"
 dependencies = [
  "keyring",
  "reqwest",
