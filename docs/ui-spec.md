@@ -120,7 +120,9 @@ types in it. Every row keeps a gutter for the tick that marks the branch you are
 is ticked or not, so four sections share one left edge. Rows have
 hover actions. The current branch is bold with a check mark. Remote rows show a host icon and
 the signed-in avatar when a hosting provider matches, with branches nested beneath. Pull
-requests group by remote showing number, title, author avatar and state, and a local branch's
+requests group by remote showing number, title, author avatar and state, and an open one carries
+a mark for its tip commit's checks (tick, cross or clock, the count on hover, the failing check a
+click away), asked for after the list so a slow host never holds it back; a local branch's
 menu offers to open one on a form naming the branch it would land on, with a title, a
 description and a draft switch. That entry appears only where a host is signed in to talk to,
 and the branches it offers are the remote's: a branch this machine has never pushed is not one

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### See whether a pull request passes its checks
+
+Each open pull or merge request in the sidebar carries a mark for its latest commit's checks: a
+tick when they passed, a cross when one failed, a clock while they run. Hover it for the count
+("1 of 3 checks failed"); click it to open the failing check. GitHub's check runs and commit
+statuses are read together, and GitLab's newest pipeline for the commit. The proposals list
+appears first, and the marks follow as the host answers.
+
 ### Coral can update itself
 
 About has an **Install and restart** button once a newer release is found, and the palette has
