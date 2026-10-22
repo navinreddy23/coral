@@ -2,6 +2,14 @@
 
 ## 1.2.6
 
+### Fixes
+
+- With uncommitted work, End and the mouse wheel stopped a row short of the oldest commit,
+  which could then only be reached by dragging the scrollbar. The pinned WIP row is now
+  taken out of the space the rows have.
+- A short history with uncommitted work could scroll a few pixels for no reason, which the
+  graph's steady scrollbar showed as a bar.
+
 ### Settings and the theme under one gear
 
 The gear in the title bar now opens a menu: **Settings…**, then **Light theme**, **Dark theme**
@@ -31,7 +39,8 @@ jagged.
 **Recover lost work** in the command palette lists every commit HEAD has been on, newest
 first, from git's reflog. The ones no branch, tag or stash reaches any more are marked
 **lost**: these are what a hard reset, a rebase or a deleted branch left behind. Each row has
-**Branch here…** to keep the commit, or **Check out** to look at it first. **Only lost**
+**Branch here…** to keep the commit without leaving the branch you are on, or **Check out**
+to look at it first. **Only lost**
 hides the rest.
 
 ### Check out a pull or merge request
