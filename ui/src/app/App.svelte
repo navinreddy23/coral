@@ -377,6 +377,15 @@
   let error = $state<string | null>(null);
   let scrollTop = $state(0);
   let viewport = $state(600);
+  /**
+   * The part of the pane the commit rows have. The WIP row is pinned across the top of the
+   * pane while there is uncommitted work, so the rows get one row less than the pane; measured
+   * from the whole pane, End and the wheel stopped a row short and the oldest commit could
+   * not be reached without dragging the scrollbar.
+   */
+  const rowsViewport = $derived(
+    worktree.dirty ? Math.max(0, viewport - metrics.rowHeight) : viewport,
+  );
   /** Width of the graph pane, which is what decides whether a body preview has room. */
   let paneWidth = $state(0);
   const panes = new PanesState();
@@ -2059,6 +2068,26 @@
     );
   }
 
+  /**
+   * Keeps a lost commit by naming it, without switching to it.
+   *
+   * Not `branchAt`, which checks the new branch out: work being recovered is often found with
+   * other work still uncommitted, and a checkout that failed over that took the branch with it,
+   * so the commit stayed lost.
+   */
+  async function keepAt(oid: string) {
+    await askUntilAccepted(
+      '',
+      (initial) =>
+        askText(
+          'Keep this commit on a branch',
+          `At ${oid.slice(0, 8)}. You stay where you are.`,
+          initial,
+        ),
+      async (name) => settled(await act({ kind: 'branchCreate', name, at: oid, checkout: false })),
+    );
+  }
+
   async function tagAt(oid: string, annotated: boolean) {
     await askUntilAccepted(
       '',
@@ -3233,11 +3262,11 @@
     const lines = event.deltaMode === 1 ? event.deltaY : event.deltaY / 40;
     const pages = event.deltaMode === 2 ? event.deltaY : 0;
     const rows =
-      pages * Math.max(1, rowsPerScreen(viewport, metrics) - 1) + lines * 3;
+      pages * Math.max(1, rowsPerScreen(rowsViewport, metrics) - 1) + lines * 3;
     if (rows === 0) return;
 
     const total = graph.totalRows;
-    const reach = Math.max(1, maxScroll(total, metrics, viewport));
+    const reach = Math.max(1, maxScroll(total, metrics, rowsViewport));
     // Below the cap a row is a whole pixel; above it the scrollable area is compressed, so the
     // same number of rows is a smaller number of pixels.
     const perRow = total > 0 ? reach / Math.max(1, total - 1) : metrics.rowHeight;
@@ -3253,7 +3282,7 @@
   function scrollToRow(row: number) {
     if (!graph.frame || !scroller) return;
     const total = graph.totalRows;
-    const reach = maxScroll(total, metrics, viewport);
+    const reach = maxScroll(total, metrics, rowsViewport);
     // Three rows of context above the target, where there is history to show above it.
     const above = Math.max(0, row - 3);
 
@@ -3265,7 +3294,7 @@
       return;
     }
     // Above it a row is a fraction of a pixel, so the target is a fraction of the range.
-    const lastTop = Math.max(1, total - rowsPerScreen(viewport, metrics));
+    const lastTop = Math.max(1, total - rowsPerScreen(rowsViewport, metrics));
     scroller.scrollTo({ top: Math.min(reach, (above / lastTop) * reach) });
   }
 
@@ -4033,8 +4062,8 @@
   /** Rows currently worth putting in the DOM. Never the whole graph. */
   function windowRows(frame: Frame | null): number[] {
     if (!frame) return [];
-    const perScreen = Math.ceil(viewport / metrics.rowHeight);
-    const first = firstRowFor(scrollTop, viewport, frame.totalRows, metrics);
+    const perScreen = Math.ceil(rowsViewport / metrics.rowHeight);
+    const first = firstRowFor(scrollTop, rowsViewport, frame.totalRows, metrics);
     const last = Math.min(frame.totalRows - 1, first + perScreen + 2);
     const out: number[] = [];
     for (let r = first; r <= last; r++) out.push(r);
@@ -4066,6 +4095,17 @@
    * Derived rather than looked up per use, so a row's object id is built once per repaint
    * instead of once for its initials, once for its summary and once for its body.
    */
+  /**
+   * The lanes canvas's height: a pane's worth, or the whole history when that is shorter.
+   *
+   * A full pane under the WIP row reached that row's height past the end of a short history,
+   * so a six-commit graph could scroll, and the scrollbar that stays showed a bar for it. A
+   * longer history still needs the overflow: it is what lets the last row clear the WIP row.
+   */
+  const canvasHeight = $derived(
+    Math.min(rowsViewport, spacerHeight(graph.totalRows, metrics, rowsViewport)),
+  );
+
   const visibleMeta = $derived.by(() => {
     const frame = graph.frame;
     const meta = graph.meta;
@@ -4321,7 +4361,7 @@
     <div class="screen">
       <Recover
         {reflog}
-        onBranch={(oid) => recoverBy(() => branchAt(oid))}
+        onBranch={(oid) => recoverBy(() => keepAt(oid))}
         onCheckout={(oid) => recoverBy(() => act({ kind: 'checkout', rev: oid }))}
         onClose={() => (showRecover = false)}
       />
@@ -4594,13 +4634,13 @@
       {/if}
       <div
         class="spacer"
-        style:height="{spacerHeight(graph.totalRows, metrics, viewport)}px"
+        style:height="{spacerHeight(graph.totalRows, metrics, rowsViewport)}px"
       >
         <div class="lanes" style:top="{listTop(scrollTop)}px">
           <GraphCanvas
             frame={graph.frame}
             firstRow={rows[0] ?? 0}
-            height={viewport}
+            height={canvasHeight}
             width={columns.graph}
             theme={theme.current}
             initials={nodeInitials}

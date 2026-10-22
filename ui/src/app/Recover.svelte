@@ -11,7 +11,7 @@
     onClose,
   }: {
     reflog: ReflogState;
-    /** Asks for a name and makes a branch at the commit, which is what keeps it. */
+    /** Asks for a name and makes a branch at the commit, which is what keeps it. Stays put. */
     onBranch: (oid: string) => void;
     onCheckout: (oid: string) => void;
     onClose: () => void;
@@ -70,7 +70,7 @@
           </span>
           {#if entry.lost}<span class="badge">lost</span>{:else}<span></span>{/if}
           <span class="buttons">
-            <button class="act" onclick={() => onBranch(entry.oid)}>
+            <button class="act" title="Make a branch at this commit, without leaving the one you are on" onclick={() => onBranch(entry.oid)}>
               <Icon name="branch" size={12} /> Branch here…
             </button>
             <button class="act" title="Check this commit out, detached" onclick={() => onCheckout(entry.oid)}>
