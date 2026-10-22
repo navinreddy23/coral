@@ -1,5 +1,6 @@
 pub mod attributes;
 pub mod blame;
+pub mod blob;
 pub mod bytes;
 pub mod commit;
 pub mod config;

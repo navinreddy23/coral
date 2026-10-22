@@ -40,6 +40,11 @@ export type BlameCommit = { oid: string, author: Signature, summary: string,
 filename: string, };
 
 /**
+ * Where one side of a change lives.
+ */
+export type BlobSide = { "kind": "commit", rev: string, } | { "kind": "parent", rev: string, } | { "kind": "index" } | { "kind": "worktree" };
+
+/**
  * One region of a conflicted file.
  */
 export type Block = { "kind": "common", lines: string[], } | { "kind": "conflict", base: string[], ours: string[], theirs: string[], };
