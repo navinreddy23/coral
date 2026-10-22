@@ -4967,6 +4967,13 @@
      window's own chrome. */
   .body { display: flex; flex: 1; min-height: 0; position: relative; gap: var(--space-1); }
   .graph { flex: 1; min-height: 0; overflow-y: auto; position: relative; background: var(--bg-0); }
+  /*
+   * A scrollbar that stays, rather than WebKitGTK's overlay one. The overlay bar flashed on its
+   * own a few seconds after the kernel's first screen was final and took two more to fade, so
+   * the graph kept moving long after it had anything new to show. Resetting the standard
+   * properties is what lets the `::-webkit-scrollbar` styles in base.css apply.
+   */
+  .graph { scrollbar-width: auto; scrollbar-color: auto; }
   /* Hidden rather than unmounted: remounting would refetch the frame and lose the scroll
      position every time a file is opened and closed. The wrapper is what carries the class
      now, so the handles go with it. */
