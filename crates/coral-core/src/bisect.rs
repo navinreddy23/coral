@@ -88,6 +88,10 @@ pub struct Bisection {
     /// True when every suspect but the bad commit was skipped, so git cannot say which of
     /// them it was.
     pub only_skipped_left: bool,
+    /// True when a commit marked good is not an ancestor of the one marked bad, which is what
+    /// marking the two the wrong way round leaves. git records both and then cannot narrow
+    /// anything; ending the bisection is the way out.
+    pub mistaken: bool,
     /// Every verdict given, oldest first. The refs keep only the newest bad commit, so this is
     /// what can say that an earlier one was judged bad too.
     pub verdicts: Vec<Judged>,
@@ -240,14 +244,23 @@ impl RepoLocation {
         state: &mut Bisection,
         bad: &str,
     ) -> Result<(), CoralError> {
+        // Exit 1 with nothing printed is rev-list's answer when a good commit is not below the
+        // bad one, so there is nothing between them to count.
         let vars = runner
-            .output(
+            .output_allowing(
                 GitCommand::read("rev-list", self.display_path())
                     .args(["rev-list", "--bisect-vars", bad, "--not"])
                     .args(&state.good),
+                &[1],
             )
             .await?;
-        let vars = parse_vars(&vars.stdout)?;
+        let vars = match parse_vars(&vars.stdout) {
+            Ok(vars) if vars.all > 0 && self.good_below_bad(runner, state, bad).await => vars,
+            _ => {
+                state.mistaken = true;
+                return Ok(());
+            }
+        };
         state.suspects = Some(vars.all);
         state.steps = Some(vars.steps);
         if vars.all <= 1 {
@@ -273,6 +286,28 @@ impl RepoLocation {
             state.testing = self.rev_parse(runner, "HEAD").await.ok();
         }
         Ok(())
+    }
+
+    /// Whether every good commit is an ancestor of the bad one, as a bisection needs.
+    ///
+    /// rev-list alone does not say: a good commit that descends from the bad one excludes it
+    /// and everything under it, which can leave a count that looks like an answer.
+    async fn good_below_bad(&self, runner: &GitRunner, state: &Bisection, bad: &str) -> bool {
+        for good in &state.good {
+            let out = runner
+                .output_allowing(
+                    GitCommand::read("merge-base", self.display_path())
+                        .args(["merge-base", "--is-ancestor"])
+                        .arg(good)
+                        .arg(bad),
+                    &[1],
+                )
+                .await;
+            if !matches!(out, Ok(o) if o.code == 0) {
+                return false;
+            }
+        }
+        true
     }
 
     /// Records a verdict on `rev`, or on the commit checked out when `rev` is `None`,
@@ -306,6 +341,17 @@ impl RepoLocation {
         let marked = runner.output(cmd).await;
         let state = self.bisection(runner).await?;
         match marked {
+            // git's own words for this are on stdout, so the error carries nothing worth
+            // showing; this says what happened and what to do.
+            Err(_) if state.as_ref().is_some_and(|s| s.mistaken) => Err(CoralError::Refused {
+                label: "bisect",
+                detail: format!(
+                    "a commit marked {} is newer than the one marked {}, as if the two were \
+                     swapped; end the bisect and start again",
+                    state.as_ref().map_or("good", |s| s.terms.good.as_str()),
+                    state.as_ref().map_or("bad", |s| s.terms.bad.as_str()),
+                ),
+            }),
             Ok(_) => Ok(state),
             // git records the verdict and then exits 2 when every suspect left was skipped.
             // That is an answer, which the state says, not a failure to mark.

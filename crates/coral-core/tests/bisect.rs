@@ -180,3 +180,35 @@ async fn refuses_to_move_over_local_changes() {
         "the edit is still there"
     );
 }
+
+/// Good and bad the wrong way round: git records both and then cannot bisect. The window has
+/// to keep showing the bisection, say what went wrong, and still be able to end it.
+#[tokio::test]
+async fn good_and_bad_swapped_is_said_and_can_still_be_ended() {
+    let (repo, oids) = history();
+    let (runner, loc) = open(&repo).await;
+    loc.bisect_mark(&runner, Verdict::Bad, Some(&oids[1]))
+        .await
+        .unwrap();
+    let err = loc
+        .bisect_mark(&runner, Verdict::Good, Some(&oids[7]))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "refused", "{err}");
+    assert!(err.to_string().contains("swapped"), "{err}");
+
+    let state = loc
+        .bisection(&runner)
+        .await
+        .unwrap()
+        .expect("still a bisection");
+    assert!(state.mistaken, "{state:?}");
+    assert_eq!(
+        state.found, None,
+        "nothing is the culprit of a bisect that cannot run"
+    );
+    assert_eq!(state.suspects, None);
+
+    loc.bisect_reset(&runner).await.unwrap();
+    assert_eq!(loc.bisection(&runner).await.unwrap(), None);
+}

@@ -40,6 +40,12 @@ found: string | null,
  */
 onlySkippedLeft: boolean, 
 /**
+ * True when a commit marked good is not an ancestor of the one marked bad, which is what
+ * marking the two the wrong way round leaves. git records both and then cannot narrow
+ * anything; ending the bisection is the way out.
+ */
+mistaken: boolean, 
+/**
  * Every verdict given, oldest first. The refs keep only the newest bad commit, so this is
  * what can say that an earlier one was judged bad too.
  */
