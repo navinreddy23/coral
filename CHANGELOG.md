@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### See an image change
+
+A changed image now shows before and after side by side, with each side's size in pixels and
+bytes, instead of "Binary file — no textual diff". PNG, JPEG, GIF, WebP, BMP, ICO and AVIF are
+drawn, for a commit, a comparison, and staged or unstaged changes alike. An added or deleted
+image says which side it is missing from, and transparency shows against a checkerboard.
+
 ### Coral can update itself
 
 About has an **Install and restart** button once a newer release is found, and the palette has

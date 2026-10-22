@@ -230,6 +230,10 @@ tabs, and next/previous change in both layouts. The unified view can be widened 
 to the whole file; side by side always shows the whole of it. Large and binary files render as a placeholder
 with an explicit load action.
 
+A binary file that is an image is drawn instead: before and after side by side, each captioned
+with its dimensions and size, on a checkerboard so transparency shows. A side the file is
+missing from says so. The bytes come over the binary IPC path, as the graph frames do.
+
 ## Merge conflict tool
 
 Full-width centre panel replacing the graph. Two source panes on top, each with a header
