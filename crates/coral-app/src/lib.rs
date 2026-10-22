@@ -13,6 +13,7 @@ pub mod profile;
 pub mod recent;
 pub mod remotes;
 pub mod scope;
+pub mod search;
 pub mod session;
 pub mod signing;
 pub mod ssh;

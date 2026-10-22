@@ -109,7 +109,10 @@ is built from, so a shortcut is written down once. Every button also carries an 
 name, which is now the only name it has.
 
 The graph filter is not here. It is opened over the list it searches with `Ctrl+F`, with a
-result count and up and down through the matches.
+result count and up and down through the matches. Words match the message, author, path or
+object id; `code:text` (or `code:/regex/`) narrows to commits that added or removed it, and
+`after:`/`before:` take `2024-05-01` or `2.weeks`. A qualifier it cannot read is said on a line
+under the field, and a `code:` search says it is reading changes while it runs.
 
 ## Sidebar
 

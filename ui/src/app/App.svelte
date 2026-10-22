@@ -4339,13 +4339,13 @@
             value={find.query}
             oninput={(e) => info && find.type(info.path, e.currentTarget.value)}
             onkeydown={findKey}
-            placeholder="Message, author or id"
+            placeholder="Message, author, path or id — code: after: before:"
             aria-label="Find a commit"
           />
           <span class="tally" aria-live="polite">
             {#if find.searching}
-              searching…
-            {:else if find.query.trim() === ''}
+              {find.readsChanges ? 'reading changes…' : 'searching…'}
+            {:else if find.query.trim() === '' || find.error !== null}
               &nbsp;
             {:else if find.matches.length === 0}
               no matches
@@ -4366,6 +4366,9 @@
           <button onclick={() => find.close()} title="Close the search">
             <Icon name="close" size={13} />
           </button>
+          {#if find.error !== null}
+            <p class="problem" role="alert">{find.error}</p>
+          {/if}
         </div>
       {/if}
 
@@ -4787,7 +4790,7 @@
    */
   .find {
     position: sticky; top: 0; z-index: 3;
-    display: flex; align-items: center; gap: var(--space-2);
+    display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
     padding: var(--space-1) var(--space-2);
     background: var(--bg-1); border-bottom: 1px solid var(--border);
   }
@@ -4808,6 +4811,8 @@
   }
   .find button:hover:not(:disabled) { background: var(--bg-2); color: var(--fg-0); }
   .find button:disabled { color: var(--fg-2); cursor: default; }
+  /* Its own line, so a long refusal never squeezes the field it is about. */
+  .find .problem { flex: 1 0 100%; margin: 0; color: var(--danger); font-size: var(--text-sm); }
 
   .columns, .row, .wip {
     display: grid;

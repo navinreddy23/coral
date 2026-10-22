@@ -128,7 +128,11 @@ impl GraphCache {
     /// repository had no branches, no remotes and no tags. The rows a commit-time walk gives
     /// are the rows the frame on screen is using at that moment anyway; the window asks again
     /// when the real walk lands.
-    async fn best_store(&self, path: &str, scope: &RepoScope) -> Result<Arc<RowStore>, CoralError> {
+    pub(crate) async fn best_store(
+        &self,
+        path: &str,
+        scope: &RepoScope,
+    ) -> Result<Arc<RowStore>, CoralError> {
         let slot = self.slot(path);
         if slot.scope.load(Ordering::Relaxed) == scope_hash(scope)
             && let Ok(held) = slot.held.try_lock()
@@ -468,14 +472,6 @@ pub async fn graph_row_of(
         .and_then(|id| store.row_of(&id)))
 }
 
-/// A commit a search matched, placed on the row it sits on.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FoundCommit {
-    pub oid: String,
-    pub row: u32,
-}
-
 /// Every file the repository holds at one commit, for the panel's "all files" view.
 ///
 /// # Errors
@@ -489,48 +485,6 @@ pub async fn commit_tree(
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
     Ok(loc.tree_files(&runner, &rev).await?)
-}
-
-/// Commits whose message, author or object id matches `query`, in graph order.
-///
-/// Sorted by row rather than by date, because the answer is stepped through with a next and a
-/// previous button against the list on screen, and a search that jumped about would be no help
-/// at all. Matches on commits the loaded walk does not hold are dropped: there is nowhere to
-/// send the reader.
-///
-/// # Errors
-/// Propagates git failures.
-#[tauri::command]
-pub async fn search_commits(
-    cache: tauri::State<'_, GraphCache>,
-    scopes: tauri::State<'_, Scopes>,
-    path: String,
-    query: String,
-    limit: u64,
-) -> Result<Vec<FoundCommit>, crate::commands::IpcError> {
-    let runner = coral_core::process::GitRunner::discover().await?;
-    let loc =
-        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
-    let found = loc.search_commits(&runner, &query, limit).await?;
-    tracing::info!(query, matched = found.len(), "search_commits");
-    if found.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    // Whatever walk is in hand: a search that has already taken ten seconds must not then
-    // wait on a walk, and the rows it places matches at are the rows on screen.
-    let store = cache.best_store(&path, &scopes.read(&path)).await?;
-    let mut out: Vec<FoundCommit> = found
-        .into_iter()
-        .filter_map(|oid| {
-            let row = gix::ObjectId::from_hex(oid.as_bytes())
-                .ok()
-                .and_then(|id| store.row_of(&id))?;
-            Some(FoundCommit { oid, row })
-        })
-        .collect();
-    out.sort_by_key(|f| f.row);
-    Ok(out)
 }
 
 /// A frame of known content, used once at startup to prove the binary path works.

@@ -605,30 +605,40 @@ impl RepoLocation {
     /// Every ref, not just HEAD: the graph shows every branch, so a search that did not would
     /// report nothing for a commit plainly on screen.
     ///
+    /// The qualifiers [`crate::search::Search`] reads narrow every pass. With nothing but
+    /// qualifiers, the answer is every commit they let through.
+    ///
     /// # Errors
-    /// Propagates git failures. A query that resolves to nothing is not one.
+    /// Propagates git failures, and refuses a qualifier it cannot read. A query that resolves
+    /// to nothing is not an error.
     pub async fn search_commits(
         &self,
         runner: &GitRunner,
         query: &str,
         limit: u64,
     ) -> Result<Vec<String>, CoralError> {
-        let query = query.trim();
+        let search = crate::search::Search::parse(query)?;
+        let narrow = search.log_args();
+        let query = search.text.as_str();
         if query.is_empty() {
-            return Ok(Vec::new());
+            if narrow.is_empty() {
+                return Ok(Vec::new());
+            }
+            return self.commits(runner, &narrow, limit).await;
         }
 
         // Together rather than one after the other. Each pass is a walk of every commit in
         // the repository — eleven seconds on the kernel — and run in sequence the window sat
         // on "searching…" for the sum of them.
         let (by_message, by_author, by_path) = tokio::try_join!(
-            self.matching(runner, "--grep", query, limit),
-            self.matching(runner, "--author", query, limit),
-            self.touching_path(runner, query, limit),
+            self.matching(runner, "--grep", query, &narrow, limit),
+            self.matching(runner, "--author", query, &narrow, limit),
+            self.touching_path(runner, query, &narrow, limit),
         )?;
 
         let mut passes = Vec::new();
-        if crate::history::looks_like_an_oid(query) {
+        // A hash names one commit; a qualifier beside it is asking something else.
+        if !search.is_qualified() && crate::history::looks_like_an_oid(query) {
             passes.push(self.resolve_oid(runner, query).await);
         }
         passes.push(by_message);
@@ -677,13 +687,15 @@ impl RepoLocation {
         &self,
         runner: &GitRunner,
         query: &str,
+        narrow: &[String],
         limit: u64,
     ) -> Result<Vec<String>, CoralError> {
         let out = runner
             .output(
                 GitCommand::read("log", self.display_path())
-                    .args(["log", "--all", "--format=%H"])
+                    .args(["log", "--all", "--format=%H", "-i"])
                     .arg(format!("--max-count={limit}"))
+                    .args(narrow)
                     .arg("--")
                     .arg(format!(":(icase)*{query}*")),
             )
@@ -699,14 +711,42 @@ impl RepoLocation {
         runner: &GitRunner,
         field: &str,
         query: &str,
+        narrow: &[String],
         limit: u64,
     ) -> Result<Vec<String>, CoralError> {
+        // `--fixed-strings` reaches only --grep and --author; `-i` reaches `code:` as well,
+        // which is why a search with nothing but qualifiers asks for it too.
         let out = runner
             .output(
                 GitCommand::read("log", self.display_path())
                     .args(["log", "--all", "--format=%H", "--fixed-strings", "-i"])
                     .arg(format!("--max-count={limit}"))
-                    .arg(format!("{field}={query}")),
+                    .arg(format!("{field}={query}"))
+                    .args(narrow),
+            )
+            .await?;
+        Ok(String::from_utf8_lossy(&out.stdout)
+            .split_whitespace()
+            .map(str::to_owned)
+            .collect())
+    }
+
+    /// Every commit the qualifiers let through, newest first.
+    ///
+    /// Ignoring case, like every other pass: the find box is one box, and `code:Render` must
+    /// not find less on its own than beside a word.
+    async fn commits(
+        &self,
+        runner: &GitRunner,
+        narrow: &[String],
+        limit: u64,
+    ) -> Result<Vec<String>, CoralError> {
+        let out = runner
+            .output(
+                GitCommand::read("log", self.display_path())
+                    .args(["log", "--all", "--format=%H", "-i"])
+                    .arg(format!("--max-count={limit}"))
+                    .args(narrow),
             )
             .await?;
         Ok(String::from_utf8_lossy(&out.stdout)

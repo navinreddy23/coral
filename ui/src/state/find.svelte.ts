@@ -1,14 +1,15 @@
-import { searchCommits, type FoundCommit } from '../ipc/graph';
-import { messageOf } from '../ipc/error';
+import { searchCommits, stopSearch, type FoundCommit } from '../ipc/graph';
+import { codeOf, messageOf } from '../ipc/error';
 
 /** How many matches are worth stepping through. Past this it is a filter, not a search. */
 export const FIND_LIMIT = 500;
 
 /**
- * Finding a commit by what is written on it.
+ * Finding a commit by what is written on it, or by what it changed.
  *
- * The engine matches the message, the author and the object id, and places each match on the
- * row it sits on; this holds where the reader is among them.
+ * The engine matches the message, the author, the paths and the object id, narrowed by any
+ * `code:`, `after:` or `before:` in the query, and places each match on the row it sits on;
+ * this holds where the reader is among them.
  */
 export class FindState {
   open = $state(false);
@@ -22,9 +23,14 @@ export class FindState {
   /** Which query the held matches answer, so a stale reply cannot replace a newer one. */
   #token = 0;
   #timer: ReturnType<typeof setTimeout> | null = null;
-  /** Whether a search is out with the engine, and the newest query waiting behind it. */
-  #running = false;
-  #queued: { repo: string; query: string } | null = null;
+  /** Where the search still running went, so closing the box can stop it there. */
+  #repo: string | null = null;
+
+  /**
+   * Whether the query reads every diff, which on a large history is minutes rather than
+   * seconds, so the wait can say why.
+   */
+  readsChanges = $derived(/(^|\s)code:\S/iu.test(this.query));
 
   /** The rows that matched, for the list to mark. */
   rows = $derived(new Set(this.matches.map((m) => m.row)));
@@ -47,7 +53,7 @@ export class FindState {
     this.#token += 1;
     if (this.#timer !== null) clearTimeout(this.#timer);
     this.#timer = null;
-    this.#queued = null;
+    this.#stop();
     this.query = '';
     this.matches = [];
     this.at = 0;
@@ -66,7 +72,7 @@ export class FindState {
     if (this.#timer !== null) clearTimeout(this.#timer);
     if (query.trim() === '') {
       this.#token += 1;
-      this.#queued = null;
+      this.#stop();
       this.matches = [];
       this.at = 0;
       this.searching = false;
@@ -79,22 +85,15 @@ export class FindState {
   /**
    * Searches now, for Enter and for the tests.
    *
-   * One at a time, latest wins. The debounce only collapses keystrokes closer together than a
-   * quarter of a second; someone typing a phrase with a pause in the middle sent one search per
-   * pause, and a search of the kernel is a walk of 1.8 million commits. Thirteen of them were
-   * once in flight at once for one typed phrase, and the answer to the last had to wait behind
-   * the twelve nobody wanted. The engine has no way to call one off, so the queue is held here
-   * and everything but the newest is dropped before it is ever asked for.
+   * Latest wins, and the engine is what makes that cheap. A search of the kernel is a walk of
+   * 1.8 million commits, and a `code:` search reads every diff on the way; someone typing a
+   * phrase with pauses in it once had thirteen walks in flight for it. Each new search of a
+   * repository now stops the one before it there, killing its git, so the stopped one answers
+   * `cancelled` and is let go without a word.
    */
   async run(repo: string, query: string): Promise<void> {
-    if (this.#running) {
-      this.#queued = { repo, query };
-      this.#token += 1;
-      this.searching = true;
-      return;
-    }
     const token = ++this.#token;
-    this.#running = true;
+    this.#repo = repo;
     this.searching = true;
     this.error = null;
     try {
@@ -103,19 +102,23 @@ export class FindState {
       this.matches = found;
       this.at = 0;
     } catch (e) {
-      if (token !== this.#token) return;
+      if (token !== this.#token || codeOf(e) === 'cancelled') return;
       this.error = messageOf(e);
       this.matches = [];
     } finally {
-      this.#running = false;
-      const next = this.#queued;
-      this.#queued = null;
-      if (next !== null) {
-        void this.run(next.repo, next.query);
-      } else if (token === this.#token) {
+      if (token === this.#token) {
         this.searching = false;
+        this.#repo = null;
       }
     }
+  }
+
+  /** Stops whatever search is still running, which nobody now wants the answer to. */
+  #stop(): void {
+    const repo = this.#repo;
+    this.#repo = null;
+    this.searching = false;
+    if (repo !== null) void stopSearch(repo).catch(() => false);
   }
 
   /** Moves to the next match, or the previous one, wrapping at either end. */

@@ -386,3 +386,135 @@ async fn blame_reaches_a_file_by_the_name_it_had_then() {
         .unwrap();
     assert_eq!(String::from_utf8_lossy(&now), "one\n");
 }
+
+/// A commit made in the fixture at `date`, rather than at the fixture's one fixed instant.
+fn commit_dated(repo: &TestRepo, file: &str, contents: &str, message: &str, date: &str) {
+    std::fs::write(repo.path().join(file), contents).unwrap();
+    repo.git(["add", "--all"]);
+    let status = repo
+        .command(["commit", "--quiet", "-m", message])
+        .env("GIT_AUTHOR_DATE", date)
+        .env("GIT_COMMITTER_DATE", date)
+        .status()
+        .unwrap();
+    assert!(status.success());
+}
+
+/// `code:` finds the commits that changed the code, whatever their messages say.
+#[tokio::test]
+async fn code_finds_the_commits_that_added_or_removed_it() {
+    let repo = TestRepo::new()
+        .write("row.rs", "fn draw() {}\n")
+        .commit("start")
+        .write("row.rs", "fn draw() {}\nfn render_row() {}\n")
+        .commit("more drawing")
+        .write(
+            "row.rs",
+            "fn draw() { render_row(); }\nfn render_row() {}\n",
+        )
+        .commit("call it")
+        .write("notes.txt", "render_row is slow\n")
+        .commit("unrelated notes about render_row");
+    let (runner, loc) = open(&repo).await;
+    let subject = |oid: &str| {
+        repo.git(["log", "-1", "--format=%s", oid])
+            .trim()
+            .to_owned()
+    };
+
+    // -S: the commit that introduced the definition, the one that added a call, and the note,
+    // each of which changed how often the string occurs. Not the start.
+    let found = loc
+        .search_commits(&runner, "code:render_row", 50)
+        .await
+        .unwrap();
+    let subjects: Vec<String> = found.iter().map(|o| subject(o)).collect();
+    assert_eq!(
+        subjects,
+        [
+            "unrelated notes about render_row",
+            "call it",
+            "more drawing"
+        ]
+    );
+
+    // Words beside it narrow it: only the commits that changed it and say "call".
+    let found = loc
+        .search_commits(&runner, "call code:render_row", 50)
+        .await
+        .unwrap();
+    assert_eq!(
+        found.iter().map(|o| subject(o)).collect::<Vec<_>>(),
+        ["call it"]
+    );
+
+    // A pattern, as -G, matched against the added and removed lines; quoted, for its space.
+    let found = loc
+        .search_commits(&runner, r#"code:"/fn [a-z_]+_row/""#, 50)
+        .await
+        .unwrap();
+    assert_eq!(
+        found.iter().map(|o| subject(o)).collect::<Vec<_>>(),
+        ["more drawing"]
+    );
+
+    // Case is ignored here as it is everywhere else in the box.
+    let upper = loc
+        .search_commits(&runner, "code:RENDER_ROW", 50)
+        .await
+        .unwrap();
+    assert_eq!(upper.len(), 3);
+}
+
+/// `after:` and `before:` bound the search, and a search can be nothing but them.
+#[tokio::test]
+async fn dates_bound_the_search_even_under_an_older_commit() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("from 2005");
+    commit_dated(
+        &repo,
+        "a.txt",
+        "2\n",
+        "from 2024",
+        "2024-06-01T12:00:00+00:00",
+    );
+    // A commit carrying an old date on top of a new one, as a rebase or a cherry-pick leaves.
+    // `--since` would stop walking here and never reach the 2024 commit below it.
+    commit_dated(
+        &repo,
+        "a.txt",
+        "3\n",
+        "old date on top",
+        "2010-01-01T12:00:00+00:00",
+    );
+    let (runner, loc) = open(&repo).await;
+    let subjects = |found: Vec<String>| -> Vec<String> {
+        found
+            .iter()
+            .map(|o| repo.git(["log", "-1", "--format=%s", o]).trim().to_owned())
+            .collect()
+    };
+
+    let after = loc
+        .search_commits(&runner, "after:2020-01-01", 50)
+        .await
+        .unwrap();
+    assert_eq!(subjects(after), ["from 2024"]);
+
+    let before = loc
+        .search_commits(&runner, "before:2008-01-01", 50)
+        .await
+        .unwrap();
+    assert_eq!(subjects(before), ["from 2005"]);
+
+    let between = loc
+        .search_commits(&runner, "from after:2000-01-01 before:2020-01-01", 50)
+        .await
+        .unwrap();
+    assert_eq!(subjects(between), ["from 2005"]);
+
+    let err = loc
+        .search_commits(&runner, "after:someday", 50)
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "refused");
+}
