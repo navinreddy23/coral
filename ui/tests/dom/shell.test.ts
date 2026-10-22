@@ -1707,6 +1707,38 @@ describe('moving down the list with the keyboard', () => {
     );
   });
 
+  it('says a staged deletion cannot be stashed by name, rather than letting git refuse it', async () => {
+    const { container } = await shell({
+      repo_status: {
+        entries: [{ path: 'gone.txt', index: 'deleted', worktree: 'unmodified' }],
+        conflicted: [],
+      },
+    });
+    const wip = await waitFor(() => {
+      const found = container.querySelector('button.row.wip');
+      if (!found) throw new Error('no WIP row yet');
+      return found as HTMLButtonElement;
+    });
+    await fireEvent.click(wip);
+    const row = await waitFor(() => {
+      const found = [...container.querySelectorAll('aside li')].find(
+        (li) => li.querySelector('div.row') !== null && li.textContent?.includes('gone.txt'),
+      );
+      if (!found) throw new Error('no staging row yet');
+      return found as HTMLElement;
+    });
+    await fireEvent.contextMenu(row.querySelector('div.row') as HTMLElement);
+    const item = await waitFor(() => {
+      const found = [...document.querySelectorAll('.menu .label')].find(
+        (e) => e.textContent?.trim() === 'Stash this file',
+      );
+      if (!found) throw new Error('no menu yet');
+      return found.closest('button') as HTMLButtonElement;
+    });
+    expect(item.disabled).toBe(true);
+    expect(item.textContent).toContain('cannot stash a deletion');
+  });
+
   it('does not offer to take an untracked file back to a commit it was never in', async () => {
     // The item read "Discard its changes — back to the last commit" about a file whose only
     // copy is on disk, and did exactly what the line under it does.

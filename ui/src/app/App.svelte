@@ -2649,8 +2649,10 @@
       {
         kind: 'item',
         label: 'Stash this file',
-        hint: 'leave the rest',
-        disabled: busy || actions.busy,
+        // git finds a file to stash by its name on disk or in the index, and a staged deletion
+        // is in neither: it refuses with a message about pathspecs that says nothing useful.
+        hint: entry.index === 'deleted' ? 'git cannot stash a deletion by name' : 'leave the rest',
+        disabled: busy || actions.busy || entry.index === 'deleted',
         // By its new name alone for a rename: git refuses the old one, which is on disk and in
         // the index nowhere, so the deletion stays staged until the stash comes back.
         run: () => void act({ kind: 'stashPush', message: null, paths: [entry.path] }),
