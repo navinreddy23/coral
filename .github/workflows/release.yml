@@ -224,6 +224,35 @@ jobs:
           retention-days: 7
           path: dist/*
 
+  # The rehearsal's half of the release job's first check. A rehearsal publishes nothing, so
+  # without this the files a tag would need were only counted when a tag was already out: the
+  # macOS update tarball went missing on 1.2.4's first tag after a rehearsal had gone green.
+  rehearsal:
+    needs: [meta, bundle]
+    if: github.ref_type != 'tag'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v7
+        with:
+          path: dist
+          pattern: bundle-*
+          merge-multiple: true
+
+      # Without the signing key there are no signatures to count, which is a fork's rehearsal
+      # and not a fault in it.
+      - name: Every platform is here
+        shell: bash
+        env:
+          SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$SIGNING_KEY" ]; then
+            echo "::notice::no signing key, so the update downloads are not counted"
+            exit 0
+          fi
+          .github/release/manifest.sh '${{ needs.meta.outputs.version }}' dist
+
   # Only a tag reaches this. A manual run and the branch rehearsal build all five platforms and
   # publish nothing.
   release:
