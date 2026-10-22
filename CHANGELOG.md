@@ -8,9 +8,16 @@ With a commit-graph, the first screen is drawn in the order the full graph will 
 already knows how many commits there are. Before, it was drawn by commit time and rearranged
 a few seconds later, when the full walk landed. On the Linux kernel the rows, lanes and
 messages are final within two seconds, nothing on the graph moves when the full walk lands,
-and that walk is ready in about 3.5 s instead of 6. Commit
+and that walk is ready in about 3.5 s instead of 6. The graph's scrollbar now stays put
+rather than appearing and fading on its own a few seconds after opening. Commit
 messages on the first screen no longer wait for the full walk, and the working tree's status
 is read alongside the walk rather than after it.
+
+### Sharper authors' pictures
+
+Pictures are fetched at twice the size, so they are no longer enlarged on a high-density
+screen, and they are shrunk to the node in halving steps rather than in one, which left them
+jagged.
 
 ### Recover lost work
 
