@@ -7,7 +7,7 @@ import {
   worktreeDiff,
 } from '../ipc/commands';
 import type { ReadOptions } from '../ipc/commands';
-import type { Blame, Commit, FileDiff } from '../ipc/types';
+import type { Blame, BlobSide, Commit, FileDiff } from '../ipc/types';
 import type { DiffMode, FileView, ViewsState } from './views.svelte';
 import { messageOf } from '../ipc/error';
 
@@ -33,6 +33,12 @@ interface Request {
    * added. A file moved with a one-line edit came out as every line of it.
    */
   oldPath: string | null;
+}
+
+/** One side of the change on screen: where its bytes are, and under which name. */
+export interface Side {
+  side: BlobSide;
+  file: string;
 }
 
 /** The file currently open in the diff viewer. */
@@ -83,11 +89,50 @@ export class DiffState {
   #token = 0;
   #side = 0;
   #views: ViewsState;
-  #request: Request | null = null;
+  #request = $state<Request | null>(null);
   #historyLimit = HISTORY_PAGE;
 
   constructor(views: ViewsState) {
     this.#views = views;
+  }
+
+  /**
+   * Where the file on screen was before the change and is after it, for a view that draws
+   * the two rather than reading lines out of them.
+   *
+   * The name before is the old one for a rename. Unstaged changes are the index against the
+   * working tree, staged ones the last commit against the index.
+   */
+  get sides(): { repo: string; before: Side; after: Side } | null {
+    const r = this.#request;
+    if (r === null) return null;
+    const was = r.oldPath ?? r.path;
+    switch (r.source) {
+      case 'commit':
+        return {
+          repo: r.repo,
+          before: { side: { kind: 'parent', rev: r.rev }, file: was },
+          after: { side: { kind: 'commit', rev: r.rev }, file: r.path },
+        };
+      case 'compare':
+        return {
+          repo: r.repo,
+          before: { side: { kind: 'commit', rev: r.rev }, file: was },
+          after: { side: { kind: 'commit', rev: r.to }, file: r.path },
+        };
+      case 'staged':
+        return {
+          repo: r.repo,
+          before: { side: { kind: 'commit', rev: 'HEAD' }, file: was },
+          after: { side: { kind: 'index' }, file: r.path },
+        };
+      case 'unstaged':
+        return {
+          repo: r.repo,
+          before: { side: { kind: 'index' }, file: was },
+          after: { side: { kind: 'worktree' }, file: r.path },
+        };
+    }
   }
 
   /**

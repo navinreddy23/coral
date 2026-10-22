@@ -71,3 +71,23 @@ fn scripts_are_still_held_to_the_origin() {
     assert!(csp.contains("object-src 'none'"), "{csp}");
     assert!(csp.contains("frame-ancestors 'none'"), "{csp}");
 }
+
+/// The image view draws a file's bytes through a blob URL, which only the page's own script
+/// can make. Allowed for images and nothing else: a blob a script may run from is a way to run
+/// code nobody shipped.
+#[test]
+fn blobs_are_images_only() {
+    let csp = security();
+    let csp = csp["csp"].as_str().expect("a csp is configured");
+    let directive = |name: &str| {
+        csp.split(';')
+            .map(str::trim)
+            .find(|d| d.split_whitespace().next() == Some(name))
+            .unwrap_or_default()
+            .to_owned()
+    };
+    assert!(directive("img-src").contains("blob:"), "{csp}");
+    assert!(!directive("script-src").contains("blob:"), "{csp}");
+    assert!(!directive("default-src").contains("blob:"), "{csp}");
+    assert!(!csp.contains("'unsafe-eval'"), "{csp}");
+}

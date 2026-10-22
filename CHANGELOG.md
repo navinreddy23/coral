@@ -39,6 +39,13 @@ keep working on the rest; a new file goes too. **Stash the staged changes** (in 
 and the palette) stashes exactly what is staged and leaves everything unstaged where it is,
 even in the same file. A file whose name has `*` or `?` in it is that file, never a pattern.
 
+### See an image change
+
+A changed image now shows before and after side by side, with each side's size in pixels and
+bytes, instead of "Binary file — no textual diff". PNG, JPEG, GIF, WebP, BMP, ICO and AVIF are
+drawn, for a commit, a comparison, and staged or unstaged changes alike. An added or deleted
+image says which side it is missing from, and transparency shows against a checkerboard.
+
 ### Coral can update itself
 
 About has an **Install and restart** button once a newer release is found, and the palette has

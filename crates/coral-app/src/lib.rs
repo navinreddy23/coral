@@ -4,6 +4,7 @@
 pub mod actions;
 pub mod activity;
 pub mod bisect;
+pub mod blob;
 pub mod commands;
 pub mod conflicts;
 pub mod credentials;
