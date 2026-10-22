@@ -28,6 +28,22 @@ impl GixCommitStream {
         Ok(Self { repo })
     }
 
+    /// The order a first paint can afford.
+    ///
+    /// Topological when the repository has a commit-graph and is not shallow, because then a
+    /// walk stopped after a screenful costs only that screenful and is the start of the full
+    /// walk; see `topo.rs`. Without one, a topological screenful costs the whole history, and
+    /// the first paint has to settle for commit-time order and be re-ordered later.
+    #[must_use]
+    pub fn first_paint_order(&self) -> Order {
+        let repo = self.repo.to_thread_local();
+        if boundary(&repo).is_empty() && repo.commit_graph_if_enabled().ok().flatten().is_some() {
+            Order::Topological
+        } else {
+            Order::CommitTime
+        }
+    }
+
     /// The commits git keeps for a stash that are not the stash itself.
     ///
     /// `git stash` writes three commits: the stash, a commit holding the index, and one
@@ -194,6 +210,17 @@ impl GixCommitStream {
         } else {
             None
         };
+        if let Some(graph) = &commit_graph {
+            let mut stats = WalkStats::default();
+            super::topo::walk(
+                repo,
+                graph,
+                &tips,
+                opts.first_parent,
+                &mut |id, parents, time| emit(&mut stats, opts, plumbing, sink, id, parents, time),
+            )?;
+            return Ok(stats);
+        }
         let find = Grafted::new(&repo.objects, edge);
         let walk = topo::Builder::from_iters(&find, tips, None::<Vec<ObjectId>>)
             .with_commit_graph(commit_graph)

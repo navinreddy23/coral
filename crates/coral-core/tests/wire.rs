@@ -5,7 +5,7 @@
 //! one side hears about fails on the other.
 
 use coral_core::graph::wire::{Frame, MAGIC, VERSION, decode, encode, frame, section};
-use coral_core::graph::{GixCommitStream, StreamOpts, build};
+use coral_core::graph::{GixCommitStream, Order, StreamOpts, build};
 use coral_core::testutil::TestRepo;
 
 /// Where the section directory starts, i.e. the header size.
@@ -109,7 +109,7 @@ fn a_complete_walk_is_marked_final_and_not_provisional() {
 fn a_first_paint_frame_is_marked_provisional() {
     let repo = TestRepo::new().write("a.txt", "1\n").commit("one");
     let stream = GixCommitStream::open(repo.path()).unwrap();
-    let store = build(&stream, &StreamOpts::first_paint(4096)).unwrap();
+    let store = build(&stream, &StreamOpts::first_paint(4096, Order::CommitTime)).unwrap();
 
     let f = decode(&encode(&store, 0, 20)).unwrap();
     assert!(f.flags & frame::PROVISIONAL != 0);

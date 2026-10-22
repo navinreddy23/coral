@@ -14,10 +14,11 @@ pub struct CommitNode {
 
 /// Emission order.
 ///
-/// The distinction is the whole reason first paint is two-phase: [`Order::Topological`] must
-/// prepaint indegrees over the entire graph before it can emit one row (1.5 s on the kernel),
-/// while [`Order::CommitTime`] emits immediately (6 ms for a screenful) but can place a child
-/// before its parent when committer clocks disagree.
+/// Without a commit-graph, [`Order::Topological`] must count children over the entire graph
+/// before it can emit one row (1.5 s on the kernel), while [`Order::CommitTime`] emits
+/// immediately (6 ms for a screenful) but can place a child before its parent when committer
+/// clocks disagree. With one, a topological screenful is as cheap; see
+/// [`super::GixCommitStream::first_paint_order`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Order {
     #[default]
@@ -58,11 +59,11 @@ impl StreamOpts {
     /// 300 ms first-paint budget and every row costs. A few screenfuls is all it has to cover.
     pub const FIRST_PAINT_ROWS: u64 = 4096;
 
-    /// The provisional first screen: fast, all tips, not topologically sound.
+    /// The first screen: all tips, in whichever `order` the stream can give quickly.
     #[must_use]
-    pub fn first_paint(rows: u64) -> Self {
+    pub fn first_paint(rows: u64, order: Order) -> Self {
         Self {
-            order: Order::CommitTime,
+            order,
             max_count: Some(rows),
             ..Self::default()
         }

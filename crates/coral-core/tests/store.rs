@@ -80,7 +80,7 @@ async fn flags_mark_merges_roots_and_provisional_rows() {
         "a topological build is not provisional"
     );
 
-    let quick = build(&stream, &StreamOpts::first_paint(4096)).unwrap();
+    let quick = build(&stream, &StreamOpts::first_paint(4096, Order::CommitTime)).unwrap();
     assert!(
         (0..quick.len()).all(|r| quick.flags(r) & flags::PROVISIONAL != 0),
         "a commit-time build must mark every row provisional"

@@ -5,7 +5,7 @@
 use std::time::Instant;
 
 use coral_core::graph::{
-    CommitStream, GixCommitStream, StreamOpts, SubprocessCommitStream, WalkControl, build,
+    CommitStream, GixCommitStream, Order, StreamOpts, SubprocessCommitStream, WalkControl, build,
 };
 use coral_core::process::GitRunner;
 
@@ -77,12 +77,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     time_walk(
         &gix,
         "gix, commit-time, 4096",
-        &StreamOpts::first_paint(4096),
+        &StreamOpts::first_paint(4096, Order::CommitTime),
+    );
+    time_walk(
+        &gix,
+        "gix, topological, 4096",
+        &StreamOpts::first_paint(4096, Order::Topological),
     );
     time_walk(
         &sub,
         "rev-list, commit-time, 4096",
-        &StreamOpts::first_paint(4096),
+        &StreamOpts::first_paint(4096, Order::CommitTime),
     );
 
     println!("walk, full graph (budget 5000 ms):");
@@ -90,7 +95,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     time_walk(&sub, "rev-list, topological", &StreamOpts::default());
 
     println!("build into the row store (budget 5000 ms, < 600 MB):");
-    time_build(&gix, "gix, first paint", &StreamOpts::first_paint(4096));
+    time_build(
+        &gix,
+        "gix, first paint",
+        &StreamOpts::first_paint(4096, gix.first_paint_order()),
+    );
     time_build(&gix, "gix, full graph", &StreamOpts::default());
     Ok(())
 }
