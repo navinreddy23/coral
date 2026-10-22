@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Check out a pull or merge request
+
+Right-click a request in the sidebar and choose **Check out #N locally**. Coral fetches the
+request's tip by the name the host keeps it under, so a request from a fork works as well as
+one from a branch here. It then checks it out as `pr/N`, or `mr/N` on GitLab. Doing it again
+after the request has moved on brings the branch up to date. A branch that would lose commits
+is left alone and the reason is shown, because that means the request was force-pushed or
+something was committed to it here.
+
 ## 1.2.5
 
 ### Authors' pictures
