@@ -25,9 +25,10 @@ export async function rowMetadata(
   path: string,
   startRow: number,
   count: number,
-  provisional: boolean,
+  /** Whether the rows on screen came from the quick first walk rather than the full one. */
+  quick: boolean,
 ): Promise<CommitMeta[]> {
-  return invoke<CommitMeta[]>('row_metadata', { path, startRow, count, provisional });
+  return invoke<CommitMeta[]>('row_metadata', { path, startRow, count, quick });
 }
 
 export interface TransportCheck {

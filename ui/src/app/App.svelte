@@ -3294,10 +3294,15 @@
       // of leaving it saying the kernel has no branches for the six seconds the real walk
       // takes. It is asked again below, once the rows are the real ones.
       void refs.load(info.path);
+      // Beside the walk rather than after it. It needs nothing the walk gives, and read after
+      // it the toolbar greyed out and "Working…" came and went as the kernel's last seconds of
+      // walking ended: the first screen kept changing for a reason that had nothing to do
+      // with it.
+      const status = worktree.load(info.path);
       await graph.open(info.path);
       await refs.load(info.path);
       await stashes.load(info.path);
-      await worktree.load(info.path);
+      await status;
       void worktrees.load(info.path);
       // A repository can be opened mid-merge, so the tool has to be there on arrival rather
       // than only after an action of ours stopped.
