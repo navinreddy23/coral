@@ -28,11 +28,11 @@ env:
 jobs:
   # Fails in seconds rather than after five bundles are built.
   meta:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.read.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - id: read
         shell: bash
@@ -107,7 +107,7 @@ jobs:
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
@@ -131,7 +131,7 @@ jobs:
       # the nightly kernel clone already takes ~6 GB of it, so five more release legs would only
       # evict each other. Releases are rare and a cold build is the more reproducible one.
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
@@ -217,7 +217,7 @@ jobs:
           ls -l dist
           [ -n "$(ls -A dist)" ] || { echo "::error::${id} produced no bundles"; exit 1; }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: bundle-${{ matrix.id }}
           if-no-files-found: error
@@ -229,13 +229,13 @@ jobs:
   release:
     needs: [meta, bundle]
     if: github.ref_type == 'tag'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           path: dist
           pattern: bundle-*
