@@ -49,6 +49,16 @@ pub fn create_url(host: &Host) -> String {
     )
 }
 
+/// The newest pipeline for one commit.
+#[must_use]
+pub fn pipelines_url(host: &Host, sha: &str) -> String {
+    format!(
+        "{}/projects/{}/pipelines?sha={sha}&order_by=id&sort=desc&per_page=1",
+        api_base(host),
+        project_id(host),
+    )
+}
+
 /// The body `POST /merge_requests` takes.
 ///
 /// A draft is marked by a `Draft:` title prefix rather than a field, which is how GitLab has
@@ -83,6 +93,8 @@ struct Wire {
     target_branch: String,
     web_url: String,
     updated_at: String,
+    #[serde(default)]
+    sha: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -135,5 +147,6 @@ fn convert(w: Wire) -> PullRequest {
         target_branch: w.target_branch,
         web_url: w.web_url,
         updated_at: w.updated_at,
+        head_sha: w.sha.unwrap_or_default(),
     }
 }

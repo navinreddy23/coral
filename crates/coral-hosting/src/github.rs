@@ -37,6 +37,29 @@ pub fn create_url(host: &Host) -> String {
     )
 }
 
+/// The check runs on one commit. A hundred is the most a page holds and more than any
+/// pipeline here has.
+#[must_use]
+pub fn check_runs_url(host: &Host, sha: &str) -> String {
+    format!(
+        "{}/repos/{}/{}/commits/{sha}/check-runs?per_page=100",
+        api_base(host),
+        host.owner,
+        host.repo
+    )
+}
+
+/// The commit statuses on one commit, the older mechanism some integrations still use.
+#[must_use]
+pub fn statuses_url(host: &Host, sha: &str) -> String {
+    format!(
+        "{}/repos/{}/{}/commits/{sha}/status",
+        api_base(host),
+        host.owner,
+        host.repo
+    )
+}
+
 /// The body `POST /pulls` takes.
 #[must_use]
 pub fn create_body(new: &NewPullRequest) -> serde_json::Value {
@@ -75,6 +98,8 @@ struct User {
 struct Ref {
     #[serde(rename = "ref")]
     name: String,
+    #[serde(default)]
+    sha: String,
 }
 
 /// Parses a `GET /pulls` response.
@@ -115,6 +140,7 @@ fn convert(w: Wire) -> PullRequest {
         title: w.title,
         state,
         author: w.user.map_or_else(|| "(unknown)".to_owned(), |u| u.login),
+        head_sha: w.head.sha,
         source_branch: w.head.name,
         target_branch: w.base.name,
         web_url: w.html_url,

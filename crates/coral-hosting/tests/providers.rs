@@ -256,3 +256,49 @@ fn only_the_host_refusing_counts_against_a_token() {
         assert!(!quiet.is_refusal(), "{quiet}");
     }
 }
+
+#[test]
+fn a_proposal_carries_the_commit_its_checks_run_on() {
+    let sha = "a".repeat(40);
+    let github = format!(
+        r#"[{{"number":5,"title":"T","state":"open","merged_at":null,"user":{{"login":"e"}},
+            "head":{{"ref":"topic","sha":"{sha}"}},"base":{{"ref":"main","sha":"{other}"}},
+            "html_url":"https://github.com/o/r/pull/5","updated_at":"2026-01-01T00:00:00Z"}}]"#,
+        other = "b".repeat(40)
+    );
+    assert_eq!(
+        github::parse_pulls(github.as_bytes()).unwrap()[0].head_sha,
+        sha
+    );
+
+    let gitlab = format!(
+        r#"[{{"iid":7,"title":"T","state":"opened","source_branch":"topic","target_branch":"main",
+            "web_url":"https://gitlab.com/g/p/-/merge_requests/7","updated_at":"2026-01-01T00:00:00Z",
+            "sha":"{sha}"}}]"#
+    );
+    assert_eq!(
+        gitlab::parse_merge_requests(gitlab.as_bytes()).unwrap()[0].head_sha,
+        sha
+    );
+}
+
+#[test]
+fn checks_are_asked_of_the_commit_on_each_provider() {
+    let sha = "c".repeat(40);
+    assert_eq!(
+        github::check_runs_url(&github_host(), &sha),
+        format!(
+            "https://api.github.com/repos/torvalds/linux/commits/{sha}/check-runs?per_page=100"
+        )
+    );
+    assert_eq!(
+        github::statuses_url(&enterprise_host(), &sha),
+        format!("https://github.acme.corp/api/v3/repos/team/app/commits/{sha}/status")
+    );
+    assert_eq!(
+        gitlab::pipelines_url(&gitlab_host(), &sha),
+        format!(
+            "https://gitlab.com/api/v4/projects/group%2Fsub%2Fproj/pipelines?sha={sha}&order_by=id&sort=desc&per_page=1"
+        )
+    );
+}
