@@ -147,4 +147,16 @@ listed=$("$MANIFEST" --platforms | sort)
 [ "$built" = "$listed" ] || fail "the manifest lists $(echo $listed) but release.yml builds $(echo $built)"
 ok "the manifest names exactly the platforms release.yml builds"
 
+# Every update download the manifest asks for has to be something the bundler is told to make.
+# macOS updates from the .app in a tarball, which Tauri makes only when `app` is a target of
+# its own: with `dmg` alone it built the disk image and no tarball, and 1.2.4's first tag
+# failed for want of it.
+python3 - "$ROOT/crates/coral-app/tauri.conf.json" <<'PY' || fail "a bundle the updater needs is not a bundle target"
+import json, sys
+targets = json.load(open(sys.argv[1]))["bundle"]["targets"]
+missing = [t for t in ("deb", "appimage", "app", "nsis") if t not in targets]
+assert not missing, f"tauri.conf.json does not build {missing}"
+PY
+ok "every kind of install that updates itself is a bundle target"
+
 printf '%d passed\n' "$passed"
