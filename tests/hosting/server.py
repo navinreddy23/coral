@@ -1,15 +1,19 @@
 """A fake GitHub Enterprise and GitLab on loopback: three proposals and the checks on each.
 
-    server.py <port> <request-log>
+    server.py <port> <request-log> [git-root]
+
+With a git root, the repositories under it are served too, over smart HTTP through
+`git http-backend`, so the window can fetch a proposal's tip from the same host.
 
 Serves the documented shapes Coral reads, on `github.localhost` or `gitlab.localhost`, which
 resolve to loopback and which Coral takes for a self-hosted instance of each. Every request is logged with the start of its
 Authorization or PRIVATE-TOKEN header, so the test can tell the token was sent.
 """
-import json, socket, sys
+import json, os, socket, subprocess, sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 PORT, LOG = int(sys.argv[1]), sys.argv[2]
+GIT_ROOT = sys.argv[3] if len(sys.argv) > 3 else None
 A, B, C = "a" * 40, "b" * 40, "c" * 40
 
 def pr(n, title, sha, branch, draft=False):
@@ -48,7 +52,44 @@ RUNS = {
 }
 
 class Handler(BaseHTTPRequestHandler):
+    def git(self):
+        """Hands the request to `git http-backend` and relays its CGI answer."""
+        path, _, query = self.path.partition("?")
+        length = int(self.headers.get("Content-Length") or 0)
+        env = dict(os.environ, GIT_PROJECT_ROOT=GIT_ROOT, GIT_HTTP_EXPORT_ALL="1",
+                   PATH_INFO=path, QUERY_STRING=query, REQUEST_METHOD=self.command,
+                   CONTENT_TYPE=self.headers.get("Content-Type", ""),
+                   CONTENT_LENGTH=str(length), REMOTE_ADDR="::1")
+        if self.headers.get("Content-Encoding"):
+            env["HTTP_CONTENT_ENCODING"] = self.headers["Content-Encoding"]
+        if self.headers.get("Git-Protocol"):
+            env["GIT_PROTOCOL"] = self.headers["Git-Protocol"]
+        out = subprocess.run(["git", "http-backend"], input=self.rfile.read(length),
+                             env=env, capture_output=True).stdout
+        head, _, body = out.partition(b"\r\n\r\n")
+        status = 200
+        headers = []
+        for line in head.decode().split("\r\n"):
+            name, _, value = line.partition(": ")
+            if name.lower() == "status":
+                status = int(value.split()[0])
+            elif name:
+                headers.append((name, value))
+        self.send_response(status)
+        for name, value in headers:
+            self.send_header(name, value)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self):
+        if GIT_ROOT and ".git/" in self.path:
+            return self.git()
+        self.send_response(404); self.end_headers()
+
     def do_GET(self):
+        if GIT_ROOT and ".git/" in self.path:
+            return self.git()
         with open(LOG, "a") as log:
             log.write(f"{self.path} auth={self.headers.get('Authorization', '')[:12]}"
                       f" private={self.headers.get('PRIVATE-TOKEN', '')[:5]}\n")

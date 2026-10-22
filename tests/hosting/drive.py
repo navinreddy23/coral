@@ -1,4 +1,5 @@
-"""Signs in to the fake host from the status bar and photographs the pull requests.
+"""Signs in to the fake host from the status bar, photographs the pull requests, and checks
+the newest out from its menu.
 
     drive.py <display> <shots-dir>
 """
@@ -28,4 +29,13 @@ x.keys("Return")
 time.sleep(3)
 x.settle(quiet=2.0)
 x.shot(SHOTS / "checks.png")
+
+# The first proposal's row, then the first thing on its menu.
+x.click(120, 334, button=3)
+x.settle()
+x.shot(SHOTS / "proposal-menu.png")
+x.click(160, 346)
+time.sleep(3)
+x.settle(quiet=2.0)
+x.shot(SHOTS / "checked-out.png")
 sys.exit(1 if x.failures else 0)
