@@ -37,6 +37,8 @@ worth of DOM. The panel on the right is the commit under the cursor.*
 | **Interactive rebase** with a picker for reword, squash, fixup, edit, drop and reorder, before anything runs. | **The command palette** on `Ctrl+P`, with every action and every tag in the repository. |
 | [![The dark theme](docs/screenshots/08-dark.png)](docs/screenshots/08-dark.png) | [![The embedded terminal](docs/screenshots/09-terminal.png)](docs/screenshots/09-terminal.png) |
 | **A dark theme**, chosen or followed from the desktop. | **A terminal** in the repository, on ``Ctrl+` ``. |
+| [![Recovering lost work](docs/screenshots/14-recover.png)](docs/screenshots/14-recover.png) | [![Checking out a pull request](docs/screenshots/15-checkout.png)](docs/screenshots/15-checkout.png) |
+| **Lost work, found again**: every commit HEAD has been on, the ones nothing reaches any more marked, and a branch at one in a click. | **A pull or merge request checked out** as a branch of its own from a right-click, forks included. |
 
 ![A branch soloed](docs/screenshots/10-solo.png)
 
