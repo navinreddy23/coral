@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Bisect
+
+Find the commit that broke something without leaving the window. Right-click a commit and
+choose **Bisect: this commit is bad**, then mark one that was good; Coral checks out the commit
+halfway between, and a strip over the list asks whether it is **Good** or **Bad** (or **Skip**,
+for one that will not build). Each verdict narrows the suspects until the strip names the first
+bad commit. **End bisect** puts you back where you started.
+
+Every judged commit is tagged in the list. A bisect started in a terminal is picked up and can
+be carried on here, in its own terms if it was started with `--term-new`/`--term-old`.
+
+- **A bisect in progress no longer hides the graph.** It was taken for a stopped merge, and the
+  empty merge tool replaced the list the commits are judged from.
+
 ### Coral can update itself
 
 About has an **Install and restart** button once a newer release is found, and the palette has
