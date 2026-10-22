@@ -19,6 +19,7 @@ pub mod ops;
 pub mod patch;
 pub mod process;
 pub mod proposal;
+pub mod reflog;
 pub mod refs;
 pub mod remote;
 pub mod repo;
