@@ -77,12 +77,18 @@ impl Client {
         }
     }
 
-    /// Whether a commit passes its checks, for the proposal it is the tip of.
+    /// Whether a proposal's tip commit passes its checks: GitHub's by the commit, GitLab's by
+    /// the merge request, whose pipelines are not always run on the tip itself.
     ///
     /// # Errors
     /// [`HostingError::Malformed`] for a `sha` that is not a commit id, which is never put in
     /// a URL; otherwise as [`Client::pull_requests`].
-    pub async fn checks(&self, host: &Host, sha: &str) -> Result<Checks, HostingError> {
+    pub async fn checks(
+        &self,
+        host: &Host,
+        number: u64,
+        sha: &str,
+    ) -> Result<Checks, HostingError> {
         if !checks::is_commit_id(sha) {
             return Err(HostingError::Malformed(format!("{sha} is not a commit id")));
         }
@@ -93,7 +99,7 @@ impl Client {
                 checks::parse_github(&runs, &statuses)
             }
             HostKind::GitLab => {
-                let body = self.get(host, &gitlab::pipelines_url(host, sha)).await?;
+                let body = self.get(host, &gitlab::pipelines_url(host, number)).await?;
                 checks::parse_gitlab(&body)
             }
         }

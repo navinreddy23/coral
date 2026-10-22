@@ -465,8 +465,8 @@ export interface Checks {
   url: string | null;
 }
 
-export function hostingChecks(path: string, sha: string): Promise<Checks> {
-  return invoke<Checks>('hosting_checks', { path, sha });
+export function hostingChecks(path: string, number: number, sha: string): Promise<Checks> {
+  return invoke<Checks>('hosting_checks', { path, number, sha });
 }
 
 export function hostingStatus(path: string): Promise<HostView> {

@@ -202,6 +202,7 @@ pub async fn hosting_pull_requests(
 pub async fn hosting_checks(
     profiles: tauri::State<'_, crate::profile::Profiles>,
     path: String,
+    number: u64,
     sha: String,
 ) -> Result<coral_hosting::Checks, IpcError> {
     let profile = current(&profiles);
@@ -211,7 +212,7 @@ pub async fn hosting_checks(
     let secret = secret_for(&view, host, &profile, reading)?;
     let client = Client::new(secret).map_err(|e| refused(reading, &e))?;
     Ok(client
-        .checks(host, &sha)
+        .checks(host, number, &sha)
         .await
         .map_err(|e| refused(reading, &e))?)
 }

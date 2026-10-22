@@ -296,9 +296,7 @@ fn checks_are_asked_of_the_commit_on_each_provider() {
         format!("https://github.acme.corp/api/v3/repos/team/app/commits/{sha}/status")
     );
     assert_eq!(
-        gitlab::pipelines_url(&gitlab_host(), &sha),
-        format!(
-            "https://gitlab.com/api/v4/projects/group%2Fsub%2Fproj/pipelines?sha={sha}&order_by=id&sort=desc&per_page=1"
-        )
+        gitlab::pipelines_url(&gitlab_host(), 7),
+        "https://gitlab.com/api/v4/projects/group%2Fsub%2Fproj/merge_requests/7/pipelines?per_page=1"
     );
 }
