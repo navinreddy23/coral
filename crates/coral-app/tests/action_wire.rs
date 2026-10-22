@@ -32,6 +32,8 @@ fn every_action_the_window_can_send_is_understood() {
         r#"{"kind":"cherryPick","revs":["abc"],"commit":false}"#,
         r#"{"kind":"revert","revs":["abc"]}"#,
         r#"{"kind":"stashPush","message":null}"#,
+        r#"{"kind":"stashPush","message":"half","paths":["a.txt","new.txt"],"staged":false}"#,
+        r#"{"kind":"stashPush","message":null,"paths":null,"staged":true}"#,
         r#"{"kind":"stashApply","index":0,"pop":true}"#,
         r#"{"kind":"stashDrop","index":0}"#,
         r#"{"kind":"tagCreate","name":"v1","at":null,"message":null}"#,

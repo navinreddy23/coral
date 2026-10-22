@@ -90,6 +90,12 @@ pub enum Action {
     },
     StashPush {
         message: Option<String>,
+        /// These files only. Everything, untracked files included, when absent.
+        #[serde(default)]
+        paths: Option<Vec<String>>,
+        /// What is staged only, leaving the rest in the working tree.
+        #[serde(default)]
+        staged: bool,
     },
     StashApply {
         index: usize,
@@ -342,6 +348,13 @@ impl Action {
                 }
             }
             Self::Revert { revs, .. } => format!("revert {}", shortened(revs)),
+            Self::StashPush { staged: true, .. } => "stash the staged changes".to_owned(),
+            Self::StashPush {
+                paths: Some(paths), ..
+            } => match paths.as_slice() {
+                [one] => format!("stash {one}"),
+                many => format!("stash {} files", many.len()),
+            },
             Self::StashPush { .. } => "stash".to_owned(),
             Self::StashApply { pop: true, .. } => "stash pop".to_owned(),
             Self::StashApply { .. } => "stash apply".to_owned(),
@@ -738,10 +751,21 @@ async fn run_tree(
     action: Action,
 ) -> Result<Done, coral_core::CoralError> {
     match action {
-        Action::StashPush { message } => {
+        Action::StashPush {
+            message,
+            paths,
+            staged,
+        } => {
             // Untracked files are included: a stash that leaves them behind is a stash that
             // does not let the branch be switched, which is what it was asked for.
-            loc.stash_push(runner, message.as_deref(), true).await?;
+            let scope = match (paths, staged) {
+                (_, true) => coral_core::ops::StashScope::Staged,
+                (Some(paths), false) => coral_core::ops::StashScope::Paths(paths),
+                (None, false) => coral_core::ops::StashScope::Everything {
+                    include_untracked: true,
+                },
+            };
+            loc.stash_push(runner, message.as_deref(), &scope).await?;
         }
         Action::StashApply { index, pop } => {
             return Ok(Done::from(&loc.stash_apply(runner, index, pop).await?));
