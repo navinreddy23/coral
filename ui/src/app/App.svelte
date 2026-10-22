@@ -58,6 +58,7 @@
   import { StartState } from '../state/start.svelte';
   import { FindState } from '../state/find.svelte';
   import { BisectState } from '../state/bisect.svelte';
+  import { AvatarState } from '../state/avatars.svelte';
   import type { PlacedStash } from '../ipc/stash';
   import { ExperimentalState } from '../state/experimental.svelte';
   import SubmodulePanel from './Submodule.svelte';
@@ -522,6 +523,7 @@
   const startPage = new StartState();
   const find = new FindState();
   const bisect = new BisectState();
+  const avatars = new AvatarState();
   let showStart = $state(false);
   /** Whether the start page is what the window is showing, asked for or for want of a tab. */
   const onStart = $derived(showStart || tabs.session.tabs.length === 0);
@@ -4027,6 +4029,25 @@
     };
   });
 
+  /** The selected commit's author's picture, for the details panel. */
+  const detailPicture = $derived.by(() => {
+    void avatars.version;
+    return avatars.url(selection.detail?.commit.author.email);
+  });
+
+  /** The author's picture for a row, which the canvas draws in place of the initials. */
+  const nodePicture = $derived.by(() => {
+    const meta = visibleMeta;
+    void avatars.version;
+    return (row: number) => avatars.bitmap(meta.get(row)?.email);
+  });
+
+  // The pictures of the authors on screen, asked for as their rows arrive.
+  $effect(() => {
+    const emails = [...visibleMeta.values()].map((m) => m.email);
+    untrack(() => avatars.want(emails));
+  });
+
   // Only rows that are on screen are worth an object read, or a frame.
   $effect(() => {
     if (rows.length === 0) return;
@@ -4191,6 +4212,7 @@
     <div class="screen">
     <Preferences
       {updates}
+      {avatars}
       {signing}
       {ssh}
       {experimental}
@@ -4494,6 +4516,7 @@
             width={columns.graph}
             theme={theme.current}
             initials={nodeInitials}
+            picture={nodePicture}
             author={nodeAuthor}
             maxLane={widestLane(graph.frame, rows)}
             {headRow}
@@ -4682,6 +4705,7 @@
       {:else}
         <Details
           detail={selection.detail}
+          picture={detailPicture}
           repo={info?.path ?? null}
           compare={selection.pair === null
             ? null

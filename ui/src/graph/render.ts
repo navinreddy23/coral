@@ -24,6 +24,8 @@ export interface LaneStyle {
   fills: string[];
   /** Author initials for a row, or null while its metadata is still loading. */
   initials?: (row: number) => string | null;
+  /** The author's picture for a row, drawn in place of the initials when there is one. */
+  picture?: (row: number) => CanvasImageSource | null;
   /** The author's identity, which fixes the node's fill. Null while it is loading. */
   author?: (row: number) => string | null;
   /** The row HEAD is on, or null when it is off screen or on nothing this frame knows. */
@@ -56,6 +58,7 @@ export function drawLanes(
 ): void {
   const { colours, fills } = style;
   const initials = style.initials ?? (() => null);
+  const picture = style.picture ?? (() => null);
   const author = style.author ?? (() => null);
   ctx.clearRect(0, 0, width, height);
   // An even width centred on an integer coordinate covers whole pixels; 1.5px straddles two
@@ -134,6 +137,16 @@ export function drawLanes(
         ? laneColour(lane, fills)
         : fills[authorColourIndex(who, fills.length)] ?? laneColour(lane, fills);
     ctx.fill();
+
+    // Inside the ring, so the lane colour still says which line the commit is on. Not in a node
+    // too small for initials either: a face a few pixels across is a smudge too.
+    const face = metrics.nodeRadius >= LABELLED_FROM ? picture(row) : null;
+    if (face !== null) {
+      ctx.save();
+      ctx.clip();
+      ctx.drawImage(face, x - radius, y - radius, radius * 2, radius * 2);
+      ctx.restore();
+    }
     ctx.strokeStyle = laneColour(lane, colours);
     ctx.stroke();
 
@@ -150,7 +163,7 @@ export function drawLanes(
     // Only where there is room for them to be read. In a merge region the lanes are drawn
     // tight and the node is a few pixels across; two letters in it are a smudge, and a smudge
     // in every node is worse than a plain dot.
-    const label = metrics.nodeRadius >= LABELLED_FROM ? initials(row) : null;
+    const label = metrics.nodeRadius >= LABELLED_FROM && face === null ? initials(row) : null;
     if (label !== null) {
       ctx.fillStyle = NODE_LABEL;
       ctx.fillText(label, x, y + 0.5);

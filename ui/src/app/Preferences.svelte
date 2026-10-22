@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
+  import type { AvatarState } from '../state/avatars.svelte';
   import type { IconName } from './icon';
   import About from './About.svelte';
   import Appearance from './Appearance.svelte';
@@ -19,6 +20,7 @@
 
   const {
     updates,
+    avatars = null,
     signing,
     ssh,
     experimental,
@@ -37,6 +39,7 @@
     onApplyProfileHere,
   }: {
     updates: UpdateState;
+    avatars?: AvatarState | null;
     signing: SigningState;
     ssh: SshState;
     experimental: ExperimentalState;
@@ -146,7 +149,7 @@
 
   <div class="page">
   {#if active === 'appearance'}
-    <Appearance {theme} {views} />
+    <Appearance {theme} {views} {avatars} />
   {:else if active === 'profiles'}
     <Profiles
       {profiles}

@@ -27,6 +27,7 @@
     width = GRAPH_COLUMN_PX,
     theme,
     initials = () => null,
+    picture = () => null,
     author = () => null,
     maxLane = 0,
     headRow = null,
@@ -47,6 +48,8 @@
     theme: Theme;
     /** Author initials for a row, or null while its metadata is still loading. */
     initials?: (row: number) => string | null;
+    /** The author's picture for a row, drawn in place of the initials when there is one. */
+    picture?: (row: number) => CanvasImageSource | null;
     /** The author's identity, which fixes the node's fill. Null while it is loading. */
     author?: (row: number) => string | null;
     /** The widest lane on screen, which decides how tightly the lanes have to be drawn. */
@@ -115,6 +118,7 @@
       colours,
       fills,
       initials,
+      picture,
       author,
       headRow,
       headRing: brand,
@@ -127,6 +131,7 @@
     void frame;
     void firstRow;
     void initials;
+    void picture;
     void author;
     void maxLane;
     void headRow;

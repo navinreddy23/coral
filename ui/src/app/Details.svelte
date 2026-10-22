@@ -15,6 +15,7 @@
     detail,
     repo,
     compare,
+    picture = null,
     nothing,
     loading,
     error,
@@ -33,6 +34,8 @@
      * been picked. Takes the place of the one commit's own details.
      */
     compare: { from: string; to: string; files: ChangedFile[] } | null;
+    /** The author's picture, shown in the disc in place of the initials when there is one. */
+    picture?: string | null;
     /** Goes back to the newer of the two on its own. */
     onClearCompare: () => void;
     /** True when the graph holds no commits, so there is nothing to invite a click on. */
@@ -203,7 +206,11 @@
     -->
     <div class="who">
       <span class="face" style:background={faceOf(detail.commit.author)}>
-        {initialsOf(detail.commit.author.name)}
+        {#if picture !== null}
+          <img src={picture} alt="" />
+        {:else}
+          {initialsOf(detail.commit.author.name)}
+        {/if}
       </span>
       <span class="names">
         <span class="name">{detail.commit.author.name}</span>
@@ -343,8 +350,9 @@
   }
   /* The same disc the canvas fills a node with, at the same size, so the row that was clicked
      and the panel that answers wear one mark between them. */
+  .face img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
   .face {
-    flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
+    flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%; overflow: hidden;
     display: flex; align-items: center; justify-content: center;
     font-size: var(--text-mark); font-weight: var(--weight-bold); letter-spacing: 0.02em;
     /* White in both themes, which is why the node palette is dark in both. */
