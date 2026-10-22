@@ -57,4 +57,23 @@ describe('reading the checks on proposals', () => {
     expect(hosting.checks[1]?.state).toBe('failing');
     expect(hosting.checks[2]).toBeUndefined();
   });
+
+  it('keeps the newer reading when an older one answers last', async () => {
+    // A push moves a proposal's tip and the list is read again while the first reading is
+    // still out; its answer is about the old commit.
+    const old = proposal(1, 'open');
+    const moved = { ...old, headSha: '9'.repeat(40) };
+    const waiting = new Map<string, (v: unknown) => void>();
+    invoke.mockImplementation(
+      (_cmd: string, args: { sha: string }) => new Promise((r) => waiting.set(args.sha, r)),
+    );
+    const hosting = new HostingState();
+    const first = hosting.readChecks('', [old]);
+    const second = hosting.readChecks('', [moved]);
+    waiting.get(moved.headSha)?.({ state: 'passing', summary: 'new', url: null });
+    await second;
+    waiting.get(old.headSha)?.({ state: 'failing', summary: 'old', url: null });
+    await first;
+    expect(hosting.checks[1]?.summary).toBe('new');
+  });
 });

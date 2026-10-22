@@ -32,6 +32,7 @@ export class HostingState {
   error = $state<string | null>(null);
 
   #path = '';
+  #reading = 0;
 
   /** True once there is a host to talk to and a token to talk with. */
   available = $derived(this.view?.host != null && this.view.token !== 'none');
@@ -81,16 +82,20 @@ export class HostingState {
    * none; the list already says whether the host is reachable.
    */
   async readChecks(path: string, proposals: PullRequest[]): Promise<void> {
+    // Each reading is its own: a refresh after a push starts another while the first is still
+    // out, and the first's late answer is about a commit that is no longer the tip.
+    const reading = ++this.#reading;
+    const current = () => reading === this.#reading && path === this.#path;
     this.checks = {};
     const queue = proposals
       .filter((p) => (p.state === 'open' || p.state === 'draft') && p.headSha !== '')
       .slice(0, CHECKED);
     const next = async (): Promise<void> => {
       const pr = queue.shift();
-      if (pr === undefined || path !== this.#path) return;
+      if (pr === undefined || !current()) return;
       try {
-        const found = await hostingChecks(path, pr.headSha);
-        if (path === this.#path) this.checks = { ...this.checks, [pr.number]: found };
+        const found = await hostingChecks(path, pr.number, pr.headSha);
+        if (current()) this.checks = { ...this.checks, [pr.number]: found };
       } catch {
         // Nothing to show for this one.
       }
