@@ -30,6 +30,9 @@ pub struct PullRequest {
     pub web_url: String,
     /// ISO 8601, as the provider gave it. Parsed at the display boundary, not here.
     pub updated_at: String,
+    /// The commit at the tip of the source branch, which is what checks run on. Empty when the
+    /// provider did not say.
+    pub head_sha: String,
 }
 
 /// What to open a new one with.

@@ -49,6 +49,21 @@ pub fn create_url(host: &Host) -> String {
     )
 }
 
+/// The newest pipeline run for a merge request.
+///
+/// By the request rather than by its tip commit: a merged-results pipeline runs on a commit
+/// GitLab makes for the purpose, and a fork's runs in the fork's project, so asking by the tip
+/// finds neither and calls a request with passing checks one with none.
+/// <https://docs.gitlab.com/api/merge_requests/#list-merge-request-pipelines>
+#[must_use]
+pub fn pipelines_url(host: &Host, iid: u64) -> String {
+    format!(
+        "{}/projects/{}/merge_requests/{iid}/pipelines?per_page=1",
+        api_base(host),
+        project_id(host),
+    )
+}
+
 /// The body `POST /merge_requests` takes.
 ///
 /// A draft is marked by a `Draft:` title prefix rather than a field, which is how GitLab has
@@ -83,6 +98,8 @@ struct Wire {
     target_branch: String,
     web_url: String,
     updated_at: String,
+    #[serde(default)]
+    sha: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -135,5 +152,6 @@ fn convert(w: Wire) -> PullRequest {
         target_branch: w.target_branch,
         web_url: w.web_url,
         updated_at: w.updated_at,
+        head_sha: w.sha.unwrap_or_default(),
     }
 }

@@ -436,6 +436,7 @@ const FIXTURES: Record<string, unknown> = {
       targetBranch: 'master',
       webUrl: 'https://gitlab.com/x/-/merge_requests/42',
       updatedAt: '2026-09-01T10:00:00Z',
+      headSha: '4'.repeat(40),
     },
     {
       number: 41,
@@ -446,6 +447,7 @@ const FIXTURES: Record<string, unknown> = {
       targetBranch: 'master',
       webUrl: 'https://gitlab.com/x/-/merge_requests/41',
       updatedAt: '2026-08-30T09:00:00Z',
+      headSha: '1'.repeat(40),
     },
     {
       number: 40,
@@ -456,6 +458,7 @@ const FIXTURES: Record<string, unknown> = {
       targetBranch: 'master',
       webUrl: 'https://gitlab.com/x/-/merge_requests/40',
       updatedAt: '2026-08-28T09:00:00Z',
+      headSha: '0'.repeat(40),
     },
   ],
 };
@@ -600,6 +603,10 @@ export function preview(command: string, args: Record<string, unknown>): unknown
       return DIFF;
     case 'commit_url':
       return `https://github.com/coral-dev/coral/commit/${String(args['oid'] ?? '')}`;
+    case 'hosting_checks':
+      return String(args['sha'] ?? '').startsWith('4')
+        ? { state: 'passing', summary: 'all 6 checks passed', url: null }
+        : { state: 'running', summary: '2 of 5 checks still running', url: null };
     case 'terminal_open':
       return { id: 1, shell: '/usr/bin/zsh' };
     case 'terminal_write':

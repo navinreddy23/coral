@@ -1,6 +1,6 @@
 <script lang="ts">
   import { byVersionDescending } from './version';
-  import type { PullRequest } from '../ipc/commands';
+  import type { Checks, PullRequest } from '../ipc/commands';
   import type { Remote, Submodule, Worktree } from '../ipc/types';
   import type { IconName } from './icon';
   import type { PlacedRef, RefGroups } from '../state/refs.svelte';
@@ -19,6 +19,8 @@
     remotes,
     openSubmodule,
     pullRequests,
+    checks = {},
+    onOpenChecks = () => undefined,
     pullRequestLabel,
     onSelect,
     onOpenSubmodule,
@@ -66,6 +68,9 @@
     openSubmodule: string | null;
     /** Empty when the remote is not a recognised host, or no token is stored for it. */
     pullRequests: PullRequest[];
+    /** What each proposal's checks came to, by number, for those that have been read. */
+    checks?: Record<number, Checks>;
+    onOpenChecks?: (pr: PullRequest, checks: Checks) => void;
     /** What the host calls them: GitHub says pull, GitLab says merge. */
     pullRequestLabel: string;
     onSelect: (row: number) => void;
@@ -659,6 +664,30 @@
                 <span class="state {pr.state}">{pr.state[0]?.toUpperCase()}</span>
                 <span class="num">#{pr.number}</span>
                 <span class="title">{pr.title}</span>
+                {#if checks[pr.number] !== undefined && checks[pr.number]?.state !== 'none'}
+                  {@const found = checks[pr.number]}
+                  {#if found}
+                    <!-- A span, not a button: a button inside the row's own button is not
+                         allowed, and the row's click already opens the proposal. -->
+                    <span
+                      class="checks {found.state}"
+                      role="link"
+                      tabindex="-1"
+                      title={found.summary}
+                      aria-label="Checks: {found.summary}"
+                      onclick={(e) => {
+                        e.stopPropagation();
+                        onOpenChecks(pr, found);
+                      }}
+                      onkeydown={() => undefined}
+                    >
+                      <Icon
+                        name={found.state === 'passing' ? 'tick' : found.state === 'failing' ? 'cross' : 'clock'}
+                        size={11}
+                      />
+                    </span>
+                  {/if}
+                {/if}
               </button>
             </li>
           {/each}
@@ -941,7 +970,16 @@
     box-shadow: inset 2px 0 0 var(--accent-line);
   }
   .ref.dragging { opacity: 0.5; }
-  .pr { gap: var(--space-1); }
+  /* The whole row's width: a button sizes to what it holds unless told otherwise, and this one
+     sits in a plain list item rather than a flex row, so `flex: 1` alone did nothing. */
+  .pr { gap: var(--space-1); width: 100%; }
+  /* The title gives way, so the number and the checks beside it are never cut off. */
+  .pr .title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pr .state, .pr .num { flex: 0 0 auto; }
+  .checks { flex: 0 0 auto; display: inline-flex; margin-left: auto; color: var(--fg-2); }
+  .checks.passing { color: var(--ok); }
+  .checks.failing { color: var(--danger); }
+  .checks.running { color: var(--warn); }
   .num { flex: 0 0 auto; color: var(--fg-2); font-size: var(--text-sm); }
   .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* Fourteen wide because that is the gutter every other row keeps for its tick: the circle
