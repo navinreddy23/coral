@@ -65,6 +65,20 @@ click(823, 99)
 shot("diff-split")
 click(1062, 98)
 
+# The find box searching what commits changed, then refusing a date it cannot read. NO_LANE
+# was added by one commit and appears in no message.
+keys("Control_L", "f")
+settle()
+type_text("code:NO_LANE")
+settle(quiet=2.0)
+shot("find-code")
+keys("Control_L", "a")
+type_text("after:soon")
+settle(quiet=2.0)
+shot("find-refused")
+keys("Escape")
+settle()
+
 # Preferences on Ctrl+comma, and closed again on Escape.
 keys("Control_L", "comma")
 settle()

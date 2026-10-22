@@ -12,6 +12,19 @@ from Xlib import X, XK, display
 from Xlib.ext import xtest
 
 
+# Keysyms by name, since a character is not one: ":" is Shift and the semicolon key on a US
+# layout, which is what Xephyr starts with.
+PUNCTUATION = {
+    " ": ("space",),
+    ":": ("Shift_L", "semicolon"),
+    "_": ("Shift_L", "minus"),
+    "-": ("minus",),
+    ".": ("period",),
+    "/": ("slash",),
+    '"': ("Shift_L", "apostrophe"),
+}
+
+
 class Driver:
     def __init__(self, name):
         self.name = name
@@ -77,8 +90,8 @@ class Driver:
 
     def type_text(self, text):
         for ch in text:
-            if ch == " ":
-                self.keys("space")
+            if ch in PUNCTUATION:
+                self.keys(*PUNCTUATION[ch])
             elif ch.isupper():
                 self.keys("Shift_L", ch.lower())
             else:
