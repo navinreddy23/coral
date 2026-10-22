@@ -424,8 +424,8 @@ pub async fn stash(
             // Neither of these can stop half-done, so both answer with the outcome the
             // repository is in once they have run: a completed one.
             StashAction::Push => {
-                l.stash_push(&r, message.as_deref(), include_untracked)
-                    .await?;
+                let scope = coral_core::ops::StashScope::Everything { include_untracked };
+                l.stash_push(&r, message.as_deref(), &scope).await?;
                 l.op_outcome(&r, String::new()).await
             }
             StashAction::Drop => {

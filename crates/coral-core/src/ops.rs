@@ -55,6 +55,18 @@ pub enum MergeMode {
     Squash,
 }
 
+/// Which changes a stash takes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StashScope {
+    /// Every change to a tracked file, and new files too when asked.
+    Everything { include_untracked: bool },
+    /// These files only, new or not, whatever else has changed.
+    Paths(Vec<String>),
+    /// What is staged, leaving unstaged changes and new files behind. `git stash --staged`,
+    /// which needs git 2.35.
+    Staged,
+}
+
 impl RepoLocation {
     /// Records a commit.
     ///
@@ -271,23 +283,36 @@ impl RepoLocation {
             .map(|_| ())
     }
 
-    /// Stashes the worktree.
+    /// Stashes the changes `scope` names, and leaves the rest where they are.
     ///
     /// # Errors
-    /// Propagates git failures.
+    /// Propagates git failures, including git's own refusal when there is nothing in scope
+    /// to stash.
     pub async fn stash_push(
         &self,
         runner: &GitRunner,
         message: Option<&str>,
-        include_untracked: bool,
+        scope: &StashScope,
     ) -> Result<(), CoralError> {
         let mut cmd =
             GitCommand::write("stash", self.display_path()).args(["stash", "push", "--quiet"]);
-        if include_untracked {
-            cmd = cmd.arg("--include-untracked");
-        }
         if let Some(m) = message {
             cmd = cmd.args(["-m", m]);
+        }
+        match scope {
+            StashScope::Everything { include_untracked } => {
+                if *include_untracked {
+                    cmd = cmd.arg("--include-untracked");
+                }
+            }
+            // With -u an untracked file named here goes too, and one not named stays; without
+            // it, picking a new file would stash nothing and say nothing about why.
+            StashScope::Paths(paths) => {
+                cmd = cmd
+                    .args(["--include-untracked", "--"])
+                    .args(paths.iter().map(|p| format!(":(literal){p}")));
+            }
+            StashScope::Staged => cmd = cmd.arg("--staged"),
         }
         runner.output(cmd).await.map(|_| ())
     }
