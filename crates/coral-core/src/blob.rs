@@ -114,9 +114,10 @@ fn too_large(size: u64) -> Result<(), CoralError> {
     if size > LIMIT {
         return Err(CoralError::Refused {
             label: "show the file",
+            // Rounded up: rounded down, a file just past the limit was said to be the limit.
             detail: format!(
                 "it is {} MB, and only files up to {} MB are drawn",
-                size / (1024 * 1024),
+                size.div_ceil(1024 * 1024),
                 LIMIT / (1024 * 1024)
             ),
         });
@@ -141,7 +142,12 @@ mod tests {
         assert!(too_large(LIMIT).is_ok());
         let err = too_large(LIMIT + 1).unwrap_err();
         assert_eq!(err.code(), "refused");
-        assert!(err.to_string().contains("32 MB"), "{err}");
+        // Just past the limit is said to be past it, not to be it.
+        assert!(
+            err.to_string()
+                .contains("it is 33 MB, and only files up to 32 MB"),
+            "{err}"
+        );
     }
 
     #[test]
