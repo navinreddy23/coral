@@ -182,6 +182,14 @@ pub enum Action {
         /// Record a commit per patch, keeping its author. False leaves the changes uncommitted.
         commit: bool,
     },
+    /// Record a bisect verdict on `rev`, or on the commit checked out, starting a bisection
+    /// if none is running.
+    BisectMark {
+        verdict: coral_core::bisect::Verdict,
+        rev: Option<String>,
+    },
+    /// End the bisection and go back to where it started.
+    BisectReset,
     Undo,
     Redo,
 }
@@ -384,9 +392,27 @@ impl Action {
                 1 => "apply a patch".to_owned(),
                 n => format!("apply {n} patches"),
             },
+            Self::BisectMark { verdict, rev } => {
+                let what = rev
+                    .as_deref()
+                    .map_or_else(|| "this commit".to_owned(), |r| named(r).into_owned());
+                match verdict {
+                    coral_core::bisect::Verdict::Bad => format!("mark {what} bad"),
+                    coral_core::bisect::Verdict::Good => format!("mark {what} good"),
+                    coral_core::bisect::Verdict::Skip => format!("skip {what}"),
+                }
+            }
+            Self::BisectReset => "end the bisect".to_owned(),
             Self::Undo => "undo".to_owned(),
             Self::Redo => "redo".to_owned(),
         }
+    }
+
+    /// False for the bisect steps, whose state is git's own log rather than refs alone:
+    /// undoing one by putting the refs back would leave `BISECT_LOG` saying otherwise, and the
+    /// way back from a bisection is ending it.
+    const fn journaled(&self) -> bool {
+        !matches!(self, Self::BisectMark { .. } | Self::BisectReset)
     }
 
     /// True for the two that move through the journal rather than adding to it.
@@ -554,6 +580,15 @@ async fn act(
         });
     }
 
+    if !action.journaled() {
+        let done = run(&loc, &runner, action, report).await?;
+        return Ok(ActionOutcome {
+            what: label.to_owned(),
+            conflicted: done.conflicted,
+            message: done.message,
+        });
+    }
+
     let before = loc.snapshot_refs(&runner).await?;
     let done = run(&loc, &runner, action, report).await?;
     let after = loc.snapshot_refs(&runner).await?;
@@ -564,6 +599,32 @@ async fn act(
         conflicted: done.conflicted,
         message: done.message,
     })
+}
+
+/// What a verdict led to, for the toast that reports it.
+fn bisect_news(state: Option<&coral_core::bisect::Bisection>) -> String {
+    let Some(state) = state else {
+        return String::new();
+    };
+    if let Some(found) = &state.found {
+        return format!("{} is the first {} commit", short(found), state.terms.bad);
+    }
+    if state.only_skipped_left {
+        return "Only skipped commits are left, so git cannot narrow it further".to_owned();
+    }
+    match (state.testing.as_deref(), state.steps) {
+        (Some(testing), Some(steps)) => format!(
+            "Testing {}, about {steps} more {} to go",
+            short(testing),
+            if steps == 1 { "step" } else { "steps" }
+        ),
+        _ if state.good.is_empty() => format!("Now mark a commit that was {}", state.terms.good),
+        _ => format!("Now mark a commit that was {}", state.terms.bad),
+    }
+}
+
+fn short(oid: &str) -> &str {
+    oid.get(..8).unwrap_or(oid)
 }
 
 /// Performs the action, reporting whether it stopped and what git said.
@@ -738,6 +799,14 @@ async fn run_tree(
     action: Action,
 ) -> Result<Done, coral_core::CoralError> {
     match action {
+        Action::BisectMark { verdict, rev } => {
+            let state = loc.bisect_mark(runner, verdict, rev.as_deref()).await?;
+            return Ok(Done {
+                conflicted: false,
+                message: bisect_news(state.as_ref()),
+            });
+        }
+        Action::BisectReset => loc.bisect_reset(runner).await?,
         Action::StashPush { message } => {
             // Untracked files are included: a stash that leaves them behind is a stash that
             // does not let the branch be switched, which is what it was asked for.
