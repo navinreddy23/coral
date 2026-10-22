@@ -46,7 +46,7 @@ pub async fn run(
     let opts = StreamOpts {
         tips: tips_from(solo, hidden),
         order: if first_paint {
-            Order::CommitTime
+            stream.first_paint_order()
         } else {
             Order::Topological
         },
@@ -84,7 +84,7 @@ pub async fn run(
         rows,
         total: end,
         lanes: store.max_lane().saturating_add(1),
-        provisional: first_paint,
+        provisional: !store.is_empty() && store.flags(0) & flags::PROVISIONAL != 0,
     })
 }
 

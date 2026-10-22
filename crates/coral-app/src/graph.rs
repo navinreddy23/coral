@@ -185,7 +185,10 @@ impl GraphCache {
             let opts = if first_paint {
                 StreamOpts {
                     tips,
-                    ..StreamOpts::first_paint(StreamOpts::FIRST_PAINT_ROWS)
+                    ..StreamOpts::first_paint(
+                        StreamOpts::FIRST_PAINT_ROWS,
+                        stream.first_paint_order(),
+                    )
                 }
             } else {
                 StreamOpts {
