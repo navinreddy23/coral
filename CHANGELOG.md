@@ -2,6 +2,13 @@
 
 ## 1.2.4
 
+### Lanes read as ribbons
+
+Each row's lane colour now starts at its commit's node and runs across the message, with the
+lines drawn over it, as GitKraken does. Before, it began after whichever lane line ran furthest
+right on that row and stopped at a white message cell, so its edge jumped about and looked cut
+off. The selected row is shown in a much deeper shade of its own lane.
+
 ### Find commits by what they changed, and when
 
 The find box (`Ctrl+F`) reads three qualifiers beside the words it already matched:
