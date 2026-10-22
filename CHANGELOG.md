@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Stash part of your changes
+
+Right-click a file in the working copy and choose **Stash this file** to put that one away and
+keep working on the rest; a new file goes too. **Stash the staged changes** (in the same menu
+and the palette) stashes exactly what is staged and leaves everything unstaged where it is,
+even in the same file. A file whose name has `*` or `?` in it is that file, never a pattern.
+
 ### Coral can update itself
 
 About has an **Install and restart** button once a newer release is found, and the palette has
