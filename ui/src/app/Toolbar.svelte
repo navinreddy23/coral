@@ -15,6 +15,8 @@
     leftPanel,
     stashes,
     dirty,
+    unborn = false,
+    remoteless = false,
     journal,
     rightPanel,
     rightPanelUsable,
@@ -45,6 +47,10 @@
      */
     stashes: number;
     dirty: boolean;
+    /** No commit yet, which leaves git nothing to stash against. */
+    unborn?: boolean;
+    /** No remote configured, so there is nowhere to fetch from or push to. */
+    remoteless?: boolean;
     /**
      * What undo and redo would act on, or null when there is nothing.
      *
@@ -104,6 +110,8 @@
    * window's own chrome beside the theme switch instead. The terminal is the one thing here
    * that acts on neither, and it sits alone at the far end for that reason.
    */
+  const NO_REMOTE = 'No remote yet: add one in the side panel';
+
   const groups = $derived<Action[][]>([
     [
       {
@@ -124,9 +132,30 @@
       },
     ],
     [
-      { name: 'fetch', label: 'Fetch', icon: 'fetch', hint: 'and prune', binding: 'fetch.all' },
-      { name: 'pull', label: 'Pull', icon: 'pull', hint: 'fast-forward only' },
-      { name: 'push', label: 'Push', icon: 'push', hint: 'setting the upstream if needed' },
+      // Off without a remote: fetching then did nothing and said nothing, and pushing answered
+      // with git's "No configured push destination".
+      {
+        name: 'fetch',
+        label: 'Fetch',
+        icon: 'fetch',
+        hint: remoteless ? NO_REMOTE : 'and prune',
+        binding: 'fetch.all',
+        disabled: remoteless,
+      },
+      {
+        name: 'pull',
+        label: 'Pull',
+        icon: 'pull',
+        hint: remoteless ? NO_REMOTE : 'fast-forward only',
+        disabled: remoteless,
+      },
+      {
+        name: 'push',
+        label: 'Push',
+        icon: 'push',
+        hint: remoteless ? NO_REMOTE : 'setting the upstream if needed',
+        disabled: remoteless,
+      },
     ],
     [
       {
@@ -140,8 +169,12 @@
         name: 'stash',
         label: 'Stash',
         icon: 'stashPush',
-        hint: dirty ? 'put the working copy aside' : 'Nothing to stash',
-        disabled: !dirty,
+        hint: unborn
+          ? 'Make the first commit before stashing'
+          : dirty
+            ? 'put the working copy aside'
+            : 'Nothing to stash',
+        disabled: !dirty || unborn,
       },
       {
         name: 'pop',
@@ -286,13 +319,13 @@
         {#if action.name === 'pull'}
           <!-- How a pull integrates is a real choice, and it belongs on the button that
                would otherwise make it silently. -->
-          <button class="caret" disabled={busy} title="Choose how to pull" onclick={onPullMenu}>
+          <button class="caret" disabled={busy || remoteless} title="Choose how to pull" onclick={onPullMenu}>
             <Icon name="chevronDown" size={11} />
           </button>
         {/if}
         {#if action.name === 'push'}
           <!-- Tags do not travel with a push; git sends them only when they are asked for. -->
-          <button class="caret" disabled={busy} title="Choose what to push" onclick={onPushMenu}>
+          <button class="caret" disabled={busy || remoteless} title="Choose what to push" onclick={onPushMenu}>
             <Icon name="chevronDown" size={11} />
           </button>
         {/if}

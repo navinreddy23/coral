@@ -184,10 +184,25 @@
     {/if}
 
     {#if start.form === 'clone'}
-      <section class="form">
+      <!-- A form, so Enter in any of its fields does what the button does. -->
+      <form
+        class="form"
+        onsubmit={(e) => {
+          e.preventDefault();
+          if (canClone) void doClone();
+        }}
+      >
         <label>
           <span class="name">URL</span>
-          <input bind:value={cloneUrl} placeholder="https://host/team/thing.git" />
+          <!-- The field the form exists for, and the one a pasted URL goes into. Without the
+               focus, a paste straight after choosing Clone went nowhere. Focused on mount
+               rather than by `autofocus`, which only acts when nothing has focus, and the
+               Clone button that opened the form does. -->
+          <input
+            bind:value={cloneUrl}
+            placeholder="https://host/team/thing.git"
+            {@attach (node) => node.focus()}
+          />
         </label>
         <label>
           <span class="name">Into</span>
@@ -198,7 +213,7 @@
             about, and the window already shows what git says.
           -->
           <input bind:value={cloneParent} placeholder="type or choose a directory" spellcheck="false" />
-          <button class="pick" onclick={() => void pickInto('clone')}>Choose…</button>
+          <button type="button" class="pick" onclick={() => void pickInto('clone')}>Choose…</button>
         </label>
         <label>
           <span class="name">Called</span>
@@ -271,17 +286,28 @@
           <p class="says">It will be at <span class="mono">{cloneParent}/{clonedAs}</span></p>
         {/if}
         <div class="go">
-          <button class="primary" disabled={!canClone} onclick={() => void doClone()}>
+          <button type="submit" class="primary" disabled={!canClone}>
             {start.busy ? 'Cloning…' : 'Clone'}
           </button>
         </div>
-      </section>
+      </form>
     {:else if start.form === 'create'}
-      <section class="form">
+      <form
+        class="form"
+        onsubmit={(e) => {
+          e.preventDefault();
+          if (canCreate) void doCreate();
+        }}
+      >
         <label>
           <span class="name">In</span>
-          <input bind:value={createParent} placeholder="type or choose a directory" spellcheck="false" />
-          <button class="pick" onclick={() => void pickInto('create')}>Choose…</button>
+          <input
+            bind:value={createParent}
+            placeholder="type or choose a directory"
+            spellcheck="false"
+            {@attach (node) => node.focus()}
+          />
+          <button type="button" class="pick" onclick={() => void pickInto('create')}>Choose…</button>
         </label>
         <label>
           <span class="name">Called</span>
@@ -305,11 +331,11 @@
           </p>
         {/if}
         <div class="go">
-          <button class="primary" disabled={!canCreate} onclick={() => void doCreate()}>
+          <button type="submit" class="primary" disabled={!canCreate}>
             {start.busy ? 'Creating…' : 'Create'}
           </button>
         </div>
-      </section>
+      </form>
     {/if}
 
     <input class="filter" placeholder="Search repositories" bind:value={start.filter} />
