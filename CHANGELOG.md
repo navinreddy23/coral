@@ -8,6 +8,17 @@ Checkboxes are drawn in the window's own colours. In the dark theme an unticked 
 bright white square, and a ticked one took the desktop's orange rather than the window's
 accent.
 
+### Starting out, smoothed
+
+- The clone and create forms, and the form for adding a remote, put the cursor in their first
+  empty field and submit on Enter. A repository's first remote is filled in as `origin`.
+- "Add remote" waits for a URL as well as a name.
+- Fetch, pull and push are off, with a tooltip saying why, until the repository has a remote.
+  Fetching used to do nothing and say nothing, and pushing answered with git's "No configured
+  push destination".
+- Stash is off until the first commit, and says why. It used to fail with "git stash exited
+  with 1" and nothing after it, because the one line git gives was silenced.
+
 ### Small things found in a day's work
 
 - Double-clicking a branch in the side panel checks it out, as double-clicking its label in
