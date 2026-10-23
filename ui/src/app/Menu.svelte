@@ -54,6 +54,20 @@
   } = $props();
 
   let panel = $state<HTMLDivElement | null>(null);
+  /**
+   * Gives a row a tooltip only when its label or hint has been cut short.
+   *
+   * Every row used to carry one, so pausing on any item put a black box repeating its own
+   * words over the row beneath it, which was usually the next thing to be read.
+   */
+  function explainIfCut(row: HTMLElement, item: { label: string; hint?: string }) {
+    const cut = [...row.querySelectorAll<HTMLElement>('.label, .hint')].some(
+      (el) => el.scrollWidth > el.clientWidth,
+    );
+    if (cut) row.title = item.hint ? `${item.label}\n${item.hint}` : item.label;
+    else row.removeAttribute('title');
+  }
+
   /** Which submenu is open, by index, so only one is ever showing. */
   let open = $state<number | null>(null);
 
@@ -197,7 +211,7 @@
         class="row"
         class:danger={item.danger}
         disabled={item.disabled}
-        title={item.hint ? `${item.label}\n${item.hint}` : item.label}
+        onpointerenter={(e) => explainIfCut(e.currentTarget, item)}
         onclick={() => choose(item)}
       >
         <span class="tick">{#if item.checked}<Icon name="check" size={12} />{/if}</span>

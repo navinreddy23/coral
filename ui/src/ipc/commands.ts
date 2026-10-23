@@ -574,6 +574,11 @@ export function remoteList(path: string): Promise<Remote[]> {
   return invoke<Remote[]>('remote_list', { path });
 }
 
+/** Whether a remote has a tag, asked of the remote: nothing local records which tags it has. */
+export function remoteHasTag(path: string, remote: string, tag: string): Promise<boolean> {
+  return invoke<boolean>('remote_has_tag', { path, remote, tag });
+}
+
 export function remoteEdit(path: string, edit: RemoteEdit): Promise<Remote[]> {
   return invoke<Remote[]>('remote_edit', { path, edit });
 }

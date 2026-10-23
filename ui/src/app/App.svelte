@@ -20,6 +20,7 @@
     commitDetail,
     openInBrowser,
     patchRangeSize,
+    remoteHasTag,
     pickPatchFiles,
     revAncestry,
     type PullRequest,
@@ -1651,6 +1652,20 @@
    * until it is deleted there too", with nothing offering to do that.
    */
   async function deleteRemoteTag(name: string, remote: string) {
+    // Asked first, because the menu cannot know: a tag never pushed was offered for deletion
+    // from the remote, and confirming it ended in git's "remote ref does not exist".
+    // A remote that cannot be reached is left to the push below to report.
+    if (info) {
+      const held = await remoteHasTag(info.path, remote, name).catch(() => true);
+      if (!held) {
+        toasts.push(
+          'info',
+          `${remote} has no tag ${name}`,
+          'It was never pushed there, or it has gone already.',
+        );
+        return;
+      }
+    }
     const { choice } = await ask({
       title: `Delete ${name} from ${remote}?`,
       detail:

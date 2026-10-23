@@ -64,6 +64,17 @@ pub async fn remote_edit(path: String, edit: RemoteEdit) -> Result<Vec<Remote>, 
     Ok(loc.remotes(&runner).await?)
 }
 
+/// Whether `remote` has the tag `tag`, asked of the remote itself.
+///
+/// # Errors
+/// Propagates git failures, including an unreachable remote.
+#[tauri::command]
+pub async fn remote_has_tag(path: String, remote: String, tag: String) -> Result<bool, IpcError> {
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc.remote_tag(&runner, &remote, &tag).await?.is_some())
+}
+
 /// Where a commit is served on the web, for the remote the repository was cloned from.
 ///
 /// Returns `None` rather than failing when the remote is not a host we recognise: an internal
