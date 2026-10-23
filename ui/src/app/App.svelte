@@ -902,6 +902,16 @@
    * still where they were, so nothing is lost either way.
    */
   async function offerToSayWhoYouAre() {
+    if (await sayWhoYouAre()) await recordCommit(false);
+  }
+
+  /**
+   * Asks for a name and an address and keeps them, answering whether it did.
+   *
+   * Apart from the commit it is retrying, because continuing a merge or a rebase records
+   * commits too and stopped on the same refusal with git's raw text and no way to answer it.
+   */
+  async function sayWhoYouAre(): Promise<boolean> {
     const was = profiles.current.settings;
     const name = await askText(
       'Git does not know who you are',
@@ -909,7 +919,7 @@
         'repository opened under it uses them.\n\nYour name:',
       was.user.name ?? '',
     );
-    if (name === null || name.trim() === '') return;
+    if (name === null || name.trim() === '') return false;
 
     const email = await askText(
       'And an address',
@@ -917,7 +927,7 @@
         'Your email address:',
       was.user.email ?? '',
     );
-    if (email === null || email.trim() === '') return;
+    if (email === null || email.trim() === '') return false;
 
     await profiles.setSettings(profiles.current.id, {
       ...was,
@@ -925,11 +935,11 @@
     });
     if (profiles.error !== null) {
       toasts.push('error', 'Could not save that', profiles.error);
-      return;
+      return false;
     }
     // Into this repository's own config as well, so the commit about to be retried carries it.
     if (info) await profiles.applyHere(info.path);
-    await recordCommit(false);
+    return true;
   }
 
   /** Shows the working copy and puts the caret in the summary field. */
@@ -4242,9 +4252,21 @@
    * the effect would depend on the very state it writes and re-run itself until Svelte gave up,
    * which shows as a window that renders nothing at all.
    */
+  /*
+   * Whether the column was last fitted to provisional rows. Commit-time order tangles commits
+   * that share a timestamp into lanes the real walk does not have, and the column only grows:
+   * a twelve-commit straight line made in one second kept a three-lane column for good, with
+   * the messages pushed away from the one lane it drew.
+   */
+  let fittedToProvisional = false;
   $effect(() => {
     const px = laneFit;
-    if (px > 0) untrack(() => panes.fitGraph(px));
+    const provisional = graph.provisional;
+    untrack(() => {
+      if (fittedToProvisional && !provisional) panes.refit();
+      fittedToProvisional = provisional;
+      if (px > 0) panes.fitGraph(px);
+    });
   });
 
   function laneOf(row: number): number {
@@ -4554,7 +4576,11 @@
     {#if merge.inProgress}
       <!-- A stopped merge or rebase is the only thing that matters until it is settled, so it
            takes the main pane outright rather than sitting behind the graph. -->
-      <MergeTool {merge} onDone={reloadAll} />
+      <MergeTool
+        {merge}
+        onDone={reloadAll}
+        onRefused={async (message) => needsIdentity(message) && (await sayWhoYouAre())}
+      />
     {:else if diff.path !== null}
       <DiffView {diff} onClose={() => diff.close()} onPart={applyPart} />
     {/if}
