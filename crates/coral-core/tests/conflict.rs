@@ -339,6 +339,14 @@ async fn a_rebase_reports_its_sides_as_swapped_with_progress() {
         "a rebase must announce that the sides read backwards"
     );
     assert_eq!(op.head_name.as_deref(), Some("topic"));
+    // Stopped on the first commit, so stage 2 is still the target itself, and the other side
+    // names the commit being replayed, not only the branch it comes from.
+    assert_eq!(op.labels.ours, "main");
+    assert!(
+        op.labels.theirs.starts_with("topic: ") && op.labels.theirs.ends_with("(topic 1)"),
+        "{}",
+        op.labels.theirs
+    );
     let progress = op.progress.expect("a rebase reports how far it has got");
     assert_eq!(progress.current, 1);
     assert_eq!(progress.total, 2);
@@ -978,4 +986,31 @@ async fn a_side_can_be_taken_for_a_file_no_longer_on_disk() {
             .git(["status", "--porcelain", "--", "f.txt"])
             .starts_with("MD")
     );
+}
+
+/// Past the first commit, stage 2 holds what has been replayed so far, not the target as it was.
+#[tokio::test]
+async fn a_rebase_past_its_first_commit_says_its_target_has_moved_on() {
+    let repo = TestRepo::new().write("f.txt", "base\n").commit("base");
+    repo.git(["checkout", "--quiet", "-b", "topic"]);
+    let repo = repo.write("g.txt", "fine\n").commit("topic 1");
+    let repo = repo.write("f.txt", "topic two\n").commit("topic 2");
+    repo.git(["checkout", "--quiet", "main"]);
+    let repo = repo.write("f.txt", "main\n").commit("main change");
+    repo.git(["checkout", "--quiet", "topic"]);
+
+    let (runner, loc) = open(&repo).await;
+    let stopped = loc.rebase(&runner, "main", false).await.unwrap();
+    assert!(!stopped.completed);
+    let op = loc.operation(&runner).await.unwrap();
+    assert_eq!(op.labels.ours, "main and what is replayed so far");
+    assert!(
+        op.labels.theirs.ends_with("(topic 2)"),
+        "{}",
+        op.labels.theirs
+    );
+
+    loc.op(&runner, coral_core::ops::OpAction::Abort)
+        .await
+        .unwrap();
 }

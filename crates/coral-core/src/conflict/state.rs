@@ -234,12 +234,33 @@ impl RepoLocation {
                 Some(oid) => self.describe(runner, oid).await,
                 None => "the target branch".to_owned(),
             };
+            // Past the first commit, stage 2 is no longer the target as it was: it holds the
+            // commits replayed onto it so far. Named as the target alone, a rebase of main
+            // onto main~4 showed Step 9's content under "main~4", which names Step 8.
+            let moved_on = match (&onto, self.head(runner).await) {
+                (Some(onto), Ok(crate::repo::Head::Detached { oid })) => &oid != onto,
+                _ => false,
+            };
+            // The commit being replayed, as git names one in its own conflict message, so a
+            // rebase of a branch onto its own history does not show "main" against "main~4".
+            let replaying = match self.read_head_file("REBASE_HEAD") {
+                Some(oid) => self.name_of(runner, &oid).await,
+                None => None,
+            };
+            let branch = head_name
+                .clone()
+                .unwrap_or_else(|| "your commits".to_owned());
             SideLabels {
                 // Stage 2 during a rebase is the target, not the user's work.
-                ours: onto_label,
-                theirs: head_name
-                    .clone()
-                    .unwrap_or_else(|| "your commits".to_owned()),
+                ours: if moved_on {
+                    format!("{onto_label} and what is replayed so far")
+                } else {
+                    onto_label
+                },
+                theirs: match replaying {
+                    Some(commit) => format!("{branch}: {commit}"),
+                    None => branch,
+                },
                 swapped: true,
             }
         };
