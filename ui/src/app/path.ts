@@ -70,3 +70,9 @@ export function beside(path: string | undefined): string | undefined {
   const at = path.replace(/[/\\]+$/u, '').lastIndexOf('/');
   return at > 0 ? path.slice(0, at) : undefined;
 }
+
+/** The last part of a path: the folder or file's own name. */
+export function baseName(path: string): string {
+  const trimmed = path.replace(/[/\\]+$/u, '');
+  return trimmed.slice(trimmed.lastIndexOf('/') + 1);
+}
