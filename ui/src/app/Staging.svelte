@@ -290,6 +290,8 @@
         Stage something to commit
       {:else if draft.summary.trim().length === 0}
         Write a summary to commit
+      {:else if draft.templated}
+        Fill in the template to commit
       {:else if draft.amend}
         Amend the previous commit
       {:else}

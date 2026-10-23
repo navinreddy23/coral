@@ -30,10 +30,46 @@ export class CommitState {
       : `${this.summary.trim()}\n\n${this.description.trim()}`,
   );
 
+  /**
+   * The repository's commit template as a message, when it has one.
+   *
+   * Where the box starts instead of empty. As at git's own editor, a message left exactly as
+   * the template is no message: a template like `[TICKET-] ` committed unread is the mistake
+   * it exists to prevent.
+   */
+  #template = $state<string | null>(null);
+
+  /** True while the box holds the template untouched, which is no message yet. */
+  templated = $derived(this.#template !== null && this.message === this.#template);
+
+  /** Nothing typed: empty, or only what the template put there. */
+  get untouched(): boolean {
+    return this.message === '' || this.templated;
+  }
+
+  /** Takes the repository's template, and starts the box from it if nothing is typed yet. */
+  useTemplate(text: string | null): void {
+    const wasUntouched = this.untouched;
+    this.#template = text === null ? null : asMessage(text);
+    if (wasUntouched) this.#blank();
+  }
+
+  /** Back to where a new message starts: the template, or nothing. */
+  #blank(): void {
+    this.#fill(this.#template ?? '');
+  }
+
+  #fill(message: string): void {
+    const [summary, ...rest] = message.split('\n');
+    this.summary = summary ?? '';
+    this.description = rest.join('\n').trim();
+  }
+
   /** Whether there is something to record. Amending needs no staged file; committing does. */
   ready(worktree: WorktreeState): boolean {
     return (
       this.summary.trim().length > 0 &&
+      !this.templated &&
       (worktree.staged.length > 0 || this.amend) &&
       !worktree.busy
     );
@@ -59,9 +95,7 @@ export class CommitState {
    * where this one is the starting point for a commit that is going to be made either way.
    */
   prepare(message: string): void {
-    const [summary, ...rest] = message.split('\n');
-    this.summary = summary ?? '';
-    this.description = rest.join('\n').trim();
+    this.#fill(message);
     this.#prepared = this.message;
   }
 
@@ -74,10 +108,7 @@ export class CommitState {
    * message now, whatever it started as.
    */
   withdraw(): void {
-    if (this.#prepared !== null && this.message === this.#prepared) {
-      this.summary = '';
-      this.description = '';
-    }
+    if (this.#prepared !== null && this.message === this.#prepared) this.#blank();
     this.#prepared = null;
   }
 
@@ -86,10 +117,7 @@ export class CommitState {
 
   /** Empties a seeded message again, unless it has been edited since it was put there. */
   unseed(): void {
-    if (this.#seeded !== null && this.message === this.#seeded) {
-      this.summary = '';
-      this.description = '';
-    }
+    if (this.#seeded !== null && this.message === this.#seeded) this.#blank();
     this.#seeded = null;
   }
 
@@ -98,10 +126,16 @@ export class CommitState {
   }
 
   clear(): void {
-    this.summary = '';
-    this.description = '';
+    this.#blank();
     this.amend = false;
     this.#seeded = null;
     this.#prepared = null;
   }
+}
+
+/** A template's text in the shape `message` gives a draft, so the two can be compared. */
+function asMessage(text: string): string {
+  const [summary, ...rest] = text.split('\n');
+  const body = rest.join('\n').trim();
+  return body === '' ? (summary ?? '').trim() : `${(summary ?? '').trim()}\n\n${body}`;
 }

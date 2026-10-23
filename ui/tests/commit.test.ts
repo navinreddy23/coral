@@ -122,3 +122,49 @@ describe('taking a prepared message back', () => {
     expect(draft.summary).toBe('Something else entirely');
   });
 });
+
+describe('the commit template', () => {
+  const TEMPLATE = '[TICKET-]\n\nWhy:';
+
+  it('is where an empty box starts', () => {
+    const draft = new CommitState();
+    draft.useTemplate(TEMPLATE);
+    expect(draft.summary).toBe('[TICKET-]');
+    expect(draft.description).toBe('Why:');
+    expect(draft.untouched).toBe(true);
+  });
+
+  it('is no message until it is edited, as at git\'s own editor', () => {
+    const draft = new CommitState();
+    draft.useTemplate(TEMPLATE);
+    expect(draft.ready(staged)).toBe(false);
+    draft.summary = '[TICKET-42] fix the parser';
+    expect(draft.templated).toBe(false);
+    expect(draft.ready(staged)).toBe(true);
+  });
+
+  it('never replaces something already typed', () => {
+    const draft = new CommitState();
+    draft.summary = 'mine';
+    draft.useTemplate(TEMPLATE);
+    expect(draft.summary).toBe('mine');
+  });
+
+  it('comes back after a commit, and goes when the repository has none', () => {
+    const draft = new CommitState();
+    draft.useTemplate(TEMPLATE);
+    draft.summary = '[TICKET-42] done';
+    draft.clear();
+    expect(draft.summary).toBe('[TICKET-]');
+    draft.useTemplate(null);
+    expect(draft.message).toBe('');
+  });
+
+  it('gives way to an amend\'s message and returns when the amend is unticked', () => {
+    const draft = new CommitState();
+    draft.useTemplate(TEMPLATE);
+    draft.seed('fix: old', '');
+    draft.unseed();
+    expect(draft.summary).toBe('[TICKET-]');
+  });
+});

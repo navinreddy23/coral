@@ -2,9 +2,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use coral_app_lib::{
-    actions, activity, avatar, bisect, blob, commands, conflicts, experimental, graph, hosting,
-    profile, recent, reflog, remotes, scope, search, signing, ssh, tabs, terminal, transfer,
-    update, version, watcher,
+    actions, activity, avatar, bisect, blob, commands, conflicts, experimental, gitignore, graph,
+    hosting, profile, recent, reflog, remotes, scope, search, signing, ssh, tabs, template,
+    terminal, transfer, update, version, watcher,
 };
 
 fn main() {
@@ -175,6 +175,8 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         remotes::remote_list,
         remotes::remote_has_tag,
         remotes::branch_set_upstream,
+        gitignore::ignore,
+        template::commit_template,
         remotes::remote_edit,
         remotes::commit_url,
         watcher::watch_repo,
