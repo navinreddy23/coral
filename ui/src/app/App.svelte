@@ -253,16 +253,26 @@
   }
 
   /**
-   * The selected row's own menu, opened beside it.
+   * The menu of whatever the keyboard is on, opened beside it.
    *
-   * The rows are kept out of the tab order, so the webview's keyboard menu event lands on the
-   * page instead of a row and only the mouse could reach a commit's actions.
+   * A file or a branch that has the focus sits in a row with a menu of its own. Otherwise it is
+   * the selected commit's: the graph's rows are kept out of the tab order, so the webview's
+   * keyboard menu event lands on the page instead of a row and only the mouse reached them.
    */
   function openSelectedMenu() {
-    const row = document.querySelector<HTMLElement>('ul.rows > li.row.selected');
+    const focused = document.activeElement;
+    // Not a graph row, though: one keeps the focus after a click while j and k move the
+    // selection on, and the menu is for the selected commit.
+    const listed =
+      focused instanceof HTMLElement && !focused.closest('ul.rows')
+        ? focused.closest<HTMLElement>('li, .row')
+        : null;
+    const row = listed ?? document.querySelector<HTMLElement>('ul.rows > li.row.selected');
     if (!row) return;
     const box = row.getBoundingClientRect();
-    row.dispatchEvent(
+    // From the focused control itself when it is in a row, so the event passes every element
+    // between it and the row, whichever of them holds the menu.
+    (listed && focused instanceof HTMLElement ? focused : row).dispatchEvent(
       new MouseEvent('contextmenu', {
         bubbles: true,
         cancelable: true,

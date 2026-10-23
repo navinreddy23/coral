@@ -46,8 +46,9 @@ accent.
 
 The Menu key, or Shift+F10, opens the selected commit's menu, and every menu can be worked
 with the keys: the arrows move through it, Right and Left open and close a submenu, Enter
-chooses and Escape closes. A commit's actions were reachable only with the mouse, and the
-arrow keys moved the graph's selection beneath an open menu.
+chooses and Escape closes. On a file or a branch that has the focus, the key opens that
+item's menu instead. A commit's actions were reachable only with the mouse, and the arrow keys
+moved the graph's selection beneath an open menu.
 
 ### Two remotes
 
