@@ -287,13 +287,24 @@ impl RepoLocation {
     ///
     /// # Errors
     /// Propagates git failures, including git's own refusal when there is nothing in scope
-    /// to stash.
+    /// to stash, and [`CoralError::Refused`] before the first commit.
     pub async fn stash_push(
         &self,
         runner: &GitRunner,
         message: Option<&str>,
         scope: &StashScope,
     ) -> Result<(), CoralError> {
+        // Asked here rather than left to git: `--quiet` silences the one line git gives for it,
+        // "You do not have the initial commit yet", and the window said only that git had
+        // exited with 1.
+        if matches!(self.head(runner).await?, crate::repo::Head::Unborn { .. }) {
+            return Err(CoralError::Refused {
+                label: "stash",
+                detail: "there is no commit yet to stash against. Make the first commit, then \
+                         stash"
+                    .to_owned(),
+            });
+        }
         let mut cmd =
             GitCommand::write("stash", self.display_path()).args(["stash", "push", "--quiet"]);
         if let Some(m) = message {

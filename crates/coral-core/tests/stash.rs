@@ -82,3 +82,21 @@ async fn a_named_stash_keeps_the_name_and_the_branch() {
     assert_eq!(stack[0].message, "half a refactor");
     assert!(stack[0].name().starts_with("topic@"));
 }
+
+#[tokio::test]
+async fn stashing_before_the_first_commit_says_why_it_cannot() {
+    let repo = TestRepo::new().write("a.txt", "1\n");
+    let (runner, loc) = open(&repo).await;
+    let err = loc
+        .stash_push(
+            &runner,
+            None,
+            &coral_core::ops::StashScope::Everything {
+                include_untracked: true,
+            },
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "refused");
+    assert!(err.to_string().contains("first commit"), "{err}");
+}
