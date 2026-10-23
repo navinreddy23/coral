@@ -345,6 +345,26 @@ impl RepoLocation {
         let Some(tag) = refspec.strip_prefix("refs/tags/") else {
             return Ok("--force-with-lease".to_owned());
         };
+        let held = self
+            .remote_tag(runner, remote, tag)
+            .await?
+            .unwrap_or_default();
+        Ok(format!("--force-with-lease=refs/tags/{tag}:{held}"))
+    }
+
+    /// What `remote` holds under `refs/tags/{tag}`, or `None` when it has no such tag.
+    ///
+    /// Asked of the remote itself: git keeps no record of which tags a remote has, so nothing
+    /// local can say whether a tag was ever pushed there.
+    ///
+    /// # Errors
+    /// Propagates git failures, including an unreachable remote.
+    pub async fn remote_tag(
+        &self,
+        runner: &GitRunner,
+        remote: &str,
+        tag: &str,
+    ) -> Result<Option<String>, CoralError> {
         let out = runner
             .output(
                 GitCommand::network("ls-remote", self.display_path())
@@ -353,14 +373,12 @@ impl RepoLocation {
             )
             .await?;
         // Two lines for an annotated tag: the tag object, then the commit it peels to under
-        // `^{}`. The ref points at the first, and that is what the lease is about.
-        let held = String::from_utf8_lossy(&out.stdout)
+        // `^{}`. The ref points at the first.
+        Ok(String::from_utf8_lossy(&out.stdout)
             .lines()
             .find(|line| line.ends_with(&format!("refs/tags/{tag}")))
             .and_then(|line| line.split_whitespace().next())
-            .unwrap_or_default()
-            .to_owned();
-        Ok(format!("--force-with-lease=refs/tags/{tag}:{held}"))
+            .map(str::to_owned))
     }
 
     /// Pushes to a remote.
