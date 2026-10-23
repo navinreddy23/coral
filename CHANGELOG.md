@@ -42,6 +42,13 @@ accent.
 - Stash is off until the first commit, and says why. It used to fail with "git stash exited
   with 1" and nothing after it, because the one line git gives was silenced.
 
+### Menus from the keyboard
+
+The Menu key, or Shift+F10, opens the selected commit's menu, and every menu can be worked
+with the keys: the arrows move through it, Right and Left open and close a submenu, Enter
+chooses and Escape closes. A commit's actions were reachable only with the mouse, and the
+arrow keys moved the graph's selection beneath an open menu.
+
 ### Two remotes
 
 A remote branch's menu can make the local branch of the same name track it instead: "Make main

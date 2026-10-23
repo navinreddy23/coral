@@ -229,7 +229,7 @@
 
   /** Which shortcuts actually do something today; the help overlay dims the rest. */
   const LIVE = new Set([
-    'select.next', 'select.previous', 'select.first', 'select.last',
+    'select.next', 'select.previous', 'select.first', 'select.last', 'select.menu',
     'stage.all', 'unstage.all', 'tab.new', 'tab.close', 'tab.next', 'tab.previous',
     'palette', 'repo.open', 'terminal', 'search.commits',
     'panel.left', 'panel.detail', 'help', 'undo', 'redo',
@@ -252,7 +252,29 @@
     void reveal(next);
   }
 
+  /**
+   * The selected row's own menu, opened beside it.
+   *
+   * The rows are kept out of the tab order, so the webview's keyboard menu event lands on the
+   * page instead of a row and only the mouse could reach a commit's actions.
+   */
+  function openSelectedMenu() {
+    const row = document.querySelector<HTMLElement>('ul.rows > li.row.selected');
+    if (!row) return;
+    const box = row.getBoundingClientRect();
+    row.dispatchEvent(
+      new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        clientX: box.left + box.width / 2,
+        clientY: box.bottom,
+      }),
+    );
+  }
+
   function onKey(event: KeyboardEvent) {
+    // An open menu has the keys: the arrows that step through it moved the graph beneath.
+    if (event.target instanceof Element && event.target.closest('[role="menu"]')) return;
     const e = {
       key: event.key,
       ctrl: event.ctrlKey,
@@ -286,6 +308,7 @@
       case 'select.previous': move(-1); break;
       case 'select.first': move(-Number.MAX_SAFE_INTEGER); break;
       case 'select.last': move(Number.MAX_SAFE_INTEGER); break;
+      case 'select.menu': openSelectedMenu(); break;
       case 'stage.all': void worktree.stage(worktree.unstaged.map((f) => f.path), true); break;
       case 'unstage.all': void worktree.stage(worktree.staged.map((f) => f.path), false); break;
       case 'tab.new': void openAnother(); break;

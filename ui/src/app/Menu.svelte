@@ -43,6 +43,7 @@
 </script>
 
 <script lang="ts">
+  import { tick } from 'svelte';
   import Icon from './Icon.svelte';
   import { fitPanel, fitSubmenu } from './placement';
 
@@ -124,11 +125,59 @@
     item.run();
   }
 
+  /**
+   * Focus starts on the first row, so the arrow keys and Enter reach the menu at all.
+   *
+   * A menu opened with the pointer shows no ring for it: focus-visible follows whatever was
+   * used last.
+   */
+  $effect(() => {
+    panel?.querySelector<HTMLButtonElement>('.row:not(:disabled)')?.focus();
+  });
+
+  /** The rows the arrow keys step through: the open submenu's while focus is in it. */
+  function rowsBeside(row: Element | null): HTMLButtonElement[] {
+    const list = row?.closest('.sub') ?? panel;
+    if (!list) return [];
+    return [
+      ...list.querySelectorAll<HTMLButtonElement>(
+        ':scope > .row:not(:disabled), :scope > .wrap > .row:not(:disabled)',
+      ),
+    ];
+  }
+
+  function step(by: number) {
+    const here = document.activeElement;
+    const rows = rowsBeside(here);
+    if (rows.length === 0) return;
+    const at = rows.indexOf(here as HTMLButtonElement);
+    const next = at < 0 ? (by > 0 ? 0 : rows.length - 1) : (at + by + rows.length) % rows.length;
+    rows[next]?.focus();
+  }
+
+  async function enter(i: number) {
+    open = i;
+    await tick();
+    sub?.querySelector<HTMLButtonElement>('.row:not(:disabled)')?.focus();
+  }
+
+  function leave() {
+    const parent = document.activeElement?.closest('.sub')?.parentElement;
+    if (!parent) return;
+    open = null;
+    parent.querySelector<HTMLButtonElement>(':scope > .row')?.focus();
+  }
+
   function onKey(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      onClose();
-    }
+    const here = document.activeElement;
+    if (event.key === 'Escape') onClose();
+    else if (event.key === 'ArrowDown') step(1);
+    else if (event.key === 'ArrowUp') step(-1);
+    else if (event.key === 'ArrowRight' && here?.getAttribute('aria-haspopup') === 'true') {
+      (here as HTMLButtonElement).click();
+    } else if (event.key === 'ArrowLeft') leave();
+    else return;
+    event.preventDefault();
   }
 </script>
 
@@ -166,7 +215,12 @@
         onmouseenter={() => (open = i)}
         onmouseleave={() => (open = open === i ? null : open)}
       >
-        <button class="row" aria-haspopup="true" aria-expanded={open === i}>
+        <button
+          class="row"
+          aria-haspopup="true"
+          aria-expanded={open === i}
+          onclick={() => void enter(i)}
+        >
           <span class="tick"></span>
           <span class="label">{item.label}</span>
           <span class="more"><Icon name="chevronRight" size={13} /></span>

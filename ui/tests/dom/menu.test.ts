@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { render } from '@testing-library/svelte';
+import { render, waitFor } from '@testing-library/svelte';
 import { fireEvent } from '@testing-library/dom';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -32,6 +32,27 @@ function row(view: { container: HTMLElement }, label: string): HTMLElement {
 }
 
 describe('the context menu', () => {
+  it('can be worked from the keyboard alone', async () => {
+    const run = vi.fn();
+    const view = render(Menu, { x: 10, y: 10, items: items(run), onClose: vi.fn() });
+    const button = (label: string) => row(view, label).closest('button') as HTMLElement;
+    await waitFor(() => expect(document.activeElement).toBe(button('Checkout this commit')));
+
+    await fireEvent.keyDown(window, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(button('Reset main to this commit'));
+    await fireEvent.keyDown(window, { key: 'ArrowRight' });
+    await waitFor(() => expect(document.activeElement).toBe(button('Soft')));
+    await fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    expect(document.activeElement).toBe(button('Reset main to this commit'));
+
+    // The disabled row is passed over, and the ends wrap round.
+    await fireEvent.keyDown(window, { key: 'ArrowDown' });
+    await fireEvent.keyDown(window, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(button('Checkout this commit'));
+    await fireEvent.keyDown(window, { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(button('Drop commit'));
+  });
+
   it('keeps the whole of a row on the row, since its width is capped', async () => {
     // "Push feature/good-name to origin" beside "the upstream stays where it is" came out as
     // "Push feature/good-name to ori… the upstream stays wher…", and a menu row carried no

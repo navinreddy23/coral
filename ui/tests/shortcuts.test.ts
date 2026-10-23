@@ -23,6 +23,12 @@ describe('shortcuts', () => {
     expect(resolve(key('End'), 'global')?.id).toBe('select.last');
   });
 
+  it('opens the selected row\'s menu from the Menu key and Shift+F10', () => {
+    expect(resolve(key('ContextMenu'), 'global')?.id).toBe('select.menu');
+    expect(resolve(key('F10', { shift: true }), 'global')?.id).toBe('select.menu');
+    expect(resolve(key('F10'), 'global')).toBeNull();
+  });
+
   it('opens Preferences on Ctrl+comma, and not on a plain comma', () => {
     expect(resolve(key(',', { ctrl: true }), 'global')?.id).toBe('preferences');
     expect(resolve(key(','), 'global')).toBeNull();
