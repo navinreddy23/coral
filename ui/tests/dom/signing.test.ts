@@ -79,6 +79,16 @@ describe('the commit signing pane', () => {
     expect(on?.textContent?.trim()).toBe('This repository');
   });
 
+  it('lists the keys of the format picked, before it is saved', async () => {
+    const { container } = pane();
+    const format = field<HTMLSelectElement>(container, '#fmt');
+    format.value = 'ssh';
+    await fireEvent.change(format);
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith('signing_keys', { format: 'ssh', program: '' }),
+    );
+  });
+
   it('says when everything is inherited', async () => {
     const { container } = pane();
     expect(container.querySelector('.note')?.textContent).toContain('Inheriting everything');

@@ -47,7 +47,7 @@
     const chosen = await pickProgram();
     if (chosen !== null && draft) {
       draft.program = chosen;
-      await signing.refreshKeys();
+      await signing.refreshKeys(draft);
     }
   }
 
@@ -104,7 +104,7 @@
           value={draft.format}
           onchange={(e) => {
             if (draft) draft.format = e.currentTarget.value as SigningFormat;
-            void signing.refreshKeys();
+            void signing.refreshKeys(draft);
           }}
         >
           {#each FORMATS as f (f.value)}
@@ -153,7 +153,7 @@
             class="refresh"
             title="Look for keys again"
             disabled={signing.loadingKeys}
-            onclick={() => void signing.refreshKeys()}
+            onclick={() => void signing.refreshKeys(draft)}
           >
             <Icon name="restart" size={13} />
           </button>
@@ -259,15 +259,15 @@
   dd { margin: 0; min-width: 0; }
   .row { display: flex; gap: var(--space-2); align-items: center; }
 
-  input, select {
+  input:not([type='checkbox']), select {
     font: inherit; font-size: var(--text-base); padding: 3px var(--space-2);
     border: 1px solid var(--border-strong); border-radius: var(--radius-1);
     background: var(--bg-0); color: var(--fg-0); min-width: 0;
   }
   /* Only the text fields. A bare `input` rule stretches the checkboxes to 300px too, which
-     pushes their labels halfway across the pane. */
+     pushes their labels halfway across the pane, and its padding and border override the
+     drawn box the base sheet gives every checkbox. */
   input[type='text'], input[type='password'] { width: 300px; max-width: 100%; }
-  input[type='checkbox'] { width: auto; flex: 0 0 auto; }
   select { width: 310px; max-width: 100%; }
   input:focus, select:focus { border-color: var(--accent); outline: none; }
 

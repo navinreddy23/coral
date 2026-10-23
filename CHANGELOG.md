@@ -54,6 +54,10 @@ accent.
   instead. The discard button used to drop onto a line of its own.
 - Staging a whole file moves its diff to the staged side, and discarding it closes the diff.
   The panel stayed on a side the file had left, saying it had no changes there.
+- Choosing SSH, or another program, on the commit signing page lists the keys it can use at
+  once. The list stayed on the saved format's keys until Save, so SSH keys looked missing.
+- The checkboxes on the commit signing and SSH pages, and the draft box on a new pull request,
+  are drawn like every other checkbox. They were empty bars without a tick.
 
 ### The palette finds the command you named
 
