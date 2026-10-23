@@ -119,7 +119,7 @@
       change{(worktree.status?.entries.length ?? 0) === 1 ? '' : 's'}
     </span>
     {#if branch}
-      <span class="on">on</span><span class="branch">{branch}</span>
+      <span class="on">on</span><span class="branch" title={branch}>{branch}</span>
     {/if}
     <div class="toggle">
       <button class:on={grouping === 'path'} onclick={() => onGrouping('path')}>Path</button>
@@ -318,13 +318,19 @@
   .panel > section > .flat,
   .panel > section > :global(.tree) { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
   .compose { flex: 0 0 auto; }
+  /*
+   * One line, whatever the branch is called. It used to wrap, and a branch name like
+   * `feature/shout` was enough to put the discard button on a line of its own under the count,
+   * away from everything else in the header. The branch name gives way instead.
+   */
   header {
-    display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+    display: flex; align-items: center; gap: var(--space-2);
     padding-bottom: var(--space-2); border-bottom: 1px solid var(--border);
   }
-  .count { font-weight: var(--weight-semibold); color: var(--fg-0); }
+  .count { font-weight: var(--weight-semibold); color: var(--fg-0); white-space: nowrap; }
   .on { color: var(--fg-2); }
   .branch {
+    flex: 0 1 auto; min-width: 0;
     font-size: var(--text-sm); padding: 1px 8px; border-radius: var(--radius-pill);
     background: var(--accent-soft); color: var(--accent);
     max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
