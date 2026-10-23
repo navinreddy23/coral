@@ -18,6 +18,12 @@ accent.
   push destination".
 - A name git refuses, for a branch or a tag, is asked for again with git's reason in the
   dialog. The reason used to be in a notice hidden behind it.
+- Making a working tree suggests a new folder beside the repository, which git creates. It
+  opened a folder picker at the repository's parent, which git then refused for not being
+  empty. The branch can be left empty for a detached checkout, as the dialog says.
+- A new working tree appears in the side panel at once, and removing one closes its tab and
+  takes away the failure notice from the first attempt once it is gone. Removal asks about
+  throwing changes away only when changes are what stopped it.
 - Continuing or skipping in a merge, rebase or cherry-pick asks who you are when git has not
   been told, as committing already did, and then carries on. It stopped on git's "unable to
   auto-detect email address".
