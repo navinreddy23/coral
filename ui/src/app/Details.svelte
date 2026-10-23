@@ -2,6 +2,7 @@
   import FileTree from './FileTree.svelte';
   import Icon from './Icon.svelte';
   import { shortAge } from './age';
+  import { describe as describeSignature } from './verification';
   import { copyText } from './clipboard';
   import { authorColourIndex, initialsOf } from '../graph/initials';
   import { buildTree } from '../diff/tree';
@@ -87,6 +88,8 @@
       (detail.commit.author.name !== detail.commit.committer.name ||
         detail.commit.author.time !== detail.commit.committer.time),
   );
+
+  const signature = $derived(detail ? describeSignature(detail.verification) : null);
 
   /**
    * Whether to list the whole repository at this commit rather than what it changed.
@@ -251,6 +254,13 @@
           {#each detail.commit.parents as parent (parent)}
             <span class="parent">{parent.slice(0, 12)}</span>
           {/each}
+        </dd>
+      {/if}
+      {#if signature}
+        <dt>Signature</dt>
+        <dd class="signature {signature.tone}">
+          {signature.text}
+          {#if signature.why}<span class="why">{signature.why}</span>{/if}
         </dd>
       {/if}
     </dl>
@@ -419,6 +429,10 @@
      without the button wrapping under it. */
   dd.break { display: flex; align-items: flex-start; gap: var(--space-1); }
   .oid { min-width: 0; }
+  .signature.ok { color: var(--ok); }
+  .signature.warn { color: var(--warn); }
+  .signature.danger { color: var(--danger); }
+  .why { display: block; color: var(--fg-2); font-size: var(--text-sm); }
   .copy {
     flex: 0 0 auto; display: flex; padding: 2px; margin-top: -1px; cursor: pointer;
     background: var(--bg-0); border: 0; border-radius: var(--radius-1); color: var(--fg-2);

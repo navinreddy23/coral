@@ -31,6 +31,7 @@ pub mod stash;
 pub mod status;
 pub mod submodule;
 pub mod undo;
+pub mod verification;
 pub mod watch;
 pub mod worktree;
 

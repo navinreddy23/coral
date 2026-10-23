@@ -109,6 +109,7 @@ function wire() {
             body: '',
           },
           files: [{ path: 'one.txt', oldPath: null, change: 'modified' }],
+          verification: { kind: 'unsigned' },
         };
       case 'file_diff':
         return {

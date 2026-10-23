@@ -14,7 +14,10 @@ import Details from '../../src/app/Details.svelte';
 import { authorColourIndex } from '../../src/graph/initials';
 import type { ChangedFile, CommitDetail } from '../../src/ipc/types';
 
-function detail(files: ChangedFile[] = []): CommitDetail {
+function detail(
+  files: ChangedFile[] = [],
+  verification: CommitDetail['verification'] = { kind: 'unsigned' },
+): CommitDetail {
   const who = { name: 'Linus Torvalds', email: 'torvalds@linux-foundation.org', time: 1_756_000_000 };
   return {
     commit: {
@@ -26,6 +29,7 @@ function detail(files: ChangedFile[] = []): CommitDetail {
       body: '',
     },
     files,
+    verification,
   };
 }
 
@@ -65,6 +69,21 @@ describe('the commit panel', () => {
 
     const index = authorColourIndex(d.commit.author.name, 8);
     expect(face.style.background).toBe(`var(--node-${index + 1})`);
+  });
+
+  it('shows a signature only on a signed commit, with git\'s reason when it could not check', () => {
+    const plain = render(Details, { props: { ...props, detail: detail() } });
+    expect(plain.container.textContent).not.toContain('Signature');
+    plain.unmount();
+
+    const reason = 'gpg.ssh.allowedSignersFile needs to be configured';
+    const { container } = render(Details, {
+      props: { ...props, detail: detail([], { kind: 'unchecked', reason }) },
+    });
+    const row = container.querySelector('dd.signature');
+    expect(row?.textContent).toContain('Signed, but git could not check it here');
+    expect(row?.textContent).toContain(reason);
+    expect(row?.classList.contains('warn')).toBe(true);
   });
 
   it('gives each term exactly one description', () => {

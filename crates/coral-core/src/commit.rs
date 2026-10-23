@@ -230,6 +230,7 @@ pub struct ChangedFile {
 pub struct CommitDetail {
     pub commit: Commit,
     pub files: Vec<ChangedFile>,
+    pub verification: crate::verification::Verification,
 }
 
 /// How a revision's files are listed.
@@ -278,6 +279,7 @@ impl crate::repo::RepoLocation {
 
         Ok(CommitDetail {
             files: self.changed_files(runner, rev, listing).await?,
+            verification: self.verification(runner, rev).await?,
             commit,
         })
     }

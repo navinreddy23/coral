@@ -22,6 +22,7 @@ const DETAIL = {
     parents: [],
   },
   files: [{ path: 'one.txt', oldPath: null, change: 'modified' }],
+  verification: { kind: 'unsigned' },
 };
 
 const DIFFER = [

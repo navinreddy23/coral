@@ -129,7 +129,7 @@ body: string, };
 /**
  * Everything the details panel shows for one commit.
  */
-export type CommitDetail = { commit: Commit, files: Array<ChangedFile>, };
+export type CommitDetail = { commit: Commit, files: Array<ChangedFile>, verification: Verification, };
 
 /**
  * What the graph shows next to a row: who wrote it and its first line.
@@ -711,6 +711,11 @@ message: string | null, };
  * What a commit was found to be.
  */
 export type Verdict = "bad" | "good" | "skip";
+
+/**
+ * What git makes of a commit's signature.
+ */
+export type Verification = { "kind": "unsigned" } | { "kind": "good", signer: string, trusted: boolean, } | { "kind": "bad", signer: string, } | { "kind": "expired", signer: string, } | { "kind": "revoked", signer: string, } | { "kind": "unchecked", reason: string, };
 
 /**
  * Why a conflicted path has no lines of its own to choose between.

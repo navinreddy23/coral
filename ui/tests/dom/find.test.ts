@@ -100,6 +100,7 @@ function answers(): Record<string, unknown> {
         body: 'Why it was done.\n\nSigned-off-by: Ada <ada@example.com>',
       },
       files: [],
+      verification: { kind: 'unsigned' },
     },
     watch_repo: { complete: true, detail: null },
     unwatch_repo: null,
