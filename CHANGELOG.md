@@ -16,6 +16,10 @@ accent.
 - Fetch, pull and push are off, with a tooltip saying why, until the repository has a remote.
   Fetching used to do nothing and say nothing, and pushing answered with git's "No configured
   push destination".
+- A name git refuses, for a branch or a tag, is asked for again with git's reason in the
+  dialog. The reason used to be in a notice hidden behind it.
+- Right-clicking a branch or tag label in the graph opens that ref's own menu, with push and
+  delete for a tag. It opened the commit's, which had neither.
 - Stash is off until the first commit, and says why. It used to fail with "git stash exited
   with 1" and nothing after it, because the one line git gives was silenced.
 
