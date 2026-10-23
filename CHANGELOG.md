@@ -18,6 +18,10 @@ accent.
   push destination".
 - A name git refuses, for a branch or a tag, is asked for again with git's reason in the
   dialog. The reason used to be in a notice hidden behind it.
+- Menu items no longer show a tooltip repeating their own label, which covered the item
+  beneath. One appears only when an item's text is cut short.
+- Deleting a tag from a remote that never had it says so, rather than asking to confirm a
+  deletion git would refuse.
 - Right-clicking a branch or tag label in the graph opens that ref's own menu, with push and
   delete for a tag. It opened the commit's, which had neither.
 - Stash is off until the first commit, and says why. It used to fail with "git stash exited
