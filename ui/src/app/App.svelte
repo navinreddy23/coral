@@ -74,7 +74,7 @@
   import { SigningState } from '../state/signing.svelte';
   import { SshState } from '../state/ssh.svelte';
   import { laneColour } from './lane';
-  import { beside, elideRef } from './path';
+  import { baseName, beside, elideRef } from './path';
   import { askUntilAccepted, nameWasRefused, withRefusal } from './prompt';
   import { checkoutOf, divergence, remoteOf, withoutRemote } from './refname';
   import { splitPrefix } from './subject';
@@ -569,6 +569,8 @@
     asksText: boolean;
     /** How many lines the field holds. More than one makes it a box. Absent means one. */
     lines?: number;
+    /** Empty is a valid answer, so the choices are not greyed out without text. */
+    optional?: boolean;
     placeholder: string;
     initial: string;
     choices: Choice[];
@@ -1163,6 +1165,12 @@
       bisect.load(path),
       stashes.load(path),
     ]);
+    // A working tree added or removed moves no ref, so nothing below reloads the list, and the
+    // watcher does not see it either: a new working tree from a commit's menu was in git and
+    // nowhere in the window until something else happened to read the list again.
+    if (action.kind === 'worktreeAdd' || action.kind === 'worktreeRemove') {
+      await worktrees.load(path);
+    }
     const after = refSignature();
     if (before !== after) {
       // `forget` first, as the scope rewalk does and for the same reason: a ref moved, so the
@@ -2158,21 +2166,33 @@
   }
 
   async function worktreeAt(oid: string) {
-    // The repository's own parent, which is where working trees for it go: a new one may not
-    // be made inside the repository, and its siblings are where people keep them. Named as an
-    // empty folder because that is what git will take — the picker offers folders that exist,
-    // and every one of them with anything in it is refused.
-    const where = await pickDirectory(
-      'Choose an empty folder for the new working tree',
-      beside(info?.path),
-    );
-    if (where === null) return;
-    const branch = await askText(
-      'Branch for the new working tree',
-      'Leave it empty to check the commit out detached. Two working trees may not share a branch.',
-      '',
-    );
-    if (branch === null) return;
+    // A folder beside the repository that does not exist yet, which git makes. It used to be a
+    // folder picker opened at the repository's parent, which offered that parent as the
+    // answer and git refused it for not being empty: every folder a picker can choose exists.
+    const parent = beside(info?.path);
+    const suggested = parent && info ? `${parent}/${baseName(info.path)}-${oid.slice(0, 8)}` : '';
+    const placed = await ask({
+      title: 'Where should the new working tree go?',
+      detail: 'A new folder, which git makes. It may not be inside this repository.',
+      asksText: true,
+      placeholder: '',
+      initial: suggested,
+      choices: [{ id: 'next', label: 'Next', primary: true }],
+    });
+    if (placed.choice === null || placed.text.trim() === '') return;
+    const where = placed.text.trim();
+    const named = await ask({
+      title: 'Branch for the new working tree',
+      detail:
+        'Leave it empty to check the commit out detached. Two working trees may not share a branch.',
+      asksText: true,
+      optional: true,
+      placeholder: 'no branch: detached',
+      initial: '',
+      choices: [{ id: 'create', label: 'Create working tree', primary: true }],
+    });
+    if (named.choice === null) return;
+    const branch = named.text;
     await act({
       kind: 'worktreeAdd',
       path: where,
@@ -3996,10 +4016,12 @@
       choices: [{ id: 'go', label: 'Remove it', danger: true }],
     });
     if (choice === null) return;
-    const done = await act({ kind: 'worktreeRemove', path: tree.path, force: false });
-    if (!done) {
-      // git's own refusal, which is what it says when the tree has changes in it or files it
-      // does not track. Forcing is a second question rather than a flag on the first.
+    const before = new Set(toasts.items.map((t) => t.id));
+    let done = await act({ kind: 'worktreeRemove', path: tree.path, force: false });
+    // Only git's refusal over changes is worth the second question. Any other failure, a
+    // locked tree say, is not something throwing changes away would fix.
+    if (!done && /modified or untracked files/u.test(actions.report?.text ?? '')) {
+      // Forcing is a second question rather than a flag on the first.
       const { choice: anyway } = await ask({
         title: 'It has changes in it. Remove it anyway?',
         detail:
@@ -4011,7 +4033,21 @@
         choices: [{ id: 'go', label: 'Throw them away', danger: true }],
       });
       if (anyway === null) return;
-      await act({ kind: 'worktreeRemove', path: tree.path, force: true });
+      done = await act({ kind: 'worktreeRemove', path: tree.path, force: true });
+      // The refusal's notice was answered by the question above, and it is gone now: left up,
+      // it went on saying the removal failed beside a list that no longer had the tree in it.
+      if (done) {
+        for (const t of toasts.items) {
+          if (!before.has(t.id) && t.kind === 'error') toasts.dismiss(t.id);
+        }
+      }
+    }
+    if (done) {
+      // A tab still open on the tree pointed at a folder that no longer existed.
+      const gone = tree.path.replace(/\/+$/u, '');
+      for (const tab of tabs.session.tabs) {
+        if (tab.path.replace(/\/+$/u, '') === gone) await tabs.close(tab.id);
+      }
     }
     await worktrees.load(info.path);
   }
@@ -5019,6 +5055,7 @@
     detail={question.detail}
     asksText={question.asksText}
     lines={question.lines ?? 1}
+    optional={question.optional ?? false}
     placeholder={question.placeholder}
     initial={question.initial}
     choices={question.choices}

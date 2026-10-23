@@ -25,6 +25,7 @@
     placeholder = '',
     initial = '',
     asksText = false,
+    optional = false,
     lines = 1,
     choices,
     onAnswer,
@@ -46,6 +47,8 @@
      * line meant the body could neither be read nor kept.
      */
     lines?: number;
+    /** Empty is an answer too, so the choices stay live with nothing typed. */
+    optional?: boolean;
     placeholder?: string;
     initial?: string;
     choices: Choice[];
@@ -127,7 +130,7 @@
         <button
           class:primary={choice.id === primary?.id}
           class:danger={choice.danger === true}
-          disabled={asksText && text.trim() === ''}
+          disabled={asksText && !optional && text.trim() === ''}
           onclick={() => answer(choice.id)}
         >
           {choice.label}
