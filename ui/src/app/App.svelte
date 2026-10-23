@@ -1138,7 +1138,7 @@
       !action.delete &&
       wasRejected(outcome.message)
     ) {
-      await offerToForce(action, outcome.message);
+      await offerToForce(action, outcome.message, announced);
     }
 
     // Stashes always, not only when a ref moved. The stack is a reflog rather than a ref, so
@@ -1262,7 +1262,16 @@
    * Offered from here because a toast cannot be acted on, and until now the rejection was the
    * end of the road: the window had no force at all, so the only way past it was a terminal.
    */
-  async function offerToForce(action: Extract<Action, { kind: 'push' }>, message: string) {
+  /**
+   * `notice` is the toast that reported the rejection. It goes once the way out chosen here has
+   * worked: left up, it went on saying the push was rejected beside the pull that had dealt with
+   * it, whose own toast says what happened instead.
+   */
+  async function offerToForce(
+    action: Extract<Action, { kind: 'push' }>,
+    message: string,
+    notice: number,
+  ) {
     // A tag is not a branch, and neither the explanation nor the way out is the same. Pulling
     // brings a branch's missing commits in; it does nothing whatever about a tag the remote
     // already has under that name, so offering it is offering a click that changes nothing.
@@ -1290,10 +1299,12 @@
           ],
     });
     if (choice === 'pull') {
-      await act({ kind: 'pull', remote: action.remote, mode: 'rebase' });
+      if (await act({ kind: 'pull', remote: action.remote, mode: 'rebase' })) toasts.dismiss(notice);
       return;
     }
-    if (choice === 'force') await act({ ...action, forceWithLease: true });
+    if (choice === 'force' && (await act({ ...action, forceWithLease: true }))) {
+      toasts.dismiss(notice);
+    }
   }
 
   /** The row under the pointer, if the loaded frame reaches it. */
@@ -2405,8 +2416,10 @@
     const { choice } = await ask({
       title: `Drop ${stash.name}?`,
       detail:
-        `${stash.message}\n\nThe changes in this stash are not in any commit and not in the ` +
-        'working copy. Dropping it is the only copy gone. This cannot be undone.',
+        // Not "these changes are nowhere else": a stash that stopped on conflicts when it was
+        // popped is kept, and its changes are by then in the working copy too.
+        `${stash.message}\n\nWhatever in it has not been applied or committed somewhere else ` +
+        'goes with it. This cannot be undone.',
       asksText: false,
       placeholder: '',
       initial: '',
@@ -4451,6 +4464,7 @@
         onCollapse={(section, closed) => views.setCollapsed(section, closed)}
         onOpenPullRequest={(pr: PullRequest) => void openInBrowser(pr.webUrl)}
         onPullRequestMenu={pullRequestMenu}
+        onCheckoutRef={checkoutPill}
         scope={{ solo: scope.solo, hidden: scope.hidden }}
         onToggleHidden={(r) => void toggleHidden(r)}
         onLeaveSolo={() => void soloRef(null)}

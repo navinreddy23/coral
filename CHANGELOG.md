@@ -8,6 +8,17 @@ Checkboxes are drawn in the window's own colours. In the dark theme an unticked 
 bright white square, and a ticked one took the desktop's orange rather than the window's
 accent.
 
+### Small things found in a day's work
+
+- Double-clicking a branch in the side panel checks it out, as double-clicking its label in
+  the graph already did. It only selected it.
+- After "Pull and rebase" from a refused push, the notice saying the push was refused goes
+  away. It stayed up beside the pull that had dealt with it.
+- Dropping a stash no longer claims its changes are nowhere else. After a pop that stopped on
+  conflicts the stash is kept and its changes are in the working copy too.
+- The staging panel's header stays on one line with a long branch name, which is shortened
+  instead. The discard button used to drop onto a line of its own.
+
 ### The palette finds the command you named
 
 A command whose name contains what you typed now comes before one that only has the same

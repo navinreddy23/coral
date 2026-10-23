@@ -27,6 +27,7 @@
     onDropRef,
     onOpenPullRequest,
     onPullRequestMenu = () => undefined,
+    onCheckoutRef = () => undefined,
     onRemoteMenu,
     onRefMenu,
     onStashMenu,
@@ -84,6 +85,8 @@
     /** `source` was dragged onto `target`; the shell decides what that means. */
     onDropRef: (source: string, target: string) => void;
     onOpenPullRequest: (pr: PullRequest) => void;
+    /** A double-click on a branch: check it out, as a double-click on its label in the graph does. */
+    onCheckoutRef?: (ref: PlacedRef) => void;
     /** Right-click on a proposal: check it out here, or open it on the host. */
     onPullRequestMenu?: (event: MouseEvent, pr: PullRequest) => void;
     /** Right-click on a remote, or on the section itself when `remote` is null. */
@@ -379,6 +382,7 @@
       ondragleave={() => (over = over === r.short ? null : over)}
       ondrop={(e) => drop(e, r.short)}
       onclick={() => onSelectRef(r)}
+      ondblclick={() => onCheckoutRef(r)}
       title={refTitle(r, outside, hidden)}
     >
       <span class="tick">
