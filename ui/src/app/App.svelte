@@ -980,7 +980,28 @@
     const path = diff.path;
     if (!info || path === null || diff.source === 'commit' || diff.source === 'compare') return;
     await worktree.stage([path], stage);
-    await diff.reload(info.path);
+    await reloadDiff(info.path);
+  }
+
+  /**
+   * Re-reads the diff on screen, following a working-copy file that has left the side shown.
+   *
+   * Staging a whole file moves it to the other list and discarding it takes it out of both; the
+   * panel was left saying the file had no changes, about a file no longer listed anywhere.
+   */
+  async function reloadDiff(repo: string) {
+    await diff.reload(repo);
+    const open = diff.path;
+    const side = diff.source;
+    if (open === null || diff.file !== null || diff.error !== null) return;
+    if (side !== 'staged' && side !== 'unstaged') return;
+    const listed = (entries: StatusEntry[]) => entries.some((e) => e.path === open);
+    if (listed(side === 'staged' ? worktree.staged : worktree.unstaged)) return;
+    if (listed(side === 'staged' ? worktree.unstaged : worktree.staged)) {
+      await diff.openWorking(repo, side === 'unstaged', open);
+    } else {
+      diff.close();
+    }
   }
 
   /**
@@ -2872,7 +2893,7 @@
       return;
     }
     // The file's diff on this side is a different diff now, and may be empty.
-    await diff.reload(info.path);
+    await reloadDiff(info.path);
   }
 
   /** Deleting a file cannot be undone, so it is asked about by name. */
@@ -3675,7 +3696,7 @@
       await worktree.load(path);
       // The diff on screen is of a file in that working tree, and a diff of what a file used
       // to say is worse than no diff at all.
-      await diff.reload(path);
+      await reloadDiff(path);
     }
     if (change.ops) await Promise.all([merge.load(path), bisect.load(path)]);
     if (!change.refs && !change.graph) return;

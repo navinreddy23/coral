@@ -52,6 +52,8 @@ accent.
   conflicts the stash is kept and its changes are in the working copy too.
 - The staging panel's header stays on one line with a long branch name, which is shortened
   instead. The discard button used to drop onto a line of its own.
+- Staging a whole file moves its diff to the staged side, and discarding it closes the diff.
+  The panel stayed on a side the file had left, saying it had no changes there.
 
 ### The palette finds the command you named
 
