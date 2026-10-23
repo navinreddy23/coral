@@ -18,6 +18,15 @@ accent.
   push destination".
 - A name git refuses, for a branch or a tag, is asked for again with git's reason in the
   dialog. The reason used to be in a notice hidden behind it.
+- Continuing or skipping in a merge, rebase or cherry-pick asks who you are when git has not
+  been told, as committing already did, and then carries on. It stopped on git's "unable to
+  auto-detect email address".
+- During a rebase, the two sides of a conflict say what they hold: the commit being replayed,
+  and, past the first commit, that the target already carries the ones replayed before it.
+  The buttons that take a whole side use the pane's letter when its name is too long.
+- In a repository without a commit-graph, the graph column no longer keeps the width of the
+  quick first screen once the real one replaces it, which could leave the messages far from
+  the lanes.
 - Menu items no longer show a tooltip repeating their own label, which covered the item
   beneath. One appears only when an item's text is cut short.
 - Deleting a tag from a remote that never had it says so, rather than asking to confirm a

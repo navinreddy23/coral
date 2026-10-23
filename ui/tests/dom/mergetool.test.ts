@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { tick } from "svelte";
 import { render } from "@testing-library/svelte";
 import { fireEvent } from "@testing-library/dom";
 import { describe, expect, it, vi } from "vitest";
@@ -444,8 +445,21 @@ describe("picking in the merge tool", () => {
     const titles = [...container.querySelectorAll("button")]
       .filter((b) => (b.textContent ?? "").trim().startsWith("All "))
       .map((b) => b.getAttribute("title"));
-    expect(titles).toContain("All the incoming change");
-    expect(titles).toContain("All feature/good-name");
+    expect(titles).toContain("Take all of the incoming change");
+    expect(titles).toContain("Take all of feature/good-name");
+    const texts = () =>
+      [...container.querySelectorAll("button")]
+        .map((b) => (b.textContent ?? "").trim())
+        .filter((t) => t.startsWith("All "));
+    expect(texts()).toEqual(["All feature/good-name", "All the incoming change"]);
+
+    // A name too long for the button names the pane by the letter its heading is badged with.
+    merge.operation = {
+      ...merge.operation,
+      labels: { ours: "main~4 and what is replayed so far", theirs: "topic", swapped: true },
+    };
+    await tick();
+    expect(texts()).toEqual(["All A", "All topic"]);
   });
 
   it("takes a whole side of one conflict from its pane heading", async () => {

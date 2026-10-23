@@ -5,7 +5,29 @@
   import type { ConflictedFile } from '../ipc/types';
   import type { MergeState, Side } from '../state/merge.svelte';
 
-  const { merge, onDone }: { merge: MergeState; onDone: () => void } = $props();
+  const {
+    merge,
+    onDone,
+    onRefused = async () => false,
+  }: {
+    merge: MergeState;
+    onDone: () => void;
+    /**
+     * A step git refused, with its words. Answers true when the window put right what stopped
+     * it, such as asking who the user is, and the step is worth trying again.
+     */
+    onRefused?: (message: string) => Promise<boolean>;
+  } = $props();
+
+  /** Runs a step, and runs it once more if what stopped it has been put right. */
+  async function run(step: 'continue' | 'skip'): Promise<boolean> {
+    if (await merge.step(step)) return true;
+    // git's refusal comes back as what the step stopped on, not as an error: it exited, and
+    // said why.
+    const refused = merge.error ?? (merge.stopped === '' ? null : merge.stopped);
+    if (refused === null || !(await onRefused(refused))) return false;
+    return merge.step(step);
+  }
 
   /**
    * Which side is which.
@@ -23,7 +45,7 @@
   ]);
 
   async function finish() {
-    if (await merge.step('continue')) onDone();
+    if (await run('continue')) onDone();
   }
 
   async function abort() {
@@ -43,7 +65,16 @@
   );
 
   async function skip() {
-    if (await merge.step('skip')) onDone();
+    if (await run('skip')) onDone();
+  }
+
+  /**
+   * A side's name as a button says it: the name when it is short, else the letter its pane is
+   * badged with. A rebase names a side "main: c6ae42d (Step 11)", which cut to "All main: c6a…"
+   * said nothing a reader could match to a pane.
+   */
+  function short(label: string, tag: string): string {
+    return label.length <= 24 ? label : tag;
   }
 
   /** The two sides, in the order the panes draw them. */
@@ -350,11 +381,11 @@
               : ''}
           </span>
           <span class="spacer"></span>
-          <button title="All {labels.ours}" onclick={() => merge.chooseAll('ours')}
-            >All {labels.ours}</button
+          <button title="Take all of {labels.ours}" onclick={() => merge.chooseAll('ours')}
+            >All {short(labels.ours, 'A')}</button
           >
-          <button title="All {labels.theirs}" onclick={() => merge.chooseAll('theirs')}
-            >All {labels.theirs}</button
+          <button title="Take all of {labels.theirs}" onclick={() => merge.chooseAll('theirs')}
+            >All {short(labels.theirs, 'B')}</button
           >
           <button
             class="primary"
