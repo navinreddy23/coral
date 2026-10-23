@@ -75,6 +75,20 @@ pub async fn remote_has_tag(path: String, remote: String, tag: String) -> Result
     Ok(loc.remote_tag(&runner, &remote, &tag).await?.is_some())
 }
 
+/// Makes `branch` track `upstream`, a remote's branch such as `upstream/main`.
+///
+/// # Errors
+/// Propagates git failures, such as an upstream that has not been fetched.
+#[tauri::command]
+pub async fn branch_set_upstream(
+    path: String,
+    branch: String,
+    upstream: String,
+) -> Result<(), IpcError> {
+    let (runner, loc) = located(&path).await?;
+    Ok(loc.set_upstream(&runner, &branch, &upstream).await?)
+}
+
 /// Where a commit is served on the web, for the remote the repository was cloned from.
 ///
 /// Returns `None` rather than failing when the remote is not a host we recognise: an internal

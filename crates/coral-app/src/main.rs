@@ -174,6 +174,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         actions::repo_journal,
         remotes::remote_list,
         remotes::remote_has_tag,
+        remotes::branch_set_upstream,
         remotes::remote_edit,
         remotes::commit_url,
         watcher::watch_repo,

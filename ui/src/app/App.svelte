@@ -21,6 +21,7 @@
     openInBrowser,
     patchRangeSize,
     remoteHasTag,
+    branchSetUpstream,
     pickPatchFiles,
     revAncestry,
     type PullRequest,
@@ -1471,7 +1472,11 @@
       });
     }
 
-    if (!current) {
+    // `upstream/main` checks out as `main`, and when `main` is the branch already out that is
+    // nothing at all: the item claimed to make it track `upstream/main` and did not.
+    const landsOnHead =
+      ref.kind.kind === 'remote_branch' && withoutRemote(ref.short) === headName;
+    if (!current && !landsOnHead) {
       const [label, hint] = checkoutOf(ref);
       items.push({
         kind: 'item',
@@ -1480,6 +1485,22 @@
         disabled: busy,
         worktree: true,
         run: () => void goTo(ref),
+      });
+    }
+
+    // With two remotes, a fork and the project it came from, which one a branch follows is
+    // what pull brings in and push sends to.
+    const follower =
+      ref.kind.kind === 'remote_branch'
+        ? refs.groups.local.find((r) => r.short === withoutRemote(ref.short))
+        : undefined;
+    if (follower && follower.upstream !== ref.short) {
+      items.push({
+        kind: 'item',
+        label: `Make ${follower.short} track ${ref.short}`,
+        hint: follower.upstream === null ? undefined : `instead of ${follower.upstream}`,
+        disabled: busy,
+        run: () => void track(follower.short, ref.short),
       });
     }
 
@@ -1834,6 +1855,19 @@
     const branch = label.kind.kind === 'local_branch' || label.kind.kind === 'remote_branch';
     if (!branch || label.short === headName) return;
     void goTo(label);
+  }
+
+  async function track(branch: string, upstream: string) {
+    if (!info) return;
+    const path = info.path;
+    try {
+      await branchSetUpstream(path, branch, upstream);
+    } catch (e) {
+      toasts.push('error', `Could not make ${branch} track ${upstream}`, messageOf(e));
+      return;
+    }
+    toasts.push('ok', `${branch} tracks ${upstream} now.`);
+    await Promise.all([refs.load(path), worktree.load(path)]);
   }
 
   async function goTo(ref: PlacedRef) {

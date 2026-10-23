@@ -579,6 +579,11 @@ export function remoteHasTag(path: string, remote: string, tag: string): Promise
   return invoke<boolean>('remote_has_tag', { path, remote, tag });
 }
 
+/** Makes a local branch track a remote's branch, which pull and push then use. */
+export function branchSetUpstream(path: string, branch: string, upstream: string): Promise<void> {
+  return invoke<void>('branch_set_upstream', { path, branch, upstream });
+}
+
 export function remoteEdit(path: string, edit: RemoteEdit): Promise<Remote[]> {
   return invoke<Remote[]>('remote_edit', { path, edit });
 }

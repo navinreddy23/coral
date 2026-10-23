@@ -42,6 +42,13 @@ accent.
 - Stash is off until the first commit, and says why. It used to fail with "git stash exited
   with 1" and nothing after it, because the one line git gives was silenced.
 
+### Two remotes
+
+A remote branch's menu can make the local branch of the same name track it instead: "Make main
+track upstream/main". Pull and push follow it from then on. That menu no longer offers to
+check out `main` when `main` is the branch already out, which did nothing while claiming it
+would track the other remote.
+
 ### Small things found in a day's work
 
 - Double-clicking a branch in the side panel checks it out, as double-clicking its label in
