@@ -2894,10 +2894,10 @@
       // Both only when there is something to act on, like the theme entry below: popping with
       // nothing stashed answered with git's own `stash@{0}`, and stashing a clean working copy
       // did nothing at all.
-      ...(worktree.dirty
+      ...(worktree.dirty && info?.head.kind !== 'unborn'
         ? [{ id: 'stash', label: 'Stash changes', group: 'Stash', run: () => void act({ kind: 'stashPush', message: null }) } satisfies Command]
         : []),
-      ...(worktree.staged.length > 0
+      ...(worktree.staged.length > 0 && info?.head.kind !== 'unborn'
         ? [{ id: 'stash-staged', label: 'Stash the staged changes', group: 'Stash', run: () => void act({ kind: 'stashPush', message: null, staged: true }) } satisfies Command]
         : []),
       ...(stashes.list.length > 0
@@ -4300,6 +4300,8 @@
       leftPanel={views.current.sidebar}
       stashes={stashes.list.length}
       dirty={worktree.dirty}
+      unborn={info?.head.kind === 'unborn'}
+      remoteless={remotes.read && remotes.error === null && remotes.list.length === 0}
       {journal}
       rightPanel={views.current.details}
       rightPanelUsable={!merge.inProgress}

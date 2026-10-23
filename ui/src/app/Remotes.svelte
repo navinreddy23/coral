@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import Icon from './Icon.svelte';
   import type { RemotesState } from '../state/remotes.svelte';
 
@@ -36,7 +37,7 @@
     opened = true;
     if (focus !== null) startEdit(focus);
     else if (remotes.list[0]) startEdit(remotes.list[0].name);
-    else adding = true;
+    else startAdd();
   });
 
   /** Loads a remote's current values into the form. */
@@ -49,15 +50,31 @@
     pushUrl = found?.pushUrl ?? '';
   }
 
+  /**
+   * A repository's first remote is called origin almost everywhere, and is what git itself
+   * names the one a clone came from, so it is filled in; any later one is the user's to name.
+   */
   function startAdd() {
     adding = true;
     editing = null;
-    name = '';
+    name = remotes.list.length === 0 ? 'origin' : '';
     url = '';
     pushUrl = '';
   }
 
   const chosen = $derived(remotes.list.find((r) => r.name === editing) ?? null);
+
+  /** A remote needs both a name and somewhere to point; adding one with no URL is git's error. */
+  const canSave = $derived(
+    !remotes.busy && (!adding || (name.trim() !== '' && url.trim() !== '')),
+  );
+
+  /** Enter in a field does what the button does, as it does in every other form. */
+  function saveOnEnter(event: KeyboardEvent) {
+    if (event.key !== 'Enter' || !(event.target instanceof HTMLInputElement)) return;
+    event.preventDefault();
+    if (canSave) void save();
+  }
 
   /**
    * Applies the form.
@@ -135,16 +152,33 @@
       </li>
     </ul>
 
-    <div class="form">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="form" onkeydown={saveOnEnter}>
       {#if adding}
         <h3>New remote</h3>
         <label>
           Name
-          <input bind:value={name} placeholder="upstream" spellcheck="false" />
+          <input
+            bind:value={name}
+            placeholder="upstream"
+            spellcheck="false"
+            {@attach (node) => {
+              if (untrack(() => name) === '') node.focus();
+            }}
+          />
         </label>
         <label>
           URL
-          <input bind:value={url} placeholder="git@github.com:owner/repo.git" spellcheck="false" />
+          <!-- Whichever field is still empty. Read untracked, or typing a name would move the
+               focus on every key. -->
+          <input
+            bind:value={url}
+            placeholder="git@github.com:owner/repo.git"
+            spellcheck="false"
+            {@attach (node) => {
+              if (untrack(() => name) !== '') node.focus();
+            }}
+          />
         </label>
         <p class="hint">
           Tracking branches appear after the first fetch, not when the remote is added.
@@ -177,7 +211,7 @@
       {#if remotes.error}<p class="error">{remotes.error}</p>{/if}
 
       <div class="row">
-        <button class="primary" disabled={remotes.busy || (adding && name.trim() === '')} onclick={save}>
+        <button class="primary" disabled={!canSave} onclick={save}>
           {adding ? 'Add remote' : 'Save changes'}
         </button>
         {#if chosen && !adding}

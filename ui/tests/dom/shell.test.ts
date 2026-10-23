@@ -107,6 +107,8 @@ function answers(over: Record<string, unknown> = {}): Record<string, unknown> {
       resumable: true,
     },
     repo_conflicts: [],
+    // A remote, as nearly every repository has, so fetch, pull and push are offered.
+    remote_list: [{ name: 'origin', fetchUrl: '/srv/origin.git', pushUrl: '/srv/origin.git' }],
     hosting_status: { host: null, detail: 'no remotes', token: 'none' },
     hosting_pull_requests: [],
     session_get: { tabs: [{ id: 1, path: REPO, group: null }], active: 1, groups: [] },
