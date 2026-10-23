@@ -136,7 +136,7 @@
   }
   .arrow { color: var(--fg-2); }
   .field { display: flex; flex-direction: column; gap: 4px; font-size: var(--text-base); color: var(--fg-2); }
-  input, textarea, select {
+  input:not([type='checkbox']), textarea, select {
     font: inherit; font-size: var(--text-md); color: var(--fg-0);
     padding: var(--space-2); border-radius: var(--radius-1);
     background: var(--bg-1); border: 1px solid var(--border-strong);

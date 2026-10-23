@@ -263,14 +263,14 @@
            font-size: var(--text-base); color: var(--fg-0); }
   .row { display: flex; gap: var(--space-2); }
   .row input { flex: 1; min-width: 0; }
-  input, select {
+  input:not([type='checkbox']), select {
     font: inherit; font-size: var(--text-base);
     padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-1);
     background: var(--bg-0); color: var(--fg-0);
   }
   input:not([type]), input[type='password'] { font-family: var(--font-mono); font-variant-ligatures: none; }
   input:focus, select:focus { border-color: var(--accent); }
-  input:disabled { background: var(--bg-2); color: var(--fg-2); }
+  input:not([type='checkbox']):disabled { background: var(--bg-2); color: var(--fg-2); }
   .hint { margin: 0; font-size: var(--text-sm); color: var(--fg-2); max-width: 44em; line-height: 1.5; }
   .error { margin: 0; color: var(--danger); }
   .ok { margin: 0; color: var(--ok); }

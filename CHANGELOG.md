@@ -42,6 +42,20 @@ accent.
 - Stash is off until the first commit, and says why. It used to fail with "git stash exited
   with 1" and nothing after it, because the one line git gives was silenced.
 
+### Menus from the keyboard
+
+The Menu key, or Shift+F10, opens the selected commit's menu, and every menu can be worked
+with the keys: the arrows move through it, Right and Left open and close a submenu, Enter
+chooses and Escape closes. A commit's actions were reachable only with the mouse, and the
+arrow keys moved the graph's selection beneath an open menu.
+
+### Two remotes
+
+A remote branch's menu can make the local branch of the same name track it instead: "Make main
+track upstream/main". Pull and push follow it from then on. That menu no longer offers to
+check out `main` when `main` is the branch already out, which did nothing while claiming it
+would track the other remote.
+
 ### Small things found in a day's work
 
 - Double-clicking a branch in the side panel checks it out, as double-clicking its label in
@@ -52,6 +66,12 @@ accent.
   conflicts the stash is kept and its changes are in the working copy too.
 - The staging panel's header stays on one line with a long branch name, which is shortened
   instead. The discard button used to drop onto a line of its own.
+- Staging a whole file moves its diff to the staged side, and discarding it closes the diff.
+  The panel stayed on a side the file had left, saying it had no changes there.
+- Choosing SSH, or another program, on the commit signing page lists the keys it can use at
+  once. The list stayed on the saved format's keys until Save, so SSH keys looked missing.
+- The checkboxes on the commit signing and SSH pages, and the draft box on a new pull request,
+  are drawn like every other checkbox. They were empty bars without a tick.
 
 ### The palette finds the command you named
 

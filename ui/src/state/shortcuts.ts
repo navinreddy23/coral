@@ -88,6 +88,12 @@ export const BINDINGS: Binding[] = [
   { id: 'select.last', label: 'Select last item', keys: 'Ctrl ↓ or End', group: 'Navigation',
     context: 'global',
     match: (e) => (primary(e) && is(e, 'ArrowDown')) || (plain(e) && is(e, 'End')) },
+  // The two every desktop gives the context menu, so a commit's actions are not mouse-only.
+  { id: 'select.menu', label: "Open the selected item's menu", keys: 'Menu or Shift F10',
+    group: 'Navigation', context: 'global',
+    match: (e) =>
+      (plain(e) && e.key === 'ContextMenu') ||
+      (e.shift && !e.ctrl && !e.meta && !e.alt && e.key === 'F10') },
   { id: 'undo', label: 'Undo', keys: 'Ctrl Z', group: 'Navigation',
     context: 'global', match: (e) => primary(e) && !e.shift && is(e, 'z') },
   { id: 'redo', label: 'Redo', keys: 'Ctrl Y or Ctrl Shift Z', group: 'Navigation',

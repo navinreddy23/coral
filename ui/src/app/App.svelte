@@ -21,6 +21,7 @@
     openInBrowser,
     patchRangeSize,
     remoteHasTag,
+    branchSetUpstream,
     pickPatchFiles,
     revAncestry,
     type PullRequest,
@@ -228,7 +229,7 @@
 
   /** Which shortcuts actually do something today; the help overlay dims the rest. */
   const LIVE = new Set([
-    'select.next', 'select.previous', 'select.first', 'select.last',
+    'select.next', 'select.previous', 'select.first', 'select.last', 'select.menu',
     'stage.all', 'unstage.all', 'tab.new', 'tab.close', 'tab.next', 'tab.previous',
     'palette', 'repo.open', 'terminal', 'search.commits',
     'panel.left', 'panel.detail', 'help', 'undo', 'redo',
@@ -251,7 +252,29 @@
     void reveal(next);
   }
 
+  /**
+   * The selected row's own menu, opened beside it.
+   *
+   * The rows are kept out of the tab order, so the webview's keyboard menu event lands on the
+   * page instead of a row and only the mouse could reach a commit's actions.
+   */
+  function openSelectedMenu() {
+    const row = document.querySelector<HTMLElement>('ul.rows > li.row.selected');
+    if (!row) return;
+    const box = row.getBoundingClientRect();
+    row.dispatchEvent(
+      new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        clientX: box.left + box.width / 2,
+        clientY: box.bottom,
+      }),
+    );
+  }
+
   function onKey(event: KeyboardEvent) {
+    // An open menu has the keys: the arrows that step through it moved the graph beneath.
+    if (event.target instanceof Element && event.target.closest('[role="menu"]')) return;
     const e = {
       key: event.key,
       ctrl: event.ctrlKey,
@@ -285,6 +308,7 @@
       case 'select.previous': move(-1); break;
       case 'select.first': move(-Number.MAX_SAFE_INTEGER); break;
       case 'select.last': move(Number.MAX_SAFE_INTEGER); break;
+      case 'select.menu': openSelectedMenu(); break;
       case 'stage.all': void worktree.stage(worktree.unstaged.map((f) => f.path), true); break;
       case 'unstage.all': void worktree.stage(worktree.staged.map((f) => f.path), false); break;
       case 'tab.new': void openAnother(); break;
@@ -980,7 +1004,28 @@
     const path = diff.path;
     if (!info || path === null || diff.source === 'commit' || diff.source === 'compare') return;
     await worktree.stage([path], stage);
-    await diff.reload(info.path);
+    await reloadDiff(info.path);
+  }
+
+  /**
+   * Re-reads the diff on screen, following a working-copy file that has left the side shown.
+   *
+   * Staging a whole file moves it to the other list and discarding it takes it out of both; the
+   * panel was left saying the file had no changes, about a file no longer listed anywhere.
+   */
+  async function reloadDiff(repo: string) {
+    await diff.reload(repo);
+    const open = diff.path;
+    const side = diff.source;
+    if (open === null || diff.file !== null || diff.error !== null) return;
+    if (side !== 'staged' && side !== 'unstaged') return;
+    const listed = (entries: StatusEntry[]) => entries.some((e) => e.path === open);
+    if (listed(side === 'staged' ? worktree.staged : worktree.unstaged)) return;
+    if (listed(side === 'staged' ? worktree.unstaged : worktree.staged)) {
+      await diff.openWorking(repo, side === 'unstaged', open);
+    } else {
+      diff.close();
+    }
   }
 
   /**
@@ -1450,7 +1495,11 @@
       });
     }
 
-    if (!current) {
+    // `upstream/main` checks out as `main`, and when `main` is the branch already out that is
+    // nothing at all: the item claimed to make it track `upstream/main` and did not.
+    const landsOnHead =
+      ref.kind.kind === 'remote_branch' && withoutRemote(ref.short) === headName;
+    if (!current && !landsOnHead) {
       const [label, hint] = checkoutOf(ref);
       items.push({
         kind: 'item',
@@ -1459,6 +1508,22 @@
         disabled: busy,
         worktree: true,
         run: () => void goTo(ref),
+      });
+    }
+
+    // With two remotes, a fork and the project it came from, which one a branch follows is
+    // what pull brings in and push sends to.
+    const follower =
+      ref.kind.kind === 'remote_branch'
+        ? refs.groups.local.find((r) => r.short === withoutRemote(ref.short))
+        : undefined;
+    if (follower && follower.upstream !== ref.short) {
+      items.push({
+        kind: 'item',
+        label: `Make ${follower.short} track ${ref.short}`,
+        hint: follower.upstream === null ? undefined : `instead of ${follower.upstream}`,
+        disabled: busy,
+        run: () => void track(follower.short, ref.short),
       });
     }
 
@@ -1813,6 +1878,19 @@
     const branch = label.kind.kind === 'local_branch' || label.kind.kind === 'remote_branch';
     if (!branch || label.short === headName) return;
     void goTo(label);
+  }
+
+  async function track(branch: string, upstream: string) {
+    if (!info) return;
+    const path = info.path;
+    try {
+      await branchSetUpstream(path, branch, upstream);
+    } catch (e) {
+      toasts.push('error', `Could not make ${branch} track ${upstream}`, messageOf(e));
+      return;
+    }
+    toasts.push('ok', `${branch} tracks ${upstream} now.`);
+    await Promise.all([refs.load(path), worktree.load(path)]);
   }
 
   async function goTo(ref: PlacedRef) {
@@ -2872,7 +2950,7 @@
       return;
     }
     // The file's diff on this side is a different diff now, and may be empty.
-    await diff.reload(info.path);
+    await reloadDiff(info.path);
   }
 
   /** Deleting a file cannot be undone, so it is asked about by name. */
@@ -3675,7 +3753,7 @@
       await worktree.load(path);
       // The diff on screen is of a file in that working tree, and a diff of what a file used
       // to say is worse than no diff at all.
-      await diff.reload(path);
+      await reloadDiff(path);
     }
     if (change.ops) await Promise.all([merge.load(path), bisect.load(path)]);
     if (!change.refs && !change.graph) return;

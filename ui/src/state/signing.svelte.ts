@@ -64,9 +64,15 @@ export class SigningState {
     }
   }
 
-  /** Re-reads the keys the signing program can see. */
-  async refreshKeys(): Promise<void> {
-    const config = this.scopes?.effective;
+  /**
+   * Re-reads the keys a signing program can see.
+   *
+   * With the format and program the form is showing when it passes them: picking SSH has to
+   * list SSH keys before anything is saved, and it listed the saved format's keys instead.
+   */
+  async refreshKeys(
+    config: Pick<SigningConfig, 'format' | 'program'> | null = this.scopes?.effective ?? null,
+  ): Promise<void> {
     if (!config) return;
     this.loadingKeys = true;
     try {

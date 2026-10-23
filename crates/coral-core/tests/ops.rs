@@ -135,6 +135,34 @@ async fn creates_renames_checks_out_and_deletes_branches() {
     assert!(output.is_empty(), "{output:?}");
 }
 
+#[tokio::test]
+async fn points_a_branch_at_another_remote() {
+    let host = TestRepo::new().write("a.txt", "1\n").commit("start");
+    let repo = TestRepo::new();
+    for remote in ["origin", "upstream"] {
+        repo.git(["remote", "add", remote, host.path().to_str().unwrap()]);
+        repo.git(["fetch", "--quiet", remote]);
+    }
+    repo.git([
+        "checkout",
+        "--quiet",
+        "-B",
+        "main",
+        "--track",
+        "origin/main",
+    ]);
+    let (runner, loc) = open(&repo).await;
+
+    loc.set_upstream(&runner, "main", "upstream/main")
+        .await
+        .unwrap();
+    assert_eq!(
+        repo.git(["rev-parse", "--abbrev-ref", "main@{upstream}"])
+            .trim(),
+        "upstream/main"
+    );
+}
+
 /// git refuses to delete an unmerged branch without force; that refusal must reach the caller.
 #[tokio::test]
 async fn refuses_to_delete_an_unmerged_branch_without_force() {
