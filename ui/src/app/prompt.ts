@@ -16,16 +16,26 @@
  */
 export async function askUntilAccepted(
   initial: string,
-  ask: (initial: string) => Promise<string | null>,
+  ask: (initial: string, refused: string | null) => Promise<string | null>,
   run: (text: string) => Promise<boolean>,
+  why: () => string | null = () => null,
 ): Promise<void> {
   let again = initial;
+  let refused: string | null = null;
   for (;;) {
-    const got = await ask(again);
+    const got = await ask(again, refused);
     if (got === null || got.trim() === '') return;
     if (await run(got.trim())) return;
     again = got;
+    // Said in the dialog that comes back. The toast saying it sits behind the dialog's scrim,
+    // so the box reopened with the same text in it and no reason anywhere to be read.
+    refused = why();
   }
+}
+
+/** A dialog's detail line, with git's reason for refusing the last attempt under it. */
+export function withRefusal(detail: string, refused: string | null): string {
+  return refused === null ? detail : `${detail}\n\n${refused.trim()}`;
 }
 
 /**

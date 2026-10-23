@@ -74,7 +74,7 @@
   import { SshState } from '../state/ssh.svelte';
   import { laneColour } from './lane';
   import { beside, elideRef } from './path';
-  import { askUntilAccepted, nameWasRefused } from './prompt';
+  import { askUntilAccepted, nameWasRefused, withRefusal } from './prompt';
   import { checkoutOf, divergence, remoteOf, withoutRemote } from './refname';
   import { splitPrefix } from './subject';
   import { orderRefs, pillChars, pillNamed } from './pill';
@@ -1572,8 +1572,10 @@
   async function renameBranch(from: string) {
     await askUntilAccepted(
       from,
-      (initial) => askText('Rename the branch', `${from} becomes:`, initial),
+      (initial, refused) =>
+        askText('Rename the branch', withRefusal(`${from} becomes:`, refused), initial),
       async (to) => (to === from ? true : settled(await act({ kind: 'branchRename', from, to }))),
+      refusal,
     );
   }
 
@@ -2067,6 +2069,11 @@
    * to it, so it can fail over a file in the way — and the dialog reopening on that said the
    * name was wrong and left no name that would work.
    */
+  /** What git said about the last refused name, for the dialog that asks again. */
+  function refusal(): string | null {
+    return actions.report?.text ?? null;
+  }
+
   function settled(ok: boolean): boolean {
     return ok || !nameWasRefused(actions.report?.text);
   }
@@ -2074,8 +2081,10 @@
   async function branchAt(oid: string) {
     await askUntilAccepted(
       '',
-      (initial) => askText('Create branch here', `At ${oid.slice(0, 8)}.`, initial),
+      (initial, refused) =>
+        askText('Create branch here', withRefusal(`At ${oid.slice(0, 8)}.`, refused), initial),
       async (name) => settled(await act({ kind: 'branchCreate', name, at: oid, checkout: true })),
+      refusal,
     );
   }
 
@@ -2089,23 +2098,24 @@
   async function keepAt(oid: string) {
     await askUntilAccepted(
       '',
-      (initial) =>
+      (initial, refused) =>
         askText(
           'Keep this commit on a branch',
-          `At ${oid.slice(0, 8)}. You stay where you are.`,
+          withRefusal(`At ${oid.slice(0, 8)}. You stay where you are.`, refused),
           initial,
         ),
       async (name) => settled(await act({ kind: 'branchCreate', name, at: oid, checkout: false })),
+      refusal,
     );
   }
 
   async function tagAt(oid: string, annotated: boolean) {
     await askUntilAccepted(
       '',
-      (initial) =>
+      (initial, refused) =>
         askText(
           annotated ? 'Create annotated tag here' : 'Create tag here',
-          `At ${oid.slice(0, 8)}.`,
+          withRefusal(`At ${oid.slice(0, 8)}.`, refused),
           initial,
         ),
       async (name) => {
@@ -2118,6 +2128,7 @@
         }
         return settled(await act({ kind: 'tagCreate', name, at: oid, message }));
       },
+      refusal,
     );
   }
 
@@ -3120,10 +3131,10 @@
       case 'branch': {
         void askUntilAccepted(
           '',
-          async (initial) => {
+          async (initial, refused) => {
             const { choice, text } = await ask({
               title: 'New branch',
-              detail: `Created at ${branch ?? 'HEAD'} and checked out.`,
+              detail: withRefusal(`Created at ${branch ?? 'HEAD'} and checked out.`, refused),
               asksText: true,
               placeholder: 'feature/…',
               initial,
@@ -3133,6 +3144,7 @@
           },
           async (name) =>
             settled(await act({ kind: 'branchCreate', name, at: null, checkout: true })),
+          refusal,
         );
         return;
       }
@@ -4762,6 +4774,14 @@
                     ondrop={(e) => dropOnPill(e, label.short)}
                     onclick={(e) => pick(row, e)}
                     ondblclick={() => checkoutPill(label)}
+                    oncontextmenu={(e) => {
+                      // The label's own menu, as in the side panel. Left to the row, a right
+                      // click on a tag offered to merge and rebase onto whichever other ref
+                      // shared its commit, and never to push or delete the tag itself.
+                      e.stopPropagation();
+                      pick(row, e);
+                      void refMenu(e, label);
+                    }}
                   >
                     <!-- The cap says what the ref is; for a tracking branch that is the host
                          it came from, which is more than "a branch" says. -->
