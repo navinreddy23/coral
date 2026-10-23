@@ -32,16 +32,25 @@ function row(view: { container: HTMLElement }, label: string): HTMLElement {
 }
 
 describe('the context menu', () => {
-  it('keeps the whole of a row on the row, since its width is capped', () => {
+  it('keeps the whole of a row on the row, since its width is capped', async () => {
     // "Push feature/good-name to origin" beside "the upstream stays where it is" came out as
     // "Push feature/good-name to ori… the upstream stays wher…", and a menu row carried no
     // title, so both halves were simply gone.
+    //
+    // Only when the text is cut, though: on every row it was a box repeating the item's own
+    // words over the row beneath it. The widths are what a browser reports for cut text, set by
+    // hand because this DOM does no layout.
     const view = render(Menu, { x: 10, y: 10, items: items(), onClose: vi.fn() });
-    const first = row(view, 'Checkout this commit').closest('button');
-    expect(first?.getAttribute('title')).toBe('Checkout this commit\na1b2c3d4');
+    const first = row(view, 'Checkout this commit').closest('button') as HTMLElement;
+    const label = first.querySelector('.label') as HTMLElement;
+    Object.defineProperty(label, 'scrollWidth', { value: 300 });
+    Object.defineProperty(label, 'clientWidth', { value: 120 });
+    await fireEvent.pointerEnter(first);
+    expect(first.getAttribute('title')).toBe('Checkout this commit\na1b2c3d4');
 
-    const plain = row(view, 'Drop commit').closest('button');
-    expect(plain?.getAttribute('title')).toBe('Drop commit');
+    const plain = row(view, 'Drop commit').closest('button') as HTMLElement;
+    await fireEvent.pointerEnter(plain);
+    expect(plain.getAttribute('title')).toBeNull();
   });
 
   it('runs the item that was chosen and closes first', async () => {
