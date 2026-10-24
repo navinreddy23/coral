@@ -342,6 +342,9 @@ impl RepoLocation {
                         "--refs=refs/remotes/*",
                         // Merging a release tag should say "v7.2", not an object id.
                         "--refs=refs/tags/*",
+                        // A clone's `origin/HEAD` names the same commit as `origin/main`, and
+                        // name-rev, taking the first, called the merge of main "origin/HEAD".
+                        "--exclude=refs/remotes/*/HEAD",
                     ])
                     .arg(rev),
             )

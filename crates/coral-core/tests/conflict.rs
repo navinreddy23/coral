@@ -247,6 +247,34 @@ async fn a_merge_labels_the_sides_by_branch_name() {
     assert!(!op.labels.swapped);
 }
 
+/// Every clone has `origin/HEAD` beside `origin/main`, and it names the same commit.
+/// `name-rev` took whichever it met first, so merging `origin/main` was labelled
+/// "origin/HEAD", which is not what was merged.
+#[tokio::test]
+async fn a_merge_of_a_remote_branch_is_named_for_it_and_not_for_origin_head() {
+    let r = TestRepo::new().write("f.txt", "one\n").commit("base");
+    r.git(["checkout", "--quiet", "-b", "side"]);
+    let r = r.write("f.txt", "theirs\n").commit("theirs");
+    r.git(["update-ref", "refs/remotes/origin/main", "side"]);
+    r.git([
+        "symbolic-ref",
+        "refs/remotes/origin/HEAD",
+        "refs/remotes/origin/main",
+    ]);
+    r.git(["checkout", "--quiet", "main"]);
+    r.git(["branch", "--quiet", "-D", "side"]);
+    let r = r.write("f.txt", "ours\n").commit("ours");
+    std::process::Command::new("git")
+        .current_dir(r.path())
+        .args(["merge", "origin/main"])
+        .output()
+        .unwrap();
+
+    let (runner, loc) = open(&r).await;
+    let op = loc.operation(&runner).await.unwrap();
+    assert_eq!(op.labels.theirs, "origin/main");
+}
+
 /// A stopped cherry-pick names the commit the way git does, not by its object id.
 ///
 /// The id was the label on a button, on a column header and in every sentence the merge tool
