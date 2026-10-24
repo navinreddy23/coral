@@ -7502,7 +7502,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `tokio-util 0.7.19`, `tokio 1.53.1`
+Used by: `tokio-util 0.7.19`, `tokio 1.53.3`
 
 ```
 MIT License
