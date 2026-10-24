@@ -718,6 +718,16 @@ export function commitDetail(
   return invoke<CommitDetail>('commit_detail', { path, rev, listing });
 }
 
+/** The note on a commit, or null. */
+export function commitNote(path: string, rev: string): Promise<string | null> {
+  return invoke<string | null>('commit_note', { path, rev });
+}
+
+/** Sets the note on a commit; empty text removes it. */
+export function setNote(path: string, rev: string, text: string): Promise<void> {
+  return invoke<void>('set_note', { path, rev, text });
+}
+
 /** What git makes of a commit's signature. Asked for apart from the detail, which it can outlast. */
 export function commitVerification(path: string, rev: string): Promise<Verification> {
   return invoke<Verification>('commit_verification', { path, rev });

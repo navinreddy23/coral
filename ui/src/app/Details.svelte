@@ -16,6 +16,8 @@
     detail,
     verification = null,
     many = [],
+    note = null,
+    onEditNote,
     repo,
     compare,
     picture = null,
@@ -31,6 +33,9 @@
     onCopied,
   }: {
     detail: CommitDetail | null;
+    /** The commit's note, from `refs/notes/commits`; null for none or not yet read. */
+    note?: string | null;
+    onEditNote?: () => void;
     /** Three or more picked commits, newest first, when that is what is selected. */
     many?: { oid: string; summary: string }[];
     /** What git makes of the commit's signature; null until it has said, or for none. */
@@ -252,6 +257,14 @@
       <pre class="body">{detail.commit.body}</pre>
     {/if}
 
+    {#if note !== null}
+      <section class="note">
+        <h3>Note</h3>
+        <pre class="body">{note}</pre>
+        {#if onEditNote}<button class="edit-note" onclick={onEditNote}>Edit</button>{/if}
+      </section>
+    {/if}
+
     <!--
       Exactly one dd per dt. The grid places items in order, so a second dd for the same term
       flows back into the label column and its content — an unbreakable object id — sets that
@@ -454,6 +467,13 @@
      without the button wrapping under it. */
   dd.break { display: flex; align-items: flex-start; gap: var(--space-1); }
   .oid { min-width: 0; }
+  .note { margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3); border-left: 2px solid var(--border-strong); background: var(--bg-1); position: relative; }
+  .note h3 { margin: 0 0 var(--space-1); }
+  .note .body { background: var(--bg-1); margin: 0; }
+  .edit-note {
+    position: absolute; top: var(--space-2); right: var(--space-2); cursor: pointer;
+    font: inherit; font-size: var(--text-sm); color: var(--accent); background: var(--bg-1); border: 0; padding: 0;
+  }
   .picked { list-style: none; margin: 0 0 var(--space-3); padding: 0; display: grid; gap: var(--space-1); }
   .picked li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-1); }
   .picked .mono { color: var(--fg-2); margin-right: var(--space-1); }

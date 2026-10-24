@@ -3,7 +3,7 @@
 
 use coral_app_lib::{
     actions, activity, avatar, bisect, blob, commands, conflicts, experimental, gitignore, graph,
-    hosting, profile, recent, reflog, remotes, scope, search, signing, ssh, tabs, template,
+    hosting, notes, profile, recent, reflog, remotes, scope, search, signing, ssh, tabs, template,
     terminal, transfer, update, version, watcher,
 };
 
@@ -155,6 +155,8 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         graph::submodule_ssh,
         graph::commit_detail,
         graph::commit_verification,
+        notes::commit_note,
+        notes::set_note,
         graph::patch_range_size,
         graph::file_diff,
         graph::worktree_diff,

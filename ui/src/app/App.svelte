@@ -25,6 +25,8 @@
     branchSetUpstream,
     ignore,
     stopTracking,
+    commitNote,
+    setNote,
     pickPatchFiles,
     revAncestry,
     type PullRequest,
@@ -2263,6 +2265,12 @@
         },
         {
           kind: 'item',
+          label: 'Note on this commit…',
+          hint: 'kept beside it, not in it',
+          run: () => void editNote(oid),
+        },
+        {
+          kind: 'item',
           label: 'Drop commit',
           danger: true,
           worktree: true,
@@ -2960,6 +2968,41 @@
   function openWorkingFile(file: string, staged: boolean) {
     if (!info) return;
     void diff.openWorking(info.path, staged, file);
+  }
+
+  /**
+   * Adds, changes or removes a commit's note.
+   *
+   * A note leaves the commit as it is, which is its point: it can be added to history already
+   * shared. It is also not pushed unless asked for, which surprises everyone once, so the
+   * dialog says so.
+   */
+  async function editNote(oid: string) {
+    if (!info) return;
+    const path = info.path;
+    const current = await commitNote(path, oid).catch(() => null);
+    const { choice, text } = await ask({
+      title: current === null ? `Add a note to ${oid.slice(0, 8)}` : `Note on ${oid.slice(0, 8)}`,
+      detail:
+        'Kept in refs/notes/commits, beside the commit rather than in it. git push sends ' +
+        'notes only when asked: git push origin refs/notes/commits.',
+      asksText: true,
+      lines: 5,
+      placeholder: 'Reviewed by…, shipped in…, see issue…',
+      initial: current ?? '',
+      choices: [
+        ...(current === null ? [] : [{ id: 'remove', label: 'Remove the note', danger: true }]),
+        { id: 'save', label: 'Save', primary: true },
+      ],
+    });
+    if (choice === null) return;
+    try {
+      await setNote(path, oid, choice === 'remove' ? '' : text);
+    } catch (e) {
+      toasts.push('error', 'Could not save the note', messageOf(e));
+      return;
+    }
+    await selection.reloadNote(path);
   }
 
   /** The commit HEAD is on, by object id, so a file at it can be told from one in history. */
@@ -5267,6 +5310,8 @@
         <Details
           detail={selection.detail}
           verification={selection.verification}
+          note={selection.note}
+          onEditNote={() => selection.detail && void editNote(selection.detail.commit.oid)}
           many={selection.many.map((p) => ({ oid: p.oid, summary: visibleMeta.get(p.row)?.summary ?? '' }))}
           onFileMenu={commitFileMenu}
           picture={detailPicture}

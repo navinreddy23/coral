@@ -82,6 +82,21 @@ describe('the commit panel', () => {
     expect(row?.classList.contains('warn')).toBe(true);
   });
 
+  it('shows a commit\'s note, with a way to edit it', async () => {
+    const edit = vi.fn();
+    const { container } = render(Details, {
+      props: { ...props, detail: detail(), note: 'Reviewed by Ada', onEditNote: edit },
+    });
+    expect(container.querySelector('.note')?.textContent).toContain('Reviewed by Ada');
+    await fireEvent.click(container.querySelector('.edit-note') as HTMLElement);
+    expect(edit).toHaveBeenCalledOnce();
+  });
+
+  it('shows no note section for a commit without one', () => {
+    const { container } = render(Details, { props: { ...props, detail: detail() } });
+    expect(container.querySelector('.note')).toBeNull();
+  });
+
   it('gives each term exactly one description', () => {
     // A second dd for the same term flows back into the label column of the two-column grid,
     // where an unbreakable object id sets the width and squeezes the values out.

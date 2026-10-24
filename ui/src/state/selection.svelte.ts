@@ -1,4 +1,10 @@
-import { commitDetail, commitVerification, compareCommits, type Listing } from '../ipc/commands';
+import {
+  commitDetail,
+  commitNote,
+  commitVerification,
+  compareCommits,
+  type Listing,
+} from '../ipc/commands';
 
 import { covers, rowOfOid, type Frame } from '../graph/frame';
 import type { ChangedFile, CommitDetail, Verification } from '../ipc/types';
@@ -26,6 +32,8 @@ export class SelectionState {
    * take seconds, and the message and files should not wait on it.
    */
   verification = $state<Verification | null>(null);
+  /** The selected commit's note, read beside the detail as the signature is. */
+  note = $state<string | null>(null);
   loading = $state(false);
   error = $state<string | null>(null);
 
@@ -57,11 +65,27 @@ export class SelectionState {
     this.row = null;
     this.detail = null;
     this.verification = null;
+    this.note = null;
     this.error = null;
     this.pair = null;
     this.compared = [];
     this.many = [];
     this.#anchor = null;
+  }
+
+  /** Reads the selected commit's note again, after it was edited. */
+  async reloadNote(path: string): Promise<void> {
+    const oid = this.detail?.commit.oid;
+    if (oid !== undefined) await this.#readNote(path, oid, this.#token);
+  }
+
+  async #readNote(path: string, oid: string, token: number): Promise<void> {
+    try {
+      const note = await commitNote(path, oid);
+      if (token === this.#token) this.note = note ?? null;
+    } catch {
+      // Nothing to show is the honest answer to a note that could not be read.
+    }
   }
 
   /** Every commit picked, newest first, whatever the count. */
@@ -117,6 +141,7 @@ export class SelectionState {
     this.compared = [];
     this.detail = null;
     this.verification = null;
+    this.note = null;
     this.error = null;
     this.loading = false;
     this.row = first.row;
@@ -140,13 +165,16 @@ export class SelectionState {
     // otherwise a slow earlier one lands last and shows the wrong commit.
     const token = ++this.#token;
     this.verification = null;
-    // A stash is not signed, and a failure here costs only the row that would have said so.
+    this.note = null;
+    // A stash is not signed and has no note, and a failure here costs only the line that
+    // would have said so.
     if (listing === 'commit') {
       void commitVerification(path, oid)
         .then((v) => {
           if (token === this.#token) this.verification = v ?? null;
         })
         .catch(() => undefined);
+      void this.#readNote(path, oid, token);
     }
     try {
       const detail = await commitDetail(path, oid, listing);
@@ -182,6 +210,7 @@ export class SelectionState {
     this.pair = { from, to };
     this.detail = null;
     this.verification = null;
+    this.note = null;
     this.compared = [];
     this.loading = true;
     this.error = null;
