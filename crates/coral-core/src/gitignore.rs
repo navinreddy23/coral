@@ -30,17 +30,25 @@ pub fn exact(path: &str) -> String {
 }
 
 /// `existing` with `pattern` on a line of its own at the end, or `None` when it is already there.
+///
+/// In the file's own line ending: a `.gitignore` written on Windows ends its lines with `\r\n`,
+/// and one line ending in `\n` among them is a change every diff of the file then shows.
 #[must_use]
 pub fn appended(existing: &str, pattern: &str) -> Option<String> {
     if existing.lines().any(|line| line.trim_end() == pattern) {
         return None;
     }
+    let newline = if existing.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
     let mut out = existing.to_owned();
     if !out.is_empty() && !out.ends_with('\n') {
-        out.push('\n');
+        out.push_str(newline);
     }
     out.push_str(pattern);
-    out.push('\n');
+    out.push_str(newline);
     Some(out)
 }
 
@@ -100,6 +108,15 @@ mod tests {
             appended("target/", "*.log").as_deref(),
             Some("target/\n*.log\n")
         );
+    }
+
+    #[test]
+    fn keeps_the_files_own_line_ending() {
+        assert_eq!(
+            appended("target/\r\n", "*.bak").as_deref(),
+            Some("target/\r\n*.bak\r\n")
+        );
+        assert_eq!(appended("target/\r\n", "target/"), None);
     }
 
     #[test]
