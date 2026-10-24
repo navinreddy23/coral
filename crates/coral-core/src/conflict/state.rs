@@ -135,7 +135,11 @@ impl RepoLocation {
                     state: OpState::Merge,
                     labels: SideLabels {
                         ours: self.current_branch(runner).await,
-                        theirs: "the incoming change".to_owned(),
+                        theirs: if self.stash_landed(runner).await {
+                            "your stashed changes".to_owned()
+                        } else {
+                            "the incoming change".to_owned()
+                        },
                         swapped: false,
                     },
                     progress: None,
@@ -181,6 +185,30 @@ impl RepoLocation {
             .ok()?;
         let text = String::from_utf8_lossy(&out.stdout).trim().to_owned();
         (!text.is_empty()).then_some(text)
+    }
+
+    /// Whether the conflict is a stash's, which leaves no file in the git dir to say so.
+    ///
+    /// git marks the side a stash brings as "Stashed changes" in the file it writes (see
+    /// `git help stash`), so the first conflicted file is read for that line.
+    async fn stash_landed(&self, runner: &GitRunner) -> bool {
+        let Ok(out) = runner
+            .output(GitCommand::read("diff", self.display_path()).args([
+                "diff",
+                "--name-only",
+                "--diff-filter=U",
+            ]))
+            .await
+        else {
+            return false;
+        };
+        let names = String::from_utf8_lossy(&out.stdout);
+        let Some(first) = names.lines().next() else {
+            return false;
+        };
+        std::fs::read(self.display_path().join(first)).is_ok_and(|bytes| {
+            String::from_utf8_lossy(&bytes).contains("\n>>>>>>> Stashed changes")
+        })
     }
 
     /// Whether any path is left unmerged in the index.
