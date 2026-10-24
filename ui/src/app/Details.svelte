@@ -15,6 +15,7 @@
   const {
     detail,
     verification = null,
+    many = [],
     repo,
     compare,
     picture = null,
@@ -30,6 +31,8 @@
     onCopied,
   }: {
     detail: CommitDetail | null;
+    /** Three or more picked commits, newest first, when that is what is selected. */
+    many?: { oid: string; summary: string }[];
     /** What git makes of the commit's signature; null until it has said, or for none. */
     verification?: Verification | null;
     /** Which repository the commit is in, for reading its tree. */
@@ -185,6 +188,20 @@
     <p class="error">{error}</p>
   {:else if loading}
     <p class="muted">Loading…</p>
+  {:else if many.length > 0}
+    <!--
+      A set rather than one commit or a pair: no one message or diff stands for it, so the panel
+      says which commits are in it and where the things that act on all of them are.
+    -->
+    <h2>{many.length} commits picked</h2>
+    <ul class="picked">
+      {#each many as one (one.oid)}
+        <li><span class="mono">{one.oid.slice(0, 8)}</span> {one.summary}</li>
+      {/each}
+    </ul>
+    <p class="muted">
+      Right-click any of them to cherry pick or revert them all. Ctrl-click one to take it out.
+    </p>
   {:else if compare}
     <!--
       Two commits, so there is no one message or author to show: what the panel has to say is
@@ -203,7 +220,8 @@
       {#if nothing}
         A commit's author, message and files appear here.
       {:else}
-        Select a commit, or hold Ctrl and pick a second one to compare.
+        Select a commit. Hold Ctrl to pick a second one to compare, or more to cherry pick or
+        revert together; Shift picks a run.
       {/if}
     </p>
   {:else}
@@ -436,6 +454,9 @@
      without the button wrapping under it. */
   dd.break { display: flex; align-items: flex-start; gap: var(--space-1); }
   .oid { min-width: 0; }
+  .picked { list-style: none; margin: 0 0 var(--space-3); padding: 0; display: grid; gap: var(--space-1); }
+  .picked li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-1); }
+  .picked .mono { color: var(--fg-2); margin-right: var(--space-1); }
   .signature.ok { color: var(--ok); }
   .signature.warn { color: var(--warn); }
   .signature.danger { color: var(--danger); }

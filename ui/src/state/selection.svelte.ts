@@ -40,6 +40,14 @@ export class SelectionState {
   /** What differs between the pair, once it has been read. */
   compared = $state<ChangedFile[]>([]);
 
+  /**
+   * Three or more commits picked together, newest first; empty otherwise.
+   *
+   * Two picked are a comparison, which is what picking a second commit has always meant; past
+   * two there is no one diff to show, only a set to cherry-pick or revert.
+   */
+  many = $state<Picked[]>([]);
+
   #token = 0;
   /** The commit the pair would be built from, kept so the second pick has a first. */
   #anchor: Picked | null = null;
@@ -52,7 +60,66 @@ export class SelectionState {
     this.error = null;
     this.pair = null;
     this.compared = [];
+    this.many = [];
     this.#anchor = null;
+  }
+
+  /** Every commit picked, newest first, whatever the count. */
+  get picked(): Picked[] {
+    if (this.many.length > 0) return this.many;
+    if (this.pair !== null) return [this.pair.to, this.pair.from];
+    return this.#anchor !== null && this.row !== null ? [this.#anchor] : [];
+  }
+
+  /** The commit a run picked with Shift starts from: the last one picked on its own. */
+  get anchorRow(): number | null {
+    return this.#anchor?.row ?? null;
+  }
+
+  /** Adds a commit to the picked set, or takes it out if it is already there. */
+  async toggle(path: string, row: number, oid: string): Promise<void> {
+    const now = this.picked;
+    const next = now.some((p) => p.row === row)
+      ? now.filter((p) => p.row !== row)
+      : [...now, { row, oid }];
+    await this.pickAll(path, next);
+  }
+
+  /**
+   * Picks exactly these commits.
+   *
+   * One is a selection and two a comparison, as before; three or more are a set. The anchor
+   * is left where it was, so a second Shift-click measures from the same commit as the first.
+   */
+  async pickAll(path: string, picks: Picked[]): Promise<void> {
+    const sorted = [...picks].sort((a, b) => a.row - b.row);
+    const [first, second] = sorted;
+    if (first === undefined) {
+      this.clear();
+      return;
+    }
+    const anchor = this.#anchor;
+    if (second === undefined) {
+      await this.select(path, first.row, first.oid);
+      this.#anchor = anchor ?? first;
+      return;
+    }
+    if (sorted.length === 2) {
+      this.#anchor = first;
+      const comparing = this.compare(path, second.row, second.oid);
+      this.#anchor = anchor ?? first;
+      await comparing;
+      return;
+    }
+    this.#token += 1;
+    this.many = sorted;
+    this.pair = null;
+    this.compared = [];
+    this.detail = null;
+    this.verification = null;
+    this.error = null;
+    this.loading = false;
+    this.row = first.row;
   }
 
   async select(
@@ -64,6 +131,7 @@ export class SelectionState {
     this.#anchor = { row, oid };
     this.pair = null;
     this.compared = [];
+    this.many = [];
     this.row = row;
     this.loading = true;
     this.error = null;
@@ -110,6 +178,7 @@ export class SelectionState {
     // Rows count back through history, so the larger row number is the older commit.
     const picked = { row, oid };
     const [from, to] = anchor.row > row ? [anchor, picked] : [picked, anchor];
+    this.many = [];
     this.pair = { from, to };
     this.detail = null;
     this.verification = null;
@@ -151,6 +220,16 @@ export class SelectionState {
     // selected commit loads a window that does not hold it, and reading that as "the commit
     // is gone" threw the selection away for scrolling.
     if (!this.reaches(frame)) return;
+    if (this.many.length > 0) {
+      const moved = this.many.map((p) => ({ ...p, row: rowOfOid(frame, p.oid) }));
+      if (moved.some((p) => p.row === null)) {
+        this.clear();
+        return;
+      }
+      this.many = moved.map((p) => ({ oid: p.oid, row: p.row ?? 0 }));
+      this.row = this.many[0]?.row ?? null;
+      return;
+    }
     if (pair !== null) {
       const from = rowOfOid(frame, pair.from.oid);
       const to = rowOfOid(frame, pair.to.oid);
@@ -180,6 +259,7 @@ export class SelectionState {
 
   /** Whether `frame` holds the rows the selection claims, and so can speak about them. */
   reaches(frame: Frame): boolean {
+    if (this.many.length > 0) return this.many.every((p) => covers(frame, p.row, p.row));
     const pair = this.pair;
     if (pair !== null) {
       return covers(frame, pair.to.row, pair.to.row) && covers(frame, pair.from.row, pair.from.row);
@@ -189,6 +269,7 @@ export class SelectionState {
 
   /** True for a row that is one end of the comparison, so the list can mark both. */
   marks(row: number): boolean {
+    if (this.many.length > 0) return this.many.some((p) => p.row === row);
     const pair = this.pair;
     if (pair === null) return this.row === row;
     return pair.from.row === row || pair.to.row === row;

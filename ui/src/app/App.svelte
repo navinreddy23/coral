@@ -135,7 +135,7 @@
     toggleMaximize as toggleMaximise,
   } from '../ipc/window';
   import { ThemeState, type ThemeChoice } from '../state/theme.svelte';
-  import { SelectionState } from '../state/selection.svelte';
+  import { SelectionState, type Picked } from '../state/selection.svelte';
   import { WorktreeState } from '../state/worktree.svelte';
   import { WorktreesState } from '../state/worktrees.svelte';
   import Staging from './Staging.svelte';
@@ -846,10 +846,83 @@
     if (local === null || !graph.frame || !info) return;
     showWip = false;
     const oid = oidOf(graph.frame, local);
-    const second = event !== undefined && (event.ctrlKey || event.metaKey || event.shiftKey);
-    void (second
-      ? selection.compare(info.path, row, oid)
-      : selection.select(info.path, row, oid, listingFor(oid)));
+    if (event !== undefined && event.shiftKey && selection.anchorRow !== null) {
+      void selection.pickAll(info.path, run(selection.anchorRow, row));
+    } else if (event !== undefined && (event.ctrlKey || event.metaKey)) {
+      void selection.toggle(info.path, row, oid);
+    } else {
+      void selection.select(info.path, row, oid, listingFor(oid));
+    }
+  }
+
+  /**
+   * Every row from one to the other, as Shift-click picks them.
+   *
+   * Rows, not one branch's commits: the graph interleaves branches, and a run is what is on
+   * screen between the two clicks. Only the rows the loaded window holds, which is all of them
+   * for anything a person can see to click.
+   */
+  function run(from: number, to: number): Picked[] {
+    const frame = graph.frame;
+    if (!frame) return [];
+    const out: Picked[] = [];
+    for (let row = Math.min(from, to); row <= Math.max(from, to); row += 1) {
+      const local = localRow(frame, row);
+      if (local !== null) out.push({ row, oid: oidOf(frame, local) });
+    }
+    return out;
+  }
+
+  /** Whether a row is a merge, which cherry-pick and revert need a parent picked for. */
+  function isMergeRow(row: number): boolean {
+    const local = localRow(graph.frame, row);
+    return local !== null && graph.frame !== null && hasFlag(graph.frame.rowFlags[local] ?? 0, RowFlag.Merge);
+  }
+
+  /**
+   * The menu for several picked commits: what can be done to all of them at once.
+   *
+   * Cherry-picked oldest first, so each lands on the one before it as it did originally;
+   * reverted newest first, undoing in the reverse of the order they were made, which is the
+   * order least likely to conflict. A merge needs a parent named, which one dialog cannot ask
+   * of several, so a set with one in it is turned away with the reason.
+   */
+  function manyMenu(event: MouseEvent, picks: Picked[]) {
+    event.preventDefault();
+    const n = picks.length;
+    const merge = picks.some((p) => isMergeRow(p.row));
+    const newestFirst = [...picks].sort((a, b) => a.row - b.row).map((p) => p.oid);
+    const oldestFirst = [...newestFirst].reverse();
+    const why = merge ? 'one is a merge; pick it on its own' : undefined;
+    menu = {
+      x: event.clientX,
+      y: event.clientY,
+      items: [
+        {
+          kind: 'item',
+          label: `Cherry pick ${n} commits`,
+          hint: why ?? 'oldest first',
+          disabled: merge || actions.busy,
+          worktree: true,
+          run: () => void cherryPickMany(oldestFirst),
+        },
+        {
+          kind: 'item',
+          label: `Revert ${n} commits`,
+          hint: why ?? 'newest first',
+          disabled: merge || actions.busy,
+          worktree: true,
+          run: () => void act({ kind: 'revert', revs: newestFirst, mainline: undefined }),
+        },
+        { kind: 'separator' },
+        {
+          kind: 'item',
+          label: `Copy ${n} commit shas`,
+          hint: 'one per line',
+          run: () => void copyName(newestFirst.join('\n')),
+        },
+      ],
+    };
   }
 
   /*
@@ -2051,6 +2124,19 @@
   async function cherryPick(oid: string) {
     const mainline = await mainlineFor(oid, 'cherry pick');
     if (mainline === null) return;
+    const commit = await commitPicked();
+    if (commit === null) return;
+    await act({ kind: 'cherryPick', revs: [oid], commit, mainline });
+  }
+
+  async function cherryPickMany(revs: string[]) {
+    const commit = await commitPicked();
+    if (commit === null) return;
+    await act({ kind: 'cherryPick', revs, commit, mainline: undefined });
+  }
+
+  /** Whether cherry-picked changes are committed at once or left staged; null for neither. */
+  async function commitPicked(): Promise<boolean | null> {
     const { choice } = await ask({
       title: 'Commit the cherry picked changes?',
       detail:
@@ -2065,8 +2151,7 @@
         { id: 'no', label: 'No' },
       ],
     });
-    if (choice === null) return;
-    await act({ kind: 'cherryPick', revs: [oid], commit: choice === 'yes', mainline });
+    return choice === null ? null : choice === 'yes';
   }
 
   /**
@@ -2107,6 +2192,13 @@
    */
   async function commitMenu(event: MouseEvent, row: number, oid: string) {
     event.preventDefault();
+    // Right-clicking one of several picked commits is about all of them, and must not undo the
+    // picking by selecting that one alone.
+    const picks = selection.picked;
+    if (picks.length > 1 && picks.some((p) => p.row === row)) {
+      manyMenu(event, picks);
+      return;
+    }
     pick(row);
     // A stash sits on a row of its own but is not a commit on this branch, so most of what
     // follows is a rewrite the engine would refuse — and "Drop commit" beside "Move commit up"
@@ -5175,6 +5267,7 @@
         <Details
           detail={selection.detail}
           verification={selection.verification}
+          many={selection.many.map((p) => ({ oid: p.oid, summary: visibleMeta.get(p.row)?.summary ?? '' }))}
           onFileMenu={commitFileMenu}
           picture={detailPicture}
           repo={info?.path ?? null}
