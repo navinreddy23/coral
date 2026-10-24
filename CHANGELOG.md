@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.10
 
 From a working day with a teammate: one clone driven in the window, the other from the shell,
 sharing a remote and an LFS server.
