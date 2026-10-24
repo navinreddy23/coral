@@ -37,7 +37,7 @@ worth of DOM. The panel on the right is the commit under the cursor.*
 | **Interactive rebase** with a picker for reword, squash, fixup, edit, drop and reorder, before anything runs. | **The command palette** on `Ctrl+P`, with every action and every tag in the repository. |
 | [![The dark theme](docs/screenshots/08-dark.png)](docs/screenshots/08-dark.png) | [![The embedded terminal](docs/screenshots/09-terminal.png)](docs/screenshots/09-terminal.png) |
 | **A dark theme**, chosen or followed from the desktop. | **A terminal** in the repository, on ``Ctrl+` ``. |
-| [![Recovering lost work](docs/screenshots/14-recover.png)](docs/screenshots/14-recover.png) | [![Checking out a pull request](docs/screenshots/15-checkout.png)](docs/screenshots/15-checkout.png) |
+| [![Recovering lost work](docs/screenshots/14-recover.png)](docs/screenshots/14-recover.png) | [![A pull request: check it out or read its review](docs/screenshots/15-checkout.png)](docs/screenshots/15-checkout.png) |
 | **Lost work, found again**: every commit HEAD has been on, the ones nothing reaches any more marked, and a branch at one in a click. | **A pull or merge request checked out** as a branch of its own from a right-click, forks included. |
 
 ![A branch soloed](docs/screenshots/10-solo.png)
@@ -61,7 +61,9 @@ carries an eye that takes it out of the graph.
 **Working with changes.** Stage and unstage by file, by hunk or by line; commit, amend, discard.
 The file panel answers four questions about one file: what changed, who wrote each line, what
 has touched it, and the same again with whitespace discounted. Diffs read inline or side by
-side, and a line that replaced another has the words that actually changed marked on it.
+side, and a line that replaced another has the words that actually changed marked on it. A
+file's menu ignores it, its kind or its folder, stops tracking one committed by mistake, puts
+it into Git LFS, and locks or unlocks it on the LFS server.
 
 **Patches.** Two commits picked in the graph are written out as a numbered series with one
 button; the same button takes patch files back in, either as commits with their original
@@ -69,7 +71,8 @@ authors or as changes left in the working copy to read first. A patch that no lo
 cleanly stops in the conflict tool rather than failing.
 
 **Rewriting history.** Merge, rebase, interactive rebase with a picker for reword, squash,
-fixup, edit, drop and reorder, cherry-pick, revert, and reset. Every one of them is journalled,
+fixup, edit, drop and reorder, cherry-pick, revert, and reset. Several commits picked with
+Ctrl or Shift are cherry picked or reverted together. Every one of them is journalled,
 so **undo** reverses an operation it knows nothing about by restoring the refs it moved — and it
 syncs the worktree, so undoing does not leave the index describing a commit that is no longer
 there.
@@ -83,7 +86,8 @@ are backwards and the tool says so.
 shows what git is doing and can be stopped, which is what makes having no timeout on them safe. Forcing is
 always `--force-with-lease`. Coral is its own git credential helper, so a token never appears in
 a URL, a config file or an argument list. GitHub and GitLab, including Enterprise and
-self-hosted, list their pull and merge requests beside the branches.
+self-hosted, list their pull and merge requests beside the branches, and a request's review
+can be read, commented on, approved or answered with a request for changes from there.
 
 **Profiles.** Work repositories and personal ones on one machine. A profile owns its own tabs,
 groups and recent list, and carries a name, an email address and an ssh key that a repository
@@ -91,7 +95,8 @@ cloned under it inherits — written into that repository's own config, so git a
 see exactly what Coral does. Switching restores the other side as it was left.
 
 **Around the edges.** Repository tabs with Chrome-style groups, an embedded terminal, commit
-signing configured per repository, SSH key selection for a clone and for an open repository,
+signing configured per repository with each commit's signature checked, notes on commits,
+commit templates, SSH key selection for a clone and for an open repository,
 worktrees, patches, a command palette, rebindable shortcuts, and light and dark themes.
 
 ## Two front ends, one engine
