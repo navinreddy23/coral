@@ -15,8 +15,8 @@ on the side that had just been pulled.
 
 ### A rejected push with a merge on the branch
 
-When a push is refused and the branch has a merge the remote has not seen, the way past it
-offered first is to pull and merge. Rebasing, which was the only pull on offer, replays what
+When a push is refused, or a pull finds that both sides have moved, and the branch has a merge
+the remote has not seen, the way past it offered first is to pull and merge. Rebasing, which was the only pull on offer, replays what
 the merge brought in as new commits and asks its conflicts again. Both are offered either way.
 
 ### Picking lines and folders
