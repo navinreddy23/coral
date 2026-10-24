@@ -3448,7 +3448,7 @@
       if (choice !== 'discard') return;
     }
 
-    await worktree.applyPart(file, part, hunk, lines);
+    await worktree.applyPart(file, part, hunk, lines, diff.reading);
     if (worktree.error) {
       toasts.push('error', 'Could not apply that', worktree.error);
       return;

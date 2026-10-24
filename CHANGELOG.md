@@ -33,6 +33,12 @@ the merge brought in as new commits and asks its conflicts again. Both are offer
 - A commit picked from a file's history no longer offers "Stage hunk", "Discard hunk" or line
   picking. The buttons counted hunks in the working copy's diff, not the one on screen, so
   "Discard hunk" over an old commit threw away a different, uncommitted hunk for good.
+- Leaving a file's history for the Diff or Blame tab goes back to the change the panel was
+  opened on. The Diff tab went on showing the last commit picked in the history.
+- Staging or discarding part of a file shown whole, or by picked lines in it, acts on what is
+  on screen. The engine counted hunks in the file's usual diff, so it staged a different part.
+  While whitespace is ignored, partial staging is not offered at all and the hunk says why:
+  "Stage hunk" there staged every change in the file, the hidden whitespace ones included.
 - Merging `origin/main` named the incoming side "origin/HEAD" in the merge tool, in every
   clone, because `origin/HEAD` points at the same commit.
 - Several commits cherry picked without committing leave every one of their messages in the

@@ -138,8 +138,10 @@
   // None over a commit picked from the file's history, though the panel was opened on the
   // working copy: a hunk's index is read against the working copy, so acting on what is shown
   // would stage or throw away a different hunk from the one on screen.
+  // None while whitespace is ignored either: the hunks on screen are not the file's, and a
+  // patch read past whitespace does not apply to it.
   const side = $derived(
-    diff.atCommit !== null
+    diff.atCommit !== null || diff.ignoreWhitespace
       ? null
       : diff.source === 'unstaged'
         ? 'stage'
@@ -573,6 +575,8 @@
                       </button>
                     {/if}
                   </span>
+                {:else if diff.atCommit === null && diff.ignoreWhitespace && (diff.source === 'unstaged' || diff.source === 'staged')}
+                  <span class="hunk-note">Show whitespace to stage or discard part of this</span>
                 {/if}
                 </div>
               </td>
@@ -947,6 +951,7 @@
   .hunk-bar { display: flex; align-items: center; gap: var(--space-3); }
   .where { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .hunk-acts { flex: 0 0 auto; display: flex; gap: var(--space-1); }
+  .hunk-note { flex: 0 0 auto; font-family: var(--font-ui); color: var(--fg-2); }
   .hunk-acts button {
     font: inherit; font-family: var(--font-ui); font-size: var(--text-sm); cursor: pointer;
     background: var(--bg-0); border: 1px solid var(--border); border-radius: var(--radius-0);

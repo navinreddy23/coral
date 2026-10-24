@@ -668,10 +668,10 @@ fn both<'a>(file: &'a str, old: Option<&'a str>) -> Vec<&'a str> {
 #[derive(Clone, Copy, Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReadOptions {
-    whole_file: bool,
-    ignore_whitespace: bool,
+    pub whole_file: bool,
+    pub ignore_whitespace: bool,
     /// False once the reader has been shown the size guard and asked for the contents anyway.
-    guard_large: bool,
+    pub guard_large: bool,
 }
 
 impl From<ReadOptions> for coral_core::diff::DiffOptions {
@@ -734,11 +734,13 @@ impl Part {
 /// `hunk` indexes the file's hunks as the panel is showing them, and `lines` indexes that
 /// hunk's own lines; an empty `lines` means the whole hunk. Both are read from the diff again
 /// here rather than sent from the window: a patch built against a stale hunk applies perfectly
-/// cleanly and stages the wrong thing.
+/// cleanly and stages the wrong thing. Read with the panel's own `options`, since a file shown
+/// whole is one hunk where the default reading has several.
 ///
 /// # Errors
-/// Propagates git failures, and [`coral_core::CoralError::Protocol`] when the file has no
-/// changes on the side being asked about.
+/// Propagates git failures; [`coral_core::CoralError::Refused`] while whitespace is ignored,
+/// since a patch read past whitespace does not apply to the file as it is; and
+/// [`coral_core::CoralError::Protocol`] when the file has no changes on the side asked about.
 #[tauri::command]
 pub async fn apply_part(
     path: String,
@@ -746,8 +748,18 @@ pub async fn apply_part(
     part: Part,
     hunk: usize,
     lines: Vec<usize>,
+    options: ReadOptions,
 ) -> Result<coral_core::status::Status, crate::commands::IpcError> {
     tracing::info!(path, file, ?part, hunk, count = lines.len(), "apply_part");
+    if options.ignore_whitespace {
+        return Err(coral_core::CoralError::Refused {
+            label: "apply",
+            detail: "whitespace is being ignored, so the hunks on screen are not the file's. \
+                     Show whitespace, then stage or discard part of it"
+                .to_owned(),
+        }
+        .into());
+    }
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
@@ -757,7 +769,7 @@ pub async fn apply_part(
             &runner,
             part.staged_side(),
             &[file.as_str()],
-            coral_core::diff::DiffOptions::default(),
+            options.into(),
         )
         .await?;
     let target =

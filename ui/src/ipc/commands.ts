@@ -253,8 +253,9 @@ export function applyPart(
   part: Part,
   hunk: number,
   lines: number[],
+  options: ReadOptions,
 ): Promise<Status> {
-  return invoke<Status>('apply_part', { path, file, part, hunk, lines });
+  return invoke<Status>('apply_part', { path, file, part, hunk, lines, options });
 }
 
 /** Deletes files outright: gone from the working tree, and staged as removed if tracked. */

@@ -218,6 +218,23 @@ describe('the diff viewer', () => {
     expect(view.container.querySelector('button.pick')).toBeNull();
   });
 
+  it('stages nothing by part while whitespace is ignored, and says how to', () => {
+    // The hunks read past whitespace are not the file's: staging "this hunk" staged all of it.
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'kernel/sched/core.c';
+    diff.source = 'unstaged';
+    diff.file = fileDiff();
+    diff.setMode('inline');
+    diff.setIgnoreWhitespace(true);
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+
+    const said = view.container.textContent ?? '';
+    expect(said).not.toContain('Stage hunk');
+    expect(said).toContain('Show whitespace to stage or discard part of this');
+    expect(view.container.querySelector('button.pick')).toBeNull();
+    diff.setIgnoreWhitespace(false);
+  });
+
   it('picks a run of lines with Shift, leaving out the unchanged ones between', async () => {
     const diff = new DiffState(new ViewsState());
     diff.path = 'kernel/sched/core.c';
