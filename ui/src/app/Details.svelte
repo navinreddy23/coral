@@ -467,12 +467,12 @@
      without the button wrapping under it. */
   dd.break { display: flex; align-items: flex-start; gap: var(--space-1); }
   .oid { min-width: 0; }
-  .note { margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3); border-left: 2px solid var(--border-strong); background: var(--bg-1); position: relative; }
+  /* The body's own frame is the note's: one box, headed, with its edit link on the heading. */
+  .note { margin: 0 0 var(--space-3); position: relative; }
   .note h3 { margin: 0 0 var(--space-1); }
-  .note .body { background: var(--bg-1); margin: 0; }
   .edit-note {
-    position: absolute; top: var(--space-2); right: var(--space-2); cursor: pointer;
-    font: inherit; font-size: var(--text-sm); color: var(--accent); background: var(--bg-1); border: 0; padding: 0;
+    position: absolute; top: 0; right: 0; cursor: pointer;
+    font: inherit; font-size: var(--text-sm); color: var(--accent); background: var(--bg-0); border: 0; padding: 0;
   }
   .picked { list-style: none; margin: 0 0 var(--space-3); padding: 0; display: grid; gap: var(--space-1); }
   .picked li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-1); }

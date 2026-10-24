@@ -250,12 +250,15 @@ export class SelectionState {
     // is gone" threw the selection away for scrolling.
     if (!this.reaches(frame)) return;
     if (this.many.length > 0) {
-      const moved = this.many.map((p) => ({ ...p, row: rowOfOid(frame, p.oid) }));
-      if (moved.some((p) => p.row === null)) {
+      const rows = this.many.map((p) => rowOfOid(frame, p.oid));
+      if (rows.some((row) => row === null)) {
         this.clear();
         return;
       }
-      this.many = moved.map((p) => ({ oid: p.oid, row: p.row ?? 0 }));
+      // Written only when a row really moved: this runs from an effect that reads `many`, and
+      // a new array on every call re-ran it without end and froze the window.
+      if (rows.every((row, i) => row === this.many[i]?.row)) return;
+      this.many = this.many.map((p, i) => ({ oid: p.oid, row: rows[i] ?? p.row }));
       this.row = this.many[0]?.row ?? null;
       return;
     }

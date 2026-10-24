@@ -195,6 +195,20 @@ describe('picking several commits', () => {
     expect(selection.picked.map((p) => p.row)).toEqual([1, 2, 3]);
   });
 
+  it('leaves a set that has not moved exactly as it was', () => {
+    // reanchor runs from an effect that reads the set; a fresh array every time re-ran that
+    // effect without end, and the window stopped answering clicks.
+    const selection = new SelectionState();
+    void selection.pickAll(repo, [
+      { row: 0, oid: tea },
+      { row: 1, oid: coffee },
+      { row: 2, oid: water },
+    ]);
+    const before = selection.many;
+    selection.reanchor(frameOf(0, [tea, coffee, water]));
+    expect(selection.many).toBe(before);
+  });
+
   it('follows a set to its new rows, and lets it go when a commit in it is gone', () => {
     const selection = new SelectionState();
     void selection.pickAll(repo, [
