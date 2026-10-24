@@ -7,6 +7,9 @@ use super::stream::{CommitNode, CommitStream, Order, StreamOpts, Tips, WalkContr
 use crate::error::CoralError;
 use crate::process::{GitCommand, GitRunner, Sink};
 
+/// The `rev-list` argument that leaves notes out of the `--all` or `--glob` after it.
+const NOT_NOTES: &str = "--exclude=refs/notes/*";
+
 /// Reads the DAG by streaming `git rev-list`.
 ///
 /// This is the oracle the gix implementation is tested against, and the fallback if gix ever
@@ -67,9 +70,11 @@ impl SubprocessCommitStream {
         // git's own vocabulary for the same thing, which is what keeps this an oracle rather
         // than a second implementation: `--exclude` applies to the `--all` that follows it, so
         // the order of these two arguments is the whole of their meaning.
+        // Notes are commits on refs/notes/*, kept about history rather than in it.
         match &opts.tips {
-            Tips::All => cmd.arg("--all"),
+            Tips::All => cmd.arg(NOT_NOTES).arg("--all"),
             Tips::Except(names) => {
+                cmd = cmd.arg(NOT_NOTES);
                 for name in names {
                     cmd = cmd.arg(format!("--exclude={name}"));
                 }

@@ -536,3 +536,32 @@ fn an_ordinary_clone_is_left_alone() {
     assert_eq!(nodes.len(), 2);
     assert_eq!(nodes[0].parents.len(), 1, "the tip still knows its parent");
 }
+
+/// A note is about a commit, not part of history.
+///
+/// `git notes` keeps its notes as commits on `refs/notes/commits`, and walking every ref drew
+/// that bookkeeping as a branch: a row reading "Notes added by 'git notes add'" under a label
+/// `refs/notes/commits`, for anyone who had ever added a note.
+#[tokio::test(flavor = "multi_thread")]
+async fn notes_are_not_walked_as_history() {
+    let repo = gnarly_repo();
+    let (gix, sub) = streams(repo.path()).await;
+    let before = ids(&gix, Tips::All);
+    repo.git(["notes", "add", "-m", "reviewed", "HEAD"]);
+
+    for stream in [&gix as &dyn CommitStream, &sub as &dyn CommitStream] {
+        assert_eq!(
+            ids(stream, Tips::All),
+            before,
+            "{} walked the notes",
+            stream.name()
+        );
+        let hiding = Tips::Except(vec!["refs/heads/a".to_owned()]);
+        let hidden = ids(stream, hiding);
+        assert!(
+            hidden.is_subset(&before),
+            "{} walked the notes with a ref hidden",
+            stream.name()
+        );
+    }
+}

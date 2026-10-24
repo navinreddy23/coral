@@ -119,8 +119,17 @@ pub fn parse(input: &[u8]) -> Result<Vec<GitRef>, CoralError> {
         .split(|b| *b == b'\n')
         .filter(|line| !line.is_empty())
         .map(parse_line)
-        .filter(|r| !matches!(r, Ok(g) if is_remote_head(&g.name) || is_bisect_verdict(&g.name)))
+        .filter(|r| {
+            !matches!(r, Ok(g) if is_remote_head(&g.name) || is_bisect_verdict(&g.name) || is_note(&g.name))
+        })
         .collect()
+}
+
+/// Whether a name is a notes ref: commits holding notes about history, not history itself.
+/// Drawn, `refs/notes/commits` was a branch label over a row nobody made.
+#[must_use]
+pub fn is_note(name: &str) -> bool {
+    name.starts_with("refs/notes/")
 }
 
 /// Whether a name is one of the verdicts a bisection records. They name commits, not lines of

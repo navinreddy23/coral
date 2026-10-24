@@ -693,7 +693,13 @@ impl RepoLocation {
         let out = runner
             .output(
                 GitCommand::read("log", self.display_path())
-                    .args(["log", "--all", "--format=%H", "-i"])
+                    .args([
+                        "log",
+                        "--exclude=refs/notes/*",
+                        "--all",
+                        "--format=%H",
+                        "-i",
+                    ])
                     .arg(format!("--max-count={limit}"))
                     .args(narrow)
                     .arg("--")
@@ -719,7 +725,14 @@ impl RepoLocation {
         let out = runner
             .output(
                 GitCommand::read("log", self.display_path())
-                    .args(["log", "--all", "--format=%H", "--fixed-strings", "-i"])
+                    .args([
+                        "log",
+                        "--exclude=refs/notes/*",
+                        "--all",
+                        "--format=%H",
+                        "--fixed-strings",
+                        "-i",
+                    ])
                     .arg(format!("--max-count={limit}"))
                     .arg(format!("{field}={query}"))
                     .args(narrow),
@@ -744,7 +757,13 @@ impl RepoLocation {
         let out = runner
             .output(
                 GitCommand::read("log", self.display_path())
-                    .args(["log", "--all", "--format=%H", "-i"])
+                    .args([
+                        "log",
+                        "--exclude=refs/notes/*",
+                        "--all",
+                        "--format=%H",
+                        "-i",
+                    ])
                     .arg(format!("--max-count={limit}"))
                     .args(narrow),
             )
