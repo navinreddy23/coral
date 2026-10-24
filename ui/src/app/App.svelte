@@ -335,7 +335,12 @@
       case 'stage.all': void worktree.stage(worktree.unstaged.map((f) => f.path), true); break;
       case 'unstage.all': void worktree.stage(worktree.staged.map((f) => f.path), false); break;
       case 'tab.new': void openAnother(); break;
-      case 'tab.close': if (tabs.active) void tabs.close(tabs.active.id); break;
+      // A new tab is the start page over the session, with the repository it came from still
+      // active underneath: closing that one closed a repository nobody was looking at.
+      case 'tab.close':
+        if (showStart && tabs.session.tabs.length > 0) showStart = false;
+        else if (tabs.active) void tabs.close(tabs.active.id);
+        break;
       case 'tab.next': cycleTab(1); break;
       case 'tab.previous': cycleTab(-1); break;
       case 'panel.left': cycleSidebar(); break;
@@ -417,6 +422,14 @@
   function cycleTab(delta: number) {
     const list = tabs.session.tabs;
     if (list.length === 0) return;
+    // A new tab sits after the last one in the bar, so stepping off it lands on the first or
+    // the last. It stayed up before, over whichever repository the step had activated.
+    if (showStart) {
+      showStart = false;
+      const edge = delta > 0 ? list[0] : list[list.length - 1];
+      if (edge) void tabs.activate(edge.id);
+      return;
+    }
     const at = list.findIndex((t) => t.id === tabs.session.active);
     const next = list[(at + delta + list.length) % list.length];
     if (next) void tabs.activate(next.id);

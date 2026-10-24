@@ -50,6 +50,11 @@ clash marked in the files and the stash kept), or left in a stash. It ended in g
 - Redoing a soft or mixed reset leaves the changes staged or unstaged, as the reset did.
   Redo matched the files to the commit whatever the reset had been, so a soft reset came back
   as a hard one, and on a branch of its own the work it had kept was left only in the reflog.
+- Ctrl+W on a new tab closes the new tab. It closed the repository tab the new one had been
+  opened from. Ctrl+Tab and Ctrl+Shift+Tab step off a new tab to the first or last tab, where
+  they changed the repository underneath and left the start page showing over it.
+- The README and the website no longer say the keyboard shortcuts can be rebound. They are
+  GitKraken's, and Ctrl+/ lists them.
 - A branch that is only behind what it follows offers "Fast-forward main to origin/main" in
   its menu, without checking it out. The panel showed it behind, and the only way to bring it
   up to date was to check it out and pull.

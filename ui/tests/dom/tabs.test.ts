@@ -387,3 +387,45 @@ describe('two repositories in two tabs', () => {
     expect(container.textContent).toContain('Reading the repository');
   });
 });
+
+describe('the new tab', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  /**
+   * A new tab is the start page shown over the session, not a tab of its own, and the active
+   * tab under it is still the repository it was opened from. Ctrl+W closed that repository.
+   */
+  it('is what Ctrl+W closes, and the repository under it stays open', async () => {
+    const { container } = await shell();
+    await fireEvent.keyDown(window, { key: 't', ctrlKey: true });
+    await waitFor(() => {
+      if (!container.textContent?.includes('Repositories')) throw new Error('no start page yet');
+    });
+
+    await fireEvent.keyDown(window, { key: 'w', ctrlKey: true });
+    await waitFor(() => {
+      if (container.textContent?.includes('Repositories')) throw new Error('still on the start page');
+    });
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'tab_close')).toBe(false);
+    expect(container.querySelectorAll('nav .tab')).toHaveLength(2);
+  });
+
+  it('leaves for the next tab on Ctrl+Tab, as the last tab in the bar', async () => {
+    // It switched the repository underneath and went on showing the start page over it.
+    const { container } = await shell();
+    await fireEvent.keyDown(window, { key: 't', ctrlKey: true });
+    await waitFor(() => {
+      if (!container.textContent?.includes('Repositories')) throw new Error('no start page yet');
+    });
+
+    await fireEvent.keyDown(window, { key: 'Tab', ctrlKey: true });
+    await waitFor(() => {
+      if (container.textContent?.includes('Repositories')) throw new Error('still on the start page');
+    });
+    const picked = invoke.mock.calls.filter(([cmd]) => cmd === 'tab_activate').at(-1);
+    expect(picked?.[1]).toMatchObject({ id: 1 });
+  });
+});
