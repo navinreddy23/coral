@@ -22,6 +22,7 @@
     openPath,
     onOpenFile,
     onFileMenu,
+    onFolderMenu,
     locks = new Map(),
     depth = 0,
     startClosed = false,
@@ -31,6 +32,7 @@
     onOpenFile: (path: string) => void;
     /** A file's own menu, where the tree has one to offer. */
     onFileMenu?: (event: MouseEvent, path: string) => void;
+    onFolderMenu?: (event: MouseEvent, path: string) => void;
     /** Files locked on the LFS server, by path. */
     locks?: Map<string, LfsLock>;
     depth?: number;
@@ -66,6 +68,7 @@
           class="dir"
           style:padding-left="{depth * 12 + 4}px"
           onclick={() => (closed[node.path] = !shut(node.path))}
+          oncontextmenu={(event) => onFolderMenu?.(event, node.path)}
         >
           <span class="caret">
             <Icon name={shut(node.path) ? 'chevronRight' : 'chevronDown'} size={13} />
@@ -77,6 +80,7 @@
             {openPath}
             {onOpenFile}
             {onFileMenu}
+            {onFolderMenu}
             {locks}
             {startClosed}
             depth={depth + 1}

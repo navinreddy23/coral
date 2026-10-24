@@ -143,3 +143,19 @@ describe('discarding part of a file', () => {
     }
   });
 });
+
+describe('discarding a file that also has something staged', () => {
+  /**
+   * Discarding goes back to the last commit, so what was staged for the file goes too. The
+   * question said only that the file went back, and lines staged a minute earlier were lost
+   * with the rest.
+   */
+  it('says the staged part goes as well', () => {
+    expect(discardWords(1, [], 'main', 1).detail).toContain('What is staged for it goes too');
+    expect(discardWords(2, [], 'main', 2).detail).toContain('What is staged for them goes too');
+  });
+
+  it('says nothing about staging when nothing is staged', () => {
+    expect(discardWords(1, [], 'main', 0).detail).not.toContain('staged');
+  });
+});

@@ -146,6 +146,17 @@ describe('bringing a revision into the branch', () => {
     expect(items.every((i) => i.kind === 'item' && i.disabled)).toBe(true);
   });
 
+  it('refuses a merge or a plain rebase of what the branch already holds, and says why', () => {
+    // Merging an ancestor is "Already up to date", and a plain rebase onto one flattens any
+    // merge made since into replayed commits.
+    const items = combineItems(local('topic'), 'topic', 'master', 'behind', spies());
+    for (const label of ['Merge topic into master', 'Rebase master onto topic']) {
+      const line = items.find((i) => i.kind === 'item' && i.label === label);
+      expect(line?.kind === 'item' && line.disabled, label).toBe(true);
+      expect(line?.kind === 'item' && line.hint, label).toBe('already in it');
+    }
+  });
+
   it('offers an interactive rebase onto an ancestor, which is not a no-op', () => {
     // It lists every commit made since, which is how anybody edits their history since a
     // release.

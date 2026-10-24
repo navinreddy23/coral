@@ -77,6 +77,10 @@ GIT_CONFIG_GLOBAL=/dev/null git clone -q "$work/git/o/r.git" "$contribution"
 if [ "$provider" = github ]; then proposal=refs/pull/12/head; branch=pr/12; else
     proposal=refs/merge-requests/12/head; branch=mr/12; fi
 GIT_CONFIG_GLOBAL=/dev/null git -C "$work/git/o/r.git" fetch -q "$contribution" "HEAD:$proposal"
+# Work of our own on a branch the host has never seen, to open a request from.
+(cd "$repo" && git switch -q -c topic && echo note > NOTE.md && git add NOTE.md \
+    && GIT_CONFIG_GLOBAL=/dev/null git -c user.name=Ada -c user.email=ada@fixture.invalid \
+        commit -qm "Add a note")
 
 home="$work/home"
 mkdir -p "$home/.config/dev.coral.app" "$home/.local/share/keyrings" "$work/bin"
@@ -129,29 +133,36 @@ log="$work/requests.log"
 if [ "$provider" = github ]; then
     check "grep -q '/pulls?' '$log'" "the proposals were asked for"
     check "! grep -v 'auth=Bearer dumm' '$log' | grep -q ." "every request carried the token"
-    for sha in aaaaaaaa bbbbbbbb cccccccc; do
+    # The fourth is the request opened from topic, whose head the fake host calls d….
+    for sha in aaaaaaaa bbbbbbbb cccccccc dddddddd; do
         check "grep -q 'commits/$sha.*/check-runs' '$log'" "the checks on ${sha:0:1}… were asked for"
     done
-    check "[ \"\$(grep -c '/check-runs' '$log')\" -eq 3 ]" "and on nothing else"
+    check "! grep -o 'commits/[0-9a-f]*/check-runs' '$log' | grep -vqE 'commits/(a{40}|b{40}|c{40}|d{40})/'" \
+        "and on nothing else"
     check "grep -q 'issues/12/comments?' '$log'" "the review of #12 was read"
     check "grep -q 'POST /api/v3/repos/o/r/issues/12/comments .*Added a test' '$log'" "a comment was left on it"
     check "grep -q 'POST /api/v3/repos/o/r/pulls/12/reviews .*APPROVE' '$log'" "and it was approved, as a review"
+    check "grep -q 'POST /api/v3/repos/o/r/pulls .*\"head\": \"topic\"' '$log'" "a pull request was opened from topic"
 else
     check "grep -q '/merge_requests?' '$log'" "the merge requests were asked for"
     # GitLab takes the token in a header of its own rather than as a bearer.
     check "! grep -v 'private=dummy' '$log' | grep -q ." "every request carried the token"
     check "! grep -q 'auth=Bearer' '$log'" "in GitLab's header, not GitHub's"
-    for iid in 12 11 10; do
+    for iid in 13 12 11 10; do
         check "grep -q 'merge_requests/$iid/pipelines' '$log'" "the pipelines of !$iid were asked for"
     done
-    check "[ \"\$(grep -c '/pipelines' '$log')\" -eq 3 ]" "and of nothing else"
+    check "! grep -o 'merge_requests/[0-9]*/pipelines' '$log' | grep -vqE 'merge_requests/1[0-3]/'" \
+        "and of nothing else"
     check "grep -q 'merge_requests/12/notes?' '$log'" "the review of !12 was read"
     check "grep -q 'POST .*merge_requests/12/notes .*Added a test' '$log'" "a note was left on it"
     check "grep -q 'POST .*merge_requests/12/approve' '$log'" "and it was approved where GitLab counts approvals"
+    check "grep -q 'POST /api/v4/projects/o%2Fr/merge_requests .*\"source_branch\": \"topic\"' '$log'" "a merge request was opened from topic"
 fi
 check "[ \"\$(git -C '$repo' symbolic-ref --short HEAD)\" = $branch ]" "#12 is checked out as $branch"
 check "[ -e '$repo/lanes' ]" "with the request's own change in it"
 check "[ \"\$(sha256sum '$keyring')\" != '$before' ]" "the token went to the test's own keyring"
+check "GIT_CONFIG_GLOBAL=/dev/null git --git-dir '$work/git/o/r.git' rev-parse -q --verify refs/heads/topic >/dev/null" \
+    "topic was pushed first, with the token the window signed in with"
 
 echo "photographs in $out"
 exit "$status"

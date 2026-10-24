@@ -1,5 +1,83 @@
 # Changelog
 
+## Unreleased
+
+From a working day with a teammate: one clone driven in the window, the other from the shell,
+sharing a remote and an LFS server.
+
+### Pulling with uncommitted work in the way
+
+A pull that git refuses because it would overwrite uncommitted changes asks whether to stash
+them, pull, and put them back, rather than ending in git's message. If they clash with what
+came in, the clash is marked in the files and the changes stay in the stash. The merge tool
+names that side "your stashed changes"; it was "the incoming change", beside the branch name
+on the side that had just been pulled.
+
+### A rejected push with a merge on the branch
+
+When a push is refused, or a pull finds that both sides have moved, and the branch has a merge
+the remote has not seen, the way past it offered first is to pull and merge. Rebasing, which was the only pull on offer, replays what
+the merge brought in as new commits and asks its conflicts again. Both are offered either way.
+
+### Checking out with uncommitted work in the way
+
+A checkout that git refuses because it would overwrite uncommitted changes asks what they are
+for: taken along to the branch being checked out (stashed, checked out and put back, with any
+clash marked in the files and the stash kept), or left in a stash. It ended in git's message.
+
+### Pushing with the token you signed in with
+
+Signing in to GitHub or GitLab in the status bar now also lets git push and fetch over https
+with that token. It was used for the host's API alone, so a push to an https remote found no
+credential and failed asking for a user name on a terminal it could not use. Coral's
+credential helper answers with it when git has nothing stored for the host, and does not keep a
+second copy, so signing out still signs git out.
+
+### Opening a request from a branch the host does not have
+
+A pull or merge request opened from a branch that has never been pushed says so, and its
+button pushes the branch first. The host refused it with a validation error in its own words.
+
+### Picking lines and folders
+
+- Shift-click picks every changed line between it and the last one clicked, and a picked line
+  is drawn in a deeper shade of its own green or red. Telling a picked line from an unpicked
+  one was a matter of a slightly thicker stripe, the same green as an added line.
+- A folder in a commit's files has a menu: copy its path, or, at the checked-out commit, stop
+  tracking everything in it and ignore it. A `build/` folder committed by mistake could only be
+  stopped file by file.
+
+### Fixed along the way
+
+- A commit picked from a file's history no longer offers "Stage hunk", "Discard hunk" or line
+  picking. The buttons counted hunks in the working copy's diff, not the one on screen, so
+  "Discard hunk" over an old commit threw away a different, uncommitted hunk for good.
+- Leaving a file's history for the Diff or Blame tab goes back to the change the panel was
+  opened on. The Diff tab went on showing the last commit picked in the history.
+- Staging or discarding part of a file shown whole, or by picked lines in it, acts on what is
+  on screen. The engine counted hunks in the file's usual diff, so it staged a different part.
+  While whitespace is ignored, partial staging is not offered at all and the hunk says why:
+  "Stage hunk" there staged every change in the file, the hidden whitespace ones included.
+- Discarding a file that also has something staged says that the staged part goes too.
+  Discarding goes back to the last commit, and the question said only that.
+- Redoing a soft or mixed reset leaves the changes staged or unstaged, as the reset did.
+  Redo matched the files to the commit whatever the reset had been, so a soft reset came back
+  as a hard one, and on a branch of its own the work it had kept was left only in the reflog.
+- Ctrl+W on a new tab closes the new tab. It closed the repository tab the new one had been
+  opened from. Ctrl+Tab and Ctrl+Shift+Tab step off a new tab to the first or last tab, where
+  they changed the repository underneath and left the start page showing over it.
+- The README and the website no longer say the keyboard shortcuts can be rebound. They are
+  GitKraken's, and Ctrl+/ lists them.
+- A branch that is only behind what it follows offers "Fast-forward main to origin/main" in
+  its menu, without checking it out. The panel showed it behind, and the only way to bring it
+  up to date was to check it out and pull.
+- Merging `origin/main` named the incoming side "origin/HEAD" in the merge tool, in every
+  clone, because `origin/HEAD` points at the same commit.
+- Several commits cherry picked without committing leave every one of their messages in the
+  commit box, oldest first. Only the last one's was there.
+- A commit the branch already holds no longer offers to be merged or rebased onto. Merging it
+  did nothing, and a plain rebase onto it flattened any merge made since.
+
 ## 1.2.9
 
 ### Stop tracking a committed file

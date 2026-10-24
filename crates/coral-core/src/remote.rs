@@ -495,7 +495,8 @@ impl RepoLocation {
         Ok(picked.map(|r| (r.name.clone(), name)))
     }
 
-    /// Fetches and integrates, in the way the caller asked for.
+    /// Fetches and integrates, in the way the caller asked for, stashing uncommitted work
+    /// around it when `autostash` is set.
     ///
     /// # Errors
     /// Propagates git failures; a stopped merge or rebase is reported as an outcome.
@@ -504,6 +505,7 @@ impl RepoLocation {
         runner: &GitRunner,
         remote: Option<&str>,
         mode: PullMode,
+        autostash: bool,
         on_progress: F,
     ) -> Result<crate::ops::OpOutcome, CoralError>
     where
@@ -519,6 +521,11 @@ impl RepoLocation {
             PullMode::Merge => cmd.arg("--no-rebase"),
             PullMode::Rebase => cmd.arg("--rebase"),
         };
+        if autostash {
+            // Stashes uncommitted work before and applies it after (see `git help pull`). An
+            // apply that conflicts keeps the entry, so nothing is lost either way.
+            cmd = cmd.arg("--autostash");
+        }
         if let Some(name) = remote {
             cmd = cmd.arg(name);
             // And the branch, whenever there is one. `git pull <remote>` asks git to work out

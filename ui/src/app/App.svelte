@@ -14,6 +14,7 @@
   import Splitter from './Splitter.svelte';
   import { fitColumns, fitPanels, PANE_LIMITS, PanesState } from '../state/panes.svelte';
   import DiffView from './DiffView.svelte';
+  import { inTheWay } from './overwrite';
   import { DiffState } from '../state/diff.svelte';
   import { HostingState } from '../state/hosting.svelte';
   import {
@@ -30,6 +31,7 @@
     setNote,
     pickPatchFiles,
     revAncestry,
+    unpushedMerges,
     type PullRequest,
   } from '../ipc/commands';
   import type { Ancestry, Verdict } from '../ipc/types';
@@ -333,7 +335,12 @@
       case 'stage.all': void worktree.stage(worktree.unstaged.map((f) => f.path), true); break;
       case 'unstage.all': void worktree.stage(worktree.staged.map((f) => f.path), false); break;
       case 'tab.new': void openAnother(); break;
-      case 'tab.close': if (tabs.active) void tabs.close(tabs.active.id); break;
+      // A new tab is the start page over the session, with the repository it came from still
+      // active underneath: closing that one closed a repository nobody was looking at.
+      case 'tab.close':
+        if (showStart && tabs.session.tabs.length > 0) showStart = false;
+        else if (tabs.active) void tabs.close(tabs.active.id);
+        break;
       case 'tab.next': cycleTab(1); break;
       case 'tab.previous': cycleTab(-1); break;
       case 'panel.left': cycleSidebar(); break;
@@ -415,6 +422,14 @@
   function cycleTab(delta: number) {
     const list = tabs.session.tabs;
     if (list.length === 0) return;
+    // A new tab sits after the last one in the bar, so stepping off it lands on the first or
+    // the last. It stayed up before, over whichever repository the step had activated.
+    if (showStart) {
+      showStart = false;
+      const edge = delta > 0 ? list[0] : list[list.length - 1];
+      if (edge) void tabs.activate(edge.id);
+      return;
+    }
     const at = list.findIndex((t) => t.id === tabs.session.active);
     const next = list[(at + delta + list.length) % list.length];
     if (next) void tabs.activate(next.id);
@@ -1304,6 +1319,14 @@
         await offerToIntegrate(action);
         return false;
       }
+      if (action.kind === 'pull' && action.autostash !== true) {
+        const files = inTheWay(actions.report?.text);
+        if (files !== null) return offerToStashAround(action, files);
+      }
+      if (action.kind === 'checkout' || (action.kind === 'branchCreate' && action.checkout)) {
+        const files = inTheWay(actions.report?.text);
+        if (files !== null) return offerToCarry(action, files);
+      }
       // `actions` keeps the message for the status line; the toast is what carries it to
       // someone who is not looking at the bottom of the window.
       //
@@ -1425,6 +1448,11 @@
     );
   }
 
+  /** Why a branch with a merge the remote has not seen is better pulled by merging. */
+  const MERGE_KEPT =
+    'This branch has a merge the remote has not seen. Rebasing would replay what it brought ' +
+    'in as new commits and ask its conflicts again; merging keeps it.';
+
   /**
    * A pull that cannot fast-forward, put as the choice it actually is.
    *
@@ -1436,23 +1464,90 @@
    */
   async function offerToIntegrate(action: Extract<Action, { kind: 'pull' }>) {
     const branch = headName ?? 'This branch';
+    const merged = info !== null ? await unpushedMerges(info.path).catch(() => false) : false;
     const { choice } = await ask({
       title: `${branch} and the remote have both moved`,
       detail:
         'A pull that only fast-forwards cannot bring these together, because each has commits ' +
         'the other does not. Merging keeps both lines of work and writes a commit that joins ' +
         'them. Rebasing puts the commits made here on top of the remote\'s, which rewrites ' +
-        'them and gives them new object ids.',
+        'them and gives them new object ids.' +
+        (merged ? `\n\n${MERGE_KEPT}` : ''),
       asksText: false,
       placeholder: '',
       initial: '',
       choices: [
-        { id: 'merge', label: 'Pull, merging' },
+        { id: 'merge', label: 'Pull, merging', primary: merged },
         { id: 'rebase', label: 'Pull, rebasing' },
       ],
     });
     if (choice === 'merge') await act({ ...action, mode: 'merge' });
     else if (choice === 'rebase') await act({ ...action, mode: 'rebase' });
+  }
+
+  /**
+   * A pull that uncommitted work is in the way of, put as the question it is.
+   *
+   * git refuses rather than overwrite the work, which is right, and the way past it — stash,
+   * pull, apply — was three steps nobody was told about. `--autostash` is those three.
+   */
+  async function offerToStashAround(
+    action: Extract<Action, { kind: 'pull' }>,
+    files: string[],
+  ): Promise<boolean> {
+    const named = files.length === 1 ? files[0] : `${files.length} files`;
+    const { choice } = await ask({
+      title: `Uncommitted changes to ${named} are in the way`,
+      detail:
+        'The pull changes what you are still working on, and git will not overwrite it. ' +
+        'Coral can stash your changes, pull, and put them back. If they clash with what came ' +
+        'in, the clash is marked in the files and your changes stay in the stash.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'stash', label: 'Stash, pull and put back', primary: true }],
+    });
+    return choice === 'stash' ? act({ ...action, autostash: true }) : false;
+  }
+
+  /**
+   * A checkout that uncommitted work is in the way of, with the two things that can be meant.
+   *
+   * Work started on the wrong branch is taken along: stashed, checked out, applied. Work that
+   * belongs where it is goes into a stash and stays there. git has no switch for either, and
+   * its own answer was the error, in a toast, with nothing to do about it here.
+   */
+  async function offerToCarry(
+    action: Extract<Action, { kind: 'checkout' } | { kind: 'branchCreate' }>,
+    files: string[],
+  ): Promise<boolean> {
+    const target = action.kind === 'checkout' ? action.rev : action.name;
+    const named = files.length === 1 ? files[0] : `${files.length} files`;
+    const { choice } = await ask({
+      title: `Uncommitted changes to ${named} are in the way`,
+      detail:
+        `${target} has a different version, and git will not check it out over your changes. ` +
+        'Coral can stash them, check it out, and put them back there; if they clash with it, ' +
+        'the clash is marked in the files and they stay in the stash. Or they can stay in the ' +
+        'stash for later.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [
+        { id: 'carry', label: 'Take them along', primary: true },
+        { id: 'leave', label: 'Leave them in a stash' },
+      ],
+    });
+    if (choice !== 'carry' && choice !== 'leave') return false;
+    if (!(await act({ kind: 'stashPush', message: `before checking out ${target}` }))) return false;
+    if (!(await act(action))) {
+      // Back where they were, on the branch they were made on, rather than left in a stash
+      // nobody asked for.
+      await act({ kind: 'stashApply', index: 0, pop: true });
+      return false;
+    }
+    if (choice === 'leave') return true;
+    return act({ kind: 'stashApply', index: 0, pop: true });
   }
 
   function wasRejected(message: string): boolean {
@@ -1480,6 +1575,15 @@
     // already has under that name, so offering it is offering a click that changes nothing.
     const tag = action.refspec?.startsWith('refs/tags/') === true;
     const name = action.refspec?.slice('refs/tags/'.length) ?? 'the tag';
+    // A rebase replays a merge's incoming commits as new ones and asks its conflicts again,
+    // so with a merge here the pull that keeps it leads. A failure reads as no merge, which
+    // is the offer this made before it asked.
+    const merged =
+      !tag && info !== null ? await unpushedMerges(info.path).catch(() => false) : false;
+    const pulls = [
+      { id: 'rebase', label: 'Pull and rebase', primary: !merged },
+      { id: 'merge', label: 'Pull and merge', primary: merged },
+    ];
     const { choice } = await ask({
       title: 'The remote refused it',
       detail: tag
@@ -1490,19 +1594,19 @@
         : `${message.trim()}\n\n` +
           'The remote has commits this branch does not. Pulling brings them in and keeps ' +
           'them. Forcing replaces them with what is here, and git allows it only while ' +
-          'nobody else has moved the branch since Coral last fetched it.',
+          'nobody else has moved the branch since Coral last fetched it.' +
+          (merged
+            ? `\n\n${MERGE_KEPT}`
+            : ''),
       asksText: false,
       placeholder: '',
       initial: '',
       choices: tag
         ? [{ id: 'force', label: `Replace ${name} on the remote` }]
-        : [
-            { id: 'pull', label: 'Pull and rebase', primary: true },
-            { id: 'force', label: 'Force push' },
-          ],
+        : [...(merged ? pulls.reverse() : pulls), { id: 'force', label: 'Force push' }],
     });
-    if (choice === 'pull') {
-      if (await act({ kind: 'pull', remote: action.remote, mode: 'rebase' })) toasts.dismiss(notice);
+    if (choice === 'rebase' || choice === 'merge') {
+      if (await act({ kind: 'pull', remote: action.remote, mode: choice })) toasts.dismiss(notice);
       return;
     }
     if (choice === 'force' && (await act({ ...action, forceWithLease: true }))) {
@@ -1663,6 +1767,26 @@
         hint: follower.upstream === null ? undefined : `instead of ${follower.upstream}`,
         disabled: busy,
         run: () => void track(follower.short, ref.short),
+      });
+    }
+
+    // A branch that is only behind what it follows can be brought up to date where it stands.
+    // The panel said so with its counter and nothing in its menu acted on it: the one way was
+    // to check it out and pull. Not the checked-out one, which the pull button is for.
+    if (
+      ref.kind.kind === 'local_branch' &&
+      !current &&
+      ref.upstream !== null &&
+      ref.behind > 0 &&
+      ref.ahead === 0
+    ) {
+      const upstream = ref.upstream;
+      items.push({
+        kind: 'item',
+        label: `Fast-forward ${ref.short} to ${upstream}`,
+        hint: 'without checking it out',
+        disabled: busy,
+        run: () => revisionActions.fastForwardBranch(ref.short, upstream),
       });
     }
 
@@ -1835,6 +1959,18 @@
       forceWithLease: false,
       delete: true,
     });
+  }
+
+  /**
+   * The remote a branch must be pushed to before the host can open a request from it, or
+   * null when it is there already. The host's remote, as the engine picks it: `origin`, or
+   * else the first.
+   */
+  function unpushedTo(branch: string | null): string | null {
+    const remote = remotes.list.find((r) => r.name === 'origin') ?? remotes.list[0];
+    if (branch === null || remote === undefined) return null;
+    const there = refs.groups.remote.some((r) => r.short === `${remote.name}/${branch}`);
+    return there ? null : remote.name;
   }
 
   /**
@@ -2668,7 +2804,8 @@
     const untracked = entries.filter((e) => e.worktree === 'untracked').map((e) => e.path);
     const tracked = entries.filter((e) => e.worktree !== 'untracked').map((e) => e.path);
 
-    const words = discardWords(tracked.length, untracked, headName);
+    const staged = tracked.filter((path) => worktree.staged.some((e) => e.path === path)).length;
+    const words = discardWords(tracked.length, untracked, headName, staged);
     const { choice } = await ask({
       title: 'Discard changes?',
       detail: words.detail,
@@ -3060,14 +3197,17 @@
    * copy that pulls the commit. That is the surprise this exists to prevent, so it is said
    * before anything is done.
    */
-  async function stopTrackingFile(file: string) {
+  async function stopTrackingFile(file: string, folder = false) {
     if (!info) return;
     const path = info.path;
     const { choice } = await ask({
-      title: `Stop tracking ${baseName(file)}?`,
-      detail:
-        `It stays on disk here, and /${file} goes into .gitignore. The next commit records it ` +
-        'as deleted, and anyone who pulls that commit has it deleted from their copy.',
+      title: `Stop tracking ${baseName(file)}${folder ? '/' : ''}?`,
+      detail: folder
+        ? `Everything in it stays on disk here, and /${file} goes into .gitignore. The next ` +
+          'commit records every file in it as deleted, and anyone who pulls that commit has ' +
+          'them deleted from their copy.'
+        : `It stays on disk here, and /${file} goes into .gitignore. The next commit records ` +
+          'it as deleted, and anyone who pulls that commit has it deleted from their copy.',
       asksText: false,
       placeholder: '',
       initial: '',
@@ -3210,6 +3350,28 @@
       );
     }
     menu = { ...at, items };
+  }
+
+  /** A folder in a commit's tree: the same as a file, for everything in it. */
+  function commitFolderMenu(event: MouseEvent, folder: string) {
+    event.preventDefault();
+    const atHead = selection.detail !== null && selection.detail.commit.oid === headOid;
+    const items: MenuItem[] = [
+      { kind: 'item', label: 'Copy the path', hint: `${folder}/`, run: () => void copyName(folder) },
+    ];
+    if (atHead) {
+      items.push(
+        { kind: 'separator' },
+        {
+          kind: 'item',
+          label: 'Stop tracking and ignore it',
+          hint: 'it stays on disk',
+          disabled: worktree.busy,
+          run: () => void stopTrackingFile(folder, true),
+        },
+      );
+    }
+    menu = { x: event.clientX, y: event.clientY, items };
   }
 
   async function ignorePath(what: Ignored, line: string) {
@@ -3356,7 +3518,8 @@
     lines: number[],
   ) {
     const file = diff.path;
-    if (!info || file === null) return;
+    // The hunk is counted in the working copy's diff, and a commit from the history is not it.
+    if (!info || file === null || diff.atCommit !== null) return;
 
     if (part === 'discard') {
       const { what, detail } = partWords(
@@ -3375,7 +3538,7 @@
       if (choice !== 'discard') return;
     }
 
-    await worktree.applyPart(file, part, hunk, lines);
+    await worktree.applyPart(file, part, hunk, lines, diff.reading);
     if (worktree.error) {
       toasts.push('error', 'Could not apply that', worktree.error);
       return;
@@ -5121,6 +5284,21 @@
         source={proposing}
         targets={remoteBranchNames}
         label={requestWord}
+        pushTo={unpushedTo(proposing)}
+        onPush={() => {
+          const remote = unpushedTo(proposing);
+          return remote === null || proposing === null
+            ? Promise.resolve(true)
+            : act({
+                kind: 'push',
+                remote,
+                setUpstream: true,
+                refspec: `refs/heads/${proposing}`,
+                tags: false,
+                forceWithLease: false,
+                delete: false,
+              });
+        }}
         onClose={() => (proposing = null)}
         onOpened={(made) => {
           toasts.push('ok', `${requestWord} opened`, `#${made.number} ${made.title}`);
@@ -5481,6 +5659,7 @@
           onEditNote={() => selection.detail && void editNote(selection.detail.commit.oid)}
           many={selection.many.map((p) => ({ oid: p.oid, summary: visibleMeta.get(p.row)?.summary ?? '' }))}
           onFileMenu={commitFileMenu}
+          onFolderMenu={commitFolderMenu}
           locks={lfs.byPath}
           picture={detailPicture}
           repo={info?.path ?? null}

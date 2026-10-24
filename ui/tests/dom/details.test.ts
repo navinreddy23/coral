@@ -140,6 +140,20 @@ describe('the commit panel', () => {
     expect(buttons[0]?.textContent).toContain('core.c');
   });
 
+  it('offers a folder in the tree its own menu, apart from its files', async () => {
+    // A build folder committed by mistake is one thing to stop tracking, not every file in it.
+    const files: ChangedFile[] = [{ path: 'build/out.bin', oldPath: null, change: 'added' }];
+    const onFolderMenu = vi.fn();
+    const onFileMenu = vi.fn();
+    const { container } = render(Details, {
+      props: { ...props, grouping: 'tree' as const, detail: detail(files), onFolderMenu, onFileMenu },
+    });
+
+    await fireEvent.contextMenu(container.querySelector('button.dir') as HTMLElement);
+    expect(onFolderMenu).toHaveBeenCalledWith(expect.anything(), 'build');
+    expect(onFileMenu).not.toHaveBeenCalled();
+  });
+
   it('marks the file whose diff is open', () => {
     const files: ChangedFile[] = [{ path: 'a.c', oldPath: null, change: 'modified' }];
     const { container } = render(Details, {

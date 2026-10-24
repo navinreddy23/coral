@@ -537,7 +537,34 @@ impl RepoLocation {
             // resolved and continued the same way.
             cmd = cmd.arg("--no-commit");
         }
-        self.run_stoppable(runner, cmd.args(revs)).await
+        let out = self.run_stoppable(runner, cmd.args(revs)).await?;
+        if !commit && revs.len() > 1 && out.completed {
+            // git leaves only the last commit's message in MERGE_MSG, which is where the
+            // commit box starts; folded together, the changes are every commit's.
+            if let Some(text) = self.messages_of(runner, revs).await {
+                self.settle_message(&text)?;
+            }
+        }
+        Ok(out)
+    }
+
+    /// Each commit's whole message, in the order given, a blank line between them.
+    async fn messages_of(&self, runner: &GitRunner, revs: &[&str]) -> Option<String> {
+        let out = runner
+            .output(
+                GitCommand::read("log", self.display_path())
+                    .args(["log", "--no-walk=unsorted", "--format=%B%x00"])
+                    .args(revs),
+            )
+            .await
+            .ok()?;
+        let text = String::from_utf8_lossy(&out.stdout);
+        let messages: Vec<&str> = text
+            .split('\0')
+            .map(str::trim)
+            .filter(|m| !m.is_empty())
+            .collect();
+        (!messages.is_empty()).then(|| messages.join("\n\n"))
     }
 
     /// Records commits that undo `revs`.

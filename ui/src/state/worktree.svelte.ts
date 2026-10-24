@@ -6,6 +6,7 @@ import {
   repoStatus,
   stagePaths,
   type Part,
+  type ReadOptions,
 } from '../ipc/commands';
 
 import type { Status, StatusEntry } from '../ipc/types';
@@ -76,9 +77,16 @@ export class WorktreeState {
   }
 
   /** Stages, unstages or discards one hunk of a file, or only some of its lines. */
-  async applyPart(file: string, part: Part, hunk: number, lines: number[]): Promise<void> {
+  /** `options` are the ones the hunks were read with, so both sides count them alike. */
+  async applyPart(
+    file: string,
+    part: Part,
+    hunk: number,
+    lines: number[],
+    options: ReadOptions,
+  ): Promise<void> {
     const path = this.#path;
-    await this.#run(() => applyPart(path, file, part, hunk, lines));
+    await this.#run(() => applyPart(path, file, part, hunk, lines, options));
   }
 
   /** Deletes files outright. The caller asks first; this does not. */

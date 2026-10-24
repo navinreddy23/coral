@@ -196,6 +196,64 @@ describe('the diff viewer', () => {
     expect(view.queryByText('Stage 1 line')).toBeNull();
   });
 
+  it('offers no staging or discarding on a commit picked from the file\'s history', () => {
+    // The buttons send a hunk's index, which is read against the working copy. Shown over an
+    // old commit's change, "Discard hunk" threw away whichever uncommitted hunk had that index:
+    // work in no commit, gone, while the screen showed a line from a year ago.
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'kernel/sched/core.c';
+    diff.source = 'unstaged';
+    diff.file = fileDiff();
+    diff.setMode('inline');
+    diff.setView('history');
+    diff.history = [];
+    diff.atCommit = 'a'.repeat(40);
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+
+    // Within this view: the page still holds the views earlier tests rendered.
+    const said = view.container.textContent ?? '';
+    expect(said).toContain('TWO');
+    expect(said).not.toContain('Stage hunk');
+    expect(said).not.toContain('Discard hunk');
+    expect(view.container.querySelector('button.pick')).toBeNull();
+  });
+
+  it('stages nothing by part while whitespace is ignored, and says how to', () => {
+    // The hunks read past whitespace are not the file's: staging "this hunk" staged all of it.
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'kernel/sched/core.c';
+    diff.source = 'unstaged';
+    diff.file = fileDiff();
+    diff.setMode('inline');
+    diff.setIgnoreWhitespace(true);
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+
+    const said = view.container.textContent ?? '';
+    expect(said).not.toContain('Stage hunk');
+    expect(said).toContain('Show whitespace to stage or discard part of this');
+    expect(view.container.querySelector('button.pick')).toBeNull();
+    diff.setIgnoreWhitespace(false);
+  });
+
+  it('picks a run of lines with Shift, leaving out the unchanged ones between', async () => {
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'kernel/sched/core.c';
+    diff.source = 'unstaged';
+    diff.file = fileDiff();
+    diff.file.hunks[0]?.lines.push(line('add', 'four', null, 4), line('add', 'five', null, 5));
+    diff.setMode('inline');
+    const onPart = vi.fn();
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart } });
+
+    // The remove on row 1 and the last add on row 5, with a context line and two adds between.
+    const picks = [...view.container.querySelectorAll('button.pick')] as HTMLElement[];
+    await fireEvent.click(picks[0] as HTMLElement);
+    await fireEvent.click(picks[picks.length - 1] as HTMLElement, { shiftKey: true });
+
+    await fireEvent.click(view.getByText('Stage 4 lines'));
+    expect(onPart).toHaveBeenCalledWith('stage', 0, [1, 2, 4, 5]);
+  });
+
   it('shows the hunk header inline, and none side by side', () => {
     const inline = mounted('inline').container;
     const headers = [...inline.querySelectorAll('tr.hunk')];

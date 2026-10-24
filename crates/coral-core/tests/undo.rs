@@ -17,6 +17,7 @@ fn entry(label: &str, before: RefSnapshot, after: RefSnapshot) -> JournalEntry {
         after,
         at: 0,
         restore: Restore::Worktree,
+        redo: Restore::Worktree,
     }
 }
 
@@ -317,7 +318,7 @@ async fn a_redo_the_worktree_blocks_is_refused_as_a_redo() {
     let (runner, loc) = open(&repo).await;
 
     let before = loc.snapshot_refs(&runner).await.unwrap();
-    loc.reset(&runner, "HEAD~1", ResetMode::Soft).await.unwrap();
+    loc.reset(&runner, "HEAD~1", ResetMode::Hard).await.unwrap();
     let after = loc.snapshot_refs(&runner).await.unwrap();
     let mut journal = Journal::load(&loc);
     journal.record(entry("reset to HEAD~1", before, after));
@@ -545,4 +546,60 @@ fn a_journal_written_before_this_existed_still_loads() {
         "undone":0}"#;
     let journal: Journal = serde_json::from_str(old).expect("an older journal still parses");
     assert_eq!(journal.entries[0].restore, Restore::Worktree);
+    assert_eq!(journal.entries[0].redo, Restore::Worktree);
+}
+
+/// Redone, a reset leaves the files as the reset itself did. Redo synced the worktree to the
+/// commit whatever the reset had been, so a soft reset came back as a hard one: what it had
+/// left staged was gone from the files, and on a branch of its own, from every ref.
+#[tokio::test]
+async fn redoing_a_soft_reset_leaves_its_changes_staged() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let repo = repo.write("a.txt", "2\n").commit("second");
+    let (runner, loc) = open(&repo).await;
+    let at_base = repo.git(["rev-parse", "HEAD~1"]);
+
+    let before = loc.snapshot_refs(&runner).await.unwrap();
+    loc.reset(&runner, "HEAD~1", ResetMode::Soft).await.unwrap();
+    let after = loc.snapshot_refs(&runner).await.unwrap();
+    loc.journal_reset("reset to HEAD~1", before, after, ResetMode::Soft)
+        .unwrap();
+
+    loc.undo_step(&runner, true).await.unwrap();
+    assert_eq!(
+        loc.undo_step(&runner, false).await.unwrap(),
+        "redid reset to HEAD~1"
+    );
+
+    assert_eq!(repo.git(["rev-parse", "HEAD"]), at_base);
+    assert_eq!(repo.git(["diff", "--cached", "--name-only"]), "a.txt");
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("a.txt")).unwrap(),
+        "2\n"
+    );
+}
+
+#[tokio::test]
+async fn redoing_a_mixed_reset_leaves_its_changes_unstaged() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let repo = repo.write("a.txt", "2\n").commit("second");
+    let (runner, loc) = open(&repo).await;
+
+    let before = loc.snapshot_refs(&runner).await.unwrap();
+    loc.reset(&runner, "HEAD~1", ResetMode::Mixed)
+        .await
+        .unwrap();
+    let after = loc.snapshot_refs(&runner).await.unwrap();
+    loc.journal_reset("reset to HEAD~1", before, after, ResetMode::Mixed)
+        .unwrap();
+
+    loc.undo_step(&runner, true).await.unwrap();
+    loc.undo_step(&runner, false).await.unwrap();
+
+    assert_eq!(repo.git(["diff", "--cached", "--name-only"]), "");
+    assert_eq!(repo.git(["diff", "--name-only"]), "a.txt");
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("a.txt")).unwrap(),
+        "2\n"
+    );
 }

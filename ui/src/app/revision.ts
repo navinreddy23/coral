@@ -98,19 +98,24 @@ export function combineItems(
 ): MenuItem[] {
   // The row the branch is already on. Everything here would be about itself.
   if (where === 'same') return [];
+  // Merging what the branch already holds does nothing, and a plain rebase onto it flattens
+  // every merge made since into replayed commits.
+  const held = where === 'behind';
   return [
     fastForwardItem(ref, rev, head, where, on),
     {
       kind: 'item',
       label: `Merge ${rev} into ${head}`,
-      disabled: on.busy,
+      hint: held ? 'already in it' : undefined,
+      disabled: on.busy || held,
       worktree: true,
       run: () => on.merge(rev, false),
     },
     {
       kind: 'item',
       label: `Rebase ${head} onto ${rev}`,
-      disabled: on.busy,
+      hint: held ? 'already in it' : undefined,
+      disabled: on.busy || held,
       worktree: true,
       run: () => on.rebase(rev),
     },

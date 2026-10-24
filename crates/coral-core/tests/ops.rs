@@ -259,6 +259,22 @@ async fn stashes_applies_pops_and_drops() {
     assert!(output.is_empty(), "{output:?}");
 }
 
+/// After a pull that stashed around uncommitted work, or a pop, the side coming in is the
+/// user's own work. It was called "the incoming change", beside the branch name on the side
+/// that had just been pulled.
+#[tokio::test]
+async fn a_stash_that_lands_on_conflicts_is_named_as_the_stash() {
+    let repo = TestRepo::new().write("a.txt", "base\n").commit("base");
+    let repo = repo.write("a.txt", "mine\n");
+    let (runner, loc) = open(&repo).await;
+    loc.stash_push(&runner, None, &tracked()).await.unwrap();
+    let _repo = repo.write("a.txt", "theirs\n").commit("pulled");
+    loc.stash_apply(&runner, 0, true).await.unwrap();
+
+    let op = loc.operation(&runner).await.unwrap();
+    assert_eq!(op.labels.theirs, "your stashed changes");
+}
+
 #[tokio::test]
 async fn a_stash_that_lands_on_conflicts_has_stopped_rather_than_failed() {
     // git exits 1 either way. Reported as a failure it read "Something went wrong" in red, for
@@ -787,6 +803,29 @@ async fn cherry_picks_without_committing_when_asked() {
         "and staged: {}",
         repo.git(["status", "--porcelain"])
     );
+}
+
+/// git leaves only the last commit's message for several picked without committing, so
+/// the box offered "Start a change log" for a change that was also the division it came with.
+#[tokio::test]
+async fn several_picked_without_committing_offer_every_message_oldest_first() {
+    let repo = TestRepo::new().write("a.txt", "base\n").commit("base");
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo.write("b.txt", "b\n").commit("Add b\n\nWhy b.");
+    let first = repo.git(["rev-parse", "HEAD"]);
+    let repo = repo.write("c.txt", "c\n").commit("Add c");
+    let second = repo.git(["rev-parse", "HEAD"]);
+    repo.git(["checkout", "--quiet", "main"]);
+
+    let (runner, loc) = open(&repo).await;
+    let out = loc
+        .cherry_pick(&runner, &[&first, &second], false, None)
+        .await
+        .unwrap();
+
+    assert!(out.completed);
+    let op = loc.operation(&runner).await.unwrap();
+    assert_eq!(op.prepared.as_deref(), Some("Add b\n\nWhy b.\n\nAdd c"));
 }
 
 #[tokio::test]

@@ -2,7 +2,7 @@
   import { hostingCreate, type PullRequest } from '../ipc/commands';
   import { messageOf } from '../ipc/error';
 
-  const { repo, source, targets, label, onClose, onOpened }: {
+  const { repo, source, targets, label, pushTo, onPush, onClose, onOpened }: {
     repo: string;
     /** The branch being proposed, which is the one the menu was opened on. */
     source: string;
@@ -10,6 +10,13 @@
     targets: string[];
     /** What the host calls one: GitHub says pull, GitLab says merge. */
     label: string;
+    /**
+     * The remote the branch has to be pushed to first, or null when it is already there. The
+     * host makes a request only from a branch it has.
+     */
+    pushTo: string | null;
+    /** Pushes the branch to `pushTo`; whether it went. */
+    onPush: () => Promise<boolean>;
     onClose: () => void;
     /** Handed the request the host created, so the window can offer to open it. */
     onOpened: (request: PullRequest) => void;
@@ -41,6 +48,10 @@
     busy = true;
     error = null;
     try {
+      if (pushTo !== null && !(await onPush())) {
+        error = `${source} was not pushed to ${pushTo}, so there is nothing for the host to open a ${label.toLowerCase()} from.`;
+        return;
+      }
       const made = await hostingCreate(repo, title.trim(), body.trim(), source, target, draft);
       onOpened(made);
       onClose();
@@ -97,6 +108,9 @@
       Open it as a draft
     </label>
 
+    {#if pushTo !== null}
+      <p class="muted">{source} is not on {pushTo} yet. It is pushed there first.</p>
+    {/if}
     {#if target === source && targets.length > 0}
       <p class="bad">A branch cannot be merged into itself.</p>
     {/if}
@@ -106,7 +120,7 @@
 
     <div class="acts">
       <button class="go" disabled={!ready} onclick={() => void create()}>
-        {busy ? 'Opening…' : `Open the ${label.toLowerCase()}`}
+        {busy ? 'Opening…' : `${pushTo === null ? 'Open' : 'Push and open'} the ${label.toLowerCase()}`}
       </button>
     </div>
   </div>

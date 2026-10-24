@@ -135,8 +135,19 @@
    * Only for the working tree: a commit is written and there is nothing to move in or out of
    * it, and a comparison of two commits is a reading, not a place to work.
    */
+  // None over a commit picked from the file's history, though the panel was opened on the
+  // working copy: a hunk's index is read against the working copy, so acting on what is shown
+  // would stage or throw away a different hunk from the one on screen.
+  // None while whitespace is ignored either: the hunks on screen are not the file's, and a
+  // patch read past whitespace does not apply to it.
   const side = $derived(
-    diff.source === 'unstaged' ? 'stage' : diff.source === 'staged' ? 'unstage' : null,
+    diff.atCommit !== null || diff.ignoreWhitespace
+      ? null
+      : diff.source === 'unstaged'
+        ? 'stage'
+        : diff.source === 'staged'
+          ? 'unstage'
+          : null,
   );
 
   /**
@@ -159,13 +170,29 @@
       pickedFor = key;
       pickedOn = file;
       picked = new Set();
+      anchor = null;
     }
   });
 
-  function togglePick(hunk: number, line: number) {
-    const key = `${hunk}:${line}`;
+  /** The line last clicked, which a Shift-click picks from. */
+  let anchor: { hunk: number; line: number } | null = null;
+
+  function togglePick(event: MouseEvent, hunk: number, line: number) {
     const next = new Set(picked);
-    if (!next.delete(key)) next.add(key);
+    const from = anchor;
+    if (event.shiftKey && from !== null && from.hunk === hunk) {
+      // A run is picked as the graph picks commits: everything between the two clicks, in
+      // one hunk, since a part of a hunk is what git is given to stage.
+      const lines = hunks[hunk]?.lines ?? [];
+      for (let i = Math.min(from.line, line); i <= Math.max(from.line, line); i++) {
+        const kind = lines[i]?.kind;
+        if (kind !== undefined && pickable(kind)) next.add(`${hunk}:${i}`);
+      }
+    } else {
+      const key = `${hunk}:${line}`;
+      if (!next.delete(key)) next.add(key);
+    }
+    anchor = { hunk, line };
     picked = next;
   }
 
@@ -548,6 +575,8 @@
                       </button>
                     {/if}
                   </span>
+                {:else if diff.atCommit === null && diff.ignoreWhitespace && (diff.source === 'unstaged' || diff.source === 'staged')}
+                  <span class="hunk-note">Show whitespace to stage or discard part of this</span>
                 {/if}
                 </div>
               </td>
@@ -558,7 +587,7 @@
                 <td class="no">{line.newNo ?? ''}</td>
                 {#if side !== null && pickable(line.kind)}
                   <td class="text">
-                    <button class="pick" onclick={() => togglePick(h, i)} title="Pick this line"
+                    <button class="pick" onclick={(e) => togglePick(e, h, i)} title="Pick this line; Shift picks a run"
                       ><span class="sign">{sign[line.kind]}</span><CodeLine
                         text={line.text}
                         spans={words.get(line) ?? null}
@@ -922,6 +951,7 @@
   .hunk-bar { display: flex; align-items: center; gap: var(--space-3); }
   .where { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .hunk-acts { flex: 0 0 auto; display: flex; gap: var(--space-1); }
+  .hunk-note { flex: 0 0 auto; font-family: var(--font-ui); color: var(--fg-2); }
   .hunk-acts button {
     font: inherit; font-family: var(--font-ui); font-size: var(--text-sm); cursor: pointer;
     background: var(--bg-0); border: 1px solid var(--border); border-radius: var(--radius-0);
@@ -936,8 +966,18 @@
     display: block; width: 100%; text-align: left; font: inherit; cursor: pointer;
     background: none; border: 0; padding: 0; color: inherit; white-space: pre;
   }
-  tr.picked .text { box-shadow: inset 3px 0 0 var(--accent); }
-  tr.picked .sign { color: var(--accent); font-weight: var(--weight-bold); }
+  /* The row's own colour, deepened, so a picked line still reads as added or removed. An
+     accent laid over it turned a dark theme's removed line grey, and the thicker stripe alone,
+     before that, was the same green as an added line's. */
+  tr.picked.add .text {
+    background-color: color-mix(in srgb, var(--ok) 28%, var(--bg-0));
+    box-shadow: inset 4px 0 0 var(--accent);
+  }
+  tr.picked.remove .text {
+    background-color: color-mix(in srgb, var(--danger) 28%, var(--bg-0));
+    box-shadow: inset 4px 0 0 var(--accent);
+  }
+  tr.picked .sign { font-weight: var(--weight-bold); }
 
   tr.hunk td {
     background: var(--bg-2); color: var(--fg-2); padding: 3px var(--space-2);

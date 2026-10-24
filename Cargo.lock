@@ -812,6 +812,7 @@ version = "1.2.9"
 dependencies = [
  "coral-core",
  "coral-hosting",
+ "dirs",
  "gix",
  "portable-pty",
  "secrecy",

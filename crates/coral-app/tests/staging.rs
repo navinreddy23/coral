@@ -99,3 +99,78 @@ async fn staging_a_path_that_does_not_exist_is_an_error() {
             .is_err()
     );
 }
+
+/// The panel counts hunks and lines in the diff it is showing. Read back with default
+/// options, a file shown whole was split into its usual hunks again, and lines picked on
+/// screen named lines of a different hunk.
+#[tokio::test(flavor = "multi_thread")]
+async fn lines_picked_in_the_whole_file_are_the_lines_staged() {
+    let lines: Vec<String> = (1..=30).map(|n| n.to_string()).collect();
+    let repo = TestRepo::new()
+        .write("f.txt", &(lines.join("\n") + "\n"))
+        .commit("base");
+    let mut changed = lines.clone();
+    changed[1] = "two".into();
+    changed[27] = "twenty-eight".into();
+    std::fs::write(repo.path().join("f.txt"), changed.join("\n") + "\n").unwrap();
+    let path = repo.path().display().to_string();
+    let whole = app::graph::ReadOptions {
+        whole_file: true,
+        ignore_whitespace: false,
+        guard_large: true,
+    };
+
+    // Shown whole there is one hunk: 30 context-or-changed lines plus the two removals. The
+    // second change's removal and addition are its lines 28 and 29.
+    let shown = app::graph::worktree_diff(path.clone(), false, "f.txt".into(), whole)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(shown.hunks.len(), 1);
+    let picked: Vec<usize> = shown.hunks[0]
+        .lines
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| l.text.as_slice() == b"28" || l.text.as_slice() == b"twenty-eight")
+        .map(|(i, _)| i)
+        .collect();
+    app::graph::apply_part(
+        path,
+        "f.txt".into(),
+        app::graph::Part::Stage,
+        0,
+        picked,
+        whole,
+    )
+    .await
+    .unwrap();
+
+    let staged = repo.git(["diff", "--cached", "--unified=0"]);
+    assert!(staged.contains("+twenty-eight"), "{staged}");
+    assert!(!staged.contains("+two"), "{staged}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn nothing_is_staged_by_part_while_whitespace_is_ignored() {
+    let repo = TestRepo::new().write("f.txt", "a\nb\n").commit("base");
+    std::fs::write(repo.path().join("f.txt"), "a \nB\n").unwrap();
+    let blind = app::graph::ReadOptions {
+        whole_file: false,
+        ignore_whitespace: true,
+        guard_large: true,
+    };
+    let path = repo.path().display().to_string();
+    assert!(
+        app::graph::apply_part(
+            path,
+            "f.txt".into(),
+            app::graph::Part::Stage,
+            0,
+            vec![],
+            blind
+        )
+        .await
+        .is_err()
+    );
+    assert_eq!(repo.git(["diff", "--cached"]), "");
+}

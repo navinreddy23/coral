@@ -952,6 +952,208 @@ describe('the shell', () => {
     expect(dialog.textContent).not.toContain('pull.rebase');
   });
 
+  /** The question that is up, once it is. */
+  async function question(container: HTMLElement): Promise<HTMLElement> {
+    return waitFor(() => {
+      const found = container.querySelector('[role="dialog"]');
+      if (!found) throw new Error('no question yet');
+      return found as HTMLElement;
+    });
+  }
+
+  /** Every repo_action sent, in order. */
+  function sent(): Record<string, unknown>[] {
+    return invoke.mock.calls
+      .filter(([cmd]) => cmd === 'repo_action')
+      .map(([, args]) => (args as { action: Record<string, unknown> }).action);
+  }
+
+  const DIVERGED = new Error(
+    "git pull exited with 128: hint: Diverging branches can't be fast-forwarded, you need " +
+      'to either:\nhint:\nhint:  git merge --no-ff',
+  );
+
+  it('recommends merging a diverged pull when the branch has a merge the remote lacks', async () => {
+    // Rebasing replays what the merge brought in as new commits and asks its conflicts again.
+    const { container } = await shell({ repo_action: DIVERGED, unpushed_merges: true });
+    await fireEvent.click(container.querySelector('[aria-label="Pull"]') as HTMLButtonElement);
+
+    const dialog = await question(container);
+    expect(dialog.textContent).toContain('has a merge the remote has not seen');
+    expect(dialog.querySelector('button.primary')?.textContent?.trim()).toBe('Pull, merging');
+  });
+
+  it('recommends neither when there is no merge to keep', async () => {
+    const { container } = await shell({ repo_action: DIVERGED, unpushed_merges: false });
+    await fireEvent.click(container.querySelector('[aria-label="Pull"]') as HTMLButtonElement);
+
+    const dialog = await question(container);
+    expect(dialog.textContent).not.toContain('has a merge the remote has not seen');
+    expect(dialog.querySelector('button.primary')).toBeNull();
+  });
+
+  it('offers to stash around uncommitted work that is in the way of a pull', async () => {
+    // It ended in git's message, with the three steps past it left for the reader to find.
+    const { container } = await shell({
+      repo_action: (args: { action: { autostash?: boolean } }) => {
+        if (args.action.autostash === true) return { what: 'pull', conflicted: false, message: '' };
+        throw new Error(
+          'git pull exited with 1: error: Your local changes to the following files would be ' +
+            'overwritten by merge:\n\tREADME.md\nPlease commit your changes or stash them ' +
+            'before you merge.\nAborting',
+        );
+      },
+    });
+    await fireEvent.click(container.querySelector('[aria-label="Pull"]') as HTMLButtonElement);
+
+    const dialog = await question(container);
+    expect(dialog.textContent).toContain('Uncommitted changes to README.md are in the way');
+    const stash = [...dialog.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Stash, pull and put back',
+    ) as HTMLButtonElement;
+    await fireEvent.click(stash);
+
+    await waitFor(() => {
+      expect(sent().at(-1)).toEqual({ kind: 'pull', remote: null, mode: 'ffOnly', autostash: true });
+    });
+  });
+
+  it('pulls by merging first when a refused push leaves a merge on the branch', async () => {
+    const { container } = await shell({
+      repo_action: (args: { action: { kind: string } }) =>
+        args.action.kind === 'push'
+          ? {
+              what: 'push',
+              conflicted: true,
+              message: 'refs/heads/master -> refs/heads/master [rejected] (fetch first)',
+            }
+          : { what: 'pull', conflicted: false, message: '' },
+      unpushed_merges: true,
+    });
+    await fireEvent.click(container.querySelector('[aria-label="Push"]') as HTMLButtonElement);
+
+    const dialog = await question(container);
+    const buttons = [...dialog.querySelectorAll('button')].map((b) => b.textContent?.trim());
+    expect(buttons.indexOf('Pull and merge')).toBeLessThan(buttons.indexOf('Pull and rebase'));
+    expect(dialog.querySelector('button.primary')?.textContent?.trim()).toBe('Pull and merge');
+    await fireEvent.click(dialog.querySelector('button.primary') as HTMLButtonElement);
+
+    await waitFor(() => {
+      expect(sent().at(-1)).toMatchObject({ kind: 'pull', mode: 'merge' });
+    });
+  });
+
+  /** A checkout that git refuses over the given file, and that goes through once stashed. */
+  function refusedCheckout() {
+    let stashed = false;
+    return (args: { action: { kind: string } }) => {
+      if (args.action.kind === 'stashPush') stashed = true;
+      if (args.action.kind === 'checkout' && !stashed) {
+        throw new Error(
+          'git checkout exited with 1: error: Your local changes to the following files would ' +
+            'be overwritten by checkout:\n\tCHANGES.md\nPlease commit your changes or stash ' +
+            'them before you switch branches.\nAborting',
+        );
+      }
+      return { what: args.action.kind, conflicted: false, message: '' };
+    };
+  }
+
+  /** Answers the question that is up with the button of that name. */
+  async function answer(container: HTMLElement, label: string) {
+    const dialog = await question(container);
+    const button = [...dialog.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === label,
+    );
+    if (!button) throw new Error(`no ${label} in ${dialog.textContent}`);
+    await fireEvent.click(button);
+  }
+
+  it('takes uncommitted work along to a branch git would not check out over it', async () => {
+    // It ended in git's message: the changes were in the way, and the window had nothing to
+    // offer but the terminal.
+    const { container } = await shell({
+      repo_action: refusedCheckout(),
+      repo_refs: [
+        {
+          name: 'refs/heads/topic',
+          short: 'topic',
+          kind: { kind: 'local_branch' },
+          target: 'a'.repeat(40),
+          peeled: null,
+          upstream: null,
+          ahead: 0,
+          behind: 0,
+          row: 0,
+        },
+      ],
+    });
+    const dots = await waitFor(() => {
+      const found = container.querySelector('[title="What can be done with topic"]');
+      if (!found) throw new Error('no topic yet');
+      return found as HTMLElement;
+    });
+    await fireEvent.click(dots);
+    const checkout = await waitFor(() => {
+      const found = [...container.querySelectorAll('.menu .label')].find(
+        (e) => e.textContent?.trim() === 'Checkout topic',
+      );
+      if (!found) throw new Error('no checkout yet');
+      return found.closest('button') as HTMLButtonElement;
+    });
+    await fireEvent.click(checkout);
+
+    expect((await question(container)).textContent).toContain('CHANGES.md');
+    await answer(container, 'Take them along');
+
+    await waitFor(() => {
+      expect(sent().map((a) => a.kind)).toEqual(['checkout', 'stashPush', 'checkout', 'stashApply']);
+    });
+    expect(sent().at(-1)).toEqual({ kind: 'stashApply', index: 0, pop: true });
+  });
+
+  it('can leave the work in a stash and check out without it', async () => {
+    const { container } = await shell({
+      repo_action: refusedCheckout(),
+      repo_refs: [
+        {
+          name: 'refs/heads/topic',
+          short: 'topic',
+          kind: { kind: 'local_branch' },
+          target: 'a'.repeat(40),
+          peeled: null,
+          upstream: null,
+          ahead: 0,
+          behind: 0,
+          row: 0,
+        },
+      ],
+    });
+    const dots = await waitFor(() => {
+      const found = container.querySelector('[title="What can be done with topic"]');
+      if (!found) throw new Error('no topic yet');
+      return found as HTMLElement;
+    });
+    await fireEvent.click(dots);
+    const checkout = await waitFor(() => {
+      const found = [...container.querySelectorAll('.menu .label')].find(
+        (e) => e.textContent?.trim() === 'Checkout topic',
+      );
+      if (!found) throw new Error('no checkout yet');
+      return found.closest('button') as HTMLButtonElement;
+    });
+    await fireEvent.click(checkout);
+
+    expect((await question(container)).textContent).toContain('CHANGES.md');
+    await answer(container, 'Leave them in a stash');
+
+    await waitFor(() => {
+      expect(sent().map((a) => a.kind)).toEqual(['checkout', 'stashPush', 'checkout']);
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(sent().map((a) => a.kind)).not.toContain('stashApply');
+  });
+
   it('offers to send the tags with a push, since git sends none by itself', async () => {
     const { container } = await shell({
       repo_action: { what: 'push', conflicted: false, message: '' },

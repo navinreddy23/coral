@@ -644,6 +644,32 @@ describe('the branch and tag menu', () => {
     });
   });
 
+  it('brings a branch that is only behind its upstream up to date, without checking it out', async () => {
+    // The panel said main was two behind origin/main, and nothing in its menu brought it up:
+    // the only way was to check it out and pull.
+    const behind = { ...on('main', { kind: 'local_branch' }), upstream: 'origin/main', behind: 2 };
+    const apart = { ...on('old', { kind: 'local_branch' }), upstream: 'origin/old', ahead: 1, behind: 2 };
+    const { container } = await shell(
+      {
+        repo_refs: [on('topic', { kind: 'local_branch' }), behind, apart],
+        repo_head: { name: 'topic', detached: false },
+      },
+      true,
+    );
+
+    let labels = await refMenu(container, 'main');
+    expect(labels).toContain('Fast-forward main to origin/main');
+    await fireEvent.click(itemNamed(container, 'Fast-forward main to origin/main'));
+    await waitFor(() => {
+      expect(lastAction()).toEqual({ kind: 'branchFastForward', name: 'main', at: 'origin/main' });
+    });
+
+    // One with work of its own on it cannot be fast-forwarded, and is not offered it.
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    labels = await refMenu(container, 'old');
+    expect(labels).not.toContain('Fast-forward old to origin/old');
+  });
+
   it('offers no push for a branch when there is no remote to push it to', async () => {
     const { container } = await shell(
       {

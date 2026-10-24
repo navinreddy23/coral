@@ -105,6 +105,11 @@ export function revAncestry(path: string, rev: string): Promise<Ancestry> {
   return invoke<Ancestry>('rev_ancestry', { path, rev });
 }
 
+/** Whether the branch has a merge its upstream lacks, which a rebase pull would flatten. */
+export function unpushedMerges(path: string): Promise<boolean> {
+  return invoke<boolean>('unpushed_merges', { path });
+}
+
 /**
  * Which refs a repository's graph is walked from.
  *
@@ -248,8 +253,9 @@ export function applyPart(
   part: Part,
   hunk: number,
   lines: number[],
+  options: ReadOptions,
 ): Promise<Status> {
-  return invoke<Status>('apply_part', { path, file, part, hunk, lines });
+  return invoke<Status>('apply_part', { path, file, part, hunk, lines, options });
 }
 
 /** Deletes files outright: gone from the working tree, and staged as removed if tracked. */
@@ -324,7 +330,13 @@ export function worktreeDiff(
  */
 export type Action =
   | { kind: 'fetch'; remote: string | null }
-  | { kind: 'pull'; remote: string | null; mode: 'ffOnly' | 'merge' | 'rebase' }
+  | {
+      kind: 'pull';
+      remote: string | null;
+      mode: 'ffOnly' | 'merge' | 'rebase';
+      /** Stash uncommitted work around the pull and put it back after. */
+      autostash?: boolean;
+    }
   | {
       kind: 'push';
       remote: string | null;

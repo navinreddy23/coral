@@ -49,6 +49,8 @@ export function discardWords(
   untrackedPaths: readonly string[],
   /** The branch HEAD is on, or null while it is detached. */
   branch: string | null,
+  /** How many of the tracked files also have something staged, which goes with the rest. */
+  staged = 0,
 ): { choices: Choice[]; detail: string } {
   const untracked = untrackedPaths.length;
   const going = untrackedWords(untrackedPaths);
@@ -72,13 +74,14 @@ export function discardWords(
       label: tracked > 0 ? `Discard everything, deleting ${going}` : `Delete ${going}`,
     });
   }
-  return { choices, detail: detailOf(tracked, untrackedPaths, branch) };
+  return { choices, detail: detailOf(tracked, untrackedPaths, branch, staged) };
 }
 
 function detailOf(
   tracked: number,
   untrackedPaths: readonly string[],
   branch: string | null,
+  staged: number,
 ): string {
   const untracked = untrackedPaths.length;
   const where = branch === null ? 'the commit that is checked out' : branch;
@@ -86,6 +89,9 @@ function detailOf(
   if (tracked > 0) {
     const goes = tracked === 1 ? 'goes' : 'go';
     parts.push(`${count(tracked, 'file')} ${goes} back to what ${where} last committed.`);
+  }
+  if (staged > 0) {
+    parts.push(`What is staged for ${staged === 1 ? 'it' : 'them'} goes too.`);
   }
   if (untracked > 0) {
     parts.push(

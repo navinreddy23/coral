@@ -21,6 +21,8 @@ function form(over: Record<string, unknown> = {}) {
         source: 'feature/thing',
         targets: ['develop', 'main', 'release'],
         label: 'Pull request',
+        pushTo: null,
+        onPush: async () => true,
         onClose,
         onOpened,
         ...over,
@@ -108,5 +110,46 @@ describe('opening a pull or merge request', () => {
       expect(container.textContent).toContain('no token stored');
     });
     expect(onClose, 'the form stays up so the text is not lost').not.toHaveBeenCalled();
+  });
+
+  /**
+   * The host makes a request from a branch it has. One that was only ever committed here was
+   * refused with a validation error, in the host's words, and the way past it was a push the
+   * form never mentioned.
+   */
+  it('pushes a branch the remote does not have yet, then opens the request', async () => {
+    invoke.mockReset();
+    invoke.mockResolvedValue({ number: 7, title: 'x', url: '', state: 'open', author: '', draft: false });
+    const order: string[] = [];
+    const onPush = vi.fn(async () => {
+      order.push('push');
+      return true;
+    });
+    invoke.mockImplementation(async () => {
+      order.push('create');
+      return { number: 7, title: 'x', url: '', state: 'open', author: '', draft: false };
+    });
+    const { container } = form({ pushTo: 'origin', onPush });
+
+    expect(container.textContent).toContain('not on origin yet');
+    const go = container.querySelector('button.go') as HTMLButtonElement;
+    expect(go.textContent).toContain('Push and open');
+    await fireEvent.click(go);
+
+    await vi.waitFor(() => {
+      expect(order).toEqual(['push', 'create']);
+    });
+  });
+
+  it('opens nothing when the push does not go through', async () => {
+    invoke.mockReset();
+    const { container, onClose } = form({ pushTo: 'origin', onPush: async () => false });
+    await fireEvent.click(container.querySelector('button.go') as HTMLButtonElement);
+
+    await vi.waitFor(() => {
+      expect(container.textContent).toContain('was not pushed');
+    });
+    expect(invoke).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

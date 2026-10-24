@@ -27,6 +27,9 @@ pub enum Action {
     Pull {
         remote: Option<String>,
         mode: PullKind,
+        /// Stash uncommitted work around the pull and put it back after.
+        #[serde(default)]
+        autostash: bool,
     },
     Push {
         remote: Option<String>,
@@ -612,10 +615,17 @@ async fn act(
         });
     }
 
+    let reset = match &action {
+        Action::Reset { mode, .. } => Some((*mode).into()),
+        _ => None,
+    };
     let before = loc.snapshot_refs(&runner).await?;
     let done = run(&loc, &runner, action, report).await?;
     let after = loc.snapshot_refs(&runner).await?;
-    loc.journal_change(label, before, after, coral_core::undo::Restore::Worktree)?;
+    match reset {
+        Some(mode) => loc.journal_reset(label, before, after, mode)?,
+        None => loc.journal_change(label, before, after, coral_core::undo::Restore::Worktree)?,
+    }
 
     Ok(ActionOutcome {
         what: label.to_owned(),
@@ -701,9 +711,15 @@ async fn run_remote(
                 .await?;
             Ok(Done::quiet())
         }
-        Action::Pull { remote, mode } => {
+        Action::Pull {
+            remote,
+            mode,
+            autostash,
+        } => {
             let out = loc
-                .pull(runner, remote.as_deref(), mode.into(), |p| report(p))
+                .pull(runner, remote.as_deref(), mode.into(), autostash, |p| {
+                    report(p);
+                })
                 .await?;
             Ok(Done::from(&out))
         }

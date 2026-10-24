@@ -69,6 +69,21 @@ pub enum Restore {
     /// Move the refs and leave the files alone, so what the operation recorded comes back
     /// staged and uncommitted. `git reset --soft`, and the only safe way to undo a commit.
     KeepChanges,
+    /// Move the refs and the index and leave the files, so the difference comes back as
+    /// unstaged changes. `git reset --mixed`, for redoing a mixed reset.
+    KeepWorktree,
+}
+
+impl Restore {
+    /// How a reset left the files, which is how a redo of it has to leave them.
+    #[must_use]
+    pub const fn after_reset(mode: crate::ops::ResetMode) -> Self {
+        match mode {
+            crate::ops::ResetMode::Hard => Self::Worktree,
+            crate::ops::ResetMode::Soft => Self::KeepChanges,
+            crate::ops::ResetMode::Mixed => Self::KeepWorktree,
+        }
+    }
 }
 
 /// One reversible operation.
@@ -84,6 +99,10 @@ pub struct JournalEntry {
     /// default anyway.
     #[serde(default)]
     pub restore: Restore,
+    /// How a redo leaves the files: as the operation itself left them. A commit is redone by
+    /// matching them to it, and so is anything absent here.
+    #[serde(default)]
+    pub redo: Restore,
 }
 
 /// A bounded, persisted history of ref-changing operations.
@@ -283,6 +302,7 @@ impl RepoLocation {
             let mode = match restore {
                 Restore::Worktree => crate::ops::ResetMode::Hard,
                 Restore::KeepChanges => crate::ops::ResetMode::Soft,
+                Restore::KeepWorktree => crate::ops::ResetMode::Mixed,
             };
             self.reset(runner, oid, mode).await?;
         }
@@ -354,6 +374,37 @@ impl RepoLocation {
         after: RefSnapshot,
         restore: Restore,
     ) -> Result<(), CoralError> {
+        self.record_change(label, before, after, restore, Restore::Worktree)
+    }
+
+    /// Records a reset, which a redo has to repeat in the same mode.
+    ///
+    /// # Errors
+    /// Propagates a failure to write the journal file.
+    pub fn journal_reset(
+        &self,
+        label: &str,
+        before: RefSnapshot,
+        after: RefSnapshot,
+        mode: crate::ops::ResetMode,
+    ) -> Result<(), CoralError> {
+        self.record_change(
+            label,
+            before,
+            after,
+            Restore::Worktree,
+            Restore::after_reset(mode),
+        )
+    }
+
+    fn record_change(
+        &self,
+        label: &str,
+        before: RefSnapshot,
+        after: RefSnapshot,
+        restore: Restore,
+        redo: Restore,
+    ) -> Result<(), CoralError> {
         if before == after {
             return Ok(());
         }
@@ -366,6 +417,7 @@ impl RepoLocation {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0)),
             restore,
+            redo,
         });
         journal.save(self)
     }
@@ -411,13 +463,9 @@ impl RepoLocation {
                 ),
             });
         }
-        // Redo puts the operation back, so the worktree has to follow the refs again even for
-        // a commit: leaving the change staged as well would double it.
-        let restore = if backwards {
-            entry.restore
-        } else {
-            Restore::Worktree
-        };
+        // Redo puts the operation back and leaves the files as it did. For a commit that is
+        // matching them again, since leaving the change staged as well would double it.
+        let restore = if backwards { entry.restore } else { entry.redo };
         self.restore_refs(runner, target, from, restore, verb)
             .await?;
 

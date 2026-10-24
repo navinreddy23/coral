@@ -38,11 +38,20 @@ pids=()
 # name says nothing about this run, so a window of this run's is known by the home it was
 # given. Anything else called Coral, such as the one the user is working in, is left alone.
 stop_coral() {
-    local p
+    local p stopped=()
     for p in $(pgrep -x coral-app; pgrep -f '^[^ ]*/Coral\.AppImage$'); do
         if tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null | grep -qx "HOME=$work/home"; then
             kill "$p" 2>/dev/null || true
+            stopped+=("$p")
         fi
+    done
+    # Until they are gone: WebKit writes its storage into the home on the way out, and a
+    # directory removed while it does is left half there.
+    for _ in $(seq 1 50); do
+        local alive=0
+        for p in "${stopped[@]}"; do kill -0 "$p" 2>/dev/null && alive=1; done
+        [ "$alive" = 0 ] && break
+        sleep 0.1
     done
 }
 cleanup() {

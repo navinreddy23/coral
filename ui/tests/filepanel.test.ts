@@ -138,6 +138,20 @@ describe('the file panel', () => {
     expect(called('file_diff').at(-1)?.[1]).toMatchObject({ rev: 'HEAD' });
   });
 
+  it('goes back to the change it was opened on when the history is left', async () => {
+    // The Diff tab went on showing the commit last picked in the history, under the working
+    // file's name, where the working copy's own change was expected.
+    answering();
+    const diff = new DiffState(new ViewsState());
+    await diff.openWorking('/repo', false, 'a.c');
+    diff.setView('history');
+    await diff.showCommit('c0ffee');
+
+    diff.setView('diff');
+    await vi.waitFor(() => expect(diff.atCommit).toBeNull());
+    expect(called('worktree_diff').length).toBeGreaterThan(1);
+  });
+
   it('asks for another page of history and says when there may be more', async () => {
     const page = Array.from({ length: 50 }, (_, i) => ({
       oid: `${i}`,
