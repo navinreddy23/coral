@@ -159,13 +159,29 @@
       pickedFor = key;
       pickedOn = file;
       picked = new Set();
+      anchor = null;
     }
   });
 
-  function togglePick(hunk: number, line: number) {
-    const key = `${hunk}:${line}`;
+  /** The line last clicked, which a Shift-click picks from. */
+  let anchor: { hunk: number; line: number } | null = null;
+
+  function togglePick(event: MouseEvent, hunk: number, line: number) {
     const next = new Set(picked);
-    if (!next.delete(key)) next.add(key);
+    const from = anchor;
+    if (event.shiftKey && from !== null && from.hunk === hunk) {
+      // A run is picked as the graph picks commits: everything between the two clicks, in
+      // one hunk, since a part of a hunk is what git is given to stage.
+      const lines = hunks[hunk]?.lines ?? [];
+      for (let i = Math.min(from.line, line); i <= Math.max(from.line, line); i++) {
+        const kind = lines[i]?.kind;
+        if (kind !== undefined && pickable(kind)) next.add(`${hunk}:${i}`);
+      }
+    } else {
+      const key = `${hunk}:${line}`;
+      if (!next.delete(key)) next.add(key);
+    }
+    anchor = { hunk, line };
     picked = next;
   }
 
@@ -558,7 +574,7 @@
                 <td class="no">{line.newNo ?? ''}</td>
                 {#if side !== null && pickable(line.kind)}
                   <td class="text">
-                    <button class="pick" onclick={() => togglePick(h, i)} title="Pick this line"
+                    <button class="pick" onclick={(e) => togglePick(e, h, i)} title="Pick this line; Shift picks a run"
                       ><span class="sign">{sign[line.kind]}</span><CodeLine
                         text={line.text}
                         spans={words.get(line) ?? null}
@@ -936,7 +952,16 @@
     display: block; width: 100%; text-align: left; font: inherit; cursor: pointer;
     background: none; border: 0; padding: 0; color: inherit; white-space: pre;
   }
-  tr.picked .text { box-shadow: inset 3px 0 0 var(--accent); }
+  /* Laid over the row's own colour rather than replacing it, so a picked line still reads as
+     added or removed. The bar alone was a thicker stripe beside the one every changed line
+     has, and on an added line the two greens could not be told apart. */
+  tr.picked .text {
+    background-image: linear-gradient(
+      color-mix(in srgb, var(--accent) 22%, transparent),
+      color-mix(in srgb, var(--accent) 22%, transparent)
+    );
+    box-shadow: inset 4px 0 0 var(--accent);
+  }
   tr.picked .sign { color: var(--accent); font-weight: var(--weight-bold); }
 
   tr.hunk td {

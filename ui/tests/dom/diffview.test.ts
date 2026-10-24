@@ -196,6 +196,25 @@ describe('the diff viewer', () => {
     expect(view.queryByText('Stage 1 line')).toBeNull();
   });
 
+  it('picks a run of lines with Shift, leaving out the unchanged ones between', async () => {
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'kernel/sched/core.c';
+    diff.source = 'unstaged';
+    diff.file = fileDiff();
+    diff.file.hunks[0]?.lines.push(line('add', 'four', null, 4), line('add', 'five', null, 5));
+    diff.setMode('inline');
+    const onPart = vi.fn();
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart } });
+
+    // The remove on row 1 and the last add on row 5, with a context line and two adds between.
+    const picks = [...view.container.querySelectorAll('button.pick')] as HTMLElement[];
+    await fireEvent.click(picks[0] as HTMLElement);
+    await fireEvent.click(picks[picks.length - 1] as HTMLElement, { shiftKey: true });
+
+    await fireEvent.click(view.getByText('Stage 4 lines'));
+    expect(onPart).toHaveBeenCalledWith('stage', 0, [1, 2, 4, 5]);
+  });
+
   it('shows the hunk header inline, and none side by side', () => {
     const inline = mounted('inline').container;
     const headers = [...inline.querySelectorAll('tr.hunk')];
