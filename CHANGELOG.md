@@ -45,6 +45,10 @@ requested. On GitLab an approval is recorded where GitLab counts approvals.
 - A message edited in the commit box while a merge, cherry-pick or rebase waits is the one
   the commit gets when it continues. Continuing used git's prepared message whatever had been
   typed over it, so renaming a squash there was silently undone.
+- A commit that is not on the checked-out branch no longer offers to be reworded, dropped,
+  moved or rebased from. Each was refused, and rewording only after a new message had been
+  typed for it.
+- Cherry picking several commits at once says it records one commit for each.
 
 ## 1.2.8
 
