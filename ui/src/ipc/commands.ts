@@ -425,8 +425,9 @@ export function resolveConflict(path: string, file: string, choice: Choice): Pro
 export function operationStep(
   path: string,
   step: 'continue' | 'abort' | 'skip',
+  message: string | null = null,
 ): Promise<OpOutcome> {
-  return invoke<OpOutcome>('operation_step', { path, step });
+  return invoke<OpOutcome>('operation_step', { path, step, message });
 }
 
 /** GitHub or GitLab, as identified from the remote URL. */

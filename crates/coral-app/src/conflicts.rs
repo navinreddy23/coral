@@ -93,6 +93,7 @@ pub async fn resolve_conflict(path: String, file: String, choice: Choice) -> Res
 pub async fn operation_step(
     path: String,
     step: String,
+    message: Option<String>,
 ) -> Result<coral_core::ops::OpOutcome, IpcError> {
     let (runner, loc) = located(&path).await?;
     let action = match step.as_str() {
@@ -100,6 +101,12 @@ pub async fn operation_step(
         "skip" => OpAction::Skip,
         _ => OpAction::Continue,
     };
+    // A message edited in the commit box while the operation waited; git reads its own file.
+    if let (OpAction::Continue, Some(text)) = (&action, message.as_deref())
+        && !text.trim().is_empty()
+    {
+        loc.settle_message(text)?;
+    }
     // Read before the step, since finishing it is what clears the state.
     let label = journal_label(loc.operation(&runner).await?.state, &step);
     let before = loc.snapshot_refs(&runner).await?;

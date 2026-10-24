@@ -115,6 +115,18 @@ export class CommitState {
   /** What `prepare` put there, so it can be told from something typed over it. */
   #prepared: string | null = null;
 
+  /**
+   * The message, when it was prepared by git and then edited here; null otherwise.
+   *
+   * What continuing a stopped operation should commit with. Unedited, git's own file already
+   * says the same, and an empty box is not a message to send.
+   */
+  edited(): string | null {
+    const message = this.message;
+    if (this.#prepared === null || message === '' || message === this.#prepared) return null;
+    return message;
+  }
+
   /** Empties a seeded message again, unless it has been edited since it was put there. */
   unseed(): void {
     if (this.#seeded !== null && this.message === this.#seeded) this.#blank();

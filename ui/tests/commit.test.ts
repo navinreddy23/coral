@@ -168,3 +168,22 @@ describe('the commit template', () => {
     expect(draft.summary).toBe('[TICKET-]');
   });
 });
+
+describe('a prepared message edited while an operation waits', () => {
+  it('is offered to continue with only once it differs from what git prepared', () => {
+    const draft = new CommitState();
+    draft.prepare('Parser a\n\nParser b');
+    expect(draft.edited()).toBeNull();
+    draft.summary = 'Parser a and b';
+    draft.description = '';
+    expect(draft.edited()).toBe('Parser a and b');
+    draft.clear();
+    expect(draft.edited()).toBeNull();
+  });
+
+  it('is never a message nobody prepared', () => {
+    const draft = new CommitState();
+    draft.summary = 'mine';
+    expect(draft.edited()).toBeNull();
+  });
+});

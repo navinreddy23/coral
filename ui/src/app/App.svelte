@@ -5131,6 +5131,8 @@
         {merge}
         onDone={reloadAll}
         onRefused={async (message) => needsIdentity(message) && (await sayWhoYouAre())}
+        message={() => commitDraft.edited()}
+        onMessageUsed={() => commitDraft.clear()}
       />
     {:else if diff.path !== null}
       <DiffView {diff} onClose={() => diff.close()} onPart={applyPart} />

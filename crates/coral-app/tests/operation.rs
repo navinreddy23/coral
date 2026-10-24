@@ -30,7 +30,7 @@ async fn finishing_a_merge_is_recorded_and_can_be_undone() {
 
     repo.git(["checkout", "--ours", "f.txt"]);
     repo.git(["add", "f.txt"]);
-    app::conflicts::operation_step(path.clone(), "continue".to_owned())
+    app::conflicts::operation_step(path.clone(), "continue".to_owned(), None)
         .await
         .expect("the merge finishes");
 
@@ -53,7 +53,7 @@ async fn aborting_records_nothing_when_it_moved_nothing() {
     let repo = stopped_merge();
     let path = repo.path().display().to_string();
 
-    app::conflicts::operation_step(path, "abort".to_owned())
+    app::conflicts::operation_step(path, "abort".to_owned(), None)
         .await
         .expect("the merge aborts");
 
@@ -132,7 +132,7 @@ async fn a_merge_that_stopped_is_not_logged_as_finished() {
     let path = repo.path().display().to_string();
     // `stopped_merge` conflicts through plain git; do it again through the window so the log
     // has an entry for it.
-    app::conflicts::operation_step(path.clone(), "abort".to_owned())
+    app::conflicts::operation_step(path.clone(), "abort".to_owned(), None)
         .await
         .expect("the merge aborts");
     let outcome = app::actions::run_action(

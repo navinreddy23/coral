@@ -42,6 +42,9 @@ requested. On GitLab an approval is recorded where GitLab counts approvals.
 ### Fixed along the way
 
 - A question with a box for several lines no longer covers its own explanation with it.
+- A message edited in the commit box while a merge, cherry-pick or rebase waits is the one
+  the commit gets when it continues. Continuing used git's prepared message whatever had been
+  typed over it, so renaming a squash there was silently undone.
 
 ## 1.2.8
 
