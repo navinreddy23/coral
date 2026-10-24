@@ -70,9 +70,45 @@ def now():
     TICK[0] += 1
     return f"2026-10-21T10:{TICK[0]:02d}:00Z"
 
+def branch_missing(path, sent):
+    """The host's refusal of a proposal from a branch it does not have; None when it has it."""
+    if path == "/api/v3/repos/o/r/pulls":
+        head = sent.get("head", "")
+    elif path == "/api/v4/projects/o%2Fr/merge_requests":
+        head = sent.get("source_branch", "")
+    else:
+        return None
+    if GIT_ROOT is None:
+        return None
+    known = subprocess.run(["git", "--git-dir", os.path.join(GIT_ROOT, "o", "r.git"),
+                            "rev-parse", "--verify", "--quiet", f"refs/heads/{head}"],
+                           capture_output=True).returncode == 0
+    if known:
+        return None
+    if "/api/v3/" in path:
+        return {"message": "Validation Failed",
+                "errors": [{"resource": "PullRequest", "field": "head", "code": "invalid"}]}
+    return {"message": "404 Branch Not Found"}
+
+
 def reply(path, sent):
     """Records a reply, answering with what the host would; None for a path that is not one."""
     parts = path.split("/")
+    # A new proposal, numbered after the newest, and listed from then on.
+    if path == "/api/v3/repos/o/r/pulls":
+        made = pr(max(p["number"] for p in PULLS) + 1, sent.get("title", ""), "d" * 40,
+                  sent.get("head", ""), draft=bool(sent.get("draft")))
+        made["user"] = {"login": "you"}
+        made["base"]["ref"] = sent.get("base", "main")
+        PULLS.insert(0, made)
+        return made
+    if path == "/api/v4/projects/o%2Fr/merge_requests":
+        made = mr(max(m["iid"] for m in MERGE_REQUESTS) + 1, sent.get("title", ""), "d" * 40,
+                  sent.get("source_branch", ""))
+        made["author"] = {"username": "you"}
+        made["target_branch"] = sent.get("target_branch", "main")
+        MERGE_REQUESTS.insert(0, made)
+        return made
     if path.startswith("/api/v3/repos/o/r/issues/") and path.endswith("/comments"):
         n = int(parts[-2])
         made = {"user": {"login": "you"}, "body": sent.get("body", ""), "created_at": now()}
@@ -105,11 +141,23 @@ class Handler(BaseHTTPRequestHandler):
     def git(self):
         """Hands the request to `git http-backend` and relays its CGI answer."""
         path, _, query = self.path.partition("?")
+        # A push starts unauthenticated, and the host answers that with a challenge, which is
+        # what makes git ask its credential helper for the token.
+        pushing = "git-receive-pack" in path or "service=git-receive-pack" in query
+        if pushing and not self.headers.get("Authorization"):
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", 'Basic realm="fake"')
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         length = int(self.headers.get("Content-Length") or 0)
         env = dict(os.environ, GIT_PROJECT_ROOT=GIT_ROOT, GIT_HTTP_EXPORT_ALL="1",
                    PATH_INFO=path, QUERY_STRING=query, REQUEST_METHOD=self.command,
                    CONTENT_TYPE=self.headers.get("Content-Type", ""),
                    CONTENT_LENGTH=str(length), REMOTE_ADDR="::1")
+        # http-backend takes a push only from a signed-in user, as the hosts do.
+        if self.headers.get("Authorization"):
+            env["REMOTE_USER"] = "you"
         if self.headers.get("Content-Encoding"):
             env["HTTP_CONTENT_ENCODING"] = self.headers["Content-Encoding"]
         if self.headers.get("Git-Protocol"):
@@ -140,11 +188,13 @@ class Handler(BaseHTTPRequestHandler):
         with open(LOG, "a") as log:
             log.write(f"POST {self.path} auth={self.headers.get('Authorization', '')[:12]}"
                       f" private={self.headers.get('PRIVATE-TOKEN', '')[:5]} {json.dumps(sent)}\n")
-        made = reply(self.path.split("?")[0], sent)
+        refused = branch_missing(self.path.split("?")[0], sent)
+        made = refused or reply(self.path.split("?")[0], sent)
         if made is None:
             self.send_response(404); self.end_headers(); return
         data = json.dumps(made).encode()
-        self.send_response(201)
+        # GitHub answers 422 for a head it does not have, GitLab 404.
+        self.send_response(201 if refused is None else (422 if "/api/v3/" in self.path else 404))
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
