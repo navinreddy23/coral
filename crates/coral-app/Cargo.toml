@@ -20,6 +20,7 @@ tauri-build = { workspace = true }
 coral-core    = { workspace = true }
 coral-hosting = { workspace = true }
 secrecy       = { workspace = true }
+dirs          = { workspace = true }
 gix        = { workspace = true }
 # Deliberately no "tracing" feature: Tauri's IPC spans serialize raw request and response
 # bodies, which would turn every binary graph chunk into a multi-megabyte debug string.
