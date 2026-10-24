@@ -1,6 +1,6 @@
 /**
- * The files git names when uncommitted work is in a pull's way, or null when that is not why
- * it stopped.
+ * The files git names when uncommitted work is in the way of a pull or a checkout, or null
+ * when that is not why it stopped.
  */
 export function inTheWay(message: string | undefined): string[] | null {
   const said = message?.match(

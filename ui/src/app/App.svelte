@@ -14,7 +14,7 @@
   import Splitter from './Splitter.svelte';
   import { fitColumns, fitPanels, PANE_LIMITS, PanesState } from '../state/panes.svelte';
   import DiffView from './DiffView.svelte';
-  import { inTheWay } from './pull';
+  import { inTheWay } from './overwrite';
   import { DiffState } from '../state/diff.svelte';
   import { HostingState } from '../state/hosting.svelte';
   import {
@@ -1310,6 +1310,10 @@
         const files = inTheWay(actions.report?.text);
         if (files !== null) return offerToStashAround(action, files);
       }
+      if (action.kind === 'checkout' || (action.kind === 'branchCreate' && action.checkout)) {
+        const files = inTheWay(actions.report?.text);
+        if (files !== null) return offerToCarry(action, files);
+      }
       // `actions` keeps the message for the status line; the toast is what carries it to
       // someone who is not looking at the bottom of the window.
       //
@@ -1491,6 +1495,46 @@
       choices: [{ id: 'stash', label: 'Stash, pull and put back', primary: true }],
     });
     return choice === 'stash' ? act({ ...action, autostash: true }) : false;
+  }
+
+  /**
+   * A checkout that uncommitted work is in the way of, with the two things that can be meant.
+   *
+   * Work started on the wrong branch is taken along: stashed, checked out, applied. Work that
+   * belongs where it is goes into a stash and stays there. git has no switch for either, and
+   * its own answer was the error, in a toast, with nothing to do about it here.
+   */
+  async function offerToCarry(
+    action: Extract<Action, { kind: 'checkout' } | { kind: 'branchCreate' }>,
+    files: string[],
+  ): Promise<boolean> {
+    const target = action.kind === 'checkout' ? action.rev : action.name;
+    const named = files.length === 1 ? files[0] : `${files.length} files`;
+    const { choice } = await ask({
+      title: `Uncommitted changes to ${named} are in the way`,
+      detail:
+        `${target} has a different version, and git will not check it out over your changes. ` +
+        'Coral can stash them, check it out, and put them back there; if they clash with it, ' +
+        'the clash is marked in the files and they stay in the stash. Or they can stay in the ' +
+        'stash for later.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [
+        { id: 'carry', label: 'Take them along', primary: true },
+        { id: 'leave', label: 'Leave them in a stash' },
+      ],
+    });
+    if (choice !== 'carry' && choice !== 'leave') return false;
+    if (!(await act({ kind: 'stashPush', message: `before checking out ${target}` }))) return false;
+    if (!(await act(action))) {
+      // Back where they were, on the branch they were made on, rather than left in a stash
+      // nobody asked for.
+      await act({ kind: 'stashApply', index: 0, pop: true });
+      return false;
+    }
+    if (choice === 'leave') return true;
+    return act({ kind: 'stashApply', index: 0, pop: true });
   }
 
   function wasRejected(message: string): boolean {

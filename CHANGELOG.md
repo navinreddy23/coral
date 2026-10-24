@@ -19,6 +19,12 @@ When a push is refused, or a pull finds that both sides have moved, and the bran
 the remote has not seen, the way past it offered first is to pull and merge. Rebasing, which was the only pull on offer, replays what
 the merge brought in as new commits and asks its conflicts again. Both are offered either way.
 
+### Checking out with uncommitted work in the way
+
+A checkout that git refuses because it would overwrite uncommitted changes asks what they are
+for: taken along to the branch being checked out (stashed, checked out and put back, with any
+clash marked in the files and the stash kept), or left in a stash. It ended in git's message.
+
 ### Picking lines and folders
 
 - Shift-click picks every changed line between it and the last one clicked, and a picked line

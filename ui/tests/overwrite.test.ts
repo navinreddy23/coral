@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { inTheWay } from '../src/app/pull';
+import { inTheWay } from '../src/app/overwrite';
 
-describe('uncommitted work in the way of a pull', () => {
+describe('uncommitted work in the way of a pull or a checkout', () => {
   it('names the files git names', () => {
     const said =
       'error: Your local changes to the following files would be overwritten by merge:\n' +
@@ -14,6 +14,13 @@ describe('uncommitted work in the way of a pull', () => {
   it('reads the line the window keeps, which has had git\'s advice taken off', () => {
     const kept = 'Your local changes to the following files would be overwritten by merge:\n\tREADME.md';
     expect(inTheWay(kept)).toEqual(['README.md']);
+  });
+
+  it('names them for a checkout too', () => {
+    const said =
+      'error: Your local changes to the following files would be overwritten by checkout:\n' +
+      '\tCHANGES.md\nPlease commit your changes or stash them before you switch branches.\nAborting';
+    expect(inTheWay(said)).toEqual(['CHANGES.md']);
   });
 
   it('is not fooled by any other failure', () => {

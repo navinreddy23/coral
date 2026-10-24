@@ -1043,6 +1043,117 @@ describe('the shell', () => {
     });
   });
 
+  /** A checkout that git refuses over the given file, and that goes through once stashed. */
+  function refusedCheckout() {
+    let stashed = false;
+    return (args: { action: { kind: string } }) => {
+      if (args.action.kind === 'stashPush') stashed = true;
+      if (args.action.kind === 'checkout' && !stashed) {
+        throw new Error(
+          'git checkout exited with 1: error: Your local changes to the following files would ' +
+            'be overwritten by checkout:\n\tCHANGES.md\nPlease commit your changes or stash ' +
+            'them before you switch branches.\nAborting',
+        );
+      }
+      return { what: args.action.kind, conflicted: false, message: '' };
+    };
+  }
+
+  /** Answers the question that is up with the button of that name. */
+  async function answer(container: HTMLElement, label: string) {
+    const dialog = await question(container);
+    const button = [...dialog.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === label,
+    );
+    if (!button) throw new Error(`no ${label} in ${dialog.textContent}`);
+    await fireEvent.click(button);
+  }
+
+  it('takes uncommitted work along to a branch git would not check out over it', async () => {
+    // It ended in git's message: the changes were in the way, and the window had nothing to
+    // offer but the terminal.
+    const { container } = await shell({
+      repo_action: refusedCheckout(),
+      repo_refs: [
+        {
+          name: 'refs/heads/topic',
+          short: 'topic',
+          kind: { kind: 'local_branch' },
+          target: 'a'.repeat(40),
+          peeled: null,
+          upstream: null,
+          ahead: 0,
+          behind: 0,
+          row: 0,
+        },
+      ],
+    });
+    const dots = await waitFor(() => {
+      const found = container.querySelector('[title="What can be done with topic"]');
+      if (!found) throw new Error('no topic yet');
+      return found as HTMLElement;
+    });
+    await fireEvent.click(dots);
+    const checkout = await waitFor(() => {
+      const found = [...container.querySelectorAll('.menu .label')].find(
+        (e) => e.textContent?.trim() === 'Checkout topic',
+      );
+      if (!found) throw new Error('no checkout yet');
+      return found.closest('button') as HTMLButtonElement;
+    });
+    await fireEvent.click(checkout);
+
+    expect((await question(container)).textContent).toContain('CHANGES.md');
+    await answer(container, 'Take them along');
+
+    await waitFor(() => {
+      expect(sent().map((a) => a.kind)).toEqual(['checkout', 'stashPush', 'checkout', 'stashApply']);
+    });
+    expect(sent().at(-1)).toEqual({ kind: 'stashApply', index: 0, pop: true });
+  });
+
+  it('can leave the work in a stash and check out without it', async () => {
+    const { container } = await shell({
+      repo_action: refusedCheckout(),
+      repo_refs: [
+        {
+          name: 'refs/heads/topic',
+          short: 'topic',
+          kind: { kind: 'local_branch' },
+          target: 'a'.repeat(40),
+          peeled: null,
+          upstream: null,
+          ahead: 0,
+          behind: 0,
+          row: 0,
+        },
+      ],
+    });
+    const dots = await waitFor(() => {
+      const found = container.querySelector('[title="What can be done with topic"]');
+      if (!found) throw new Error('no topic yet');
+      return found as HTMLElement;
+    });
+    await fireEvent.click(dots);
+    const checkout = await waitFor(() => {
+      const found = [...container.querySelectorAll('.menu .label')].find(
+        (e) => e.textContent?.trim() === 'Checkout topic',
+      );
+      if (!found) throw new Error('no checkout yet');
+      return found.closest('button') as HTMLButtonElement;
+    });
+    await fireEvent.click(checkout);
+
+    expect((await question(container)).textContent).toContain('CHANGES.md');
+    await answer(container, 'Leave them in a stash');
+
+    await waitFor(() => {
+      expect(sent().map((a) => a.kind)).toEqual(['checkout', 'stashPush', 'checkout']);
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(sent().map((a) => a.kind)).not.toContain('stashApply');
+  });
+
   it('offers to send the tags with a push, since git sends none by itself', async () => {
     const { container } = await shell({
       repo_action: { what: 'push', conflicted: false, message: '' },
