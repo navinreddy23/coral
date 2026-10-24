@@ -3060,14 +3060,17 @@
    * copy that pulls the commit. That is the surprise this exists to prevent, so it is said
    * before anything is done.
    */
-  async function stopTrackingFile(file: string) {
+  async function stopTrackingFile(file: string, folder = false) {
     if (!info) return;
     const path = info.path;
     const { choice } = await ask({
-      title: `Stop tracking ${baseName(file)}?`,
-      detail:
-        `It stays on disk here, and /${file} goes into .gitignore. The next commit records it ` +
-        'as deleted, and anyone who pulls that commit has it deleted from their copy.',
+      title: `Stop tracking ${baseName(file)}${folder ? '/' : ''}?`,
+      detail: folder
+        ? `Everything in it stays on disk here, and /${file} goes into .gitignore. The next ` +
+          'commit records every file in it as deleted, and anyone who pulls that commit has ' +
+          'them deleted from their copy.'
+        : `It stays on disk here, and /${file} goes into .gitignore. The next commit records ` +
+          'it as deleted, and anyone who pulls that commit has it deleted from their copy.',
       asksText: false,
       placeholder: '',
       initial: '',
@@ -3210,6 +3213,28 @@
       );
     }
     menu = { ...at, items };
+  }
+
+  /** A folder in a commit's tree: the same as a file, for everything in it. */
+  function commitFolderMenu(event: MouseEvent, folder: string) {
+    event.preventDefault();
+    const atHead = selection.detail !== null && selection.detail.commit.oid === headOid;
+    const items: MenuItem[] = [
+      { kind: 'item', label: 'Copy the path', hint: `${folder}/`, run: () => void copyName(folder) },
+    ];
+    if (atHead) {
+      items.push(
+        { kind: 'separator' },
+        {
+          kind: 'item',
+          label: 'Stop tracking and ignore it',
+          hint: 'it stays on disk',
+          disabled: worktree.busy,
+          run: () => void stopTrackingFile(folder, true),
+        },
+      );
+    }
+    menu = { x: event.clientX, y: event.clientY, items };
   }
 
   async function ignorePath(what: Ignored, line: string) {
@@ -5481,6 +5506,7 @@
           onEditNote={() => selection.detail && void editNote(selection.detail.commit.oid)}
           many={selection.many.map((p) => ({ oid: p.oid, summary: visibleMeta.get(p.row)?.summary ?? '' }))}
           onFileMenu={commitFileMenu}
+          onFolderMenu={commitFolderMenu}
           locks={lfs.byPath}
           picture={detailPicture}
           repo={info?.path ?? null}

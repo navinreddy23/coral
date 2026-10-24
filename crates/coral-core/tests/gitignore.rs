@@ -83,3 +83,24 @@ async fn a_tracked_file_untracked_and_ignored_stays_on_disk_and_leaves_the_next_
     );
     assert_eq!(untracked(&repo), [".gitignore"]);
 }
+
+#[tokio::test]
+async fn a_tracked_folder_untracked_and_ignored_keeps_every_file_in_it_on_disk() {
+    let repo = TestRepo::new()
+        .write("a.txt", "1\n")
+        .write("build/out.bin", "x\n")
+        .write("build/deep/more.bin", "y\n")
+        .commit("start");
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = open(&repo).await;
+
+    loc.untrack(&runner, &["build"]).await.unwrap();
+    loc.ignore(&exact("build")).unwrap();
+
+    assert!(repo.path().join("build/deep/more.bin").exists());
+    assert_eq!(
+        repo.git(["diff", "--cached", "--name-status"]).trim(),
+        "D\tbuild/deep/more.bin\nD\tbuild/out.bin"
+    );
+    assert_eq!(untracked(&repo), [".gitignore"]);
+}

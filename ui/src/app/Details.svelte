@@ -30,6 +30,7 @@
     onGrouping,
     onOpenFile,
     onFileMenu,
+    onFolderMenu,
     locks = new Map(),
     onClearCompare,
     onCopied,
@@ -65,6 +66,8 @@
     onOpenFile: (path: string) => void;
     /** A file's own menu, for a file in the list or the tree. */
     onFileMenu?: (event: MouseEvent, path: string) => void;
+    /** A folder's menu, in the tree. */
+    onFolderMenu?: (event: MouseEvent, path: string) => void;
     /** Files locked on the LFS server, by path. */
     locks?: Map<string, LfsLock>;
     /** Says whether the clipboard took the object id, which a button cannot tell on its own. */
@@ -337,10 +340,10 @@
         <p class="muted count">
           {everything.length} file{everything.length === 1 ? '' : 's'} at this commit
         </p>
-        <FileTree nodes={tree} {openPath} {onOpenFile} {onFileMenu} {locks} startClosed />
+        <FileTree nodes={tree} {openPath} {onOpenFile} {onFileMenu} {onFolderMenu} {locks} startClosed />
       {/if}
     {:else if grouping === 'tree'}
-      <FileTree nodes={tree} {openPath} {onOpenFile} {onFileMenu} {locks} />
+      <FileTree nodes={tree} {openPath} {onOpenFile} {onFileMenu} {onFolderMenu} {locks} />
     {:else}
     <ul class="files">
       {#each shown as file (file.path)}
