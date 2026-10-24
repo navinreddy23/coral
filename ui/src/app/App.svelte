@@ -1962,6 +1962,18 @@
   }
 
   /**
+   * The remote a branch must be pushed to before the host can open a request from it, or
+   * null when it is there already. The host's remote, as the engine picks it: `origin`, or
+   * else the first.
+   */
+  function unpushedTo(branch: string | null): string | null {
+    const remote = remotes.list.find((r) => r.name === 'origin') ?? remotes.list[0];
+    if (branch === null || remote === undefined) return null;
+    const there = refs.groups.remote.some((r) => r.short === `${remote.name}/${branch}`);
+    return there ? null : remote.name;
+  }
+
+  /**
    * Where a push should go when nobody has said: `origin` if it is there, else the only one.
    *
    * Null when there are several and none is called `origin`, which is the case that has to be
@@ -5272,6 +5284,21 @@
         source={proposing}
         targets={remoteBranchNames}
         label={requestWord}
+        pushTo={unpushedTo(proposing)}
+        onPush={() => {
+          const remote = unpushedTo(proposing);
+          return remote === null || proposing === null
+            ? Promise.resolve(true)
+            : act({
+                kind: 'push',
+                remote,
+                setUpstream: true,
+                refspec: `refs/heads/${proposing}`,
+                tags: false,
+                forceWithLease: false,
+                delete: false,
+              });
+        }}
         onClose={() => (proposing = null)}
         onOpened={(made) => {
           toasts.push('ok', `${requestWord} opened`, `#${made.number} ${made.title}`);

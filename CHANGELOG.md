@@ -25,6 +25,19 @@ A checkout that git refuses because it would overwrite uncommitted changes asks 
 for: taken along to the branch being checked out (stashed, checked out and put back, with any
 clash marked in the files and the stash kept), or left in a stash. It ended in git's message.
 
+### Pushing with the token you signed in with
+
+Signing in to GitHub or GitLab in the status bar now also lets git push and fetch over https
+with that token. It was used for the host's API alone, so a push to an https remote found no
+credential and failed asking for a user name on a terminal it could not use. Coral's
+credential helper answers with it when git has nothing stored for the host, and does not keep a
+second copy, so signing out still signs git out.
+
+### Opening a request from a branch the host does not have
+
+A pull or merge request opened from a branch that has never been pushed says so, and its
+button pushes the branch first. The host refused it with a validation error in its own words.
+
 ### Picking lines and folders
 
 - Shift-click picks every changed line between it and the last one clicked, and a picked line
