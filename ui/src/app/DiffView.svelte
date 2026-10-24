@@ -135,8 +135,17 @@
    * Only for the working tree: a commit is written and there is nothing to move in or out of
    * it, and a comparison of two commits is a reading, not a place to work.
    */
+  // None over a commit picked from the file's history, though the panel was opened on the
+  // working copy: a hunk's index is read against the working copy, so acting on what is shown
+  // would stage or throw away a different hunk from the one on screen.
   const side = $derived(
-    diff.source === 'unstaged' ? 'stage' : diff.source === 'staged' ? 'unstage' : null,
+    diff.atCommit !== null
+      ? null
+      : diff.source === 'unstaged'
+        ? 'stage'
+        : diff.source === 'staged'
+          ? 'unstage'
+          : null,
   );
 
   /**

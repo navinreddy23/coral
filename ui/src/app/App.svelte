@@ -3428,7 +3428,8 @@
     lines: number[],
   ) {
     const file = diff.path;
-    if (!info || file === null) return;
+    // The hunk is counted in the working copy's diff, and a commit from the history is not it.
+    if (!info || file === null || diff.atCommit !== null) return;
 
     if (part === 'discard') {
       const { what, detail } = partWords(

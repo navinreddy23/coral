@@ -30,6 +30,9 @@ the merge brought in as new commits and asks its conflicts again. Both are offer
 
 ### Fixed along the way
 
+- A commit picked from a file's history no longer offers "Stage hunk", "Discard hunk" or line
+  picking. The buttons counted hunks in the working copy's diff, not the one on screen, so
+  "Discard hunk" over an old commit threw away a different, uncommitted hunk for good.
 - Merging `origin/main` named the incoming side "origin/HEAD" in the merge tool, in every
   clone, because `origin/HEAD` points at the same commit.
 - Several commits cherry picked without committing leave every one of their messages in the

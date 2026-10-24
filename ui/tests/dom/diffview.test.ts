@@ -196,6 +196,28 @@ describe('the diff viewer', () => {
     expect(view.queryByText('Stage 1 line')).toBeNull();
   });
 
+  it('offers no staging or discarding on a commit picked from the file\'s history', () => {
+    // The buttons send a hunk's index, which is read against the working copy. Shown over an
+    // old commit's change, "Discard hunk" threw away whichever uncommitted hunk had that index:
+    // work in no commit, gone, while the screen showed a line from a year ago.
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'kernel/sched/core.c';
+    diff.source = 'unstaged';
+    diff.file = fileDiff();
+    diff.setMode('inline');
+    diff.setView('history');
+    diff.history = [];
+    diff.atCommit = 'a'.repeat(40);
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+
+    // Within this view: the page still holds the views earlier tests rendered.
+    const said = view.container.textContent ?? '';
+    expect(said).toContain('TWO');
+    expect(said).not.toContain('Stage hunk');
+    expect(said).not.toContain('Discard hunk');
+    expect(view.container.querySelector('button.pick')).toBeNull();
+  });
+
   it('picks a run of lines with Shift, leaving out the unchanged ones between', async () => {
     const diff = new DiffState(new ViewsState());
     diff.path = 'kernel/sched/core.c';
