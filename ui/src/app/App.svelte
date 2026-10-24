@@ -1431,6 +1431,11 @@
     );
   }
 
+  /** Why a branch with a merge the remote has not seen is better pulled by merging. */
+  const MERGE_KEPT =
+    'This branch has a merge the remote has not seen. Rebasing would replay what it brought ' +
+    'in as new commits and ask its conflicts again; merging keeps it.';
+
   /**
    * A pull that cannot fast-forward, put as the choice it actually is.
    *
@@ -1442,18 +1447,20 @@
    */
   async function offerToIntegrate(action: Extract<Action, { kind: 'pull' }>) {
     const branch = headName ?? 'This branch';
+    const merged = info !== null ? await unpushedMerges(info.path).catch(() => false) : false;
     const { choice } = await ask({
       title: `${branch} and the remote have both moved`,
       detail:
         'A pull that only fast-forwards cannot bring these together, because each has commits ' +
         'the other does not. Merging keeps both lines of work and writes a commit that joins ' +
         'them. Rebasing puts the commits made here on top of the remote\'s, which rewrites ' +
-        'them and gives them new object ids.',
+        'them and gives them new object ids.' +
+        (merged ? `\n\n${MERGE_KEPT}` : ''),
       asksText: false,
       placeholder: '',
       initial: '',
       choices: [
-        { id: 'merge', label: 'Pull, merging' },
+        { id: 'merge', label: 'Pull, merging', primary: merged },
         { id: 'rebase', label: 'Pull, rebasing' },
       ],
     });
@@ -1532,8 +1539,7 @@
           'them. Forcing replaces them with what is here, and git allows it only while ' +
           'nobody else has moved the branch since Coral last fetched it.' +
           (merged
-            ? '\n\nThis branch has a merge the remote has not seen. Rebasing would replay ' +
-              'what it brought in as new commits and ask its conflicts again; merging keeps it.'
+            ? `\n\n${MERGE_KEPT}`
             : ''),
       asksText: false,
       placeholder: '',
