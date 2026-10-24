@@ -283,12 +283,17 @@ export class MergeState {
     }
   }
 
-  /** Continues, aborts, or skips the operation. */
-  async step(step: 'continue' | 'abort' | 'skip'): Promise<boolean> {
+  /**
+   * Continues, aborts, or skips the operation.
+   *
+   * `message` is one edited in the commit box while the operation waited, which continuing
+   * commits with instead of the one git prepared.
+   */
+  async step(step: 'continue' | 'abort' | 'skip', message: string | null = null): Promise<boolean> {
     this.busy = true;
     this.error = null;
     try {
-      const out = await operationStep(this.#path, step);
+      const out = await operationStep(this.#path, step, step === 'continue' ? message : null);
       this.nothingToRecord = !out.completed && emptied(out.message);
       this.stopped = out.completed ? '' : plainly(out.message);
       await this.#reload();

@@ -558,6 +558,27 @@ impl RepoLocation {
         self.run_stoppable(runner, cmd).await
     }
 
+    /// Makes `text` the message the stopped operation commits with when it continues.
+    ///
+    /// For a message edited in the window while a merge, cherry-pick, revert or rebase waits.
+    /// Each reads its own file when it continues, and none reads what is in the commit box: a
+    /// rebase reads `rebase-merge/message`, the rest `MERGE_MSG` (see `git help rebase`,
+    /// "--continue"). Both are written when a rebase is stopped, since a squash also leaves
+    /// its combined message in `MERGE_MSG`.
+    ///
+    /// # Errors
+    /// I/O failures writing either file.
+    pub fn settle_message(&self, text: &str) -> Result<(), CoralError> {
+        let mut body = text.trim_end().to_owned();
+        body.push('\n');
+        std::fs::write(self.git_dir.join("MERGE_MSG"), &body)?;
+        let rebase = self.git_dir.join("rebase-merge");
+        if rebase.is_dir() {
+            std::fs::write(rebase.join("message"), &body)?;
+        }
+        Ok(())
+    }
+
     /// Continues, aborts, or skips whatever operation is in progress.
     ///
     /// # Errors

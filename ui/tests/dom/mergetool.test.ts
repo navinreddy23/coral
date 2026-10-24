@@ -56,6 +56,22 @@ function state(files: ConflictedFile[], swapped = false) {
 const noop = () => {};
 
 describe("the merge tool", () => {
+  it("continues with a message edited in the commit box, and lets it go once used", async () => {
+    const merge = state([]);
+    const step = vi.spyOn(merge, "step").mockResolvedValue(true);
+    const used = vi.fn();
+    const { container } = render(MergeTool, {
+      props: { merge, onDone: noop, message: () => "Parser a and b", onMessageUsed: used },
+    });
+    const cont = [...container.querySelectorAll("header button")].find(
+      (b) => b.textContent?.trim() === "Continue",
+    ) as HTMLButtonElement;
+    await fireEvent.click(cont);
+    await tick();
+    expect(step).toHaveBeenCalledWith("continue", "Parser a and b");
+    expect(used).toHaveBeenCalledOnce();
+  });
+
   it("will not continue while a file is still conflicted", () => {
     const { container } = render(MergeTool, {
       props: { merge: state([conflicted()]), onDone: noop },

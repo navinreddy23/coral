@@ -1046,3 +1046,38 @@ async fn cherry_picks_several_commits_in_order_and_reverts_them_newest_first() {
     loc.revert(&runner, &newest_first, None).await.unwrap();
     assert_eq!(r.git(["show", "HEAD:f.txt"]).trim(), "base");
 }
+
+/// A message edited while an operation is stopped is the one the commit gets.
+///
+/// The window shows git's prepared message in the commit box while a merge, cherry-pick or
+/// rebase waits, and continuing used to commit git's file whatever was typed over it there.
+#[tokio::test]
+async fn continuing_uses_a_message_edited_while_stopped() {
+    // A rebase reads its own message file; a cherry-pick reads MERGE_MSG.
+    let r = conflicting();
+    r.git(["checkout", "--quiet", "side"]);
+    let (runner, loc) = open(&r).await;
+    let _ = r.command(["rebase", "main"]).output();
+    let r = r.write("f.txt", "resolved\n");
+    r.git(["add", "f.txt"]);
+    loc.settle_message("Side change, reworded while stopped")
+        .unwrap();
+    loc.op(&runner, OpAction::Continue).await.unwrap();
+    assert_eq!(
+        r.git(["log", "--format=%s", "-1"]).trim(),
+        "Side change, reworded while stopped"
+    );
+
+    let r = conflicting();
+    let (runner, loc) = open(&r).await;
+    let _ = r.command(["cherry-pick", "side"]).output();
+    let r = r.write("f.txt", "resolved\n");
+    r.git(["add", "f.txt"]);
+    loc.settle_message("Picked, reworded while stopped")
+        .unwrap();
+    loc.op(&runner, OpAction::Continue).await.unwrap();
+    assert_eq!(
+        r.git(["log", "--format=%s", "-1"]).trim(),
+        "Picked, reworded while stopped"
+    );
+}

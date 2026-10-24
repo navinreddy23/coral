@@ -9,9 +9,18 @@
     merge,
     onDone,
     onRefused = async () => false,
+    message = () => null,
+    onMessageUsed = () => undefined,
   }: {
     merge: MergeState;
     onDone: () => void;
+    /** A message edited in the commit box while the operation waited, to continue with. */
+    message?: () => string | null;
+    /**
+     * Told when a continue has taken that message, so the box can let it go: left there, the
+     * next commit a rebase stopped on would be continued with the previous one's words.
+     */
+    onMessageUsed?: () => void;
     /**
      * A step git refused, with its words. Answers true when the window put right what stopped
      * it, such as asking who the user is, and the step is worth trying again.
@@ -21,12 +30,20 @@
 
   /** Runs a step, and runs it once more if what stopped it has been put right. */
   async function run(step: 'continue' | 'skip'): Promise<boolean> {
-    if (await merge.step(step)) return true;
+    if (await send(step)) return true;
     // git's refusal comes back as what the step stopped on, not as an error: it exited, and
     // said why.
     const refused = merge.error ?? (merge.stopped === '' ? null : merge.stopped);
     if (refused === null || !(await onRefused(refused))) return false;
-    return merge.step(step);
+    return send(step);
+  }
+
+  /** One step, with the edited message when continuing, letting the message go once used. */
+  async function send(step: 'continue' | 'skip'): Promise<boolean> {
+    const words = step === 'continue' ? message() : null;
+    const done = await merge.step(step, words);
+    if (words !== null && (done || merge.operation?.prepared !== words)) onMessageUsed();
+    return done;
   }
 
   /**

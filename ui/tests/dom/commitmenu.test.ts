@@ -248,7 +248,7 @@ describe('the commit menu', () => {
   it('moves a commit without asking, since nothing is lost by it', async () => {
     // Reordering is undoable through the journal and destroys nothing, so a confirmation here
     // would only be in the way.
-    const { container } = await shell();
+    const { container } = await shell({ rev_ancestry: 'same' });
     await openMenu(container);
     await fireEvent.click(itemNamed(container, 'Move commit up'));
 
@@ -263,7 +263,7 @@ describe('the commit menu', () => {
   });
 
   it('asks before dropping a commit, and drops it when told to', async () => {
-    const { container } = await shell();
+    const { container } = await shell({ rev_ancestry: 'same' });
     await openMenu(container);
     await fireEvent.click(itemNamed(container, 'Drop commit'));
 
@@ -282,8 +282,27 @@ describe('the commit menu', () => {
     });
   });
 
+  it('offers no rewrite of a commit the checked-out branch does not hold', async () => {
+    // Rewording one replays the branch from that commit up, and the engine refuses a commit
+    // that is not on it, but only once a new message had been typed for it.
+    const { container } = await shell({ rev_ancestry: 'diverged' });
+    await openMenu(container);
+
+    for (const label of [
+      'Interactive rebase from this commit',
+      'Edit commit message',
+      'Drop commit',
+      'Move commit up',
+      'Move commit down',
+    ]) {
+      expect(itemNamed(container, label).hasAttribute('disabled'), label).toBe(true);
+    }
+    expect(itemNamed(container, 'Edit commit message').textContent).toContain('not on master');
+    expect(itemNamed(container, 'Cherry pick commit…').hasAttribute('disabled')).toBe(false);
+  });
+
   it('drops nothing when the question is dismissed', async () => {
-    const { container } = await shell();
+    const { container } = await shell({ rev_ancestry: 'same' });
     await openMenu(container);
     await fireEvent.click(itemNamed(container, 'Drop commit'));
     await confirm(container, false);
@@ -351,7 +370,7 @@ describe('the commit menu', () => {
     // The field held the summary and what came back replaced the entire message, so rewording
     // any commit with a body — on a kernel, every commit, with its explanation and its
     // Signed-off-by lines — silently threw the body away.
-    const { container } = await shell();
+    const { container } = await shell({ rev_ancestry: 'same' });
     await openMenu(container);
     await fireEvent.click(itemNamed(container, 'Edit commit message'));
 
@@ -366,7 +385,7 @@ describe('the commit menu', () => {
   });
 
   it('sends the message it was given when rewording, and nothing when cancelled', async () => {
-    const { container } = await shell();
+    const { container } = await shell({ rev_ancestry: 'same' });
     await openMenu(container);
     await fireEvent.click(itemNamed(container, 'Edit commit message'));
 

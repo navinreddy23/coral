@@ -2154,23 +2154,25 @@
   async function cherryPick(oid: string) {
     const mainline = await mainlineFor(oid, 'cherry pick');
     if (mainline === null) return;
-    const commit = await commitPicked();
+    const commit = await commitPicked(1);
     if (commit === null) return;
     await act({ kind: 'cherryPick', revs: [oid], commit, mainline });
   }
 
   async function cherryPickMany(revs: string[]) {
-    const commit = await commitPicked();
+    const commit = await commitPicked(revs.length);
     if (commit === null) return;
     await act({ kind: 'cherryPick', revs, commit, mainline: undefined });
   }
 
   /** Whether cherry-picked changes are committed at once or left staged; null for neither. */
-  async function commitPicked(): Promise<boolean | null> {
+  async function commitPicked(count: number): Promise<boolean | null> {
     const { choice } = await ask({
       title: 'Commit the cherry picked changes?',
       detail:
-        'Yes records a commit on this branch straight away.\n' +
+        (count === 1
+          ? 'Yes records a commit on this branch straight away.\n'
+          : `Yes records ${count} commits on this branch straight away, one for each.\n`) +
         'No leaves the changes staged, so they can be edited, split, or folded into ' +
         'something else before anything is recorded.',
       asksText: false,
@@ -2244,6 +2246,9 @@
     const summary = visibleMeta.get(row)?.summary ?? '';
     const at = { x: event.clientX, y: event.clientY };
     const where = await standingOf(oid);
+    // A rewrite replays the branch from this commit up, so it has to be on the branch. The
+    // engine refuses one that is not, but only after a new message has been typed for it.
+    const offBranch = where === 'same' || where === 'behind' ? null : `not on ${branch}`;
 
     menu = {
       x: at.x,
@@ -2281,13 +2286,16 @@
         {
           kind: 'item',
           label: 'Interactive rebase from this commit',
-          hint: `${short} and newer`,
+          hint: offBranch ?? `${short} and newer`,
+          disabled: offBranch !== null,
           worktree: true,
           run: () => info && void rebase.load(info.path, `${oid}~1`),
         },
         {
           kind: 'item',
           label: 'Edit commit message',
+          hint: offBranch ?? undefined,
+          disabled: offBranch !== null,
           worktree: true,
           run: () => void reword(oid, summary),
         },
@@ -2300,19 +2308,23 @@
         {
           kind: 'item',
           label: 'Drop commit',
+          hint: offBranch ?? undefined,
           danger: true,
+          disabled: offBranch !== null,
           worktree: true,
           run: () => void confirmDrop(oid, summary),
         },
         {
           kind: 'item',
           label: 'Move commit up',
+          disabled: offBranch !== null,
           worktree: true,
           run: () => void act({ kind: 'rewrite', rev: oid, how: 'moveNewer', message: null }),
         },
         {
           kind: 'item',
           label: 'Move commit down',
+          disabled: offBranch !== null,
           worktree: true,
           run: () => void act({ kind: 'rewrite', rev: oid, how: 'moveOlder', message: null }),
         },
@@ -5131,6 +5143,8 @@
         {merge}
         onDone={reloadAll}
         onRefused={async (message) => needsIdentity(message) && (await sayWhoYouAre())}
+        message={() => commitDraft.edited()}
+        onMessageUsed={() => commitDraft.clear()}
       />
     {:else if diff.path !== null}
       <DiffView {diff} onClose={() => diff.close()} onPart={applyPart} />
