@@ -5,6 +5,7 @@ use crate::github;
 use crate::gitlab;
 use crate::provider::{Host, HostKind, HostingError};
 use crate::pull_request::{NewPullRequest, PullRequest};
+use crate::review::{self, Remark, Reply};
 use crate::token::auth_header;
 
 /// How many proposals to ask for at once.
@@ -123,6 +124,49 @@ impl Client {
             HostKind::GitHub => github::parse_one(&body),
             HostKind::GitLab => gitlab::parse_one(&body),
         }
+    }
+
+    /// Everything said on a proposal, oldest first.
+    ///
+    /// # Errors
+    /// As [`Client::pull_requests`].
+    pub async fn review(&self, host: &Host, number: u64) -> Result<Vec<Remark>, HostingError> {
+        let remarks = match host.kind {
+            HostKind::GitHub => {
+                let talk = self
+                    .get(host, &github::conversation_url(host, number))
+                    .await?;
+                let lines = self
+                    .get(host, &github::line_comments_url(host, number))
+                    .await?;
+                let verdicts = self.get(host, &github::reviews_url(host, number)).await?;
+                let mut all = github::parse_comments(&talk)?;
+                all.extend(github::parse_comments(&lines)?);
+                all.extend(github::parse_reviews(&verdicts)?);
+                all
+            }
+            HostKind::GitLab => {
+                let notes = self.get(host, &gitlab::notes_url(host, number)).await?;
+                gitlab::parse_notes(&notes)?
+            }
+        };
+        Ok(review::in_order(remarks))
+    }
+
+    /// Comments on a proposal, approves it, or asks for changes.
+    ///
+    /// # Errors
+    /// [`HostingError::Unsupported`] for asking GitLab for changes; otherwise as
+    /// [`Client::pull_requests`].
+    pub async fn reply(&self, host: &Host, number: u64, reply: &Reply) -> Result<(), HostingError> {
+        let requests = match host.kind {
+            HostKind::GitHub => vec![github::reply_request(host, number, reply)],
+            HostKind::GitLab => gitlab::reply_requests(host, number, reply)?,
+        };
+        for (url, payload) in requests {
+            self.post(host, &url, &payload).await?;
+        }
+        Ok(())
     }
 
     async fn get(&self, host: &Host, url: &str) -> Result<Vec<u8>, HostingError> {

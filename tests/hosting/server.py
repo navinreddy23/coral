@@ -1,4 +1,4 @@
-"""A fake GitHub Enterprise and GitLab on loopback: three proposals and the checks on each.
+"""A fake GitHub Enterprise and GitLab on loopback: three proposals, their checks and a review.
 
     server.py <port> <request-log> [git-root]
 
@@ -51,6 +51,56 @@ RUNS = {
     C: [{"status": "in_progress", "conclusion": None, "html_url": "http://ci/c"}],
 }
 
+# The review on proposal 12, as each host keeps it. Replies are appended, so the window can be
+# seen reading back what it said.
+CONVERSATION = {12: [{"user": {"login": "bob"}, "body": "Does this keep the order stable?",
+                      "created_at": "2026-10-20T09:00:00Z"}]}
+LINE_COMMENTS = {12: [{"user": {"login": "cy"}, "body": "Off by one here?",
+                       "created_at": "2026-10-20T09:30:00Z", "path": "src/lanes.rs",
+                       "line": 42, "original_line": 42}]}
+REVIEWS = {12: [{"user": {"login": "dee"}, "state": "CHANGES_REQUESTED", "body": "Needs a test",
+                 "submitted_at": "2026-10-20T10:00:00Z"}]}
+NOTES = {12: [{"author": {"username": "bob"}, "body": "Does this keep the order stable?",
+               "created_at": "2026-10-20T09:00:00.000Z", "system": False},
+              {"author": {"username": "cy"}, "body": "added 1 commit",
+               "created_at": "2026-10-20T09:10:00.000Z", "system": True}]}
+TICK = [0]
+
+def now():
+    TICK[0] += 1
+    return f"2026-10-21T10:{TICK[0]:02d}:00Z"
+
+def reply(path, sent):
+    """Records a reply, answering with what the host would; None for a path that is not one."""
+    parts = path.split("/")
+    if path.startswith("/api/v3/repos/o/r/issues/") and path.endswith("/comments"):
+        n = int(parts[-2])
+        made = {"user": {"login": "you"}, "body": sent.get("body", ""), "created_at": now()}
+        CONVERSATION.setdefault(n, []).append(made)
+        return made
+    if path.startswith("/api/v3/repos/o/r/pulls/") and path.endswith("/reviews"):
+        n = int(parts[-2])
+        state = {"APPROVE": "APPROVED", "REQUEST_CHANGES": "CHANGES_REQUESTED"}.get(
+            sent.get("event"), "COMMENTED")
+        made = {"user": {"login": "you"}, "state": state, "body": sent.get("body", ""),
+                "submitted_at": now()}
+        REVIEWS.setdefault(n, []).append(made)
+        return made
+    if path.startswith("/api/v4/projects/o%2Fr/merge_requests/") and path.endswith("/notes"):
+        n = int(parts[-2])
+        made = {"author": {"username": "you"}, "body": sent.get("body", ""),
+                "created_at": now().replace("Z", ".000Z"), "system": False}
+        NOTES.setdefault(n, []).append(made)
+        return made
+    if path.startswith("/api/v4/projects/o%2Fr/merge_requests/") and path.endswith("/approve"):
+        n = int(parts[-2])
+        NOTES.setdefault(n, []).append({"author": {"username": "you"},
+                                        "body": "approved this merge request",
+                                        "created_at": now().replace("Z", ".000Z"),
+                                        "system": True})
+        return {"approved": True}
+    return None
+
 class Handler(BaseHTTPRequestHandler):
     def git(self):
         """Hands the request to `git http-backend` and relays its CGI answer."""
@@ -85,7 +135,20 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if GIT_ROOT and ".git/" in self.path:
             return self.git()
-        self.send_response(404); self.end_headers()
+        length = int(self.headers.get("Content-Length") or 0)
+        sent = json.loads(self.rfile.read(length) or b"{}")
+        with open(LOG, "a") as log:
+            log.write(f"POST {self.path} auth={self.headers.get('Authorization', '')[:12]}"
+                      f" private={self.headers.get('PRIVATE-TOKEN', '')[:5]} {json.dumps(sent)}\n")
+        made = reply(self.path.split("?")[0], sent)
+        if made is None:
+            self.send_response(404); self.end_headers(); return
+        data = json.dumps(made).encode()
+        self.send_response(201)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def do_GET(self):
         if GIT_ROOT and ".git/" in self.path:
@@ -106,6 +169,14 @@ class Handler(BaseHTTPRequestHandler):
             body = {"total_count": len(RUNS.get(sha, [])), "check_runs": RUNS.get(sha, [])}
         elif path.endswith("/status"):
             body = {"state": "pending", "statuses": []}
+        elif path.startswith("/api/v3/repos/o/r/issues/") and path.endswith("/comments"):
+            body = CONVERSATION.get(int(path.split("/")[-2]), [])
+        elif path.startswith("/api/v3/repos/o/r/pulls/") and path.endswith("/comments"):
+            body = LINE_COMMENTS.get(int(path.split("/")[-2]), [])
+        elif path.startswith("/api/v3/repos/o/r/pulls/") and path.endswith("/reviews"):
+            body = REVIEWS.get(int(path.split("/")[-2]), [])
+        elif path.startswith("/api/v4/projects/o%2Fr/merge_requests/") and path.endswith("/notes"):
+            body = NOTES.get(int(path.split("/")[-2]), [])
         if body is None:
             self.send_response(404); self.end_headers(); return
         data = json.dumps(body).encode()

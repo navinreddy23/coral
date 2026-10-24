@@ -300,3 +300,146 @@ fn checks_are_asked_of_the_commit_on_each_provider() {
         "https://gitlab.com/api/v4/projects/group%2Fsub%2Fproj/merge_requests/7/pipelines?per_page=1"
     );
 }
+
+mod review {
+    use coral_hosting::review::{Remark, Reply, Verdict, in_order};
+    use coral_hosting::{HostingError, github, gitlab};
+
+    use super::{github_host, gitlab_host};
+
+    #[test]
+    fn github_line_comments_keep_their_place_even_after_the_line_moved_away() {
+        let body = br#"[
+          {"user":{"login":"ada"},"body":"Off by one?","created_at":"2026-10-01T10:00:00Z",
+           "path":"src/lanes.rs","line":42,"original_line":40},
+          {"user":{"login":"bob"},"body":"Outdated now","created_at":"2026-10-01T11:00:00Z",
+           "path":"src/lanes.rs","line":null,"original_line":17}
+        ]"#;
+        let remarks = github::parse_comments(body).unwrap();
+        assert_eq!(remarks[0].path.as_deref(), Some("src/lanes.rs"));
+        assert_eq!(remarks[0].line, Some(42));
+        assert_eq!(remarks[1].line, Some(17));
+    }
+
+    #[test]
+    fn github_conversation_comments_are_about_no_line() {
+        let body = br#"[{"user":{"login":"ada"},"body":"Looks good","created_at":"2026-10-01T10:00:00Z"}]"#;
+        let remarks = github::parse_comments(body).unwrap();
+        assert_eq!((remarks[0].path.as_deref(), remarks[0].line), (None, None));
+    }
+
+    #[test]
+    fn github_reviews_keep_verdicts_and_what_was_said_and_drop_the_rest() {
+        let body = br#"[
+          {"user":{"login":"ada"},"state":"APPROVED","body":"","submitted_at":"2026-10-02T09:00:00Z"},
+          {"user":{"login":"bob"},"state":"CHANGES_REQUESTED","body":"Needs a test","submitted_at":"2026-10-02T10:00:00Z"},
+          {"user":{"login":"cy"},"state":"COMMENTED","body":"","submitted_at":"2026-10-02T11:00:00Z"},
+          {"user":{"login":"cy"},"state":"COMMENTED","body":"One question","submitted_at":"2026-10-02T12:00:00Z"},
+          {"user":{"login":"dee"},"state":"PENDING","body":"draft","submitted_at":null},
+          {"user":{"login":"eve"},"state":"DISMISSED","body":"stale","submitted_at":"2026-10-02T13:00:00Z"}
+        ]"#;
+        let remarks = github::parse_reviews(body).unwrap();
+        let said: Vec<(&str, Option<Verdict>)> = remarks
+            .iter()
+            .map(|r| (r.author.as_str(), r.verdict))
+            .collect();
+        assert_eq!(
+            said,
+            [
+                ("ada", Some(Verdict::Approved)),
+                ("bob", Some(Verdict::ChangesRequested)),
+                ("cy", None),
+            ]
+        );
+    }
+
+    #[test]
+    fn github_replies_go_to_the_conversation_or_become_a_review() {
+        let host = github_host();
+        let (url, body) = github::reply_request(
+            &host,
+            7,
+            &Reply::Comment {
+                body: "Thanks".into(),
+            },
+        );
+        assert_eq!(
+            url,
+            "https://api.github.com/repos/torvalds/linux/issues/7/comments"
+        );
+        assert_eq!(body["body"], "Thanks");
+
+        let (url, body) = github::reply_request(
+            &host,
+            7,
+            &Reply::RequestChanges {
+                body: "Fix it".into(),
+            },
+        );
+        assert_eq!(
+            url,
+            "https://api.github.com/repos/torvalds/linux/pulls/7/reviews"
+        );
+        assert_eq!(body["event"], "REQUEST_CHANGES");
+        let (_, body) = github::reply_request(
+            &host,
+            7,
+            &Reply::Approve {
+                body: String::new(),
+            },
+        );
+        assert_eq!(body["event"], "APPROVE");
+    }
+
+    #[test]
+    fn gitlab_keeps_approvals_from_its_system_notes_and_drops_the_other_events() {
+        let body = br#"[
+          {"author":{"username":"ada"},"body":"Looks right","created_at":"2026-10-01T10:00:00.000Z","system":false},
+          {"author":{"username":"ada"},"body":"added 1 commit","created_at":"2026-10-01T10:05:00.000Z","system":true},
+          {"author":{"username":"bob"},"body":"approved this merge request","created_at":"2026-10-01T11:00:00.000Z","system":true},
+          {"author":{"username":"bob"},"body":"Why removed?","created_at":"2026-10-01T12:00:00.000Z","system":false,
+           "position":{"new_path":null,"new_line":null,"old_path":"src/old.rs","old_line":9}}
+        ]"#;
+        let remarks = gitlab::parse_notes(body).unwrap();
+        assert_eq!(remarks.len(), 3);
+        assert_eq!(remarks[1].verdict, Some(Verdict::Approved));
+        assert_eq!(remarks[1].body, "");
+        assert_eq!(remarks[2].path.as_deref(), Some("src/old.rs"));
+        assert_eq!(remarks[2].line, Some(9));
+    }
+
+    #[test]
+    fn gitlab_approves_where_approvals_count_and_cannot_request_changes() {
+        let host = gitlab_host();
+        let calls = gitlab::reply_requests(
+            &host,
+            3,
+            &Reply::Approve {
+                body: "Ship it".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(calls.len(), 2);
+        assert!(calls[0].0.ends_with("/merge_requests/3/approve"));
+        assert!(calls[1].0.ends_with("/merge_requests/3/notes"));
+        assert!(matches!(
+            gitlab::reply_requests(&host, 3, &Reply::RequestChanges { body: "x".into() }),
+            Err(HostingError::Unsupported(_))
+        ));
+    }
+
+    #[test]
+    fn remarks_from_several_lists_read_in_the_order_they_were_made() {
+        let at = |t: &str| Remark {
+            author: t.into(),
+            body: String::new(),
+            at: t.into(),
+            verdict: None,
+            path: None,
+            line: None,
+        };
+        let ordered = in_order(vec![at("2026-10-03"), at("2026-10-01"), at("2026-10-02")]);
+        let times: Vec<&str> = ordered.iter().map(|r| r.at.as_str()).collect();
+        assert_eq!(times, ["2026-10-01", "2026-10-02", "2026-10-03"]);
+    }
+}

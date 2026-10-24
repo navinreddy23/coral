@@ -483,6 +483,38 @@ export function hostingChecks(path: string, number: number, sha: string): Promis
   return invoke<Checks>('hosting_checks', { path, number, sha });
 }
 
+/** What a review concluded, when it concluded anything. */
+export type ReviewVerdict = 'approved' | 'changesRequested';
+
+/** One thing somebody said on a proposal. Mirrors `coral_hosting::review::Remark`. */
+export interface Remark {
+  author: string;
+  /** Markdown, as written. Empty for a bare approval. */
+  body: string;
+  /** ISO 8601, as the provider gave it. */
+  at: string;
+  verdict: ReviewVerdict | null;
+  /** The file and line of the diff it is about, for a comment left on one. */
+  path: string | null;
+  line: number | null;
+}
+
+/** What to say back. Mirrors `coral_hosting::review::Reply`. */
+export type Reply =
+  | { kind: 'comment'; body: string }
+  | { kind: 'approve'; body: string }
+  | { kind: 'requestChanges'; body: string };
+
+/** Everything said on a proposal, oldest first. */
+export function hostingReview(path: string, number: number): Promise<Remark[]> {
+  return invoke<Remark[]>('hosting_review', { path, number });
+}
+
+/** Comments on a proposal, approves it, or asks for changes. */
+export function hostingReply(path: string, number: number, reply: Reply): Promise<void> {
+  return invoke<void>('hosting_reply', { path, number, reply });
+}
+
 export function hostingStatus(path: string): Promise<HostView> {
   return invoke<HostView>('hosting_status', { path });
 }

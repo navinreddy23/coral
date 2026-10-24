@@ -245,6 +245,51 @@ pub async fn hosting_checks(
         .map_err(|e| refused(reading, &e))?)
 }
 
+/// Everything said on a proposal, oldest first.
+///
+/// # Errors
+/// As [`hosting_pull_requests`].
+#[tauri::command]
+pub async fn hosting_review(
+    profiles: tauri::State<'_, crate::profile::Profiles>,
+    path: String,
+    number: u64,
+) -> Result<Vec<coral_hosting::review::Remark>, IpcError> {
+    let profile = current(&profiles);
+    let view = host_of(&path, &profile).await?;
+    let host = view.host.as_ref().ok_or_else(|| no_host(&view))?;
+    let reading = "read the review";
+    let secret = secret_for(&view, host, &profile, reading)?;
+    let client = Client::new(secret).map_err(|e| refused(reading, &e))?;
+    Ok(client
+        .review(host, number)
+        .await
+        .map_err(|e| refused(reading, &e))?)
+}
+
+/// Comments on a proposal, approves it, or asks for changes.
+///
+/// # Errors
+/// As [`hosting_pull_requests`], and a refusal for asking GitLab for changes.
+#[tauri::command]
+pub async fn hosting_reply(
+    profiles: tauri::State<'_, crate::profile::Profiles>,
+    path: String,
+    number: u64,
+    reply: coral_hosting::review::Reply,
+) -> Result<(), IpcError> {
+    let profile = current(&profiles);
+    let view = host_of(&path, &profile).await?;
+    let host = view.host.as_ref().ok_or_else(|| no_host(&view))?;
+    let replying = "reply on the review";
+    let secret = secret_for(&view, host, &profile, replying)?;
+    let client = Client::new(secret).map_err(|e| refused(replying, &e))?;
+    Ok(client
+        .reply(host, number, &reply)
+        .await
+        .map_err(|e| refused(replying, &e))?)
+}
+
 /// Opens a new pull or merge request.
 ///
 /// # Errors

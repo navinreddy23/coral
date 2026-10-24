@@ -38,6 +38,8 @@
   import MergeTool from './MergeTool.svelte';
   import BisectBar from './BisectBar.svelte';
   import NewRequest from './NewRequest.svelte';
+  import Review from './Review.svelte';
+  import { ReviewState } from '../state/review.svelte';
   import { MergeState } from '../state/merge.svelte';
   import RebasePicker from './RebasePicker.svelte';
   import { RebaseState } from '../state/rebase.svelte';
@@ -559,6 +561,10 @@
       .catch(() => undefined);
   });
   const hosting = new HostingState();
+
+  /** The proposal whose review is open, or null. */
+  let reviewing = $state<PullRequest | null>(null);
+  const review = new ReviewState();
 
   /** The branch a pull or merge request is being opened for, or null. */
   let proposing = $state<string | null>(null);
@@ -4473,6 +4479,15 @@
           label: `Check out #${pr.number} locally`,
           run: () => void act({ kind: 'checkoutProposal', number: pr.number }),
         },
+        {
+          kind: 'item',
+          label: 'Read the review…',
+          hint: 'comment, approve',
+          run: () => {
+            reviewing = pr;
+            if (info) void review.load(info.path, pr.number);
+          },
+        },
         { kind: 'separator' },
         {
           kind: 'item',
@@ -5077,6 +5092,15 @@
         }}
         onUpdate={(remote) => void initSubmodule(showSubmodule?.path ?? null, remote)}
         onRemove={() => void removeSubmodule()}
+      />
+    {/if}
+    {#if reviewing !== null && info}
+      <Review
+        {review}
+        pr={reviewing}
+        label={requestWord}
+        canRequestChanges={hosting.view?.host?.kind === 'github'}
+        onClose={() => (reviewing = null)}
       />
     {/if}
     {#if proposing !== null && info}

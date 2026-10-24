@@ -4,6 +4,7 @@ use serde::Deserialize;
 
 use crate::provider::{Host, HostingError};
 use crate::pull_request::{NewPullRequest, PrState, PullRequest};
+use crate::review::{Remark, Reply, Verdict};
 
 #[must_use]
 pub fn api_base(host: &Host) -> String {
@@ -154,4 +155,116 @@ fn convert(w: Wire) -> PullRequest {
         updated_at: w.updated_at,
         head_sha: w.sha.unwrap_or_default(),
     }
+}
+
+/// Every note on a merge request, oldest first: comments, comments on lines of the diff, and
+/// the system notes that record approvals.
+#[must_use]
+pub fn notes_url(host: &Host, iid: u64) -> String {
+    format!(
+        "{}/projects/{}/merge_requests/{iid}/notes?sort=asc&order_by=created_at&per_page=100",
+        api_base(host),
+        project_id(host),
+    )
+}
+
+/// The requests a reply takes: a note for anything said, and the approval endpoint for an
+/// approval, which records it where GitLab counts approvals rather than only in the text.
+///
+/// # Errors
+/// [`HostingError::Unsupported`] for requesting changes, which GitLab has no verdict for on a
+/// merge request.
+pub fn reply_requests(
+    host: &Host,
+    iid: u64,
+    reply: &Reply,
+) -> Result<Vec<(String, serde_json::Value)>, HostingError> {
+    let base = format!(
+        "{}/projects/{}/merge_requests/{iid}",
+        api_base(host),
+        project_id(host)
+    );
+    let note = |body: &str| (format!("{base}/notes"), serde_json::json!({ "body": body }));
+    match reply {
+        Reply::Comment { body } => Ok(vec![note(body)]),
+        Reply::Approve { body } => {
+            let mut out = vec![(format!("{base}/approve"), serde_json::json!({}))];
+            if !body.trim().is_empty() {
+                out.push(note(body));
+            }
+            Ok(out)
+        }
+        Reply::RequestChanges { .. } => Err(HostingError::Unsupported(
+            "GitLab has no way to request changes on a merge request; say what needs changing \
+             in a comment"
+                .to_owned(),
+        )),
+    }
+}
+
+#[derive(Deserialize)]
+struct WireNote {
+    #[serde(default)]
+    author: Option<Author>,
+    #[serde(default)]
+    body: String,
+    created_at: String,
+    #[serde(default)]
+    system: bool,
+    #[serde(default)]
+    position: Option<WirePosition>,
+}
+
+#[derive(Deserialize)]
+struct WirePosition {
+    #[serde(default)]
+    new_path: Option<String>,
+    #[serde(default)]
+    new_line: Option<u64>,
+    #[serde(default)]
+    old_path: Option<String>,
+    #[serde(default)]
+    old_line: Option<u64>,
+}
+
+/// Parses a merge request's notes.
+///
+/// System notes are GitLab's record of events — pushes, label changes, assignments — and
+/// only an approval among them is something a reviewer said. A line comment on a removed line
+/// has only the old side of its position.
+///
+/// # Errors
+/// [`HostingError::Malformed`] when the body is not the documented array.
+pub fn parse_notes(body: &[u8]) -> Result<Vec<Remark>, HostingError> {
+    let raw: Vec<WireNote> =
+        serde_json::from_slice(body).map_err(|e| HostingError::Malformed(e.to_string()))?;
+    Ok(raw
+        .into_iter()
+        .filter_map(|n| {
+            let author = n
+                .author
+                .map_or_else(|| "(unknown)".to_owned(), |a| a.username);
+            if n.system {
+                return (n.body.trim() == "approved this merge request").then(|| Remark {
+                    author,
+                    body: String::new(),
+                    at: n.created_at,
+                    verdict: Some(Verdict::Approved),
+                    path: None,
+                    line: None,
+                });
+            }
+            let (path, line) = n.position.map_or((None, None), |p| {
+                (p.new_path.or(p.old_path), p.new_line.or(p.old_line))
+            });
+            Some(Remark {
+                author,
+                body: n.body,
+                at: n.created_at,
+                verdict: None,
+                path,
+                line,
+            })
+        })
+        .collect())
 }
