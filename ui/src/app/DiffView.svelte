@@ -952,17 +952,18 @@
     display: block; width: 100%; text-align: left; font: inherit; cursor: pointer;
     background: none; border: 0; padding: 0; color: inherit; white-space: pre;
   }
-  /* Laid over the row's own colour rather than replacing it, so a picked line still reads as
-     added or removed. The bar alone was a thicker stripe beside the one every changed line
-     has, and on an added line the two greens could not be told apart. */
-  tr.picked .text {
-    background-image: linear-gradient(
-      color-mix(in srgb, var(--accent) 22%, transparent),
-      color-mix(in srgb, var(--accent) 22%, transparent)
-    );
+  /* The row's own colour, deepened, so a picked line still reads as added or removed. An
+     accent laid over it turned a dark theme's removed line grey, and the thicker stripe alone,
+     before that, was the same green as an added line's. */
+  tr.picked.add .text {
+    background-color: color-mix(in srgb, var(--ok) 28%, var(--bg-0));
     box-shadow: inset 4px 0 0 var(--accent);
   }
-  tr.picked .sign { color: var(--accent); font-weight: var(--weight-bold); }
+  tr.picked.remove .text {
+    background-color: color-mix(in srgb, var(--danger) 28%, var(--bg-0));
+    box-shadow: inset 4px 0 0 var(--accent);
+  }
+  tr.picked .sign { font-weight: var(--weight-bold); }
 
   tr.hunk td {
     background: var(--bg-2); color: var(--fg-2); padding: 3px var(--space-2);

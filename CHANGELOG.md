@@ -22,8 +22,8 @@ the merge brought in as new commits and asks its conflicts again. Both are offer
 ### Picking lines and folders
 
 - Shift-click picks every changed line between it and the last one clicked, and a picked line
-  is tinted. Telling a picked line from an unpicked one was a matter of a slightly thicker
-  stripe, the same green as an added line.
+  is drawn in a deeper shade of its own green or red. Telling a picked line from an unpicked
+  one was a matter of a slightly thicker stripe, the same green as an added line.
 - A folder in a commit's files has a menu: copy its path, or, at the checked-out commit, stop
   tracking everything in it and ignore it. A `build/` folder committed by mistake could only be
   stopped file by file.

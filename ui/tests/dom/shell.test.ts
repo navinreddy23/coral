@@ -952,6 +952,97 @@ describe('the shell', () => {
     expect(dialog.textContent).not.toContain('pull.rebase');
   });
 
+  /** The question that is up, once it is. */
+  async function question(container: HTMLElement): Promise<HTMLElement> {
+    return waitFor(() => {
+      const found = container.querySelector('[role="dialog"]');
+      if (!found) throw new Error('no question yet');
+      return found as HTMLElement;
+    });
+  }
+
+  /** Every repo_action sent, in order. */
+  function sent(): Record<string, unknown>[] {
+    return invoke.mock.calls
+      .filter(([cmd]) => cmd === 'repo_action')
+      .map(([, args]) => (args as { action: Record<string, unknown> }).action);
+  }
+
+  const DIVERGED = new Error(
+    "git pull exited with 128: hint: Diverging branches can't be fast-forwarded, you need " +
+      'to either:\nhint:\nhint:  git merge --no-ff',
+  );
+
+  it('recommends merging a diverged pull when the branch has a merge the remote lacks', async () => {
+    // Rebasing replays what the merge brought in as new commits and asks its conflicts again.
+    const { container } = await shell({ repo_action: DIVERGED, unpushed_merges: true });
+    await fireEvent.click(container.querySelector('[aria-label="Pull"]') as HTMLButtonElement);
+
+    const dialog = await question(container);
+    expect(dialog.textContent).toContain('has a merge the remote has not seen');
+    expect(dialog.querySelector('button.primary')?.textContent?.trim()).toBe('Pull, merging');
+  });
+
+  it('recommends neither when there is no merge to keep', async () => {
+    const { container } = await shell({ repo_action: DIVERGED, unpushed_merges: false });
+    await fireEvent.click(container.querySelector('[aria-label="Pull"]') as HTMLButtonElement);
+
+    const dialog = await question(container);
+    expect(dialog.textContent).not.toContain('has a merge the remote has not seen');
+    expect(dialog.querySelector('button.primary')).toBeNull();
+  });
+
+  it('offers to stash around uncommitted work that is in the way of a pull', async () => {
+    // It ended in git's message, with the three steps past it left for the reader to find.
+    const { container } = await shell({
+      repo_action: (args: { action: { autostash?: boolean } }) => {
+        if (args.action.autostash === true) return { what: 'pull', conflicted: false, message: '' };
+        throw new Error(
+          'git pull exited with 1: error: Your local changes to the following files would be ' +
+            'overwritten by merge:\n\tREADME.md\nPlease commit your changes or stash them ' +
+            'before you merge.\nAborting',
+        );
+      },
+    });
+    await fireEvent.click(container.querySelector('[aria-label="Pull"]') as HTMLButtonElement);
+
+    const dialog = await question(container);
+    expect(dialog.textContent).toContain('Uncommitted changes to README.md are in the way');
+    const stash = [...dialog.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Stash, pull and put back',
+    ) as HTMLButtonElement;
+    await fireEvent.click(stash);
+
+    await waitFor(() => {
+      expect(sent().at(-1)).toEqual({ kind: 'pull', remote: null, mode: 'ffOnly', autostash: true });
+    });
+  });
+
+  it('pulls by merging first when a refused push leaves a merge on the branch', async () => {
+    const { container } = await shell({
+      repo_action: (args: { action: { kind: string } }) =>
+        args.action.kind === 'push'
+          ? {
+              what: 'push',
+              conflicted: true,
+              message: 'refs/heads/master -> refs/heads/master [rejected] (fetch first)',
+            }
+          : { what: 'pull', conflicted: false, message: '' },
+      unpushed_merges: true,
+    });
+    await fireEvent.click(container.querySelector('[aria-label="Push"]') as HTMLButtonElement);
+
+    const dialog = await question(container);
+    const buttons = [...dialog.querySelectorAll('button')].map((b) => b.textContent?.trim());
+    expect(buttons.indexOf('Pull and merge')).toBeLessThan(buttons.indexOf('Pull and rebase'));
+    expect(dialog.querySelector('button.primary')?.textContent?.trim()).toBe('Pull and merge');
+    await fireEvent.click(dialog.querySelector('button.primary') as HTMLButtonElement);
+
+    await waitFor(() => {
+      expect(sent().at(-1)).toMatchObject({ kind: 'pull', mode: 'merge' });
+    });
+  });
+
   it('offers to send the tags with a push, since git sends none by itself', async () => {
     const { container } = await shell({
       repo_action: { what: 'push', conflicted: false, message: '' },
