@@ -585,6 +585,11 @@ export function commitTemplate(path: string): Promise<string | null> {
   return invoke<string | null>('commit_template', { path });
 }
 
+/** Stops tracking a file and ignores it, leaving it on disk. */
+export function stopTracking(path: string, file: string): Promise<void> {
+  return invoke<void>('stop_tracking', { path, file });
+}
+
 /** Adds a line to the repository's `.gitignore`: one file exactly, or a pattern as written. */
 export function ignore(
   path: string,

@@ -177,6 +177,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         remotes::remote_has_tag,
         remotes::branch_set_upstream,
         gitignore::ignore,
+        gitignore::stop_tracking,
         template::commit_template,
         remotes::remote_edit,
         remotes::commit_url,

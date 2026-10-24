@@ -25,6 +25,7 @@
     grouping,
     onGrouping,
     onOpenFile,
+    onFileMenu,
     onClearCompare,
     onCopied,
   }: {
@@ -52,6 +53,8 @@
     grouping: Grouping;
     onGrouping: (grouping: Grouping) => void;
     onOpenFile: (path: string) => void;
+    /** A file's own menu, for a file in the list or the tree. */
+    onFileMenu?: (event: MouseEvent, path: string) => void;
     /** Says whether the clipboard took the object id, which a button cannot tell on its own. */
     onCopied: (ok: boolean, what: string) => void;
   } = $props();
@@ -299,10 +302,10 @@
         <p class="muted count">
           {everything.length} file{everything.length === 1 ? '' : 's'} at this commit
         </p>
-        <FileTree nodes={tree} {openPath} {onOpenFile} startClosed />
+        <FileTree nodes={tree} {openPath} {onOpenFile} {onFileMenu} startClosed />
       {/if}
     {:else if grouping === 'tree'}
-      <FileTree nodes={tree} {openPath} {onOpenFile} />
+      <FileTree nodes={tree} {openPath} {onOpenFile} {onFileMenu} />
     {:else}
     <ul class="files">
       {#each shown as file (file.path)}
@@ -311,6 +314,7 @@
             class="file"
             class:open={file.path === openPath}
             onclick={() => onOpenFile(file.path)}
+            oncontextmenu={(event) => onFileMenu?.(event, file.path)}
             title={file.oldPath ? `${file.path}\nfrom ${file.oldPath}` : file.path}
           >
             <span class="mark {file.change}">{mark[file.change] ?? '?'}</span>

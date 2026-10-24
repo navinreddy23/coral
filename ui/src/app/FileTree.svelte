@@ -16,10 +16,12 @@
     change: FileChange | null;
   }
 
-  const { nodes, openPath, onOpenFile, depth = 0, startClosed = false }: {
+  const { nodes, openPath, onOpenFile, onFileMenu, depth = 0, startClosed = false }: {
     nodes: TreeNode<Entry>[];
     openPath: string | null;
     onOpenFile: (path: string) => void;
+    /** A file's own menu, where the tree has one to offer. */
+    onFileMenu?: (event: MouseEvent, path: string) => void;
     depth?: number;
     /**
      * Whether directories start shut.
@@ -63,6 +65,7 @@
             nodes={node.children}
             {openPath}
             {onOpenFile}
+            {onFileMenu}
             {startClosed}
             depth={depth + 1}
           />
@@ -73,6 +76,7 @@
           class:open={node.path === openPath}
           style:padding-left="{depth * 12 + 4}px"
           onclick={() => onOpenFile(node.path)}
+          oncontextmenu={(event) => onFileMenu?.(event, node.path)}
           title={node.item.oldPath ? `${node.path}\nfrom ${node.item.oldPath}` : node.path}
         >
           <span class="mark {node.item.change ?? 'untouched'}">

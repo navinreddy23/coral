@@ -914,6 +914,18 @@ impl RepoLocation {
         runner.output(cmd).await.map(|_| ())
     }
 
+    /// Takes `paths` out of the index and leaves them on disk, which git then lists as
+    /// untracked: the next commit records them as deleted.
+    ///
+    /// # Errors
+    /// Propagates git failures, including a path git does not track.
+    pub async fn untrack(&self, runner: &GitRunner, paths: &[&str]) -> Result<(), CoralError> {
+        let cmd = GitCommand::write("rm", self.display_path())
+            .args(["rm", "--cached", "-r", "--quiet", "--"])
+            .args(paths);
+        runner.output(cmd).await.map(|_| ())
+    }
+
     /// Throws away worktree changes to `paths`. Staged content is left in the index.
     ///
     /// # Errors

@@ -15,6 +15,21 @@ pub enum Ignored {
     Pattern { pattern: String },
 }
 
+/// Stops tracking `file` and ignores it, leaving it on disk.
+///
+/// Both, because either alone does not do what was asked: a tracked file is not affected by
+/// `.gitignore`, and one merely untracked shows up again as a new file to add.
+///
+/// # Errors
+/// git failures from untracking, then I/O failures on the `.gitignore`.
+#[tauri::command]
+pub async fn stop_tracking(path: String, file: String) -> Result<(), IpcError> {
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    loc.untrack(&runner, &[&file]).await?;
+    Ok(loc.ignore(&coral_core::gitignore::exact(&file))?)
+}
+
 /// Adds a line for `what` to the repository's top-level `.gitignore`.
 ///
 /// # Errors

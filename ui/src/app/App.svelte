@@ -24,6 +24,7 @@
     remoteHasTag,
     branchSetUpstream,
     ignore,
+    stopTracking,
     pickPatchFiles,
     revAncestry,
     type PullRequest,
@@ -2869,6 +2870,72 @@
     void diff.openWorking(info.path, staged, file);
   }
 
+  /** The commit HEAD is on, by object id, so a file at it can be told from one in history. */
+  const headOid = $derived(
+    info?.head.kind === 'detached'
+      ? info.head.oid
+      : (refs.groups.local.find((r) => r.short === headName)?.target ?? null),
+  );
+
+  /**
+   * Stops tracking a committed file and ignores it, once the user has been told what that
+   * does to everyone else.
+   *
+   * The file stays here, but the commit records it as deleted, and git deletes it from every
+   * copy that pulls the commit. That is the surprise this exists to prevent, so it is said
+   * before anything is done.
+   */
+  async function stopTrackingFile(file: string) {
+    if (!info) return;
+    const path = info.path;
+    const { choice } = await ask({
+      title: `Stop tracking ${baseName(file)}?`,
+      detail:
+        `It stays on disk here, and /${file} goes into .gitignore. The next commit records it ` +
+        'as deleted, and anyone who pulls that commit has it deleted from their copy.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'stop', label: 'Stop tracking', primary: true }],
+    });
+    if (choice !== 'stop') return;
+    try {
+      await stopTracking(path, file);
+    } catch (e) {
+      toasts.push('error', `Could not stop tracking ${file}`, messageOf(e));
+      return;
+    }
+    toasts.push('ok', `${file} is no longer tracked. Commit to make it so for everyone.`);
+    await worktree.load(path);
+  }
+
+  /** A file in a commit's list: copy its path, or stop tracking it at the checked-out commit. */
+  function commitFileMenu(event: MouseEvent, file: string) {
+    event.preventDefault();
+    const atHead = selection.detail !== null && selection.detail.commit.oid === headOid;
+    const items: MenuItem[] = [
+      {
+        kind: 'item',
+        label: 'Copy the path',
+        hint: file,
+        run: () => void copyName(file),
+      },
+    ];
+    if (atHead) {
+      items.push(
+        { kind: 'separator' },
+        {
+          kind: 'item',
+          label: 'Stop tracking and ignore it',
+          hint: 'it stays on disk',
+          disabled: worktree.busy,
+          run: () => void stopTrackingFile(file),
+        },
+      );
+    }
+    menu = { x: event.clientX, y: event.clientY, items };
+  }
+
   async function ignorePath(what: Ignored, line: string) {
     if (!info) return;
     const path = info.path;
@@ -2949,6 +3016,23 @@
                 disabled: busy,
                 run: () => void ignorePath(choice.what, choice.hint),
               })),
+            },
+          ]
+        : []),
+      // A file the last commit has and the working copy still holds. Ignoring alone does
+      // nothing to a tracked file, which is the trap the item exists to get people out of.
+      ...(entry.worktree !== 'untracked' &&
+      entry.index !== 'added' &&
+      entry.index !== 'deleted' &&
+      entry.worktree !== 'deleted'
+        ? [
+            { kind: 'separator' as const },
+            {
+              kind: 'item' as const,
+              label: 'Stop tracking and ignore it',
+              hint: 'it stays on disk',
+              disabled: busy,
+              run: () => void stopTrackingFile(entry.path),
             },
           ]
         : []),
@@ -5091,6 +5175,7 @@
         <Details
           detail={selection.detail}
           verification={selection.verification}
+          onFileMenu={commitFileMenu}
           picture={detailPicture}
           repo={info?.path ?? null}
           compare={selection.pair === null
