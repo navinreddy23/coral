@@ -238,6 +238,19 @@ export type IdentityScopes = { effective: Identity, global: Identity, local: Ide
  */
 export type Judged = { oid: string, verdict: Verdict, };
 
+/**
+ * A file locked on the LFS server.
+ */
+export type LfsLock = { id: string, path: string, 
+/**
+ * Who holds it, as the server names them; empty when it does not say.
+ */
+owner: string, 
+/**
+ * Whether it is held by whoever this repository authenticates as.
+ */
+ours: boolean, };
+
 export type Line = { kind: LineKind, text: string, oldNo: number | null, newNo: number | null, 
 /**
  * The file does not end with a newline, and this is its last line.

@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { StatusEntry } from '../ipc/types';
+  import type { LfsLock, StatusEntry } from '../ipc/types';
 
   /**
    * How a working-tree entry reads on a row: one letter and one colour.
@@ -39,9 +39,21 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
   import Changes from './Changes.svelte';
+  import LockMark from './LockMark.svelte';
   import { filesIn, type TreeNode } from '../diff/tree';
 
-  const { nodes, staged, openPath, closed, onToggleDir, onAct, onOpen, onMenu, depth = 0 }: {
+  const {
+    nodes,
+    staged,
+    openPath,
+    closed,
+    onToggleDir,
+    onAct,
+    onOpen,
+    onMenu,
+    locks = new Map(),
+    depth = 0,
+  }: {
     nodes: TreeNode<StatusEntry>[];
     /** Which side this list is, which decides the verb and the letter shown. */
     staged: boolean;
@@ -54,6 +66,8 @@
     onOpen: (path: string) => void;
     /** What can be done with one file, asked for by right-clicking it. */
     onMenu: (event: MouseEvent, path: string) => void;
+    /** Files locked on the LFS server, by path, so the row can say who holds one. */
+    locks?: Map<string, LfsLock>;
     depth?: number;
   } = $props();
 
@@ -116,6 +130,7 @@
             {onAct}
             {onOpen}
             {onMenu}
+            {locks}
             depth={depth + 1}
           />
         {/if}
@@ -130,6 +145,7 @@
           >
             <span class="mark {kindOf(node.item, staged)}">{markOf(node.item, staged)}</span>
             <span class="name">{node.name}</span>
+            <LockMark lock={locks.get(node.path)} />
           </button>
           <button
             class="act"

@@ -138,6 +138,8 @@
   } from '../ipc/window';
   import { ThemeState, type ThemeChoice } from '../state/theme.svelte';
   import { SelectionState, type Picked } from '../state/selection.svelte';
+  import { LfsState } from '../state/lfs.svelte';
+  import { lfsAvailable } from '../ipc/start';
   import { WorktreeState } from '../state/worktree.svelte';
   import { WorktreesState } from '../state/worktrees.svelte';
   import Staging from './Staging.svelte';
@@ -521,6 +523,25 @@
    * Read on opening rather than once: it is per repository, and a template written while the
    * window is open is picked up the next time the repository is.
    */
+  /**
+   * Git LFS: whether the program is here at all, and the locks of the repository open.
+   *
+   * Locks are read when a repository opens, and only for one that keeps something in LFS;
+   * see `LfsState`.
+   */
+  const lfs = new LfsState();
+  let lfsInstalled = $state(false);
+  void lfsAvailable()
+    .then((yes: boolean) => (lfsInstalled = yes))
+    .catch(() => undefined);
+  let locksFor: string | null = null;
+  $effect(() => {
+    const path = info?.path ?? null;
+    if (path === locksFor) return;
+    locksFor = path;
+    if (path !== null) void lfs.load(path);
+  });
+
   let templateFor: string | null = null;
   $effect(() => {
     const path = info?.path ?? null;
@@ -3044,6 +3065,101 @@
     await worktree.load(path);
   }
 
+  /**
+   * What Git LFS can do with a file: put its kind in LFS, and lock it or let go of it.
+   *
+   * Tracking is offered wherever git-lfs is installed. Locks only where the repository keeps
+   * something in LFS and its server answered, because a lock lives on that server and nowhere
+   * else; asking a server that does not do locking would offer a menu of refusals.
+   */
+  function lfsItems(file: string): MenuItem[] {
+    const items: MenuItem[] = [];
+    if (lfsInstalled) {
+      const ext = ignoreChoices(file).find((c) => c.what.kind === 'pattern');
+      if (ext && ext.what.kind === 'pattern') {
+        const pattern = ext.what.pattern;
+        items.push({
+          kind: 'item',
+          label: `Track every ${pattern.slice(1)} file with LFS`,
+          hint: pattern,
+          disabled: lfs.busy,
+          run: () => void lfsStep(lfs.track(pattern), `${pattern} goes into LFS from now on.`),
+        });
+      }
+      items.push({
+        kind: 'item',
+        label: 'Track this file with LFS',
+        hint: file,
+        disabled: lfs.busy,
+        run: () => void lfsStep(lfs.track(file), `${file} goes into LFS from now on.`),
+      });
+    }
+    if (lfs.locks !== null) {
+      const held = lfs.byPath.get(file);
+      if (held === undefined) {
+        items.push({
+          kind: 'item',
+          label: 'Lock it for editing',
+          hint: 'others are told',
+          disabled: lfs.busy,
+          run: () => void lfsStep(lfs.lock(file), `${file} is locked to you.`),
+        });
+      } else if (held.ours) {
+        items.push({
+          kind: 'item',
+          label: 'Unlock it',
+          disabled: lfs.busy,
+          run: () => void lfsStep(lfs.unlock(file, false), `${file} is unlocked.`),
+        });
+      } else {
+        items.push(
+          {
+            kind: 'item',
+            label: `Locked by ${held.owner || 'somebody else'}`,
+            disabled: true,
+            run: () => undefined,
+          },
+          {
+            kind: 'item',
+            label: 'Force the lock off',
+            hint: 'their work may be lost',
+            danger: true,
+            disabled: lfs.busy,
+            run: () => void forceUnlock(file, held.owner),
+          },
+        );
+      }
+    }
+    return items.length === 0
+      ? []
+      : [{ kind: 'separator' }, { kind: 'submenu', label: 'LFS', items }];
+  }
+
+  /** Runs one LFS step and says how it went; tracking also changes `.gitattributes`. */
+  async function lfsStep(step: Promise<string | null>, done: string) {
+    const refused = await step;
+    if (refused !== null) {
+      toasts.push('error', 'Git LFS refused', refused);
+      return;
+    }
+    toasts.push('ok', done);
+    if (info) await worktree.load(info.path);
+  }
+
+  async function forceUnlock(file: string, owner: string) {
+    const { choice } = await ask({
+      title: `Take ${owner || 'their'} lock off ${baseName(file)}?`,
+      detail:
+        'They are told the file is free, and nothing stops two people changing it at once. ' +
+        'A file kept in LFS does not merge, so one of the two copies is lost.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'force', label: 'Force the lock off', danger: true }],
+    });
+    if (choice === 'force') await lfsStep(lfs.unlock(file, true), `${file} is unlocked.`);
+  }
+
   /** A file in a commit's list: copy its path, or stop tracking it at the checked-out commit. */
   function commitFileMenu(event: MouseEvent, file: string) {
     event.preventDefault();
@@ -3066,6 +3182,7 @@
           disabled: worktree.busy,
           run: () => void stopTrackingFile(file),
         },
+        ...lfsItems(file),
       );
     }
     menu = { x: event.clientX, y: event.clientY, items };
@@ -3171,6 +3288,7 @@
             },
           ]
         : []),
+      ...(entry.worktree === 'untracked' ? [] : lfsItems(entry.path)),
       { kind: 'separator' },
       // Only for a file git already has a copy of. An untracked one has no last commit to go
       // back to, so this read "Discard its changes — back to the last commit" about a file
@@ -5304,6 +5422,7 @@
             onDiscard={(entries) => void discardChanges(entries)}
             onFileMenu={fileMenu}
             onCommit={() => void recordCommit(false)}
+            locks={lfs.byPath}
           />
         </aside>
       {:else}

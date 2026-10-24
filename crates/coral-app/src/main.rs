@@ -3,8 +3,8 @@
 
 use coral_app_lib::{
     actions, activity, avatar, bisect, blob, commands, conflicts, experimental, gitignore, graph,
-    hosting, notes, profile, recent, reflog, remotes, scope, search, signing, ssh, tabs, template,
-    terminal, transfer, update, version, watcher,
+    hosting, lfs, notes, profile, recent, reflog, remotes, scope, search, signing, ssh, tabs,
+    template, terminal, transfer, update, version, watcher,
 };
 
 fn main() {
@@ -156,6 +156,10 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         graph::commit_detail,
         graph::commit_verification,
         notes::commit_note,
+        lfs::lfs_track,
+        lfs::lfs_locks,
+        lfs::lfs_lock,
+        lfs::lfs_unlock,
         notes::set_note,
         graph::patch_range_size,
         graph::file_diff,

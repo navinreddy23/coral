@@ -10,6 +10,7 @@ import type {
   ChangedFile,
   Commit,
   CommitDetail,
+  LfsLock,
   Verification,
   Todo,
   ConflictedFile,
@@ -716,6 +717,26 @@ export function commitDetail(
   listing: Listing = 'commit',
 ): Promise<CommitDetail> {
   return invoke<CommitDetail>('commit_detail', { path, rev, listing });
+}
+
+/** Puts files matching `pattern` in Git LFS from now on. */
+export function lfsTrack(path: string, pattern: string): Promise<void> {
+  return invoke<void>('lfs_track', { path, pattern });
+}
+
+/** The locks on the LFS server, or null for a repository that keeps nothing in LFS. */
+export function lfsLocks(path: string): Promise<LfsLock[] | null> {
+  return invoke<LfsLock[] | null>('lfs_locks', { path });
+}
+
+/** Locks a file on the LFS server. */
+export function lfsLock(path: string, file: string): Promise<void> {
+  return invoke<void>('lfs_lock', { path, file });
+}
+
+/** Releases a lock on the LFS server; `force` releases somebody else's. */
+export function lfsUnlock(path: string, file: string, force: boolean): Promise<void> {
+  return invoke<void>('lfs_unlock', { path, file, force });
 }
 
 /** The note on a commit, or null. */
