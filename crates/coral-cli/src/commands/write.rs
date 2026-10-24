@@ -222,10 +222,14 @@ pub async fn op(path: &Path, action: Action) -> Result<OpOutcome, CoralError> {
 /// # Errors
 /// Propagates git failures.
 pub async fn reset(path: &Path, rev: String, mode: Reset) -> Result<Done, CoralError> {
-    journaled(path, &format!("reset to {rev}"), |r, l| async move {
-        l.reset(&r, &rev, mode.into()).await
-    })
-    .await?;
+    // Journaled with its mode rather than through `journaled`, so a redo repeats it in the
+    // same mode instead of as a hard reset.
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, path).await?;
+    let before = loc.snapshot_refs(&runner).await?;
+    loc.reset(&runner, &rev, mode.into()).await?;
+    let after = loc.snapshot_refs(&runner).await?;
+    loc.journal_reset(&format!("reset to {rev}"), before, after, mode.into())?;
     Ok(Done {
         what: "reset".into(),
         oid: None,

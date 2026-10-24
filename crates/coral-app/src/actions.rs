@@ -615,10 +615,17 @@ async fn act(
         });
     }
 
+    let reset = match &action {
+        Action::Reset { mode, .. } => Some((*mode).into()),
+        _ => None,
+    };
     let before = loc.snapshot_refs(&runner).await?;
     let done = run(&loc, &runner, action, report).await?;
     let after = loc.snapshot_refs(&runner).await?;
-    loc.journal_change(label, before, after, coral_core::undo::Restore::Worktree)?;
+    match reset {
+        Some(mode) => loc.journal_reset(label, before, after, mode)?,
+        None => loc.journal_change(label, before, after, coral_core::undo::Restore::Worktree)?,
+    }
 
     Ok(ActionOutcome {
         what: label.to_owned(),
