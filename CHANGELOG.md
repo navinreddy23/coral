@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.9
 
 ### Stop tracking a committed file
 
