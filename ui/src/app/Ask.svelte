@@ -160,7 +160,7 @@
   textarea {
     width: 100%; box-sizing: border-box; resize: vertical;
     font: inherit; font-family: var(--mono);
-    padding: var(--space-2); margin-bottom: var(--space-3);
+    padding: var(--space-2); margin-top: var(--space-3);
     background: var(--bg-0); color: var(--fg-0);
     border: 1px solid var(--border-strong); border-radius: var(--radius-1);
   }

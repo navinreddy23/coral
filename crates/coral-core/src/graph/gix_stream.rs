@@ -168,7 +168,7 @@ impl GixCommitStream {
                 continue;
             };
             let name = reference.name().as_bstr().to_string();
-            if excluded.contains(name.as_str()) {
+            if excluded.contains(name.as_str()) || crate::refs::is_note(&name) {
                 continue;
             }
             let Ok(id) = reference.peel_to_id() else {

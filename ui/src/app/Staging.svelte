@@ -1,8 +1,9 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
   import Changes, { kindOf, markOf } from './Changes.svelte';
+  import LockMark from './LockMark.svelte';
   import { buildTree } from '../diff/tree';
-  import type { StatusEntry } from '../ipc/types';
+  import type { LfsLock, StatusEntry } from '../ipc/types';
   import type { CommitState } from '../state/commit.svelte';
   import type { WorktreeState } from '../state/worktree.svelte';
   import type { Grouping } from '../state/views.svelte';
@@ -18,6 +19,7 @@
     onDiscard,
     onFileMenu,
     onCommit,
+    locks = new Map(),
   }: {
     worktree: WorktreeState;
     /**
@@ -27,6 +29,8 @@
     commit: CommitState;
     /** What the changes are on, which is what the header names. */
     branch: string | null;
+    /** Files locked on the LFS server, by path. */
+    locks?: Map<string, LfsLock>;
     /** The file whose diff is on screen, so the list can mark it. */
     openPath: string | null;
     /** How both lists are arranged. Remembered by the window, not by this component. */
@@ -189,6 +193,7 @@
         onToggleDir={(p) => (closedUnstaged[p] = !closedUnstaged[p])}
         onAct={(paths) => worktree.stage(paths, true)}
         onOpen={(p) => onOpenFile(p, false)}
+        {locks}
         onMenu={(event, path) => {
           const entry = worktree.unstaged.find((e) => e.path === path);
           if (entry) onFileMenu(event, entry, false);
@@ -206,6 +211,7 @@
             >
               <span class="mark {kindOf(e, false)}">{markOf(e, false)}</span>
               <span class="name">{e.path}</span>
+              <LockMark lock={locks.get(e.path)} />
             </button>
             <button class="act" title="Stage it" onclick={() => worktree.stage([e.path], true)}>+</button>
           </li>
@@ -240,6 +246,7 @@
         onToggleDir={(p) => (closedStaged[p] = !closedStaged[p])}
         onAct={(paths) => worktree.stage(paths, false)}
         onOpen={(p) => onOpenFile(p, true)}
+        {locks}
         onMenu={(event, path) => {
           const entry = worktree.staged.find((e) => e.path === path);
           if (entry) onFileMenu(event, entry, true);
@@ -257,6 +264,7 @@
             >
               <span class="mark {kindOf(e, true)}">{markOf(e, true)}</span>
               <span class="name">{e.path}</span>
+              <LockMark lock={locks.get(e.path)} />
             </button>
             <button class="act" title="Unstage it" onclick={() => worktree.stage([e.path], false)}>−</button>
           </li>

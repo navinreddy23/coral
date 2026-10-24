@@ -31,6 +31,8 @@ pub enum HostingError {
     Api { status: u16, detail: String },
     #[error("no token is stored for this host")]
     NoToken,
+    #[error("{0}")]
+    Unsupported(String),
 }
 
 impl HostingError {

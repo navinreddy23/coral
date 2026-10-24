@@ -3,18 +3,22 @@
   import Icon from './Icon.svelte';
   import { shortAge } from './age';
   import { describe as describeSignature } from './verification';
+  import LockMark from './LockMark.svelte';
   import { copyText } from './clipboard';
   import { authorColourIndex, initialsOf } from '../graph/initials';
   import { buildTree } from '../diff/tree';
   import { commitTree } from '../ipc/commands';
   import { messageOf } from '../ipc/error';
   import type { Entry } from './FileTree.svelte';
-  import type { ChangedFile, CommitDetail, FileChange, Verification } from '../ipc/types';
+  import type { ChangedFile, CommitDetail, FileChange, LfsLock, Verification } from '../ipc/types';
   import type { Grouping } from '../state/views.svelte';
 
   const {
     detail,
     verification = null,
+    many = [],
+    note = null,
+    onEditNote,
     repo,
     compare,
     picture = null,
@@ -25,10 +29,17 @@
     grouping,
     onGrouping,
     onOpenFile,
+    onFileMenu,
+    locks = new Map(),
     onClearCompare,
     onCopied,
   }: {
     detail: CommitDetail | null;
+    /** The commit's note, from `refs/notes/commits`; null for none or not yet read. */
+    note?: string | null;
+    onEditNote?: () => void;
+    /** Three or more picked commits, newest first, when that is what is selected. */
+    many?: { oid: string; summary: string }[];
     /** What git makes of the commit's signature; null until it has said, or for none. */
     verification?: Verification | null;
     /** Which repository the commit is in, for reading its tree. */
@@ -52,6 +63,10 @@
     grouping: Grouping;
     onGrouping: (grouping: Grouping) => void;
     onOpenFile: (path: string) => void;
+    /** A file's own menu, for a file in the list or the tree. */
+    onFileMenu?: (event: MouseEvent, path: string) => void;
+    /** Files locked on the LFS server, by path. */
+    locks?: Map<string, LfsLock>;
     /** Says whether the clipboard took the object id, which a button cannot tell on its own. */
     onCopied: (ok: boolean, what: string) => void;
   } = $props();
@@ -182,6 +197,20 @@
     <p class="error">{error}</p>
   {:else if loading}
     <p class="muted">Loading…</p>
+  {:else if many.length > 0}
+    <!--
+      A set rather than one commit or a pair: no one message or diff stands for it, so the panel
+      says which commits are in it and where the things that act on all of them are.
+    -->
+    <h2>{many.length} commits picked</h2>
+    <ul class="picked">
+      {#each many as one (one.oid)}
+        <li><span class="mono">{one.oid.slice(0, 8)}</span> {one.summary}</li>
+      {/each}
+    </ul>
+    <p class="muted">
+      Right-click any of them to cherry pick or revert them all. Ctrl-click one to take it out.
+    </p>
   {:else if compare}
     <!--
       Two commits, so there is no one message or author to show: what the panel has to say is
@@ -200,7 +229,8 @@
       {#if nothing}
         A commit's author, message and files appear here.
       {:else}
-        Select a commit, or hold Ctrl and pick a second one to compare.
+        Select a commit. Hold Ctrl to pick a second one to compare, or more to cherry pick or
+        revert together; Shift picks a run.
       {/if}
     </p>
   {:else}
@@ -229,6 +259,14 @@
 
     {#if detail.commit.body}
       <pre class="body">{detail.commit.body}</pre>
+    {/if}
+
+    {#if note !== null}
+      <section class="note">
+        <h3>Note</h3>
+        <pre class="body">{note}</pre>
+        {#if onEditNote}<button class="edit-note" onclick={onEditNote}>Edit</button>{/if}
+      </section>
     {/if}
 
     <!--
@@ -299,10 +337,10 @@
         <p class="muted count">
           {everything.length} file{everything.length === 1 ? '' : 's'} at this commit
         </p>
-        <FileTree nodes={tree} {openPath} {onOpenFile} startClosed />
+        <FileTree nodes={tree} {openPath} {onOpenFile} {onFileMenu} {locks} startClosed />
       {/if}
     {:else if grouping === 'tree'}
-      <FileTree nodes={tree} {openPath} {onOpenFile} />
+      <FileTree nodes={tree} {openPath} {onOpenFile} {onFileMenu} {locks} />
     {:else}
     <ul class="files">
       {#each shown as file (file.path)}
@@ -311,6 +349,7 @@
             class="file"
             class:open={file.path === openPath}
             onclick={() => onOpenFile(file.path)}
+            oncontextmenu={(event) => onFileMenu?.(event, file.path)}
             title={file.oldPath ? `${file.path}\nfrom ${file.oldPath}` : file.path}
           >
             <span class="mark {file.change}">{mark[file.change] ?? '?'}</span>
@@ -318,6 +357,7 @@
               <span class="dir">{split(file.path).dir}</span
               ><span class="name">{split(file.path).name}</span>
             </span>
+            <LockMark lock={locks.get(file.path)} />
           </button>
         </li>
       {/each}
@@ -432,6 +472,16 @@
      without the button wrapping under it. */
   dd.break { display: flex; align-items: flex-start; gap: var(--space-1); }
   .oid { min-width: 0; }
+  /* The body's own frame is the note's: one box, headed, with its edit link on the heading. */
+  .note { margin: 0 0 var(--space-3); position: relative; }
+  .note h3 { margin: 0 0 var(--space-1); }
+  .edit-note {
+    position: absolute; top: 0; right: 0; cursor: pointer;
+    font: inherit; font-size: var(--text-sm); color: var(--accent); background: var(--bg-0); border: 0; padding: 0;
+  }
+  .picked { list-style: none; margin: 0 0 var(--space-3); padding: 0; display: grid; gap: var(--space-1); }
+  .picked li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-1); }
+  .picked .mono { color: var(--fg-2); margin-right: var(--space-1); }
   .signature.ok { color: var(--ok); }
   .signature.warn { color: var(--warn); }
   .signature.danger { color: var(--danger); }

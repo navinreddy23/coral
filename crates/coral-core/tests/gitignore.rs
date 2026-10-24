@@ -63,3 +63,23 @@ async fn a_star_in_a_name_ignores_that_name_and_is_not_a_wildcard() {
     loc.ignore(&exact("a*b.txt")).unwrap();
     assert_eq!(untracked(&repo), [".gitignore", "aXb.txt"]);
 }
+
+#[tokio::test]
+async fn a_tracked_file_untracked_and_ignored_stays_on_disk_and_leaves_the_next_commit() {
+    let repo = TestRepo::new()
+        .write("a.txt", "1\n")
+        .write(".env", "SECRET=1\n")
+        .commit("start");
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = open(&repo).await;
+
+    loc.untrack(&runner, &[".env"]).await.unwrap();
+    loc.ignore(&exact(".env")).unwrap();
+
+    assert!(repo.path().join(".env").exists());
+    assert_eq!(
+        repo.git(["diff", "--cached", "--name-status"]).trim(),
+        "D\t.env"
+    );
+    assert_eq!(untracked(&repo), [".gitignore"]);
+}

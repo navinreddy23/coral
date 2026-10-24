@@ -163,3 +163,62 @@ describe('the signature beside the detail', () => {
     expect(checks.has(water)).toBe(false);
   });
 });
+
+describe('picking several commits', () => {
+  it('compares two, makes a set of three, and goes back to comparing when one is dropped', async () => {
+    const selection = new SelectionState();
+    await selection.select(repo, 0, tea);
+    await selection.toggle(repo, 2, water);
+    expect(selection.pair?.from.oid).toBe(water);
+    expect(selection.many).toEqual([]);
+
+    await selection.toggle(repo, 1, coffee);
+    expect(selection.pair).toBeNull();
+    expect(selection.many.map((p) => p.oid)).toEqual([tea, coffee, water]);
+    expect([0, 1, 2].every((row) => selection.marks(row))).toBe(true);
+    expect(selection.marks(3)).toBe(false);
+
+    await selection.toggle(repo, 1, coffee);
+    expect(selection.many).toEqual([]);
+    expect(selection.pair?.to.oid).toBe(tea);
+  });
+
+  it('keeps the anchor a run is measured from', async () => {
+    const selection = new SelectionState();
+    await selection.select(repo, 1, coffee);
+    await selection.pickAll(repo, [
+      { row: 1, oid: coffee },
+      { row: 2, oid: water },
+      { row: 3, oid: revert },
+    ]);
+    expect(selection.anchorRow).toBe(1);
+    expect(selection.picked.map((p) => p.row)).toEqual([1, 2, 3]);
+  });
+
+  it('leaves a set that has not moved exactly as it was', () => {
+    // reanchor runs from an effect that reads the set; a fresh array every time re-ran that
+    // effect without end, and the window stopped answering clicks.
+    const selection = new SelectionState();
+    void selection.pickAll(repo, [
+      { row: 0, oid: tea },
+      { row: 1, oid: coffee },
+      { row: 2, oid: water },
+    ]);
+    const before = selection.many;
+    selection.reanchor(frameOf(0, [tea, coffee, water]));
+    expect(selection.many).toBe(before);
+  });
+
+  it('follows a set to its new rows, and lets it go when a commit in it is gone', () => {
+    const selection = new SelectionState();
+    void selection.pickAll(repo, [
+      { row: 0, oid: tea },
+      { row: 1, oid: coffee },
+      { row: 2, oid: water },
+    ]);
+    selection.reanchor(frameOf(0, [other, tea, coffee, water]));
+    expect(selection.many.map((p) => p.row)).toEqual([1, 2, 3]);
+    selection.reanchor(frameOf(0, [other, tea, water, revert]));
+    expect(selection.many).toEqual([]);
+  });
+});

@@ -1014,3 +1014,35 @@ async fn stashes_a_rename_by_its_new_name() {
         "and comes back with the stash"
     );
 }
+
+/// Several commits from another branch, as the graph's picked set sends them: oldest first.
+#[tokio::test]
+async fn cherry_picks_several_commits_in_order_and_reverts_them_newest_first() {
+    let r = TestRepo::new().write("f.txt", "base\n").commit("base");
+    r.git(["checkout", "--quiet", "-b", "side"]);
+    let r = r.write("f.txt", "one\n").commit("one");
+    let r = r.write("f.txt", "two\n").commit("two");
+    let r = r.write("f.txt", "three\n").commit("three");
+    r.git(["checkout", "--quiet", "main"]);
+    let (runner, loc) = open(&r).await;
+    let side: Vec<String> = r
+        .git(["rev-list", "--reverse", "main..side"])
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    let oldest_first: Vec<&str> = side.iter().map(String::as_str).collect();
+
+    loc.cherry_pick(&runner, &oldest_first, true, None)
+        .await
+        .unwrap();
+    assert_eq!(r.git(["log", "--format=%s", "-4"]), "three\ntwo\none\nbase");
+
+    let picked: Vec<String> = r
+        .git(["rev-list", "-3", "HEAD"])
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    let newest_first: Vec<&str> = picked.iter().map(String::as_str).collect();
+    loc.revert(&runner, &newest_first, None).await.unwrap();
+    assert_eq!(r.git(["show", "HEAD:f.txt"]).trim(), "base");
+}

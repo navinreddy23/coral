@@ -693,7 +693,13 @@ impl RepoLocation {
         let out = runner
             .output(
                 GitCommand::read("log", self.display_path())
-                    .args(["log", "--all", "--format=%H", "-i"])
+                    .args([
+                        "log",
+                        "--exclude=refs/notes/*",
+                        "--all",
+                        "--format=%H",
+                        "-i",
+                    ])
                     .arg(format!("--max-count={limit}"))
                     .args(narrow)
                     .arg("--")
@@ -719,7 +725,14 @@ impl RepoLocation {
         let out = runner
             .output(
                 GitCommand::read("log", self.display_path())
-                    .args(["log", "--all", "--format=%H", "--fixed-strings", "-i"])
+                    .args([
+                        "log",
+                        "--exclude=refs/notes/*",
+                        "--all",
+                        "--format=%H",
+                        "--fixed-strings",
+                        "-i",
+                    ])
                     .arg(format!("--max-count={limit}"))
                     .arg(format!("{field}={query}"))
                     .args(narrow),
@@ -744,7 +757,13 @@ impl RepoLocation {
         let out = runner
             .output(
                 GitCommand::read("log", self.display_path())
-                    .args(["log", "--all", "--format=%H", "-i"])
+                    .args([
+                        "log",
+                        "--exclude=refs/notes/*",
+                        "--all",
+                        "--format=%H",
+                        "-i",
+                    ])
                     .arg(format!("--max-count={limit}"))
                     .args(narrow),
             )
@@ -911,6 +930,18 @@ impl RepoLocation {
                 .args(["restore", "--staged", "--"])
                 .args(paths)
         };
+        runner.output(cmd).await.map(|_| ())
+    }
+
+    /// Takes `paths` out of the index and leaves them on disk, which git then lists as
+    /// untracked: the next commit records them as deleted.
+    ///
+    /// # Errors
+    /// Propagates git failures, including a path git does not track.
+    pub async fn untrack(&self, runner: &GitRunner, paths: &[&str]) -> Result<(), CoralError> {
+        let cmd = GitCommand::write("rm", self.display_path())
+            .args(["rm", "--cached", "-r", "--quiet", "--"])
+            .args(paths);
         runner.output(cmd).await.map(|_| ())
     }
 

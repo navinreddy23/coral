@@ -24,6 +24,10 @@
     remoteHasTag,
     branchSetUpstream,
     ignore,
+    stopTracking,
+    lfsKept,
+    commitNote,
+    setNote,
     pickPatchFiles,
     revAncestry,
     type PullRequest,
@@ -34,6 +38,8 @@
   import MergeTool from './MergeTool.svelte';
   import BisectBar from './BisectBar.svelte';
   import NewRequest from './NewRequest.svelte';
+  import Review from './Review.svelte';
+  import { ReviewState } from '../state/review.svelte';
   import { MergeState } from '../state/merge.svelte';
   import RebasePicker from './RebasePicker.svelte';
   import { RebaseState } from '../state/rebase.svelte';
@@ -134,7 +140,9 @@
     toggleMaximize as toggleMaximise,
   } from '../ipc/window';
   import { ThemeState, type ThemeChoice } from '../state/theme.svelte';
-  import { SelectionState } from '../state/selection.svelte';
+  import { SelectionState, type Picked } from '../state/selection.svelte';
+  import { LfsState } from '../state/lfs.svelte';
+  import { lfsAvailable } from '../ipc/start';
   import { WorktreeState } from '../state/worktree.svelte';
   import { WorktreesState } from '../state/worktrees.svelte';
   import Staging from './Staging.svelte';
@@ -518,6 +526,25 @@
    * Read on opening rather than once: it is per repository, and a template written while the
    * window is open is picked up the next time the repository is.
    */
+  /**
+   * Git LFS: whether the program is here at all, and the locks of the repository open.
+   *
+   * Locks are read when a repository opens, and only for one that keeps something in LFS;
+   * see `LfsState`.
+   */
+  const lfs = new LfsState();
+  let lfsInstalled = $state(false);
+  void lfsAvailable()
+    .then((yes: boolean) => (lfsInstalled = yes))
+    .catch(() => undefined);
+  let locksFor: string | null = null;
+  $effect(() => {
+    const path = info?.path ?? null;
+    if (path === locksFor) return;
+    locksFor = path;
+    if (path !== null) void lfs.load(path);
+  });
+
   let templateFor: string | null = null;
   $effect(() => {
     const path = info?.path ?? null;
@@ -534,6 +561,10 @@
       .catch(() => undefined);
   });
   const hosting = new HostingState();
+
+  /** The proposal whose review is open, or null. */
+  let reviewing = $state<PullRequest | null>(null);
+  const review = new ReviewState();
 
   /** The branch a pull or merge request is being opened for, or null. */
   let proposing = $state<string | null>(null);
@@ -845,10 +876,83 @@
     if (local === null || !graph.frame || !info) return;
     showWip = false;
     const oid = oidOf(graph.frame, local);
-    const second = event !== undefined && (event.ctrlKey || event.metaKey || event.shiftKey);
-    void (second
-      ? selection.compare(info.path, row, oid)
-      : selection.select(info.path, row, oid, listingFor(oid)));
+    if (event !== undefined && event.shiftKey && selection.anchorRow !== null) {
+      void selection.pickAll(info.path, run(selection.anchorRow, row));
+    } else if (event !== undefined && (event.ctrlKey || event.metaKey)) {
+      void selection.toggle(info.path, row, oid);
+    } else {
+      void selection.select(info.path, row, oid, listingFor(oid));
+    }
+  }
+
+  /**
+   * Every row from one to the other, as Shift-click picks them.
+   *
+   * Rows, not one branch's commits: the graph interleaves branches, and a run is what is on
+   * screen between the two clicks. Only the rows the loaded window holds, which is all of them
+   * for anything a person can see to click.
+   */
+  function run(from: number, to: number): Picked[] {
+    const frame = graph.frame;
+    if (!frame) return [];
+    const out: Picked[] = [];
+    for (let row = Math.min(from, to); row <= Math.max(from, to); row += 1) {
+      const local = localRow(frame, row);
+      if (local !== null) out.push({ row, oid: oidOf(frame, local) });
+    }
+    return out;
+  }
+
+  /** Whether a row is a merge, which cherry-pick and revert need a parent picked for. */
+  function isMergeRow(row: number): boolean {
+    const local = localRow(graph.frame, row);
+    return local !== null && graph.frame !== null && hasFlag(graph.frame.rowFlags[local] ?? 0, RowFlag.Merge);
+  }
+
+  /**
+   * The menu for several picked commits: what can be done to all of them at once.
+   *
+   * Cherry-picked oldest first, so each lands on the one before it as it did originally;
+   * reverted newest first, undoing in the reverse of the order they were made, which is the
+   * order least likely to conflict. A merge needs a parent named, which one dialog cannot ask
+   * of several, so a set with one in it is turned away with the reason.
+   */
+  function manyMenu(event: MouseEvent, picks: Picked[]) {
+    event.preventDefault();
+    const n = picks.length;
+    const merge = picks.some((p) => isMergeRow(p.row));
+    const newestFirst = [...picks].sort((a, b) => a.row - b.row).map((p) => p.oid);
+    const oldestFirst = [...newestFirst].reverse();
+    const why = merge ? 'one is a merge; pick it on its own' : undefined;
+    menu = {
+      x: event.clientX,
+      y: event.clientY,
+      items: [
+        {
+          kind: 'item',
+          label: `Cherry pick ${n} commits`,
+          hint: why ?? 'oldest first',
+          disabled: merge || actions.busy,
+          worktree: true,
+          run: () => void cherryPickMany(oldestFirst),
+        },
+        {
+          kind: 'item',
+          label: `Revert ${n} commits`,
+          hint: why ?? 'newest first',
+          disabled: merge || actions.busy,
+          worktree: true,
+          run: () => void act({ kind: 'revert', revs: newestFirst, mainline: undefined }),
+        },
+        { kind: 'separator' },
+        {
+          kind: 'item',
+          label: `Copy ${n} commit shas`,
+          hint: 'one per line',
+          run: () => void copyName(newestFirst.join('\n')),
+        },
+      ],
+    };
   }
 
   /*
@@ -2050,6 +2154,19 @@
   async function cherryPick(oid: string) {
     const mainline = await mainlineFor(oid, 'cherry pick');
     if (mainline === null) return;
+    const commit = await commitPicked();
+    if (commit === null) return;
+    await act({ kind: 'cherryPick', revs: [oid], commit, mainline });
+  }
+
+  async function cherryPickMany(revs: string[]) {
+    const commit = await commitPicked();
+    if (commit === null) return;
+    await act({ kind: 'cherryPick', revs, commit, mainline: undefined });
+  }
+
+  /** Whether cherry-picked changes are committed at once or left staged; null for neither. */
+  async function commitPicked(): Promise<boolean | null> {
     const { choice } = await ask({
       title: 'Commit the cherry picked changes?',
       detail:
@@ -2064,8 +2181,7 @@
         { id: 'no', label: 'No' },
       ],
     });
-    if (choice === null) return;
-    await act({ kind: 'cherryPick', revs: [oid], commit: choice === 'yes', mainline });
+    return choice === null ? null : choice === 'yes';
   }
 
   /**
@@ -2106,6 +2222,13 @@
    */
   async function commitMenu(event: MouseEvent, row: number, oid: string) {
     event.preventDefault();
+    // Right-clicking one of several picked commits is about all of them, and must not undo the
+    // picking by selecting that one alone.
+    const picks = selection.picked;
+    if (picks.length > 1 && picks.some((p) => p.row === row)) {
+      manyMenu(event, picks);
+      return;
+    }
     pick(row);
     // A stash sits on a row of its own but is not a commit on this branch, so most of what
     // follows is a rewrite the engine would refuse — and "Drop commit" beside "Move commit up"
@@ -2167,6 +2290,12 @@
           label: 'Edit commit message',
           worktree: true,
           run: () => void reword(oid, summary),
+        },
+        {
+          kind: 'item',
+          label: 'Note on this commit…',
+          hint: 'kept beside it, not in it',
+          run: () => void editNote(oid),
         },
         {
           kind: 'item',
@@ -2869,6 +2998,208 @@
     void diff.openWorking(info.path, staged, file);
   }
 
+  /**
+   * Adds, changes or removes a commit's note.
+   *
+   * A note leaves the commit as it is, which is its point: it can be added to history already
+   * shared. It is also not pushed unless asked for, which surprises everyone once, so the
+   * dialog says so.
+   */
+  async function editNote(oid: string) {
+    if (!info) return;
+    const path = info.path;
+    const current = await commitNote(path, oid).catch(() => null);
+    const { choice, text } = await ask({
+      title: current === null ? `Add a note to ${oid.slice(0, 8)}` : `Note on ${oid.slice(0, 8)}`,
+      detail:
+        'Kept in refs/notes/commits, beside the commit rather than in it. git push sends ' +
+        'notes only when asked: git push origin refs/notes/commits.',
+      asksText: true,
+      lines: 5,
+      placeholder: 'Reviewed by…, shipped in…, see issue…',
+      initial: current ?? '',
+      choices: [
+        ...(current === null ? [] : [{ id: 'remove', label: 'Remove the note', danger: true }]),
+        { id: 'save', label: 'Save', primary: true },
+      ],
+    });
+    if (choice === null) return;
+    try {
+      await setNote(path, oid, choice === 'remove' ? '' : text);
+    } catch (e) {
+      toasts.push('error', 'Could not save the note', messageOf(e));
+      return;
+    }
+    await selection.reloadNote(path);
+  }
+
+  /** The commit HEAD is on, by object id, so a file at it can be told from one in history. */
+  const headOid = $derived(
+    info?.head.kind === 'detached'
+      ? info.head.oid
+      : (refs.groups.local.find((r) => r.short === headName)?.target ?? null),
+  );
+
+  /**
+   * Stops tracking a committed file and ignores it, once the user has been told what that
+   * does to everyone else.
+   *
+   * The file stays here, but the commit records it as deleted, and git deletes it from every
+   * copy that pulls the commit. That is the surprise this exists to prevent, so it is said
+   * before anything is done.
+   */
+  async function stopTrackingFile(file: string) {
+    if (!info) return;
+    const path = info.path;
+    const { choice } = await ask({
+      title: `Stop tracking ${baseName(file)}?`,
+      detail:
+        `It stays on disk here, and /${file} goes into .gitignore. The next commit records it ` +
+        'as deleted, and anyone who pulls that commit has it deleted from their copy.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'stop', label: 'Stop tracking', primary: true }],
+    });
+    if (choice !== 'stop') return;
+    try {
+      await stopTracking(path, file);
+    } catch (e) {
+      toasts.push('error', `Could not stop tracking ${file}`, messageOf(e));
+      return;
+    }
+    toasts.push('ok', `${file} is no longer tracked. Commit to make it so for everyone.`);
+    await worktree.load(path);
+  }
+
+  /**
+   * What Git LFS can do with a file: put its kind in LFS, and lock it or let go of it.
+   *
+   * Tracking is offered wherever git-lfs is installed. Locks only where the repository keeps
+   * something in LFS and its server answered, because a lock lives on that server and nowhere
+   * else; asking a server that does not do locking would offer a menu of refusals.
+   */
+  async function lfsItems(file: string, lockable = true): Promise<MenuItem[]> {
+    const items: MenuItem[] = [];
+    // A file LFS already keeps needs no offer to put it there.
+    const kept =
+      lfsInstalled && info ? await lfsKept(info.path, [file]).catch(() => []) : [];
+    if (lfsInstalled && !kept.includes(file)) {
+      const ext = ignoreChoices(file).find((c) => c.what.kind === 'pattern');
+      if (ext && ext.what.kind === 'pattern') {
+        const pattern = ext.what.pattern;
+        items.push({
+          kind: 'item',
+          label: `Track every ${pattern.slice(1)} file with LFS`,
+          hint: pattern,
+          disabled: lfs.busy,
+          run: () => void lfsStep(lfs.track(pattern), `${pattern} goes into LFS from now on.`),
+        });
+      }
+      items.push({
+        kind: 'item',
+        label: 'Track this file with LFS',
+        hint: file,
+        disabled: lfs.busy,
+        run: () => void lfsStep(lfs.track(file), `${file} goes into LFS from now on.`),
+      });
+    }
+    if (lockable && lfs.locks !== null) {
+      const held = lfs.byPath.get(file);
+      if (held === undefined) {
+        items.push({
+          kind: 'item',
+          label: 'Lock it for editing',
+          hint: 'others are told',
+          disabled: lfs.busy,
+          run: () => void lfsStep(lfs.lock(file), `${file} is locked to you.`),
+        });
+      } else if (held.ours) {
+        items.push({
+          kind: 'item',
+          label: 'Unlock it',
+          disabled: lfs.busy,
+          run: () => void lfsStep(lfs.unlock(file, false), `${file} is unlocked.`),
+        });
+      } else {
+        items.push(
+          {
+            kind: 'item',
+            label: `Locked by ${held.owner || 'somebody else'}`,
+            disabled: true,
+            run: () => undefined,
+          },
+          {
+            kind: 'item',
+            label: 'Force the lock off',
+            hint: 'their work may be lost',
+            danger: true,
+            disabled: lfs.busy,
+            run: () => void forceUnlock(file, held.owner),
+          },
+        );
+      }
+    }
+    return items.length === 0
+      ? []
+      : [{ kind: 'separator' }, { kind: 'submenu', label: 'LFS', items }];
+  }
+
+  /** Runs one LFS step and says how it went; tracking also changes `.gitattributes`. */
+  async function lfsStep(step: Promise<string | null>, done: string) {
+    const refused = await step;
+    if (refused !== null) {
+      toasts.push('error', 'Git LFS refused', refused);
+      return;
+    }
+    toasts.push('ok', done);
+    if (info) await worktree.load(info.path);
+  }
+
+  async function forceUnlock(file: string, owner: string) {
+    const { choice } = await ask({
+      title: `Take ${owner ? `${owner}'s` : 'their'} lock off ${baseName(file)}?`,
+      detail:
+        'They are told the file is free, and nothing stops two people changing it at once. ' +
+        'A file kept in LFS does not merge, so one of the two copies is lost.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'force', label: 'Force the lock off', danger: true }],
+    });
+    if (choice === 'force') await lfsStep(lfs.unlock(file, true), `${file} is unlocked.`);
+  }
+
+  /** A file in a commit's list: copy its path, or stop tracking it at the checked-out commit. */
+  async function commitFileMenu(event: MouseEvent, file: string) {
+    event.preventDefault();
+    // Read before the await, as every other menu does: the event is recycled.
+    const at = { x: event.clientX, y: event.clientY };
+    const atHead = selection.detail !== null && selection.detail.commit.oid === headOid;
+    const items: MenuItem[] = [
+      {
+        kind: 'item',
+        label: 'Copy the path',
+        hint: file,
+        run: () => void copyName(file),
+      },
+    ];
+    if (atHead) {
+      items.push(
+        { kind: 'separator' },
+        {
+          kind: 'item',
+          label: 'Stop tracking and ignore it',
+          hint: 'it stays on disk',
+          disabled: worktree.busy,
+          run: () => void stopTrackingFile(file),
+        },
+        ...(await lfsItems(file)),
+      );
+    }
+    menu = { ...at, items };
+  }
+
   async function ignorePath(what: Ignored, line: string) {
     if (!info) return;
     const path = info.path;
@@ -2888,9 +3219,13 @@
    * Deleting is the only thing here that leaves nothing behind, so it is set apart and asked
    * about first. Everything else is reversible with the button beside it.
    */
-  function fileMenu(event: MouseEvent, entry: StatusEntry, staged: boolean) {
+  async function fileMenu(event: MouseEvent, entry: StatusEntry, staged: boolean) {
     event.preventDefault();
+    const at = { x: event.clientX, y: event.clientY };
     const busy = worktree.busy;
+    // A new file can be put in LFS before its first commit, which is the best time to; only a
+    // file the repository already has can be locked.
+    const lfsPart = await lfsItems(entry.path, entry.worktree !== 'untracked');
     const items: MenuItem[] = [
       {
         kind: 'item',
@@ -2952,6 +3287,24 @@
             },
           ]
         : []),
+      // A file the last commit has and the working copy still holds. Ignoring alone does
+      // nothing to a tracked file, which is the trap the item exists to get people out of.
+      ...(entry.worktree !== 'untracked' &&
+      entry.index !== 'added' &&
+      entry.index !== 'deleted' &&
+      entry.worktree !== 'deleted'
+        ? [
+            { kind: 'separator' as const },
+            {
+              kind: 'item' as const,
+              label: 'Stop tracking and ignore it',
+              hint: 'it stays on disk',
+              disabled: busy,
+              run: () => void stopTrackingFile(entry.path),
+            },
+          ]
+        : []),
+      ...lfsPart,
       { kind: 'separator' },
       // Only for a file git already has a copy of. An untracked one has no last commit to go
       // back to, so this read "Discard its changes — back to the last commit" about a file
@@ -2976,7 +3329,7 @@
         run: () => void confirmDelete(entry),
       },
     ];
-    menu = { x: event.clientX, y: event.clientY, items };
+    menu = { ...at, items };
   }
 
   /**
@@ -4126,6 +4479,15 @@
           label: `Check out #${pr.number} locally`,
           run: () => void act({ kind: 'checkoutProposal', number: pr.number }),
         },
+        {
+          kind: 'item',
+          label: 'Read the review…',
+          hint: 'comment, approve',
+          run: () => {
+            reviewing = pr;
+            if (info) void review.load(info.path, pr.number);
+          },
+        },
         { kind: 'separator' },
         {
           kind: 'item',
@@ -4732,6 +5094,15 @@
         onRemove={() => void removeSubmodule()}
       />
     {/if}
+    {#if reviewing !== null && info}
+      <Review
+        {review}
+        pr={reviewing}
+        label={requestWord}
+        canRequestChanges={hosting.view?.host?.kind === 'github'}
+        onClose={() => (reviewing = null)}
+      />
+    {/if}
     {#if proposing !== null && info}
       <NewRequest
         repo={info.path}
@@ -5085,12 +5456,18 @@
             onDiscard={(entries) => void discardChanges(entries)}
             onFileMenu={fileMenu}
             onCommit={() => void recordCommit(false)}
+            locks={lfs.byPath}
           />
         </aside>
       {:else}
         <Details
           detail={selection.detail}
           verification={selection.verification}
+          note={selection.note}
+          onEditNote={() => selection.detail && void editNote(selection.detail.commit.oid)}
+          many={selection.many.map((p) => ({ oid: p.oid, summary: visibleMeta.get(p.row)?.summary ?? '' }))}
+          onFileMenu={commitFileMenu}
+          locks={lfs.byPath}
           picture={detailPicture}
           repo={info?.path ?? null}
           compare={selection.pair === null

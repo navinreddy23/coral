@@ -9,6 +9,7 @@
 #
 # - every request carries the token;
 # - the checks are asked for every open proposal and no other;
+# - a review is read, commented on and approved, each in the host's own requests;
 # - the menu on a proposal checks it out, fetched from the host by the name it keeps it under;
 # - the sidebar is photographed into target/hosting-test for a person to look at.
 #
@@ -119,7 +120,7 @@ status=0
 keyring="$home/.local/share/keyrings/login.keyring"
 for _ in $(seq 1 50); do [ -s "$keyring" ] && break; sleep 0.1; done
 before="$(sha256sum "$keyring" 2>/dev/null || true)"
-"$venv/bin/python" -I "$here/drive.py" ":$n" "$out" || status=1
+"$venv/bin/python" -I "$here/drive.py" ":$n" "$out" "$provider" || status=1
 
 check() {
     if eval "$1"; then echo "ok   $2"; else echo "FAIL $2"; status=1; fi
@@ -132,6 +133,9 @@ if [ "$provider" = github ]; then
         check "grep -q 'commits/$sha.*/check-runs' '$log'" "the checks on ${sha:0:1}… were asked for"
     done
     check "[ \"\$(grep -c '/check-runs' '$log')\" -eq 3 ]" "and on nothing else"
+    check "grep -q 'issues/12/comments?' '$log'" "the review of #12 was read"
+    check "grep -q 'POST /api/v3/repos/o/r/issues/12/comments .*Added a test' '$log'" "a comment was left on it"
+    check "grep -q 'POST /api/v3/repos/o/r/pulls/12/reviews .*APPROVE' '$log'" "and it was approved, as a review"
 else
     check "grep -q '/merge_requests?' '$log'" "the merge requests were asked for"
     # GitLab takes the token in a header of its own rather than as a bearer.
@@ -141,6 +145,9 @@ else
         check "grep -q 'merge_requests/$iid/pipelines' '$log'" "the pipelines of !$iid were asked for"
     done
     check "[ \"\$(grep -c '/pipelines' '$log')\" -eq 3 ]" "and of nothing else"
+    check "grep -q 'merge_requests/12/notes?' '$log'" "the review of !12 was read"
+    check "grep -q 'POST .*merge_requests/12/notes .*Added a test' '$log'" "a note was left on it"
+    check "grep -q 'POST .*merge_requests/12/approve' '$log'" "and it was approved where GitLab counts approvals"
 fi
 check "[ \"\$(git -C '$repo' symbolic-ref --short HEAD)\" = $branch ]" "#12 is checked out as $branch"
 check "[ -e '$repo/lanes' ]" "with the request's own change in it"

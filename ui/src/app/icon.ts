@@ -159,6 +159,11 @@ export const ICONS = {
   search: {
     paths: ['M10.6 17.2a6.6 6.6 0 1 0 0-13.2 6.6 6.6 0 0 0 0 13.2Z', 'M20.4 20.4 15.4 15.4'],
   },
+  /* A file locked on the LFS server: somebody is editing it, and it does not merge. */
+  lock: {
+    paths: ['M8.5 11V8a3.5 3.5 0 0 1 7 0v3'],
+    solid: ['M6.5 11h11a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 18.5v-6A1.5 1.5 0 0 1 6.5 11Z'],
+  },
   copy: {
     paths: ['M9.5 9.5A1.5 1.5 0 0 1 11 8h8a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 19h-8a1.5 1.5 0 0 1-1.5-1.5Z'],
     solid: ['M5 3.6h9a2.5 2.5 0 0 1 2.5 2.5v.5H11a3 3 0 0 0-3 3v6.6H5A2.5 2.5 0 0 1 2.5 13.7V6.1A2.5 2.5 0 0 1 5 3.6Z'],

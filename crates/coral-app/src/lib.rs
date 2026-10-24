@@ -13,6 +13,8 @@ pub mod experimental;
 pub mod gitignore;
 pub mod graph;
 pub mod hosting;
+pub mod lfs;
+pub mod notes;
 pub mod profile;
 pub mod recent;
 pub mod reflog;

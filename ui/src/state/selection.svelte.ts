@@ -1,4 +1,10 @@
-import { commitDetail, commitVerification, compareCommits, type Listing } from '../ipc/commands';
+import {
+  commitDetail,
+  commitNote,
+  commitVerification,
+  compareCommits,
+  type Listing,
+} from '../ipc/commands';
 
 import { covers, rowOfOid, type Frame } from '../graph/frame';
 import type { ChangedFile, CommitDetail, Verification } from '../ipc/types';
@@ -26,6 +32,8 @@ export class SelectionState {
    * take seconds, and the message and files should not wait on it.
    */
   verification = $state<Verification | null>(null);
+  /** The selected commit's note, read beside the detail as the signature is. */
+  note = $state<string | null>(null);
   loading = $state(false);
   error = $state<string | null>(null);
 
@@ -40,6 +48,14 @@ export class SelectionState {
   /** What differs between the pair, once it has been read. */
   compared = $state<ChangedFile[]>([]);
 
+  /**
+   * Three or more commits picked together, newest first; empty otherwise.
+   *
+   * Two picked are a comparison, which is what picking a second commit has always meant; past
+   * two there is no one diff to show, only a set to cherry-pick or revert.
+   */
+  many = $state<Picked[]>([]);
+
   #token = 0;
   /** The commit the pair would be built from, kept so the second pick has a first. */
   #anchor: Picked | null = null;
@@ -49,10 +65,86 @@ export class SelectionState {
     this.row = null;
     this.detail = null;
     this.verification = null;
+    this.note = null;
     this.error = null;
     this.pair = null;
     this.compared = [];
+    this.many = [];
     this.#anchor = null;
+  }
+
+  /** Reads the selected commit's note again, after it was edited. */
+  async reloadNote(path: string): Promise<void> {
+    const oid = this.detail?.commit.oid;
+    if (oid !== undefined) await this.#readNote(path, oid, this.#token);
+  }
+
+  async #readNote(path: string, oid: string, token: number): Promise<void> {
+    try {
+      const note = await commitNote(path, oid);
+      if (token === this.#token) this.note = note ?? null;
+    } catch {
+      // Nothing to show is the honest answer to a note that could not be read.
+    }
+  }
+
+  /** Every commit picked, newest first, whatever the count. */
+  get picked(): Picked[] {
+    if (this.many.length > 0) return this.many;
+    if (this.pair !== null) return [this.pair.to, this.pair.from];
+    return this.#anchor !== null && this.row !== null ? [this.#anchor] : [];
+  }
+
+  /** The commit a run picked with Shift starts from: the last one picked on its own. */
+  get anchorRow(): number | null {
+    return this.#anchor?.row ?? null;
+  }
+
+  /** Adds a commit to the picked set, or takes it out if it is already there. */
+  async toggle(path: string, row: number, oid: string): Promise<void> {
+    const now = this.picked;
+    const next = now.some((p) => p.row === row)
+      ? now.filter((p) => p.row !== row)
+      : [...now, { row, oid }];
+    await this.pickAll(path, next);
+  }
+
+  /**
+   * Picks exactly these commits.
+   *
+   * One is a selection and two a comparison, as before; three or more are a set. The anchor
+   * is left where it was, so a second Shift-click measures from the same commit as the first.
+   */
+  async pickAll(path: string, picks: Picked[]): Promise<void> {
+    const sorted = [...picks].sort((a, b) => a.row - b.row);
+    const [first, second] = sorted;
+    if (first === undefined) {
+      this.clear();
+      return;
+    }
+    const anchor = this.#anchor;
+    if (second === undefined) {
+      await this.select(path, first.row, first.oid);
+      this.#anchor = anchor ?? first;
+      return;
+    }
+    if (sorted.length === 2) {
+      this.#anchor = first;
+      const comparing = this.compare(path, second.row, second.oid);
+      this.#anchor = anchor ?? first;
+      await comparing;
+      return;
+    }
+    this.#token += 1;
+    this.many = sorted;
+    this.pair = null;
+    this.compared = [];
+    this.detail = null;
+    this.verification = null;
+    this.note = null;
+    this.error = null;
+    this.loading = false;
+    this.row = first.row;
   }
 
   async select(
@@ -64,6 +156,7 @@ export class SelectionState {
     this.#anchor = { row, oid };
     this.pair = null;
     this.compared = [];
+    this.many = [];
     this.row = row;
     this.loading = true;
     this.error = null;
@@ -72,13 +165,16 @@ export class SelectionState {
     // otherwise a slow earlier one lands last and shows the wrong commit.
     const token = ++this.#token;
     this.verification = null;
-    // A stash is not signed, and a failure here costs only the row that would have said so.
+    this.note = null;
+    // A stash is not signed and has no note, and a failure here costs only the line that
+    // would have said so.
     if (listing === 'commit') {
       void commitVerification(path, oid)
         .then((v) => {
           if (token === this.#token) this.verification = v ?? null;
         })
         .catch(() => undefined);
+      void this.#readNote(path, oid, token);
     }
     try {
       const detail = await commitDetail(path, oid, listing);
@@ -110,9 +206,11 @@ export class SelectionState {
     // Rows count back through history, so the larger row number is the older commit.
     const picked = { row, oid };
     const [from, to] = anchor.row > row ? [anchor, picked] : [picked, anchor];
+    this.many = [];
     this.pair = { from, to };
     this.detail = null;
     this.verification = null;
+    this.note = null;
     this.compared = [];
     this.loading = true;
     this.error = null;
@@ -151,6 +249,19 @@ export class SelectionState {
     // selected commit loads a window that does not hold it, and reading that as "the commit
     // is gone" threw the selection away for scrolling.
     if (!this.reaches(frame)) return;
+    if (this.many.length > 0) {
+      const rows = this.many.map((p) => rowOfOid(frame, p.oid));
+      if (rows.some((row) => row === null)) {
+        this.clear();
+        return;
+      }
+      // Written only when a row really moved: this runs from an effect that reads `many`, and
+      // a new array on every call re-ran it without end and froze the window.
+      if (rows.every((row, i) => row === this.many[i]?.row)) return;
+      this.many = this.many.map((p, i) => ({ oid: p.oid, row: rows[i] ?? p.row }));
+      this.row = this.many[0]?.row ?? null;
+      return;
+    }
     if (pair !== null) {
       const from = rowOfOid(frame, pair.from.oid);
       const to = rowOfOid(frame, pair.to.oid);
@@ -180,6 +291,7 @@ export class SelectionState {
 
   /** Whether `frame` holds the rows the selection claims, and so can speak about them. */
   reaches(frame: Frame): boolean {
+    if (this.many.length > 0) return this.many.every((p) => covers(frame, p.row, p.row));
     const pair = this.pair;
     if (pair !== null) {
       return covers(frame, pair.to.row, pair.to.row) && covers(frame, pair.from.row, pair.from.row);
@@ -189,6 +301,7 @@ export class SelectionState {
 
   /** True for a row that is one end of the comparison, so the list can mark both. */
   marks(row: number): boolean {
+    if (this.many.length > 0) return this.many.some((p) => p.row === row);
     const pair = this.pair;
     if (pair === null) return this.row === row;
     return pair.from.row === row || pair.to.row === row;
