@@ -157,6 +157,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         graph::commit_verification,
         notes::commit_note,
         lfs::lfs_track,
+        lfs::lfs_kept,
         lfs::lfs_locks,
         lfs::lfs_lock,
         lfs::lfs_unlock,

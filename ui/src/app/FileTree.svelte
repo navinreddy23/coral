@@ -1,8 +1,9 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
   import FileTree from './FileTree.svelte';
+  import LockMark from './LockMark.svelte';
   import type { TreeNode } from '../diff/tree';
-  import type { FileChange } from '../ipc/types';
+  import type { FileChange, LfsLock } from '../ipc/types';
 
   /**
    * What the tree needs of an entry.
@@ -16,12 +17,22 @@
     change: FileChange | null;
   }
 
-  const { nodes, openPath, onOpenFile, onFileMenu, depth = 0, startClosed = false }: {
+  const {
+    nodes,
+    openPath,
+    onOpenFile,
+    onFileMenu,
+    locks = new Map(),
+    depth = 0,
+    startClosed = false,
+  }: {
     nodes: TreeNode<Entry>[];
     openPath: string | null;
     onOpenFile: (path: string) => void;
     /** A file's own menu, where the tree has one to offer. */
     onFileMenu?: (event: MouseEvent, path: string) => void;
+    /** Files locked on the LFS server, by path. */
+    locks?: Map<string, LfsLock>;
     depth?: number;
     /**
      * Whether directories start shut.
@@ -66,6 +77,7 @@
             {openPath}
             {onOpenFile}
             {onFileMenu}
+            {locks}
             {startClosed}
             depth={depth + 1}
           />
@@ -83,6 +95,7 @@
             {node.item.change === null ? '' : mark[node.item.change] ?? '?'}
           </span>
           <span class="name">{node.name}</span>
+          <LockMark lock={locks.get(node.path)} />
         </button>
       {/if}
     </li>

@@ -3,13 +3,14 @@
   import Icon from './Icon.svelte';
   import { shortAge } from './age';
   import { describe as describeSignature } from './verification';
+  import LockMark from './LockMark.svelte';
   import { copyText } from './clipboard';
   import { authorColourIndex, initialsOf } from '../graph/initials';
   import { buildTree } from '../diff/tree';
   import { commitTree } from '../ipc/commands';
   import { messageOf } from '../ipc/error';
   import type { Entry } from './FileTree.svelte';
-  import type { ChangedFile, CommitDetail, FileChange, Verification } from '../ipc/types';
+  import type { ChangedFile, CommitDetail, FileChange, LfsLock, Verification } from '../ipc/types';
   import type { Grouping } from '../state/views.svelte';
 
   const {
@@ -29,6 +30,7 @@
     onGrouping,
     onOpenFile,
     onFileMenu,
+    locks = new Map(),
     onClearCompare,
     onCopied,
   }: {
@@ -63,6 +65,8 @@
     onOpenFile: (path: string) => void;
     /** A file's own menu, for a file in the list or the tree. */
     onFileMenu?: (event: MouseEvent, path: string) => void;
+    /** Files locked on the LFS server, by path. */
+    locks?: Map<string, LfsLock>;
     /** Says whether the clipboard took the object id, which a button cannot tell on its own. */
     onCopied: (ok: boolean, what: string) => void;
   } = $props();
@@ -333,10 +337,10 @@
         <p class="muted count">
           {everything.length} file{everything.length === 1 ? '' : 's'} at this commit
         </p>
-        <FileTree nodes={tree} {openPath} {onOpenFile} {onFileMenu} startClosed />
+        <FileTree nodes={tree} {openPath} {onOpenFile} {onFileMenu} {locks} startClosed />
       {/if}
     {:else if grouping === 'tree'}
-      <FileTree nodes={tree} {openPath} {onOpenFile} {onFileMenu} />
+      <FileTree nodes={tree} {openPath} {onOpenFile} {onFileMenu} {locks} />
     {:else}
     <ul class="files">
       {#each shown as file (file.path)}
@@ -353,6 +357,7 @@
               <span class="dir">{split(file.path).dir}</span
               ><span class="name">{split(file.path).name}</span>
             </span>
+            <LockMark lock={locks.get(file.path)} />
           </button>
         </li>
       {/each}

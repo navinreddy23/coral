@@ -22,6 +22,18 @@ pub async fn lfs_track(path: String, pattern: String) -> Result<(), IpcError> {
     Ok(loc.lfs_track(&runner, &pattern).await?)
 }
 
+/// Which of `files` LFS already keeps, so a menu need not offer to put them there.
+///
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn lfs_kept(path: String, files: Vec<String>) -> Result<Vec<String>, IpcError> {
+    let (runner, loc) = located(&path).await?;
+    let mut kept: Vec<String> = loc.in_lfs(&runner, &files).await?.into_iter().collect();
+    kept.sort();
+    Ok(kept)
+}
+
 /// The locks on the LFS server, or `None` for a repository that keeps nothing in LFS.
 ///
 /// # Errors

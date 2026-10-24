@@ -724,6 +724,11 @@ export function lfsTrack(path: string, pattern: string): Promise<void> {
   return invoke<void>('lfs_track', { path, pattern });
 }
 
+/** Which of these files LFS already keeps. */
+export function lfsKept(path: string, files: string[]): Promise<string[]> {
+  return invoke<string[]>('lfs_kept', { path, files });
+}
+
 /** The locks on the LFS server, or null for a repository that keeps nothing in LFS. */
 export function lfsLocks(path: string): Promise<LfsLock[] | null> {
   return invoke<LfsLock[] | null>('lfs_locks', { path });

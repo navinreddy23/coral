@@ -25,6 +25,7 @@
     branchSetUpstream,
     ignore,
     stopTracking,
+    lfsKept,
     commitNote,
     setNote,
     pickPatchFiles,
@@ -3072,9 +3073,12 @@
    * something in LFS and its server answered, because a lock lives on that server and nowhere
    * else; asking a server that does not do locking would offer a menu of refusals.
    */
-  function lfsItems(file: string): MenuItem[] {
+  async function lfsItems(file: string, lockable = true): Promise<MenuItem[]> {
     const items: MenuItem[] = [];
-    if (lfsInstalled) {
+    // A file LFS already keeps needs no offer to put it there.
+    const kept =
+      lfsInstalled && info ? await lfsKept(info.path, [file]).catch(() => []) : [];
+    if (lfsInstalled && !kept.includes(file)) {
       const ext = ignoreChoices(file).find((c) => c.what.kind === 'pattern');
       if (ext && ext.what.kind === 'pattern') {
         const pattern = ext.what.pattern;
@@ -3094,7 +3098,7 @@
         run: () => void lfsStep(lfs.track(file), `${file} goes into LFS from now on.`),
       });
     }
-    if (lfs.locks !== null) {
+    if (lockable && lfs.locks !== null) {
       const held = lfs.byPath.get(file);
       if (held === undefined) {
         items.push({
@@ -3148,7 +3152,7 @@
 
   async function forceUnlock(file: string, owner: string) {
     const { choice } = await ask({
-      title: `Take ${owner || 'their'} lock off ${baseName(file)}?`,
+      title: `Take ${owner ? `${owner}'s` : 'their'} lock off ${baseName(file)}?`,
       detail:
         'They are told the file is free, and nothing stops two people changing it at once. ' +
         'A file kept in LFS does not merge, so one of the two copies is lost.',
@@ -3161,8 +3165,10 @@
   }
 
   /** A file in a commit's list: copy its path, or stop tracking it at the checked-out commit. */
-  function commitFileMenu(event: MouseEvent, file: string) {
+  async function commitFileMenu(event: MouseEvent, file: string) {
     event.preventDefault();
+    // Read before the await, as every other menu does: the event is recycled.
+    const at = { x: event.clientX, y: event.clientY };
     const atHead = selection.detail !== null && selection.detail.commit.oid === headOid;
     const items: MenuItem[] = [
       {
@@ -3182,10 +3188,10 @@
           disabled: worktree.busy,
           run: () => void stopTrackingFile(file),
         },
-        ...lfsItems(file),
+        ...(await lfsItems(file)),
       );
     }
-    menu = { x: event.clientX, y: event.clientY, items };
+    menu = { ...at, items };
   }
 
   async function ignorePath(what: Ignored, line: string) {
@@ -3207,9 +3213,13 @@
    * Deleting is the only thing here that leaves nothing behind, so it is set apart and asked
    * about first. Everything else is reversible with the button beside it.
    */
-  function fileMenu(event: MouseEvent, entry: StatusEntry, staged: boolean) {
+  async function fileMenu(event: MouseEvent, entry: StatusEntry, staged: boolean) {
     event.preventDefault();
+    const at = { x: event.clientX, y: event.clientY };
     const busy = worktree.busy;
+    // A new file can be put in LFS before its first commit, which is the best time to; only a
+    // file the repository already has can be locked.
+    const lfsPart = await lfsItems(entry.path, entry.worktree !== 'untracked');
     const items: MenuItem[] = [
       {
         kind: 'item',
@@ -3288,7 +3298,7 @@
             },
           ]
         : []),
-      ...(entry.worktree === 'untracked' ? [] : lfsItems(entry.path)),
+      ...lfsPart,
       { kind: 'separator' },
       // Only for a file git already has a copy of. An untracked one has no last commit to go
       // back to, so this read "Discard its changes — back to the last commit" about a file
@@ -3313,7 +3323,7 @@
         run: () => void confirmDelete(entry),
       },
     ];
-    menu = { x: event.clientX, y: event.clientY, items };
+    menu = { ...at, items };
   }
 
   /**
@@ -5433,6 +5443,7 @@
           onEditNote={() => selection.detail && void editNote(selection.detail.commit.oid)}
           many={selection.many.map((p) => ({ oid: p.oid, summary: visibleMeta.get(p.row)?.summary ?? '' }))}
           onFileMenu={commitFileMenu}
+          locks={lfs.byPath}
           picture={detailPicture}
           repo={info?.path ?? null}
           compare={selection.pair === null
