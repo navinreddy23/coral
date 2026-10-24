@@ -18,10 +18,12 @@
   import { HostingState } from '../state/hosting.svelte';
   import {
     commitDetail,
+    commitTemplate,
     openInBrowser,
     patchRangeSize,
     remoteHasTag,
     branchSetUpstream,
+    ignore,
     pickPatchFiles,
     revAncestry,
     type PullRequest,
@@ -78,6 +80,7 @@
   import { baseName, beside, elideRef } from './path';
   import { askUntilAccepted, nameWasRefused, withRefusal } from './prompt';
   import { checkoutOf, divergence, remoteOf, withoutRemote } from './refname';
+  import { ignoreChoices, type Ignored } from './ignoring';
   import { splitPrefix } from './subject';
   import { orderRefs, pillChars, pillNamed } from './pill';
   import {
@@ -443,11 +446,11 @@
       return;
     }
     const path = info?.path;
-    if (path === undefined || commitDraft.message !== '') return;
+    if (path === undefined || !commitDraft.untouched) return;
     void commitDetail(path, 'HEAD')
       .then((detail) => {
         // Still wanted: the tick can be undone, or the panel closed, while this is in flight.
-        if (commitDraft.amend && commitDraft.message === '') {
+        if (commitDraft.amend && commitDraft.untouched) {
           commitDraft.seed(detail.commit.summary, detail.commit.body);
         }
       })
@@ -506,7 +509,29 @@
       commitDraft.withdraw();
       return;
     }
-    if (commitDraft.message === '') commitDraft.prepare(said);
+    if (commitDraft.untouched) commitDraft.prepare(said);
+  });
+
+  /**
+   * The repository's commit template, read again whenever another repository is open.
+   *
+   * Read on opening rather than once: it is per repository, and a template written while the
+   * window is open is picked up the next time the repository is.
+   */
+  let templateFor: string | null = null;
+  $effect(() => {
+    const path = info?.path ?? null;
+    if (path === templateFor) return;
+    templateFor = path;
+    if (path === null) {
+      commitDraft.useTemplate(null);
+      return;
+    }
+    void commitTemplate(path)
+      .then((text) => {
+        if (templateFor === path) commitDraft.useTemplate(text ?? null);
+      })
+      .catch(() => undefined);
   });
   const hosting = new HostingState();
 
@@ -2844,6 +2869,19 @@
     void diff.openWorking(info.path, staged, file);
   }
 
+  async function ignorePath(what: Ignored, line: string) {
+    if (!info) return;
+    const path = info.path;
+    try {
+      await ignore(path, what);
+    } catch (e) {
+      toasts.push('error', 'Could not add it to .gitignore', messageOf(e));
+      return;
+    }
+    toasts.push('ok', `Added ${line} to .gitignore.`);
+    await worktree.load(path);
+  }
+
   /**
    * What can be done with one file in the working tree.
    *
@@ -2893,6 +2931,24 @@
               hint: `${worktree.staged.length} ${worktree.staged.length === 1 ? 'file' : 'files'}`,
               disabled: busy || actions.busy,
               run: () => void act({ kind: 'stashPush', message: null, staged: true }),
+            },
+          ]
+        : []),
+      // Untracked only: a line in .gitignore does nothing for a file git already tracks, and
+      // offering it there reads as if it would stop the changes showing.
+      ...(entry.worktree === 'untracked' && !staged
+        ? [
+            { kind: 'separator' as const },
+            {
+              kind: 'submenu' as const,
+              label: 'Ignore',
+              items: ignoreChoices(entry.path).map((choice) => ({
+                kind: 'item' as const,
+                label: choice.label,
+                hint: choice.hint,
+                disabled: busy,
+                run: () => void ignorePath(choice.what, choice.hint),
+              })),
             },
           ]
         : []),
@@ -5034,6 +5090,7 @@
       {:else}
         <Details
           detail={selection.detail}
+          verification={selection.verification}
           picture={detailPicture}
           repo={info?.path ?? null}
           compare={selection.pair === null

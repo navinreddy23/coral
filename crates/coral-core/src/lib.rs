@@ -11,6 +11,7 @@ pub mod credential;
 pub mod diff;
 pub mod engine;
 pub mod error;
+pub mod gitignore;
 pub mod graph;
 pub mod history;
 pub mod identity;
@@ -30,7 +31,9 @@ pub mod ssh;
 pub mod stash;
 pub mod status;
 pub mod submodule;
+pub mod template;
 pub mod undo;
+pub mod verification;
 pub mod watch;
 pub mod worktree;
 

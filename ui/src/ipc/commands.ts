@@ -10,6 +10,7 @@ import type {
   ChangedFile,
   Commit,
   CommitDetail,
+  Verification,
   Todo,
   ConflictedFile,
   FileDiff,
@@ -579,6 +580,19 @@ export function remoteHasTag(path: string, remote: string, tag: string): Promise
   return invoke<boolean>('remote_has_tag', { path, remote, tag });
 }
 
+/** The repository's commit message template without its comment lines, or null. */
+export function commitTemplate(path: string): Promise<string | null> {
+  return invoke<string | null>('commit_template', { path });
+}
+
+/** Adds a line to the repository's `.gitignore`: one file exactly, or a pattern as written. */
+export function ignore(
+  path: string,
+  what: { kind: 'file'; file: string } | { kind: 'pattern'; pattern: string },
+): Promise<void> {
+  return invoke<void>('ignore', { path, what });
+}
+
 /** Makes a local branch track a remote's branch, which pull and push then use. */
 export function branchSetUpstream(path: string, branch: string, upstream: string): Promise<void> {
   return invoke<void>('branch_set_upstream', { path, branch, upstream });
@@ -697,6 +711,11 @@ export function commitDetail(
   listing: Listing = 'commit',
 ): Promise<CommitDetail> {
   return invoke<CommitDetail>('commit_detail', { path, rev, listing });
+}
+
+/** What git makes of a commit's signature. Asked for apart from the detail, which it can outlast. */
+export function commitVerification(path: string, rev: string): Promise<Verification> {
+  return invoke<Verification>('commit_verification', { path, rev });
 }
 
 /* Commit signing. A key belongs to a repository, not to a person: the app-level settings are

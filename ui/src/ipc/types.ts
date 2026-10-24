@@ -713,6 +713,11 @@ message: string | null, };
 export type Verdict = "bad" | "good" | "skip";
 
 /**
+ * What git makes of a commit's signature.
+ */
+export type Verification = { "kind": "unsigned" } | { "kind": "good", signer: string, trusted: boolean, } | { "kind": "bad", signer: string, } | { "kind": "expired", signer: string, } | { "kind": "revoked", signer: string, } | { "kind": "unchecked", reason: string, };
+
+/**
  * Why a conflicted path has no lines of its own to choose between.
  */
 export type Whole = "binary" | "lfs" | "submodule" | "symlink" | "too_large";

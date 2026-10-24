@@ -1,7 +1,7 @@
-import { commitDetail, compareCommits, type Listing } from '../ipc/commands';
+import { commitDetail, commitVerification, compareCommits, type Listing } from '../ipc/commands';
 
 import { covers, rowOfOid, type Frame } from '../graph/frame';
-import type { ChangedFile, CommitDetail } from '../ipc/types';
+import type { ChangedFile, CommitDetail, Verification } from '../ipc/types';
 import { messageOf } from '../ipc/error';
 
 /** One end of a comparison: which row was picked, and the commit on it. */
@@ -19,6 +19,13 @@ export interface Picked {
 export class SelectionState {
   row = $state<number | null>(null);
   detail = $state<CommitDetail | null>(null);
+  /**
+   * What git makes of the selected commit's signature, once it has said.
+   *
+   * Read beside the detail rather than with it: checking runs the signing program, which can
+   * take seconds, and the message and files should not wait on it.
+   */
+  verification = $state<Verification | null>(null);
   loading = $state(false);
   error = $state<string | null>(null);
 
@@ -41,6 +48,7 @@ export class SelectionState {
     this.#token += 1;
     this.row = null;
     this.detail = null;
+    this.verification = null;
     this.error = null;
     this.pair = null;
     this.compared = [];
@@ -63,6 +71,15 @@ export class SelectionState {
     // Clicking down the graph starts several reads; only the newest may write the result,
     // otherwise a slow earlier one lands last and shows the wrong commit.
     const token = ++this.#token;
+    this.verification = null;
+    // A stash is not signed, and a failure here costs only the row that would have said so.
+    if (listing === 'commit') {
+      void commitVerification(path, oid)
+        .then((v) => {
+          if (token === this.#token) this.verification = v ?? null;
+        })
+        .catch(() => undefined);
+    }
     try {
       const detail = await commitDetail(path, oid, listing);
       if (token === this.#token) this.detail = detail;
@@ -95,6 +112,7 @@ export class SelectionState {
     const [from, to] = anchor.row > row ? [anchor, picked] : [picked, anchor];
     this.pair = { from, to };
     this.detail = null;
+    this.verification = null;
     this.compared = [];
     this.loading = true;
     this.error = null;

@@ -67,6 +67,21 @@ describe('the commit panel', () => {
     expect(face.style.background).toBe(`var(--node-${index + 1})`);
   });
 
+  it('shows a signature only on a signed commit, with git\'s reason when it could not check', () => {
+    const plain = render(Details, { props: { ...props, detail: detail() } });
+    expect(plain.container.textContent).not.toContain('Signature');
+    plain.unmount();
+
+    const reason = 'gpg.ssh.allowedSignersFile needs to be configured';
+    const { container } = render(Details, {
+      props: { ...props, detail: detail(), verification: { kind: 'unchecked', reason } },
+    });
+    const row = container.querySelector('dd.signature');
+    expect(row?.textContent).toContain('Signed, but git could not check it here');
+    expect(row?.textContent).toContain(reason);
+    expect(row?.classList.contains('warn')).toBe(true);
+  });
+
   it('gives each term exactly one description', () => {
     // A second dd for the same term flows back into the label column of the two-column grid,
     // where an unbreakable object id sets the width and squeezes the values out.

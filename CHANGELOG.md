@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased
+
+### Ignore a file from the staging panel
+
+An untracked file's menu has an Ignore submenu: the file itself, or every file with its
+extension. A wholly untracked folder can be ignored as a folder. Each choice shows the line it
+adds to the repository's `.gitignore`, which is only ever appended to, in the file's own line
+endings. A file's own folder is
+not offered, since ignoring a folder that holds tracked files would quietly ignore every new
+file put beside them.
+
+### Signatures in the commit details
+
+A signed commit's details say what git makes of its signature: good, from whom, and whether
+the key is trusted; bad; expired; revoked; or signed but impossible to check here, with git's
+reason, such as an SSH signature with no allowed signers file. git's own verdict letter calls
+that last case "no signature", and a signing program that cannot run "bad"; Coral reads git's
+message beside the letter so neither is misreported.
+
+The check runs beside the rest of the details, not before them, and gives up after five
+seconds: gpg can be set to fetch unknown keys from a key server, and a click on a commit should
+never wait on that.
+
+### Commit templates
+
+A repository's `commit.template` is where the message box starts, and where it returns after
+each commit. As at git's own editor, a template left exactly as it was is not a message: the
+commit button asks for it to be filled in.
+
 ## 1.2.7
 
 ### Checkboxes that fit the theme
