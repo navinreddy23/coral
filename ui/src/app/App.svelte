@@ -5090,6 +5090,7 @@
       {:else}
         <Details
           detail={selection.detail}
+          verification={selection.verification}
           picture={detailPicture}
           repo={info?.path ?? null}
           compare={selection.pair === null

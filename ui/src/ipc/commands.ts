@@ -10,6 +10,7 @@ import type {
   ChangedFile,
   Commit,
   CommitDetail,
+  Verification,
   Todo,
   ConflictedFile,
   FileDiff,
@@ -710,6 +711,11 @@ export function commitDetail(
   listing: Listing = 'commit',
 ): Promise<CommitDetail> {
   return invoke<CommitDetail>('commit_detail', { path, rev, listing });
+}
+
+/** What git makes of a commit's signature. Asked for apart from the detail, which it can outlast. */
+export function commitVerification(path: string, rev: string): Promise<Verification> {
+  return invoke<Verification>('commit_verification', { path, rev });
 }
 
 /* Commit signing. A key belongs to a repository, not to a person: the app-level settings are

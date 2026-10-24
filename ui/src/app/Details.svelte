@@ -9,11 +9,12 @@
   import { commitTree } from '../ipc/commands';
   import { messageOf } from '../ipc/error';
   import type { Entry } from './FileTree.svelte';
-  import type { ChangedFile, CommitDetail, FileChange } from '../ipc/types';
+  import type { ChangedFile, CommitDetail, FileChange, Verification } from '../ipc/types';
   import type { Grouping } from '../state/views.svelte';
 
   const {
     detail,
+    verification = null,
     repo,
     compare,
     picture = null,
@@ -28,6 +29,8 @@
     onCopied,
   }: {
     detail: CommitDetail | null;
+    /** What git makes of the commit's signature; null until it has said, or for none. */
+    verification?: Verification | null;
     /** Which repository the commit is in, for reading its tree. */
     repo: string | null;
     /**
@@ -89,7 +92,7 @@
         detail.commit.author.time !== detail.commit.committer.time),
   );
 
-  const signature = $derived(detail ? describeSignature(detail.verification) : null);
+  const signature = $derived(verification ? describeSignature(verification) : null);
 
   /**
    * Whether to list the whole repository at this commit rather than what it changed.

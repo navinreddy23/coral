@@ -1656,7 +1656,6 @@ describe('moving down the list with the keyboard', () => {
           body: '',
         },
         files: [{ path: 'huge.txt', oldPath: null, change: 'added' }],
-        verification: { kind: 'unsigned' },
       }),
       file_diff: {
         path: 'huge.txt',

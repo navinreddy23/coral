@@ -7,7 +7,7 @@ use std::process::Command;
 use coral_core::process::GitRunner;
 use coral_core::repo::RepoLocation;
 use coral_core::testutil::TestRepo;
-use coral_core::verification::{Verification, carries_signature};
+use coral_core::verification::{CHECK_LIMIT, Verification, carries_signature};
 
 /// A repository whose `HEAD` is signed by a key made for the test, and the key's public half.
 fn signed() -> (TestRepo, tempfile::TempDir, String) {
@@ -35,7 +35,7 @@ fn signed() -> (TestRepo, tempfile::TempDir, String) {
 async fn verdict(repo: &TestRepo, rev: &str) -> Verification {
     let runner = GitRunner::discover().await.unwrap();
     let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
-    loc.verification(&runner, rev).await.unwrap()
+    loc.verification(&runner, rev, CHECK_LIMIT).await.unwrap()
 }
 
 #[tokio::test]

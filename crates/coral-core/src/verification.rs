@@ -9,6 +9,8 @@
 //!
 //! Both are signatures nothing here could check, and git's message says what is missing.
 
+use std::time::Duration;
+
 use crate::error::CoralError;
 use crate::process::{GitCommand, GitRunner};
 use crate::repo::RepoLocation;
@@ -41,15 +43,23 @@ pub enum Verification {
 }
 
 impl Verification {
-    /// Reads `%G?%x00%GS`, with git's stderr from the same run and whether the commit carries
-    /// a signature at all.
+    /// Reads `%G?%x00%GS%x00%GG`, with git's stderr from the same run and whether the commit
+    /// carries a signature at all.
+    ///
+    /// The reason for an unchecked signature is git's own complaint when it made one, and
+    /// otherwise the signing program's last word in `%GG`: gpg says "No public key" there and
+    /// leaves git's stderr empty.
     #[must_use]
     pub fn judge(stdout: &[u8], stderr: &[u8], has_signature: bool) -> Self {
         let text = String::from_utf8_lossy(stdout);
-        let mut parts = text.trim_end_matches('\n').splitn(2, '\0');
+        let mut parts = text.trim_end_matches('\n').splitn(3, '\0');
         let code = parts.next().unwrap_or("");
         let signer = parts.next().unwrap_or("").to_owned();
-        let reason = first_error(stderr);
+        let said = parts.next().unwrap_or("");
+        let reason = match first_error(stderr) {
+            complaint if !complaint.is_empty() => complaint,
+            _ => last_word(said),
+        };
         match code {
             "G" => Self::Good {
                 signer,
@@ -79,6 +89,16 @@ pub fn carries_signature(commit: &[u8]) -> bool {
         .any(|line| line.starts_with(b"gpgsig"))
 }
 
+/// The last line the signing program wrote, which is where gpg gives its verdict.
+fn last_word(said: &str) -> String {
+    let line = said
+        .lines()
+        .map(str::trim)
+        .rfind(|l| !l.is_empty())
+        .unwrap_or("");
+    line.strip_prefix("gpg: ").unwrap_or(line).to_owned()
+}
+
 /// The first line git or the signing program flagged, without its `error: ` or `gpg: ` prefix.
 fn first_error(stderr: &[u8]) -> String {
     let text = String::from_utf8_lossy(stderr);
@@ -93,24 +113,45 @@ fn first_error(stderr: &[u8]) -> String {
         .to_owned()
 }
 
+/// How long a signature check may take before it is reported as unchecked.
+///
+/// The signing program runs for every signed commit looked at, and gpg can be set to fetch a
+/// key it does not know from a key server (`auto-key-retrieve`), or wait on an agent that is
+/// not answering. Neither should hold up the panel for the read limit of thirty seconds.
+pub const CHECK_LIMIT: Duration = Duration::from_secs(5);
+
 impl RepoLocation {
-    /// Asks git to check one commit's signature.
+    /// Asks git to check one commit's signature, giving up after `limit`.
     ///
     /// Only ever for one commit at a time: git runs the signing program for each signed commit
     /// it formats this way, which is far too slow for a graph.
     ///
     /// # Errors
-    /// Propagates git failures, including an unknown revision.
+    /// Propagates git failures, including an unknown revision. Running out of time is not one:
+    /// it is a signature that could not be checked, and says so.
     pub async fn verification(
         &self,
         runner: &GitRunner,
         rev: &str,
+        limit: Duration,
     ) -> Result<Verification, CoralError> {
+        match tokio::time::timeout(limit, self.check(runner, rev)).await {
+            Ok(answer) => answer,
+            Err(_) => Ok(Verification::Unchecked {
+                reason: format!(
+                    "the signing program did not answer within {} seconds",
+                    limit.as_secs()
+                ),
+            }),
+        }
+    }
+
+    async fn check(&self, runner: &GitRunner, rev: &str) -> Result<Verification, CoralError> {
         let verdict = runner
             .output(GitCommand::read("log", self.display_path()).args([
                 "log",
                 "-1",
-                "--format=%G?%x00%GS",
+                "--format=%G?%x00%GS%x00%GG",
                 rev,
                 "--",
             ]))
@@ -200,6 +241,17 @@ mod tests {
             Verification::judge(b"B\0\n", stderr, true),
             Verification::Unchecked {
                 reason: "cannot run : No such file or directory".into()
+            }
+        );
+    }
+
+    #[test]
+    fn a_missing_key_says_why_in_gpgs_words_when_git_says_nothing() {
+        let out = b"E\0\0gpg: Signature made Sat 24 Oct\ngpg:                issuer \"f@x.test\"\ngpg: Can't check signature: No public key\n\n";
+        assert_eq!(
+            Verification::judge(out, b"", true),
+            Verification::Unchecked {
+                reason: "Can't check signature: No public key".into()
             }
         );
     }

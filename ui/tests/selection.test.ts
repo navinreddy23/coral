@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
+/** Signature checks the test answers by hand, by revision, to play them out of order. */
+const checks = vi.hoisted(() => new Map<string, (v: unknown) => void>());
+
 vi.mock('../src/ipc/commands', () => ({
   commitDetail: vi.fn(async () => ({ oid: 'x', files: [] })),
+  commitVerification: vi.fn((_path: string, rev: string) => new Promise((done) => checks.set(rev, done))),
   compareCommits: vi.fn(async () => []),
 }));
 
@@ -131,5 +135,31 @@ describe('a selection that outlives the rows it was made on', () => {
     await selection.select(repo, 1, coffee);
     selection.reanchor(frameOf(0, [tea, water, revert]));
     expect(selection.row).toBeNull();
+  });
+});
+
+describe('the signature beside the detail', () => {
+  it('shows the detail without waiting, and drops a verdict for a commit no longer selected', async () => {
+    const selection = new SelectionState();
+    await selection.select(repo, 0, tea);
+    // The detail is in while the check is still out.
+    expect(selection.detail).not.toBeNull();
+    expect(selection.verification).toBeNull();
+
+    await selection.select(repo, 1, coffee);
+    checks.get(tea)?.({ kind: 'bad', signer: '' });
+    await Promise.resolve();
+    expect(selection.verification).toBeNull();
+
+    checks.get(coffee)?.({ kind: 'unsigned' });
+    await Promise.resolve();
+    expect(selection.verification).toEqual({ kind: 'unsigned' });
+  });
+
+  it('does not ask about a stash, which is never signed', async () => {
+    checks.clear();
+    const selection = new SelectionState();
+    await selection.select(repo, 0, water, 'stash');
+    expect(checks.has(water)).toBe(false);
   });
 });

@@ -129,7 +129,7 @@ body: string, };
 /**
  * Everything the details panel shows for one commit.
  */
-export type CommitDetail = { commit: Commit, files: Array<ChangedFile>, verification: Verification, };
+export type CommitDetail = { commit: Commit, files: Array<ChangedFile>, };
 
 /**
  * What the graph shows next to a row: who wrote it and its first line.

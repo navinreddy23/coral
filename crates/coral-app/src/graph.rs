@@ -334,6 +334,26 @@ pub async fn commit_detail(
     Ok(loc.commit_detail(&runner, &rev, listing).await?)
 }
 
+/// What git makes of one commit's signature.
+///
+/// Apart from [`commit_detail`] so the panel never waits on it: checking runs the signing
+/// program, which can be slow, and the files and message are already known.
+///
+/// # Errors
+/// Propagates git failures, such as an unknown revision.
+#[tauri::command]
+pub async fn commit_verification(
+    path: String,
+    rev: String,
+) -> Result<coral_core::verification::Verification, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc
+        .verification(&runner, &rev, coral_core::verification::CHECK_LIMIT)
+        .await?)
+}
+
 /// Where a revision stands relative to `HEAD`.
 ///
 /// Asked when a menu opens rather than carried on every ref: the answer needs an ancestry walk

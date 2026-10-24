@@ -154,6 +154,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         graph::submodule_revision,
         graph::submodule_ssh,
         graph::commit_detail,
+        graph::commit_verification,
         graph::patch_range_size,
         graph::file_diff,
         graph::worktree_diff,

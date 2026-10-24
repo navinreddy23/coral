@@ -14,10 +14,7 @@ import Details from '../../src/app/Details.svelte';
 import { authorColourIndex } from '../../src/graph/initials';
 import type { ChangedFile, CommitDetail } from '../../src/ipc/types';
 
-function detail(
-  files: ChangedFile[] = [],
-  verification: CommitDetail['verification'] = { kind: 'unsigned' },
-): CommitDetail {
+function detail(files: ChangedFile[] = []): CommitDetail {
   const who = { name: 'Linus Torvalds', email: 'torvalds@linux-foundation.org', time: 1_756_000_000 };
   return {
     commit: {
@@ -29,7 +26,6 @@ function detail(
       body: '',
     },
     files,
-    verification,
   };
 }
 
@@ -78,7 +74,7 @@ describe('the commit panel', () => {
 
     const reason = 'gpg.ssh.allowedSignersFile needs to be configured';
     const { container } = render(Details, {
-      props: { ...props, detail: detail([], { kind: 'unchecked', reason }) },
+      props: { ...props, detail: detail(), verification: { kind: 'unchecked', reason } },
     });
     const row = container.querySelector('dd.signature');
     expect(row?.textContent).toContain('Signed, but git could not check it here');

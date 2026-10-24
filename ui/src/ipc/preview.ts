@@ -497,7 +497,6 @@ function detail(rev: string) {
       { path: 'docs/ARCHITECTURE.md', oldPath: null, change: 'modified' },
       { path: 'ui/src/graph/old-render.ts', oldPath: null, change: 'deleted' },
     ],
-    verification: { kind: 'unsigned' },
   };
 }
 
