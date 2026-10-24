@@ -95,3 +95,28 @@ async fn an_unknown_revision_is_an_error_rather_than_a_guess() {
     let (runner, loc) = open(&repo).await;
     assert!(loc.ancestry(&runner, "no-such-ref").await.is_err());
 }
+
+/// Rebasing a merge onto a teammate's work replays everything it brought in as new commits
+/// and asks for its conflicts again, so the window asks this before offering a rebase pull.
+#[tokio::test]
+async fn a_merge_not_yet_on_the_upstream_is_noticed_and_plain_commits_are_not() {
+    let repo = TestRepo::new().write("f.txt", "1\n").commit("first");
+    repo.git(["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    repo.git(["config", "remote.origin.url", "/nowhere"]);
+    repo.git([
+        "config",
+        "remote.origin.fetch",
+        "+refs/heads/*:refs/remotes/origin/*",
+    ]);
+    repo.git(["config", "branch.main.remote", "origin"]);
+    repo.git(["config", "branch.main.merge", "refs/heads/main"]);
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo.write("g.txt", "s\n").commit("side");
+    repo.git(["checkout", "--quiet", "main"]);
+    let repo = repo.write("f.txt", "2\n").commit("plain");
+    let (runner, loc) = open(&repo).await;
+    assert!(!loc.merges_since(&runner, "@{upstream}").await.unwrap());
+
+    repo.git(["merge", "--quiet", "--no-edit", "side"]);
+    assert!(loc.merges_since(&runner, "@{upstream}").await.unwrap());
+}

@@ -14,6 +14,7 @@
   import Splitter from './Splitter.svelte';
   import { fitColumns, fitPanels, PANE_LIMITS, PanesState } from '../state/panes.svelte';
   import DiffView from './DiffView.svelte';
+  import { inTheWay } from './pull';
   import { DiffState } from '../state/diff.svelte';
   import { HostingState } from '../state/hosting.svelte';
   import {
@@ -30,6 +31,7 @@
     setNote,
     pickPatchFiles,
     revAncestry,
+    unpushedMerges,
     type PullRequest,
   } from '../ipc/commands';
   import type { Ancestry, Verdict } from '../ipc/types';
@@ -1304,6 +1306,10 @@
         await offerToIntegrate(action);
         return false;
       }
+      if (action.kind === 'pull' && action.autostash !== true) {
+        const files = inTheWay(actions.report?.text);
+        if (files !== null) return offerToStashAround(action, files);
+      }
       // `actions` keeps the message for the status line; the toast is what carries it to
       // someone who is not looking at the bottom of the window.
       //
@@ -1455,6 +1461,31 @@
     else if (choice === 'rebase') await act({ ...action, mode: 'rebase' });
   }
 
+  /**
+   * A pull that uncommitted work is in the way of, put as the question it is.
+   *
+   * git refuses rather than overwrite the work, which is right, and the way past it — stash,
+   * pull, apply — was three steps nobody was told about. `--autostash` is those three.
+   */
+  async function offerToStashAround(
+    action: Extract<Action, { kind: 'pull' }>,
+    files: string[],
+  ): Promise<boolean> {
+    const named = files.length === 1 ? files[0] : `${files.length} files`;
+    const { choice } = await ask({
+      title: `Uncommitted changes to ${named} are in the way`,
+      detail:
+        'The pull changes what you are still working on, and git will not overwrite it. ' +
+        'Coral can stash your changes, pull, and put them back. If they clash with what came ' +
+        'in, the clash is marked in the files and your changes stay in the stash.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'stash', label: 'Stash, pull and put back', primary: true }],
+    });
+    return choice === 'stash' ? act({ ...action, autostash: true }) : false;
+  }
+
   function wasRejected(message: string): boolean {
     return /\[rejected\]|non-fast-forward|fetch first|stale info/iu.test(message);
   }
@@ -1480,6 +1511,15 @@
     // already has under that name, so offering it is offering a click that changes nothing.
     const tag = action.refspec?.startsWith('refs/tags/') === true;
     const name = action.refspec?.slice('refs/tags/'.length) ?? 'the tag';
+    // A rebase replays a merge's incoming commits as new ones and asks its conflicts again,
+    // so with a merge here the pull that keeps it leads. A failure reads as no merge, which
+    // is the offer this made before it asked.
+    const merged =
+      !tag && info !== null ? await unpushedMerges(info.path).catch(() => false) : false;
+    const pulls = [
+      { id: 'rebase', label: 'Pull and rebase', primary: !merged },
+      { id: 'merge', label: 'Pull and merge', primary: merged },
+    ];
     const { choice } = await ask({
       title: 'The remote refused it',
       detail: tag
@@ -1490,19 +1530,20 @@
         : `${message.trim()}\n\n` +
           'The remote has commits this branch does not. Pulling brings them in and keeps ' +
           'them. Forcing replaces them with what is here, and git allows it only while ' +
-          'nobody else has moved the branch since Coral last fetched it.',
+          'nobody else has moved the branch since Coral last fetched it.' +
+          (merged
+            ? '\n\nThis branch has a merge the remote has not seen. Rebasing would replay ' +
+              'what it brought in as new commits and ask its conflicts again; merging keeps it.'
+            : ''),
       asksText: false,
       placeholder: '',
       initial: '',
       choices: tag
         ? [{ id: 'force', label: `Replace ${name} on the remote` }]
-        : [
-            { id: 'pull', label: 'Pull and rebase', primary: true },
-            { id: 'force', label: 'Force push' },
-          ],
+        : [...(merged ? pulls.reverse() : pulls), { id: 'force', label: 'Force push' }],
     });
-    if (choice === 'pull') {
-      if (await act({ kind: 'pull', remote: action.remote, mode: 'rebase' })) toasts.dismiss(notice);
+    if (choice === 'rebase' || choice === 'merge') {
+      if (await act({ kind: 'pull', remote: action.remote, mode: choice })) toasts.dismiss(notice);
       return;
     }
     if (choice === 'force' && (await act({ ...action, forceWithLease: true }))) {

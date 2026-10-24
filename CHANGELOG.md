@@ -1,5 +1,42 @@
 # Changelog
 
+## Unreleased
+
+From a working day with a teammate: one clone driven in the window, the other from the shell,
+sharing a remote and an LFS server.
+
+### Pulling with uncommitted work in the way
+
+A pull that git refuses because it would overwrite uncommitted changes asks whether to stash
+them, pull, and put them back, rather than ending in git's message. If they clash with what
+came in, the clash is marked in the files and the changes stay in the stash. The merge tool
+names that side "your stashed changes"; it was "the incoming change", beside the branch name
+on the side that had just been pulled.
+
+### A rejected push with a merge on the branch
+
+When a push is refused and the branch has a merge the remote has not seen, the way past it
+offered first is to pull and merge. Rebasing, which was the only pull on offer, replays what
+the merge brought in as new commits and asks its conflicts again. Both are offered either way.
+
+### Picking lines and folders
+
+- Shift-click picks every changed line between it and the last one clicked, and a picked line
+  is tinted. Telling a picked line from an unpicked one was a matter of a slightly thicker
+  stripe, the same green as an added line.
+- A folder in a commit's files has a menu: copy its path, or, at the checked-out commit, stop
+  tracking everything in it and ignore it. A `build/` folder committed by mistake could only be
+  stopped file by file.
+
+### Fixed along the way
+
+- Merging `origin/main` named the incoming side "origin/HEAD" in the merge tool, in every
+  clone, because `origin/HEAD` points at the same commit.
+- Several commits cherry picked without committing leave every one of their messages in the
+  commit box, oldest first. Only the last one's was there.
+- A commit the branch already holds no longer offers to be merged or rebased onto. Merging it
+  did nothing, and a plain rebase onto it flattened any merge made since.
+
 ## 1.2.9
 
 ### Stop tracking a committed file

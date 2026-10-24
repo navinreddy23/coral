@@ -39,6 +39,22 @@ impl RepoLocation {
         })
     }
 
+    /// Whether `HEAD` has a merge commit that `base` does not.
+    ///
+    /// # Errors
+    /// Propagates git failures, including a `base` that names nothing, such as `@{upstream}`
+    /// on a branch without one.
+    pub async fn merges_since(&self, runner: &GitRunner, base: &str) -> Result<bool, CoralError> {
+        let out = runner
+            .output(
+                GitCommand::read("rev-list", self.display_path())
+                    .args(["rev-list", "--merges", "--max-count=1"])
+                    .arg(format!("{base}..HEAD")),
+            )
+            .await?;
+        Ok(!out.stdout.is_empty())
+    }
+
     /// Whether `older` is reachable from `newer`.
     ///
     /// `merge-base --is-ancestor` writes nothing and answers by exiting 0 or 1, so 1 has to be

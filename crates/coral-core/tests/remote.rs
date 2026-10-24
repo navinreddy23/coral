@@ -398,7 +398,7 @@ async fn a_rejected_push_is_settled_by_rebasing_and_pushing_again() {
 
     // Pulling with a rebase replays our commit onto theirs, and the same line stops it.
     let stopped = loc
-        .pull(&runner, Some("origin"), PullMode::Rebase, |_| {})
+        .pull(&runner, Some("origin"), PullMode::Rebase, false, |_| {})
         .await
         .unwrap();
     assert!(!stopped.completed, "it stopped on the conflict");
@@ -570,6 +570,43 @@ async fn fetch_all_and_prune_drop_a_deleted_branch() {
     );
 }
 
+/// A teammate's change to a file with uncommitted work in it stops a pull dead; stashing
+/// around it is what lets the pull through with the work kept.
+#[tokio::test]
+async fn a_pull_stashes_around_uncommitted_work_when_asked() {
+    let (repo, _home, origin) = with_origin();
+    let repo = repo.write("f.txt", "1\n2\n3\n4\n5\n").commit("lines");
+    repo.git(["push", "--quiet", "origin", "main"]);
+    let (runner, loc) = open(&repo).await;
+
+    let other = Clone::of(&origin);
+    other.write("f.txt", "ONE\n2\n3\n4\n5\n");
+    other.git(&["commit", "--quiet", "-am", "their line"]);
+    other.git(&["push", "--quiet", "origin", "main"]);
+    std::fs::write(repo.path().join("f.txt"), "1\n2\n3\n4\nFIVE\n").unwrap();
+
+    assert!(
+        loc.pull(&runner, Some("origin"), PullMode::FfOnly, false, |_| {})
+            .await
+            .is_err(),
+        "git will not overwrite the uncommitted line"
+    );
+    let out = loc
+        .pull(&runner, Some("origin"), PullMode::FfOnly, true, |_| {})
+        .await
+        .unwrap();
+    assert!(out.completed);
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("f.txt")).unwrap(),
+        "ONE\n2\n3\n4\nFIVE\n"
+    );
+    assert_eq!(
+        repo.git(["stash", "list"]),
+        "",
+        "and nothing is left in the stash"
+    );
+}
+
 #[tokio::test]
 async fn pull_fast_forwards_and_refuses_to_diverge() {
     let (repo, _home, origin) = with_origin();
@@ -582,7 +619,7 @@ async fn pull_fast_forwards_and_refuses_to_diverge() {
     other.git(&["push", "--quiet", "origin", "main"]);
 
     let outcome = loc
-        .pull(&runner, Some("origin"), PullMode::FfOnly, |_| {})
+        .pull(&runner, Some("origin"), PullMode::FfOnly, false, |_| {})
         .await
         .unwrap();
     assert!(outcome.completed);
@@ -599,13 +636,13 @@ async fn pull_fast_forwards_and_refuses_to_diverge() {
     other.git(&["push", "--quiet", "origin", "main"]);
 
     assert!(
-        loc.pull(&runner, Some("origin"), PullMode::FfOnly, |_| {})
+        loc.pull(&runner, Some("origin"), PullMode::FfOnly, false, |_| {})
             .await
             .is_err()
     );
     // Rebasing does integrate them.
     let rebased = loc
-        .pull(&runner, Some("origin"), PullMode::Rebase, |_| {})
+        .pull(&runner, Some("origin"), PullMode::Rebase, false, |_| {})
         .await
         .unwrap();
     assert!(rebased.completed);
@@ -752,7 +789,7 @@ async fn a_pull_from_a_remote_that_is_not_the_upstream_still_integrates() {
 
     // The branch still tracks origin, which has not moved.
     let out = loc
-        .pull(&runner, Some("mirror"), PullMode::FfOnly, |_| {})
+        .pull(&runner, Some("mirror"), PullMode::FfOnly, false, |_| {})
         .await
         .expect("a pull from a named remote is not an error");
     assert!(out.completed, "it should have fast-forwarded");
@@ -780,7 +817,7 @@ async fn a_pull_into_an_unborn_branch_names_it_too() {
     let (runner, loc) = open(&empty).await;
 
     let out = loc
-        .pull(&runner, Some("origin"), PullMode::FfOnly, |_| {})
+        .pull(&runner, Some("origin"), PullMode::FfOnly, false, |_| {})
         .await
         .expect("a pull that seeds a repository is not an error");
     assert!(out.completed, "it should have taken the remote's history");

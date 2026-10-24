@@ -373,6 +373,19 @@ pub async fn rev_ancestry(
     Ok(loc.ancestry(&runner, &rev).await?)
 }
 
+/// Whether the current branch has a merge its upstream does not, which a rebase pull would
+/// flatten.
+///
+/// # Errors
+/// Propagates git failures, including a branch with no upstream.
+#[tauri::command]
+pub async fn unpushed_merges(path: String) -> Result<bool, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc.merges_since(&runner, "@{upstream}").await?)
+}
+
 /// A ref placed on the row it belongs to.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
