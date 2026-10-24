@@ -32,6 +32,17 @@ function row(view: { container: HTMLElement }, label: string): HTMLElement {
 }
 
 describe('the context menu', () => {
+  it('gives focus back to what had it when it closes', async () => {
+    const opener = document.createElement('button');
+    document.body.append(opener);
+    opener.focus();
+    const view = render(Menu, { x: 10, y: 10, items: items(), onClose: vi.fn() });
+    await waitFor(() => expect(document.activeElement).not.toBe(opener));
+    view.unmount();
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+
   it('can be worked from the keyboard alone', async () => {
     const run = vi.fn();
     const view = render(Menu, { x: 10, y: 10, items: items(run), onClose: vi.fn() });
