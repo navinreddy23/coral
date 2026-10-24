@@ -1713,6 +1713,26 @@
       });
     }
 
+    // A branch that is only behind what it follows can be brought up to date where it stands.
+    // The panel said so with its counter and nothing in its menu acted on it: the one way was
+    // to check it out and pull. Not the checked-out one, which the pull button is for.
+    if (
+      ref.kind.kind === 'local_branch' &&
+      !current &&
+      ref.upstream !== null &&
+      ref.behind > 0 &&
+      ref.ahead === 0
+    ) {
+      const upstream = ref.upstream;
+      items.push({
+        kind: 'item',
+        label: `Fast-forward ${ref.short} to ${upstream}`,
+        hint: 'without checking it out',
+        disabled: busy,
+        run: () => revisionActions.fastForwardBranch(ref.short, upstream),
+      });
+    }
+
     if (ref.kind.kind === 'local_branch' && hosting.available) {
       items.push({ kind: 'separator' });
       items.push({

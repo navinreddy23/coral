@@ -41,6 +41,12 @@ the merge brought in as new commits and asks its conflicts again. Both are offer
   "Stage hunk" there staged every change in the file, the hidden whitespace ones included.
 - Discarding a file that also has something staged says that the staged part goes too.
   Discarding goes back to the last commit, and the question said only that.
+- Redoing a soft or mixed reset leaves the changes staged or unstaged, as the reset did.
+  Redo matched the files to the commit whatever the reset had been, so a soft reset came back
+  as a hard one, and on a branch of its own the work it had kept was left only in the reflog.
+- A branch that is only behind what it follows offers "Fast-forward main to origin/main" in
+  its menu, without checking it out. The panel showed it behind, and the only way to bring it
+  up to date was to check it out and pull.
 - Merging `origin/main` named the incoming side "origin/HEAD" in the merge tool, in every
   clone, because `origin/HEAD` points at the same commit.
 - Several commits cherry picked without committing leave every one of their messages in the
