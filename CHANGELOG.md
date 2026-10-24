@@ -1,5 +1,48 @@
 # Changelog
 
+## Unreleased
+
+### Stop tracking a committed file
+
+A tracked file's menu in the staging panel, and a file's menu in the checked-out commit's
+files, offer "Stop tracking and ignore it": the file leaves the repository, stays on disk and
+goes into `.gitignore`. It asks first, and says what nobody expects: the next commit records
+the file as deleted, and everyone who pulls it has the file deleted from their copy.
+
+### Cherry pick or revert several commits at once
+
+Ctrl-click picks commits one by one and Shift-click a run of them. Two are compared, as
+before; three or more are listed, and right-clicking any of them cherry picks them all oldest
+first or reverts them all newest first. A set with a merge in it says why it cannot.
+
+### Notes on commits
+
+A commit's note, from `refs/notes/commits`, shows in its details, and a commit's menu adds,
+changes or removes one. The dialog says that `git push` sends notes only when asked. Notes no
+longer appear in the graph: `refs/notes/commits` was drawn as a branch over a row reading
+"Notes added by 'git notes add'", and commit search looked through them.
+
+### Git LFS: tracking and locks
+
+A file's menu has an LFS submenu. It puts the file, or every file of its kind, into LFS,
+setting LFS up in the repository first when it is not; a file already in LFS is not offered
+it. Where the repository keeps something in LFS, the same submenu locks a file for editing,
+unlocks it, or forces somebody else's lock off after saying that their work may be lost.
+Locked files carry a lock in the staging list and in a commit's files, in the accent colour
+when the lock is yours. Locks are read from the LFS server with a time limit and only for a
+repository that uses LFS.
+
+### Pull request reviews
+
+A pull or merge request's menu opens its review: the conversation, comments on lines of the
+diff with their file and line, and every approval and request for changes, in the order they
+were made. From there a comment can be left, the request approved, or, on GitHub, changes
+requested. On GitLab an approval is recorded where GitLab counts approvals.
+
+### Fixed along the way
+
+- A question with a box for several lines no longer covers its own explanation with it.
+
 ## 1.2.8
 
 ### Ignore a file from the staging panel
