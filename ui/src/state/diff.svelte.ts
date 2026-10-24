@@ -174,7 +174,7 @@ export class DiffState {
   }
 
   /** How the next read is asked for: the view's settings, plus whether the guard still holds. */
-  get #reading(): ReadOptions {
+  get reading(): ReadOptions {
     return {
       wholeFile: this.wholeFile,
       ignoreWhitespace: this.ignoreWhitespace,
@@ -220,6 +220,12 @@ export class DiffState {
   setView(view: FileView): void {
     if (view === this.view) return;
     this.#views.set('fileView', view);
+    // A commit picked from the history belongs to the history. Kept, the Diff tab went on
+    // showing it under the name of the change the panel was opened on.
+    if (view !== 'history' && this.atCommit !== null) {
+      void this.showOpened().then(() => this.#sideLoad());
+      return;
+    }
     void this.#sideLoad();
   }
 
@@ -378,7 +384,7 @@ export class DiffState {
     this.#request = request;
     const token = ++this.#token;
     try {
-      const got = await read(request, this.#reading);
+      const got = await read(request, this.reading);
       if (token !== this.#token) return;
       this.file = got;
       this.empty = got === null ? absentFor(request.source) : null;
@@ -409,7 +415,7 @@ export class DiffState {
     this.empty = null;
     this.loading = true;
     try {
-      const got = await read(request, this.#reading);
+      const got = await read(request, this.reading);
       // Clicking down a long file list must not let an earlier, slower read win.
       if (token !== this.#token) return;
       this.file = got;
