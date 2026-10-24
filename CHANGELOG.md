@@ -39,6 +39,8 @@ the merge brought in as new commits and asks its conflicts again. Both are offer
   on screen. The engine counted hunks in the file's usual diff, so it staged a different part.
   While whitespace is ignored, partial staging is not offered at all and the hunk says why:
   "Stage hunk" there staged every change in the file, the hidden whitespace ones included.
+- Discarding a file that also has something staged says that the staged part goes too.
+  Discarding goes back to the last commit, and the question said only that.
 - Merging `origin/main` named the incoming side "origin/HEAD" in the merge tool, in every
   clone, because `origin/HEAD` points at the same commit.
 - Several commits cherry picked without committing leave every one of their messages in the
