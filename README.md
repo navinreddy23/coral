@@ -32,7 +32,7 @@ worth of DOM. The panel on the right is the commit under the cursor.*
 | [![Side by side diff](docs/screenshots/02-diff.png)](docs/screenshots/02-diff.png) | [![Blame](docs/screenshots/03-blame.png)](docs/screenshots/03-blame.png) |
 | **Diffs** read inline or side by side, with the changed words marked inside a changed line, and step change by change in either layout. | **Blame** attributes every line to the commit that last changed it, with the age beside it. |
 | [![Staging and committing](docs/screenshots/04-staging.png)](docs/screenshots/04-staging.png) | [![The conflict tool](docs/screenshots/05-conflicts.png)](docs/screenshots/05-conflicts.png) |
-| **Staging** by file, by hunk or by line, as a tree or a flat list. | **Conflicts** in three panes built from the index stages, with the sides named after the refs involved rather than "ours" and "theirs". |
+| **Staging** by file, by hunk or by line, as a tree or a flat list, in lists that fold and resize. | **Conflicts** in three panes built from the index stages, with the sides named after the refs involved rather than "ours" and "theirs". |
 | [![Interactive rebase](docs/screenshots/06-rebase.png)](docs/screenshots/06-rebase.png) | [![The command palette](docs/screenshots/07-palette.png)](docs/screenshots/07-palette.png) |
 | **Interactive rebase** with a picker for reword, squash, fixup, edit, drop and reorder, before anything runs. | **The command palette** on `Ctrl+P`, with every action and every tag in the repository. |
 | [![The dark theme](docs/screenshots/08-dark.png)](docs/screenshots/08-dark.png) | [![The embedded terminal](docs/screenshots/09-terminal.png)](docs/screenshots/09-terminal.png) |
