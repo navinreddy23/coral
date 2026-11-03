@@ -29,7 +29,9 @@ for tool in Xephyr import dbus-run-session gnome-keyring-daemon fusermount; do
     command -v "$tool" >/dev/null || { echo "hosting-test needs $tool" >&2; exit 1; }
 done
 [ -x "$binary" ] || { echo "no $binary; run just app first" >&2; exit 1; }
-if [ ! -x "$venv/bin/python" ]; then
+# A venv outlives a system python upgrade, which leaves its packages on the old version's path.
+if ! "$venv/bin/python" -c "import Xlib" 2>/dev/null; then
+    rm -rf "$venv"
     python3 -m venv "$venv"
     "$venv/bin/pip" install --quiet python-xlib
 fi
