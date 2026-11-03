@@ -27,7 +27,9 @@ for tool in Xephyr import python3 cargo; do
 done
 
 venv="$root/target/window-real/venv"
-if [ ! -x "$venv/bin/python" ]; then
+# A venv outlives a system python upgrade, which leaves its packages on the old version's path.
+if ! "$venv/bin/python" -c "import Xlib" 2>/dev/null; then
+    rm -rf "$venv"
     python3 -m venv "$venv"
     "$venv/bin/pip" install --quiet python-xlib
 fi
