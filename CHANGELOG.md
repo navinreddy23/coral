@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.11
+
+A maintenance release: no behaviour changes.
+
+### Dependencies
+
+Every Rust crate is at its newest version compatible with the Rust 1.88 floor, among them tokio,
+reqwest, rustls, serde_json and clap; Tauri moves to 2.11.6. Tauri 2.12 needs Rust 1.90 and
+waits for a release that raises the floor. The interface's build and test tools are updated,
+and happy-dom, which only runs under the interface's tests, goes to 21 for two security
+advisories.
+
 ## 1.2.10
 
 From a working day with a teammate: one clone driven in the window, the other from the shell,
