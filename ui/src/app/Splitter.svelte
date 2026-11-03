@@ -12,6 +12,7 @@
     label,
     grows = 'right',
     vertical = false,
+    grip = false,
     onresize,
     onreset,
   }: {
@@ -21,6 +22,12 @@
     label: string;
     /** True for a handle between stacked panes, which is dragged up and down. */
     vertical?: boolean;
+    /**
+     * Draws a short bar on the handle at rest, for a divider inside a panel. Between the window's
+     * panes the gap between two cards says where to drag; inside one there is no gap, and a
+     * handle drawn only under the pointer is one nobody finds.
+     */
+    grip?: boolean;
     /** Which way the pane being sized grows when the handle moves right. */
     grows?: 'right' | 'left';
     onresize: (px: number) => void;
@@ -63,6 +70,9 @@
     else if (event.key === more) onresize(value + step * sign);
     else return;
     event.preventDefault();
+    // The window walks the commit list on the same arrows, and would move the selection out
+    // from under a divider being nudged in the panel showing it.
+    event.stopPropagation();
   }
 </script>
 
@@ -79,6 +89,7 @@
 <div
   class="splitter"
   class:vertical
+  class:grip
   class:dragging
   role="separator"
   aria-orientation={vertical ? 'horizontal' : 'vertical'}
@@ -111,6 +122,15 @@
   .splitter.vertical {
     width: auto; height: 9px; margin: -4px 0; cursor: row-resize;
   }
+  .splitter.grip { position: relative; }
+  .splitter.grip.vertical::before {
+    content: ''; position: absolute; left: 50%; top: 50%; width: 36px; height: 4px;
+    transform: translate(-50%, -50%); border-radius: var(--radius-pill);
+    background: var(--border-strong); transition: background var(--fast) var(--ease);
+  }
+  .splitter.grip.vertical:hover::before,
+  .splitter.grip.vertical.dragging::before,
+  .splitter.grip.vertical:focus-visible::before { background: var(--accent); }
   .splitter.vertical:hover,
   .splitter.vertical.dragging,
   .splitter.vertical:focus-visible {

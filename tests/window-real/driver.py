@@ -79,6 +79,24 @@ class Driver:
             time.sleep(0.06)
         self.settle()
 
+    def drag(self, x0, y0, x1, y1, steps=12):
+        """Presses at one point, moves to another in steps, and lets go.
+
+        In steps because a handle follows pointer moves, and one jump is a drag no hand makes:
+        it would pass whether or not the handle kept up.
+        """
+        self.move(x0, y0)
+        time.sleep(0.1)
+        xtest.fake_input(self.d, X.ButtonPress, 1)
+        self.d.sync()
+        for i in range(1, steps + 1):
+            time.sleep(0.03)
+            self.move(x0 + (x1 - x0) * i // steps, y0 + (y1 - y0) * i // steps)
+        time.sleep(0.05)
+        xtest.fake_input(self.d, X.ButtonRelease, 1)
+        self.d.sync()
+        self.settle()
+
     def keys(self, *names):
         codes = [self.d.keysym_to_keycode(XK.string_to_keysym(n)) for n in names]
         for c in codes:

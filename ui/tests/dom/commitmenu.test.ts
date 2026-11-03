@@ -1372,3 +1372,26 @@ describe('the menu on a stash row', () => {
     expect(labels).not.toContain('Pop it');
   });
 });
+
+describe('keys a focused control has taken', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  it('leaves the selected commit alone while the arrows move a divider', async () => {
+    const { container } = await shell();
+    const second = container.querySelectorAll('li.row button.hit')[1] as HTMLButtonElement;
+    await fireEvent.click(second);
+    const divider = await waitFor(() => {
+      const found = container.querySelector('[aria-label="Resize the commit message and its files"]');
+      if (!(found instanceof HTMLElement)) throw new Error('no divider yet');
+      return found;
+    });
+    const selected = () => [...container.querySelectorAll('li.row')].findIndex((r) => r.classList.contains('selected'));
+    expect(selected()).toBe(1);
+    await fireEvent.keyDown(divider, { key: 'ArrowUp' });
+    await fireEvent.keyDown(divider, { key: 'ArrowDown' });
+    expect(selected()).toBe(1);
+  });
+});

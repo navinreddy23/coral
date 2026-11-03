@@ -169,6 +169,9 @@
     flex: 1; min-width: 0; text-align: left; cursor: pointer;
     font: inherit; font-size: var(--text-base); padding: 2px var(--space-2) 2px 4px;
     background: var(--bg-0); border: 0; color: var(--fg-1);
+    /* Four short of a commit row, so a file list follows the density the graph is read at
+       rather than packing a row every twenty pixels whatever it is set to. */
+    min-height: calc(var(--row-h) - 4px);
   }
   .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dir { color: var(--fg-1); font-weight: var(--weight-semibold); }

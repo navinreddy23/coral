@@ -13,6 +13,7 @@ import "../src/styles/tokens.css";
 import "../src/styles/base.css";
 
 import Details from "../src/app/Details.svelte";
+import { SectionsState } from "../src/state/sections.svelte";
 import DiffView from "../src/app/DiffView.svelte";
 import MergeTool from "../src/app/MergeTool.svelte";
 import Palette from "../src/app/Palette.svelte";
@@ -104,6 +105,7 @@ const commitPanel = {
   onOpenFile: () => {},
   onGrouping: () => {},
   onCopied: () => {},
+  sections: new SectionsState(),
 };
 mount(Details, {
   target: panel("Commit panel — path grouping", "360px"),

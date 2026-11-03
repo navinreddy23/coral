@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Resizing and folding the right panel
+
+The right panel's sections can be resized and folded, and are remembered across restarts.
+
+- **Working copy:** the unstaged list, the staged list and the commit message box each fold
+  to their heading by clicking it. The dividers between them can be dragged, nudged with
+  the arrow keys, and reset with a double-click.
+- **Folded message box:** it keeps its commit button. The shortcut that puts the caret in
+  the message opens the box first.
+- **Commit view:** the message and its files scroll separately, with a divider between
+  them. A long kernel merge message no longer pushes the file list a screen down. Either
+  part folds away.
+- **Spacing:** the dividers inside the panel carry a visible grip. File rows follow the
+  density setting rather than sitting twenty pixels apart.
+
 ## 1.2.11
 
 A maintenance release: no behaviour changes.

@@ -60,7 +60,40 @@ move(1300, 860)
 # The working copy, its staging panel, and a diff side by side.
 click(700, 95)
 shot("staging")
-click(1150, 230)
+
+# The panel's sections. Each step is undone before the next, and checked back to the picture
+# it started from, so the stops after this one find the panel as shipped.
+LISTS = (1110, 165, 300, 450)
+
+
+def same(a, b):
+    """Whether two pictures of the lists are the same panel. Not byte for byte: GTK's overlay
+    scrollbar fades in and out on its own, which is a handful of pixels and not a layout."""
+    return len(a) == len(b) and sum(1 for p, q in zip(a, b) if p != q) < len(a) // 200
+
+
+move(700, 893)
+settle()
+shipped = region(*LISTS)
+click(1180, 154)
+move(700, 893)
+settle()
+check(not same(region(*LISTS), shipped), "the unstaged list folds to its heading")
+shot("sections-folded")
+click(1180, 154)
+move(700, 893)
+settle()
+check(same(region(*LISTS), shipped), "and unfolds to the panel it was")
+x.drag(1260, 372, 1260, 280)
+move(700, 893)
+settle()
+check(not same(region(*LISTS), shipped), "the divider between the lists follows a drag")
+shot("sections-dragged")
+click(1260, 280, times=2)
+move(700, 893)
+settle()
+check(same(region(*LISTS), shipped), "and a double-click puts it back")
+click(1160, 256)
 click(823, 99)
 shot("diff-split")
 click(1062, 98)
