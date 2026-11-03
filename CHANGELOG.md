@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.0
 
 ### Resizing and folding the right panel
 
@@ -17,11 +17,9 @@ The right panel's sections can be resized and folded, and are remembered across 
 - **Spacing:** the dividers inside the panel carry a visible grip. File rows follow the
   density setting rather than sitting twenty pixels apart.
 
-## 1.2.11
-
-A maintenance release: no behaviour changes.
-
 ### Dependencies
+
+1.2.11 was tagged with these and never published, so they arrive here.
 
 Every Rust crate is at its newest version compatible with the Rust 1.88 floor, among them tokio,
 reqwest, rustls, serde_json and clap; Tauri moves to 2.11.6. Tauri 2.12 needs Rust 1.90 and
