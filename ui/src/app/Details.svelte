@@ -497,8 +497,9 @@
   }
   .head { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
   /* Undragged, the message is as tall as it is, up to half the panel; the files have the rest.
-     The room at its foot keeps the grip off the last line of the metadata. */
-  .head.shared { flex: 0 1 auto; max-height: 50%; padding-bottom: var(--space-3); }
+     The room at its foot is outside the scrolling, so a long message that scrolls ends clear of
+     the grip rather than running under it. */
+  .head.shared { flex: 0 1 auto; max-height: 50%; margin-bottom: var(--space-3); }
   .head.shared.sized { flex: 0 0 auto; max-height: none; }
   .head.closed { flex: 0 0 auto; }
   .part { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }

@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { render } from '@testing-library/svelte';
 import { fireEvent, waitFor } from '@testing-library/dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -335,5 +337,12 @@ describe('the commit panel sections', () => {
     const { container } = render(Details, { props: { ...props, detail: null } });
     expect(container.querySelector('button.fold')).toBeNull();
     expect(container.querySelector('[role="separator"]')).toBeNull();
+  });
+
+  it('keeps the room under a scrolling message outside the scroll, clear of the grip', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/app/Details.svelte'), 'utf8');
+    const rule = /\.head\.shared \{([^}]*)\}/u.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/margin-bottom:/u);
+    expect(rule).not.toMatch(/padding-bottom:/u);
   });
 });
