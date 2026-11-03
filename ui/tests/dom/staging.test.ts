@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { render } from '@testing-library/svelte';
 import { fireEvent, waitFor } from '@testing-library/dom';
 import { tick } from 'svelte';
@@ -511,5 +513,13 @@ describe('the staging panel sections', () => {
     const { container } = await panel();
     await fireEvent.click(fold(container, /Staged files/u));
     expect(new SectionsState().collapsed.staged).toBe(true);
+  });
+
+  it('shortens a heading in a narrow panel before moving the buttons beside it', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/app/Staging.svelte'), 'utf8');
+    expect(css).toMatch(/h3 \.fold \.title \{[^}]*text-overflow:\s*ellipsis/u);
+    for (const action of ['all', 'expand']) {
+      expect(css).toMatch(new RegExp(`\\.${action} \\{[^}]*flex: 0 0 auto; white-space: nowrap`, 'u'));
+    }
   });
 });

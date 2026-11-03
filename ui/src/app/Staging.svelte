@@ -266,7 +266,8 @@
         <span class="caret">
           <Icon name={closed.unstaged ? 'chevronRight' : 'chevronDown'} size={13} />
         </span>
-        Unstaged files ({worktree.unstaged.length})
+        <span class="title">Unstaged files</span>
+        <span class="tally">({worktree.unstaged.length})</span>
       </button>
       {#if !closed.unstaged && grouping === 'tree' && worktree.unstaged.length > 0}
         <button
@@ -358,7 +359,8 @@
         <span class="caret">
           <Icon name={closed.staged ? 'chevronRight' : 'chevronDown'} size={13} />
         </span>
-        Staged files ({worktree.staged.length})
+        <span class="title">Staged files</span>
+        <span class="tally">({worktree.staged.length})</span>
       </button>
       {#if worktree.staged.length > 0}
         <button
@@ -554,7 +556,7 @@
   }
 
   h3 {
-    display: flex; align-items: center; gap: var(--space-1);
+    display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1);
     font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--fg-2);
     text-transform: uppercase; letter-spacing: var(--tracking-label);
     margin: var(--space-2) 0 var(--space-1);
@@ -566,31 +568,39 @@
   /* The heading's own words are what fold the section, so it reads as a heading, not as a
      button sitting on one. */
   h3 .fold {
-    display: flex; align-items: center; gap: var(--space-1); cursor: pointer;
+    display: flex; align-items: center; cursor: pointer;
+    flex: 1 1 7em; min-width: 0; overflow: hidden;
     text-align: left; white-space: nowrap;
     font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit;
     padding: 0; margin: 0; background: none; border: 0; border-radius: var(--radius-0);
   }
+  /* A narrow panel shortens the heading's words, keeping its count; only a panel too narrow
+     for even that puts the buttons beside it on a line of their own. */
+  h3 .fold .title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  h3 .fold .tally { flex: 0 0 auto; margin-left: 0.3em; }
+  h3 .fold .caret { margin-right: var(--space-1); }
   h3 .fold:hover { color: var(--fg-0); }
   h3 .fold:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   /* The whole-list action, set apart from the heading it belongs to rather than looking like
      part of the count. */
   .all {
+    flex: 0 0 auto; white-space: nowrap;
     margin-left: auto; font: inherit; font-size: var(--text-xs); font-weight: var(--weight-semibold);
     cursor: pointer;
-    padding: 1px var(--space-2); border-radius: var(--radius-1);
+    padding: 1px var(--space-1); border-radius: var(--radius-1);
     background: var(--bg-2); border: 1px solid var(--border); color: var(--fg-1);
   }
   .all:hover { background: var(--bg-3); color: var(--fg-0); }
   /* Beside the whole-list action, and set as a link rather than a button: it changes how the
      list is drawn, where the button beside it changes what is in the index. */
   .expand {
+    flex: 0 0 auto; white-space: nowrap;
     margin-left: auto; font: inherit; font-size: var(--text-xs); cursor: pointer;
     padding: 0; background: var(--bg-0); border: 0; color: var(--accent);
   }
   .expand:hover { text-decoration: underline; }
   /* With the link before it taking the leftover room, the button no longer needs to. */
-  .expand + .all { margin-left: var(--space-2); }
+  .expand + .all { margin-left: var(--space-1); }
   /* A real edge, not a hairline: the two halves are different places and a file moves between
      them, which the eye has to be able to see happen. */
   .between, .rule {

@@ -70,6 +70,9 @@
     else if (event.key === more) onresize(value + step * sign);
     else return;
     event.preventDefault();
+    // The window walks the commit list on the same arrows, and would move the selection out
+    // from under a divider being nudged in the panel showing it.
+    event.stopPropagation();
   }
 </script>
 
