@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { render } from '@testing-library/svelte';
-import { fireEvent } from '@testing-library/dom';
+import { fireEvent, waitFor } from '@testing-library/dom';
+import { tick } from 'svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const invoke = vi.hoisted(() => vi.fn());
@@ -13,6 +14,7 @@ vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn() }));
 import Staging from '../../src/app/Staging.svelte';
 import { CommitState } from '../../src/state/commit.svelte';
 import { WorktreeState } from '../../src/state/worktree.svelte';
+import { SECTION_LIMITS, SectionsState } from '../../src/state/sections.svelte';
 import type { Status, StatusEntry } from '../../src/ipc/types';
 
 function entry(path: string, over: Partial<StatusEntry> = {}): StatusEntry {
@@ -62,6 +64,7 @@ async function panel(over: Record<string, unknown> = {}) {
       props: {
         worktree,
         commit,
+        sections: new SectionsState(),
         branch: 'main',
         openPath: null,
         grouping: 'tree',
@@ -85,6 +88,7 @@ function headings(container: HTMLElement): string[] {
 
 describe('the staging panel', () => {
   beforeEach(() => {
+    localStorage.clear();
     invoke.mockReset();
     invoke.mockImplementation(async () => status());
   });
@@ -206,6 +210,7 @@ describe('the staging panel', () => {
       props: {
         worktree,
         commit: new CommitState(),
+        sections: new SectionsState(),
         branch: 'main',
         openPath: null,
         grouping: 'tree',
@@ -229,6 +234,7 @@ describe('the staging panel', () => {
       props: {
         worktree,
         commit: new CommitState(),
+        sections: new SectionsState(),
         branch: 'main',
         openPath: null,
         grouping: 'tree',
@@ -300,6 +306,7 @@ describe('what a folder row says is under it', () => {
       props: {
         worktree,
         commit: new CommitState(),
+        sections: new SectionsState(),
         branch: 'main',
         openPath: null,
         grouping: 'tree',
@@ -320,6 +327,7 @@ describe('what a folder row says is under it', () => {
       props: {
         worktree,
         commit: new CommitState(),
+        sections: new SectionsState(),
         branch: 'main',
         openPath: null,
         grouping: 'tree',
@@ -331,5 +339,177 @@ describe('what a folder row says is under it', () => {
       },
     });
     expect(tallies(container)).toEqual(['M 1']);
+  });
+});
+
+describe('the staging panel sections', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    invoke.mockReset();
+    invoke.mockImplementation(async () => status());
+  });
+
+  function fold(container: HTMLElement, name: RegExp): HTMLButtonElement {
+    const button = [...container.querySelectorAll<HTMLButtonElement>('button.fold')].find((b) =>
+      name.test(b.textContent ?? ''),
+    );
+    if (!button) throw new Error(`no fold for ${name}`);
+    return button;
+  }
+
+  const listDivider = '[role="separator"][aria-label="Resize the unstaged and staged lists"]';
+  const composeDivider = '[role="separator"][aria-label="Resize the commit message"]';
+
+  it('folds a list to its heading and takes its divider with it', async () => {
+    const { container } = await panel();
+    const unstaged = fold(container, /Unstaged files/u);
+    expect(unstaged.getAttribute('aria-expanded')).toBe('true');
+    expect(container.querySelector('#staging-unstaged')).not.toBeNull();
+    expect(container.querySelector(listDivider)).not.toBeNull();
+
+    await fireEvent.click(unstaged);
+    expect(unstaged.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('#staging-unstaged')).toBeNull();
+    // The heading and its count are still there, so the folded list says what is in it.
+    expect(unstaged.textContent).toMatch(/Unstaged files \(3\)/u);
+    expect(container.querySelector(listDivider)).toBeNull();
+    expect(container.querySelector('#staging-staged')).not.toBeNull();
+
+    await fireEvent.click(unstaged);
+    expect(container.querySelector('#staging-unstaged')).not.toBeNull();
+  });
+
+  it('keeps the whole-list action on a folded list', async () => {
+    // Staging everything does not need the list on screen, and folding it is often how a
+    // long list of changes is got out of the way before doing exactly that.
+    const { container, worktree } = await panel();
+    await fireEvent.click(fold(container, /Unstaged files/u));
+    const all = [...container.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Stage all changes',
+    );
+    expect(all).toBeDefined();
+    const stage = vi.spyOn(worktree, 'stage').mockResolvedValue();
+    if (all) await fireEvent.click(all);
+    expect(stage).toHaveBeenCalledWith(
+      ['src/app/App.svelte', 'src/state/graph.ts', 'docs/ARCHITECTURE.md'],
+      true,
+    );
+  });
+
+  it('shares the height between the lists as dragged', async () => {
+    const sections = new SectionsState();
+    sections.resize('unstagedShare', 0.3);
+    const { container } = await panel({ sections });
+    const [unstaged, staged] = container.querySelectorAll<HTMLElement>('.panel > section');
+    expect(unstaged?.style.flexGrow).toBe('0.3');
+    expect(Number(staged?.style.flexGrow)).toBeCloseTo(0.7);
+  });
+
+  it('gives the whole height to the list left open', async () => {
+    const sections = new SectionsState();
+    sections.resize('unstagedShare', 0.3);
+    sections.toggle('staged');
+    const { container } = await panel({ sections });
+    const [unstaged, staged] = container.querySelectorAll<HTMLElement>('.panel > section');
+    expect(unstaged?.style.flexGrow).toBe('1');
+    expect(staged?.classList.contains('closed')).toBe(true);
+    expect(staged?.style.flexGrow).toBe('');
+  });
+
+  it('sizes the message box from its divider, by key, and resets on a double-click', async () => {
+    const sections = new SectionsState();
+    const { container } = await panel({ sections });
+    const divider = container.querySelector<HTMLElement>(composeDivider);
+    expect(divider).not.toBeNull();
+    const compose = container.querySelector<HTMLElement>('.compose');
+    expect(compose?.style.height).toBe('');
+
+    // Up makes the box taller: it is anchored to the foot of the panel.
+    if (divider) await fireEvent.keyDown(divider, { key: 'ArrowUp' });
+    expect(sections.sizes.composeHeight).toBe(SECTION_LIMITS.composeHeight.min);
+    if (divider) await fireEvent.keyDown(divider, { key: 'ArrowUp', shiftKey: true });
+    expect(sections.sizes.composeHeight).toBe(SECTION_LIMITS.composeHeight.min + 32);
+    expect(compose?.style.height).toBe(`${SECTION_LIMITS.composeHeight.min + 32}px`);
+    expect(compose?.classList.contains('sized')).toBe(true);
+    if (divider) await fireEvent.keyDown(divider, { key: 'ArrowDown' });
+    expect(sections.sizes.composeHeight).toBe(SECTION_LIMITS.composeHeight.min + 24);
+
+    if (divider) await fireEvent.dblClick(divider);
+    expect(sections.sizes.composeHeight).toBeNull();
+    expect(compose?.style.height).toBe('');
+  });
+
+  it('commits from a folded message box', async () => {
+    const onCommit = vi.fn();
+    const { container, commit } = await panel({ onCommit });
+    commit.summary = 'Fix the build';
+    await fireEvent.click(fold(container, /Commit message/u));
+    expect(container.querySelector('.summary')).toBeNull();
+    expect(container.querySelector('.description')).toBeNull();
+    expect(container.querySelector(composeDivider)).toBeNull();
+
+    const button = container.querySelector<HTMLButtonElement>('button.commit');
+    expect(button?.disabled).toBe(false);
+    expect(button?.textContent).toMatch(/Commit 1 file/u);
+    if (button) await fireEvent.click(button);
+    expect(onCommit).toHaveBeenCalledOnce();
+  });
+
+  it('opens a folded message box when the caret is asked for', async () => {
+    const sections = new SectionsState();
+    sections.toggle('compose');
+    const { container, commit } = await panel({ sections });
+    expect(container.querySelector('.summary')).toBeNull();
+
+    commit.focus();
+    await waitFor(() => expect(document.activeElement?.classList.contains('summary')).toBe(true));
+    expect(sections.collapsed.compose).toBe(false);
+  });
+
+  it('opens a folded message box when amending starts, and lets it be folded again', async () => {
+    const sections = new SectionsState();
+    sections.toggle('compose');
+    const { container, commit } = await panel({ sections });
+    commit.amend = true;
+    await waitFor(() => expect(container.querySelector('.summary')).not.toBeNull());
+
+    // Folding it again while still amending is the user's choice, and is not undone.
+    await fireEvent.click(fold(container, /Commit message/u));
+    await tick();
+    expect(sections.collapsed.compose).toBe(true);
+    expect(container.querySelector('.summary')).toBeNull();
+  });
+
+  it('opens the list that holds a file put on screen from elsewhere', async () => {
+    const sections = new SectionsState();
+    sections.toggle('unstaged');
+    const { rerender } = await panel({ sections, openPath: null });
+    await rerender({ openPath: 'docs/ARCHITECTURE.md' });
+    expect(sections.collapsed.unstaged).toBe(false);
+  });
+
+  it('leaves a fold alone when the panel comes back on the same file', async () => {
+    const sections = new SectionsState();
+    sections.toggle('unstaged');
+    await panel({ sections, openPath: 'docs/ARCHITECTURE.md' });
+    await tick();
+    expect(sections.collapsed.unstaged).toBe(true);
+  });
+
+  it('fills the panel with the message box when both lists are folded', async () => {
+    const sections = new SectionsState();
+    sections.toggle('unstaged');
+    sections.toggle('staged');
+    const { container } = await panel({ sections });
+    expect(container.querySelector('.compose')?.classList.contains('fill')).toBe(true);
+    // Nothing to share the height with, so there is nothing to drag.
+    expect(container.querySelector(composeDivider)).toBeNull();
+    expect(container.querySelector(listDivider)).toBeNull();
+  });
+
+  it('remembers a fold for the next window', async () => {
+    const { container } = await panel();
+    await fireEvent.click(fold(container, /Staged files/u));
+    expect(new SectionsState().collapsed.staged).toBe(true);
   });
 });

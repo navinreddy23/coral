@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { render } from '@testing-library/svelte';
 import { fireEvent, waitFor } from '@testing-library/dom';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 vi.mock('../../src/ipc/invoke', () => ({ invoke: vi.fn(), isPreview: () => false }));
@@ -11,6 +11,8 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => undefined })
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 
 import Details from '../../src/app/Details.svelte';
+import { SECTION_LIMITS, SectionsState } from '../../src/state/sections.svelte';
+import { tick } from 'svelte';
 import { authorColourIndex } from '../../src/graph/initials';
 import type { ChangedFile, CommitDetail } from '../../src/ipc/types';
 
@@ -41,9 +43,15 @@ const props = {
   onOpenFile: () => {},
   onClearCompare: () => {},
   onCopied: () => {},
+  // A getter, so every spread of these props gets a panel layout of its own.
+  get sections() {
+    return new SectionsState();
+  },
 };
 
 describe('the commit panel', () => {
+  beforeEach(() => localStorage.clear());
+
   it('gives an author the colour the graph gives them', () => {
     // Both discs are the author's initials on one of eight fills, chosen by hashing who they
     // are — but the graph hashed the email and this hashed the name, so the same person came
@@ -206,5 +214,126 @@ describe('counting everything at a commit', () => {
       if (!container.querySelector('.count')) throw new Error('no count yet');
     });
     expect(container.querySelector('.count')?.textContent?.trim()).toBe('1 file at this commit');
+  });
+});
+
+describe('the commit panel sections', () => {
+  beforeEach(() => localStorage.clear());
+
+  const files: ChangedFile[] = [
+    { path: 'kernel/sched/core.c', oldPath: null, change: 'modified' },
+    { path: 'kernel/sched/fair.c', oldPath: null, change: 'modified' },
+  ];
+  const divider = '[role="separator"][aria-label="Resize the commit message and its files"]';
+
+  function withBody(): CommitDetail {
+    const d = detail(files);
+    return { ...d, commit: { ...d.commit, body: 'Pull scheduler fixes.\n\nThree of them.' } };
+  }
+
+  function fold(container: HTMLElement, name: RegExp): HTMLButtonElement {
+    const button = [...container.querySelectorAll<HTMLButtonElement>('button.fold')].find((b) =>
+      name.test(b.textContent ?? ''),
+    );
+    if (!button) throw new Error(`no fold for ${name}`);
+    return button;
+  }
+
+  it('scrolls the message and the files apart, with a divider between them', () => {
+    const { container } = render(Details, { props: { ...props, detail: withBody() } });
+    const head = container.querySelector('.head');
+    const scroll = container.querySelector('.scroll');
+    expect(head?.querySelector('.body')).not.toBeNull();
+    expect(scroll?.querySelector('.files')).not.toBeNull();
+    expect(head?.contains(scroll ?? null)).toBe(false);
+    expect(container.querySelector(divider)).not.toBeNull();
+    expect(head?.classList.contains('shared')).toBe(true);
+
+    // happy-dom does not lay out, so the scrolling is read from the rules.
+    const rules = [...document.styleSheets]
+      .flatMap((sheet) => [...(sheet.cssRules ?? [])])
+      .map((r) => r.cssText);
+    for (const part of ['head', 'scroll']) {
+      const rule = rules.find(
+        (text) => new RegExp(`\\.${part}[^{,]*\\{`, 'u').test(text) && /overflow-y:\s*auto/u.test(text),
+      );
+      expect(rule, `.${part} scrolls on its own`).toBeDefined();
+    }
+  });
+
+  it('folds the message to its summary and gives the files the panel', async () => {
+    const { container } = render(Details, { props: { ...props, detail: withBody() } });
+    const summary = fold(container, /Merge tag something/u);
+    await fireEvent.click(summary);
+    expect(summary.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('.body')).toBeNull();
+    expect(container.querySelector('dl')).toBeNull();
+    expect(container.querySelector('#detail-message')).toBeNull();
+    expect(container.querySelector(divider)).toBeNull();
+    expect(container.querySelector('.head')?.classList.contains('closed')).toBe(true);
+    expect(container.querySelectorAll('.files li')).toHaveLength(2);
+  });
+
+  it('folds the files to their count and gives the message the panel', async () => {
+    const { container } = render(Details, { props: { ...props, detail: withBody() } });
+    const heading = fold(container, /2 files/u);
+    await fireEvent.click(heading);
+    expect(heading.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('.files')).toBeNull();
+    expect(container.querySelector('.filebar')).toBeNull();
+    expect(container.querySelector(divider)).toBeNull();
+    expect(container.querySelector('.head')?.classList.contains('shared')).toBe(false);
+    expect(container.querySelector('.body')).not.toBeNull();
+  });
+
+  it('sizes the message from its divider and resets on a double-click', async () => {
+    const sections = new SectionsState();
+    const { container } = render(Details, { props: { ...props, sections, detail: withBody() } });
+    const handle = container.querySelector<HTMLElement>(divider);
+    const head = container.querySelector<HTMLElement>('.head');
+    expect(head?.style.height).toBe('');
+
+    // Down makes the message taller: it is anchored to the top of the panel.
+    if (handle) await fireEvent.keyDown(handle, { key: 'ArrowDown', shiftKey: true });
+    expect(sections.sizes.messageHeight).toBe(SECTION_LIMITS.messageHeight.min);
+    sections.resize('messageHeight', 220);
+    await tick();
+    expect(head?.style.height).toBe('220px');
+    expect(head?.classList.contains('sized')).toBe(true);
+
+    if (handle) await fireEvent.dblClick(handle);
+    expect(sections.sizes.messageHeight).toBeNull();
+    expect(head?.style.height).toBe('');
+  });
+
+  it('keeps a fold from one commit to the next', async () => {
+    const sections = new SectionsState();
+    const { container, rerender } = render(Details, {
+      props: { ...props, sections, detail: withBody() },
+    });
+    await fireEvent.click(fold(container, /Merge tag something/u));
+    const next = withBody();
+    await rerender({ detail: { ...next, commit: { ...next.commit, oid: 'f'.repeat(40), summary: 'Another' } } });
+    expect(fold(container, /Another/u).getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('.body')).toBeNull();
+  });
+
+  it('folds the comparison the same way', async () => {
+    const { container } = render(Details, {
+      props: {
+        ...props,
+        detail: null,
+        compare: { from: 'a'.repeat(40), to: 'b'.repeat(40), files },
+      },
+    });
+    await fireEvent.click(fold(container, /Comparing two commits/u));
+    expect(container.querySelector('.single')).toBeNull();
+    expect(container.querySelectorAll('.files li')).toHaveLength(2);
+  });
+
+  it('has nothing to fold while there is no commit', () => {
+    const { container } = render(Details, { props: { ...props, detail: null } });
+    expect(container.querySelector('button.fold')).toBeNull();
+    expect(container.querySelector('[role="separator"]')).toBeNull();
   });
 });

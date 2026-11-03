@@ -13,6 +13,7 @@
   import GraphCanvas from '../graph/GraphCanvas.svelte';
   import Splitter from './Splitter.svelte';
   import { fitColumns, fitPanels, PANE_LIMITS, PanesState } from '../state/panes.svelte';
+  import { SectionsState } from '../state/sections.svelte';
   import DiffView from './DiffView.svelte';
   import { inTheWay } from './overwrite';
   import { DiffState } from '../state/diff.svelte';
@@ -450,6 +451,7 @@
   /** Width of the graph pane, which is what decides whether a body preview has room. */
   let paneWidth = $state(0);
   const panes = new PanesState();
+  const sections = new SectionsState();
   const diff = new DiffState(views);
   const actions = new ActionsState();
   const commitDraft = new CommitState();
@@ -5649,6 +5651,7 @@
             onFileMenu={fileMenu}
             onCommit={() => void recordCommit(false)}
             locks={lfs.byPath}
+            {sections}
           />
         </aside>
       {:else}
@@ -5678,6 +5681,7 @@
           onGrouping={(g) => views.set('commitFiles', g)}
           onOpenFile={openFile}
           onClearCompare={clearCompare}
+          {sections}
           onCopied={(ok, what) =>
             ok
               ? toasts.push('ok', `Copied ${what.toLowerCase()}`)

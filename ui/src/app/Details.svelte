@@ -4,6 +4,7 @@
   import { shortAge } from './age';
   import { describe as describeSignature } from './verification';
   import LockMark from './LockMark.svelte';
+  import Splitter from './Splitter.svelte';
   import { copyText } from './clipboard';
   import { authorColourIndex, initialsOf } from '../graph/initials';
   import { buildTree } from '../diff/tree';
@@ -12,6 +13,12 @@
   import type { Entry } from './FileTree.svelte';
   import type { ChangedFile, CommitDetail, FileChange, LfsLock, Verification } from '../ipc/types';
   import type { Grouping } from '../state/views.svelte';
+  import {
+    fitHeight,
+    LIST_FLOOR_PX,
+    SECTION_LIMITS,
+    type SectionsState,
+  } from '../state/sections.svelte';
 
   const {
     detail,
@@ -34,6 +41,7 @@
     locks = new Map(),
     onClearCompare,
     onCopied,
+    sections,
   }: {
     detail: CommitDetail | null;
     /** The commit's note, from `refs/notes/commits`; null for none or not yet read. */
@@ -72,7 +80,38 @@
     locks?: Map<string, LfsLock>;
     /** Says whether the clipboard took the object id, which a button cannot tell on its own. */
     onCopied: (ok: boolean, what: string) => void;
+    /** How the panel's height is shared between the message and the files, and folds. */
+    sections: SectionsState;
   } = $props();
+
+  const closed = $derived(sections.collapsed);
+  const hasFiles = $derived(compare !== null || detail !== null);
+  /** A message and a file list both open, so there is a height to share between them. */
+  const sharing = $derived(hasFiles && !closed.message && !closed.files);
+
+  let asidePx = $state(0);
+  let headPx = $state(0);
+
+  /**
+   * What the files must keep under a dragged message: the heading and the bar with the
+   * grouping and "View all files" on it come first, and a floor that counted only a list's
+   * heading left room for those and not one file.
+   */
+  const FILES_FLOOR_PX = LIST_FLOOR_PX + 64;
+
+  /** The message's height as drawn: as dragged, unless the panel cannot spare it. */
+  const headDrawn = $derived.by(() => {
+    const want = sections.sizes.messageHeight;
+    if (want === null || !sharing) return null;
+    return fitHeight(want, asidePx - 32, FILES_FLOOR_PX, SECTION_LIMITS.messageHeight.min);
+  });
+
+  /** The tallest the message can be dragged here and now, which is also the most stored. */
+  const headMax = $derived(
+    asidePx > 0
+      ? Math.max(SECTION_LIMITS.messageHeight.min, asidePx - 32 - FILES_FLOOR_PX)
+      : SECTION_LIMITS.messageHeight.max,
+  );
 
   /**
    * The disc behind an author's initials, keyed by who they are.
@@ -195,7 +234,15 @@
   };
 </script>
 
-<aside>
+<aside bind:clientHeight={asidePx}>
+  <div
+    class="head"
+    class:shared={sharing}
+    class:sized={headDrawn !== null}
+    class:closed={hasFiles && closed.message}
+    style:height={headDrawn !== null ? `${headDrawn}px` : null}
+    bind:clientHeight={headPx}
+  >
   {#if error}
     <p class="error">{error}</p>
   {:else if loading}
@@ -219,7 +266,21 @@
       Two commits, so there is no one message or author to show: what the panel has to say is
       what differs between them, and which two they are.
     -->
-    <h2>Comparing two commits</h2>
+    <h2>
+      <button
+        class="fold"
+        aria-expanded={!closed.message}
+        aria-controls="detail-message"
+        onclick={() => sections.toggle('message')}
+      >
+        <span class="caret">
+          <Icon name={closed.message ? 'chevronRight' : 'chevronDown'} size={14} />
+        </span>
+        <span>Comparing two commits</span>
+      </button>
+    </h2>
+    {#if !closed.message}
+    <div id="detail-message">
     <dl class="fields">
       <dt>From</dt>
       <dd class="mono">{compare.from.slice(0, 12)}</dd>
@@ -227,6 +288,8 @@
       <dd class="mono">{compare.to.slice(0, 12)}</dd>
     </dl>
     <button class="single" onclick={onClearCompare}>Show just the newer commit</button>
+    </div>
+    {/if}
   {:else if !detail}
     <p class="muted">
       {#if nothing}
@@ -237,7 +300,24 @@
       {/if}
     </p>
   {:else}
-    <h2>{detail.commit.summary}</h2>
+    <!-- The summary is the heading that folds the rest away: folded, it is still the line that
+         says which commit the files below belong to. -->
+    <h2>
+      <button
+        class="fold"
+        aria-expanded={!closed.message}
+        aria-controls="detail-message"
+        onclick={() => sections.toggle('message')}
+      >
+        <span class="caret">
+          <Icon name={closed.message ? 'chevronRight' : 'chevronDown'} size={14} />
+        </span>
+        <span>{detail.commit.summary}</span>
+      </button>
+    </h2>
+
+    {#if !closed.message}
+    <div id="detail-message">
 
     <!--
       Who wrote it, on one line, with the same initials disc the graph draws its nodes with —
@@ -308,16 +388,43 @@
         </dd>
       {/if}
     </dl>
+    </div>
+    {/if}
   {/if}
+  </div>
 
-  {#if compare || detail}
+  {#if hasFiles}
+    {#if sharing}
+      <Splitter
+        vertical
+        grip
+        label="Resize the commit message and its files"
+        value={sections.sizes.messageHeight ?? headPx}
+        min={SECTION_LIMITS.messageHeight.min}
+        max={headMax}
+        onresize={(px) => sections.resize('messageHeight', Math.min(px, headMax))}
+        onreset={() => sections.reset('messageHeight')}
+      />
+    {/if}
+    <div class="part" class:closed={closed.files}>
     <h3>
-      {files.length} file{files.length === 1 ? '' : 's'}{compare
-        ? files.length === 1
-          ? ' differs'
-          : ' differ'
-        : ''}
+      <button
+        class="fold"
+        aria-expanded={!closed.files}
+        aria-controls="detail-files"
+        onclick={() => sections.toggle('files')}
+      >
+        <span class="caret">
+          <Icon name={closed.files ? 'chevronRight' : 'chevronDown'} size={13} />
+        </span>
+        {files.length} file{files.length === 1 ? '' : 's'}{compare
+          ? files.length === 1
+            ? ' differs'
+            : ' differ'
+          : ''}
+      </button>
     </h3>
+    {#if !closed.files}
     <div class="filebar">
       <!-- Path and Tree are how the changed files are arranged. Everything at this commit is
            thousands of files in a directory structure, which only reads as a tree, so the
@@ -331,6 +438,7 @@
         View all files
       </label>
     </div>
+    <div class="scroll" id="detail-files">
     {#if showAll}
       {#if loadingAll}
         <p class="muted">Reading the tree…</p>
@@ -369,15 +477,45 @@
       {/if}
     </ul>
     {/if}
+    </div>
+    {/if}
+    </div>
   {/if}
 </aside>
 
 <style>
+  /*
+   * Two parts that scroll on their own: what the commit says, and what it changed. As one
+   * scrolling column, a kernel merge's message pushed the file list a screen down, and a
+   * seventeen-thousand-file list scrolled the message away for good.
+   */
   aside {
-    width: var(--details-w, 340px); flex: 0 0 auto; overflow-y: auto;
+    width: var(--details-w, 340px); flex: 0 0 auto; min-height: 0; overflow: hidden;
+    display: flex; flex-direction: column;
     border: var(--hairline) solid var(--border); border-radius: var(--radius-3); background: var(--bg-0);
     padding: var(--space-3); font-size: var(--text-base);
   }
+  .head { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  /* Undragged, the message is as tall as it is, up to half the panel; the files have the rest.
+     The room at its foot keeps the grip off the last line of the metadata. */
+  .head.shared { flex: 0 1 auto; max-height: 50%; padding-bottom: var(--space-3); }
+  .head.shared.sized { flex: 0 0 auto; max-height: none; }
+  .head.closed { flex: 0 0 auto; }
+  .part { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+  .part.closed { flex: 0 0 auto; }
+  .part > h3 { flex: 0 0 auto; margin-top: var(--space-3); }
+  .filebar { flex: 0 0 auto; }
+  .scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .fold {
+    display: flex; align-items: flex-start; gap: var(--space-1); cursor: pointer; text-align: left;
+    font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit;
+    padding: 0; margin: 0; background: var(--bg-0); border: 0; border-radius: var(--radius-0);
+  }
+  h3 .fold { align-items: center; }
+  .fold:hover { color: var(--fg-0); }
+  .fold:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .caret { flex: 0 0 auto; display: flex; color: var(--fg-2); }
+  h2 .caret { margin-top: 0.2em; }
   /*
    * Every element that carries text in this panel paints its own opaque background.
    *
@@ -402,7 +540,7 @@
    */
   .who {
     display: flex; align-items: center; gap: var(--space-2);
-    margin-bottom: var(--space-3); min-width: 0;
+    margin-bottom: var(--space-4); min-width: 0;
   }
   /* The same disc the canvas fills a node with, at the same size, so the row that was clicked
      and the panel that answers wear one mark between them. */
@@ -450,7 +588,7 @@
   }
   .single:hover { text-decoration: underline; }
   .body {
-    margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3);
+    margin: 0 0 var(--space-4); padding: var(--space-3);
     /* A plate one step off the panel, holding the strongest text on it. */
     background: var(--bg-1); border-radius: var(--radius-1);
     /* A rule down the leading edge, as a quoted message is set everywhere else. */
@@ -537,6 +675,7 @@
     padding: 2px var(--space-2); margin: 0 calc(-1 * var(--space-2));
     background: var(--bg-0); border: 0; border-radius: var(--radius-1); cursor: pointer;
     color: var(--fg-1); overflow: hidden;
+    min-height: calc(var(--row-h) - 4px);
   }
   .file:hover { background: var(--bg-1); }
   .file.open {

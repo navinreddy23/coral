@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { tick, untrack } from 'svelte';
   import Icon from './Icon.svelte';
+  import Splitter from './Splitter.svelte';
   import Changes, { kindOf, markOf } from './Changes.svelte';
   import LockMark from './LockMark.svelte';
   import { buildTree } from '../diff/tree';
@@ -7,6 +9,12 @@
   import type { CommitState } from '../state/commit.svelte';
   import type { WorktreeState } from '../state/worktree.svelte';
   import type { Grouping } from '../state/views.svelte';
+  import {
+    fitHeight,
+    LIST_FLOOR_PX,
+    SECTION_LIMITS,
+    type SectionsState,
+  } from '../state/sections.svelte';
 
   const {
     worktree,
@@ -19,6 +27,7 @@
     onDiscard,
     onFileMenu,
     onCommit,
+    sections,
     locks = new Map(),
   }: {
     worktree: WorktreeState;
@@ -62,6 +71,8 @@
      * makes.
      */
     onCommit: () => void;
+    /** How the panel's height is shared between its sections, and which are folded away. */
+    sections: SectionsState;
   } = $props();
 
   /**
@@ -80,11 +91,86 @@
   // Only when asked. The panel appears whenever the working copy is selected, and taking the
   // caret every time it did would put keystrokes meant for the list into the message.
   let focusedAt = 0;
+  // A folded message box is opened first: the caret was asked for, and it cannot go into a
+  // field that is not there.
   $effect(() => {
     if (draft.focusTick === focusedAt) return;
     focusedAt = draft.focusTick;
-    summaryField?.focus();
+    untrack(() => sections.open('compose'));
+    void tick().then(() => summaryField?.focus());
   });
+
+  // Ticking amend from the graph's menu fills the message in; it is no use doing that out of
+  // sight.
+  $effect(() => {
+    if (draft.amend) untrack(() => sections.open('compose'));
+  });
+
+  /*
+   * A file whose diff is put on screen from elsewhere — the diff's own next and previous — is
+   * shown in its list, so the list never hides what is open. Only on a change of file: showing
+   * the panel again must not undo a fold the user made while that file was already open.
+   */
+  let seenPath = untrack(() => openPath);
+  $effect(() => {
+    const path = openPath;
+    if (path === seenPath) return;
+    seenPath = path;
+    if (path === null) return;
+    untrack(() => {
+      const unstaged = worktree.unstaged.some((e) => e.path === path);
+      const staged = worktree.staged.some((e) => e.path === path);
+      if ((unstaged && !sections.collapsed.unstaged) || (staged && !sections.collapsed.staged)) {
+        return;
+      }
+      if (unstaged) sections.open('unstaged');
+      else if (staged) sections.open('staged');
+    });
+  });
+
+  const closed = $derived(sections.collapsed);
+  const bothLists = $derived(!closed.unstaged && !closed.staged);
+  const anyList = $derived(!closed.unstaged || !closed.staged);
+
+  let panelPx = $state(0);
+  let unstagedPx = $state(0);
+  let stagedPx = $state(0);
+  let composePx = $state(0);
+
+  /**
+   * The two lists as flex weights. A fraction rather than a height, so a taller window gives
+   * both lists more and the split stays where it was put.
+   */
+  const unstagedGrow = $derived(bothLists ? sections.sizes.unstagedShare : 1);
+  const stagedGrow = $derived(bothLists ? 1 - sections.sizes.unstagedShare : 1);
+
+  /** The height the lists must keep under the message box: a floor for each one open. */
+  const listsFloor = $derived((bothLists ? 2 : 1) * LIST_FLOOR_PX + (bothLists ? 0 : 32));
+
+  /** The message box's height as drawn: as dragged, unless the window cannot spare it. */
+  const composeDrawn = $derived.by(() => {
+    const want = sections.sizes.composeHeight;
+    if (want === null || !anyList) return null;
+    return fitHeight(want, panelPx - 48, listsFloor, SECTION_LIMITS.composeHeight.min);
+  });
+
+  /**
+   * The tallest the box can be dragged here and now.
+   *
+   * A drag is stored no taller than this. The pointer can go on past the point the box stops
+   * at, and storing where it went rather than where the box went meant that folding a list
+   * later gave the room it freed to the message box rather than to the list left open.
+   */
+  const composeMax = $derived(
+    panelPx > 0
+      ? Math.max(SECTION_LIMITS.composeHeight.min, panelPx - 48 - listsFloor)
+      : SECTION_LIMITS.composeHeight.max,
+  );
+
+  function resizeLists(px: number): void {
+    const both = unstagedPx + stagedPx;
+    if (both > 0) sections.resize('unstagedShare', px / both);
+  }
 
   /** Collapsed directories, per side, so expanding one list leaves the other alone. */
   let closedUnstaged = $state<Record<string, boolean>>({});
@@ -116,7 +202,7 @@
   const anyClosed = $derived(Object.values(closedUnstaged).some(Boolean));
 </script>
 
-<div class="panel">
+<div class="panel" bind:clientHeight={panelPx}>
   <header>
     <span class="count">
       {worktree.dirty ? worktree.status?.entries.length ?? 0 : 'No'} file
@@ -165,11 +251,24 @@
     Unstaged first, then staged: work moves down the panel in the direction it moves through
     git, and the list being edited is the one at the top where the eye starts.
   -->
-  <section>
+  <section
+    class:closed={closed.unstaged}
+    style:flex-grow={closed.unstaged ? null : unstagedGrow}
+    bind:clientHeight={unstagedPx}
+  >
     <h3>
-      <span class="caret"><Icon name="chevronDown" size={13} /></span>
-      Unstaged files ({worktree.unstaged.length})
-      {#if grouping === 'tree' && worktree.unstaged.length > 0}
+      <button
+        class="fold"
+        aria-expanded={!closed.unstaged}
+        aria-controls="staging-unstaged"
+        onclick={() => sections.toggle('unstaged')}
+      >
+        <span class="caret">
+          <Icon name={closed.unstaged ? 'chevronRight' : 'chevronDown'} size={13} />
+        </span>
+        Unstaged files ({worktree.unstaged.length})
+      </button>
+      {#if !closed.unstaged && grouping === 'tree' && worktree.unstaged.length > 0}
         <button
           class="expand"
           onclick={() => (anyClosed ? expandAll('unstaged') : collapseAll('unstaged'))}
@@ -182,6 +281,8 @@
         >Stage all changes</button>
       {/if}
     </h3>
+    {#if !closed.unstaged}
+    <div class="list" id="staging-unstaged">
     {#if worktree.unstaged.length === 0}
       <p class="empty">Nothing unstaged.</p>
     {:else if grouping === 'tree'}
@@ -218,16 +319,47 @@
         {/each}
       </ul>
     {/if}
+    </div>
+    {/if}
   </section>
 
   <!-- The two halves are different places, not one list with a heading in the middle: a file
-       moves between them, and the rule is what makes the move visible. -->
-  <hr class="between" />
+       moves between them, and the edge is what makes the move visible. It is also the handle
+       that shares the height out between them, while both are open. -->
+  {#if bothLists}
+    <div class="between">
+      <Splitter
+        vertical
+        grip
+      label="Resize the unstaged and staged lists"
+        value={unstagedPx}
+        min={0}
+        max={unstagedPx + stagedPx}
+        onresize={resizeLists}
+        onreset={() => sections.reset('unstagedShare')}
+      />
+    </div>
+  {:else}
+    <hr class="rule" />
+  {/if}
 
-  <section>
+  <section
+    class:closed={closed.staged}
+    style:flex-grow={closed.staged ? null : stagedGrow}
+    bind:clientHeight={stagedPx}
+  >
     <h3>
-      <span class="caret"><Icon name="chevronDown" size={13} /></span>
-      Staged files ({worktree.staged.length})
+      <button
+        class="fold"
+        aria-expanded={!closed.staged}
+        aria-controls="staging-staged"
+        onclick={() => sections.toggle('staged')}
+      >
+        <span class="caret">
+          <Icon name={closed.staged ? 'chevronRight' : 'chevronDown'} size={13} />
+        </span>
+        Staged files ({worktree.staged.length})
+      </button>
       {#if worktree.staged.length > 0}
         <button
           class="all"
@@ -235,6 +367,8 @@
         >Unstage all changes</button>
       {/if}
     </h3>
+    {#if !closed.staged}
+    <div class="list" id="staging-staged">
     {#if worktree.staged.length === 0}
       <p class="empty">Nothing staged. A commit needs something in here.</p>
     {:else if grouping === 'tree'}
@@ -271,9 +405,47 @@
         {/each}
       </ul>
     {/if}
+    </div>
+    {/if}
   </section>
 
-  <div class="compose">
+  {#if anyList && !closed.compose}
+    <Splitter
+      vertical
+      grows="left"
+      grip
+      label="Resize the commit message"
+      value={sections.sizes.composeHeight ?? composePx}
+      min={SECTION_LIMITS.composeHeight.min}
+      max={composeMax}
+      onresize={(px) => sections.resize('composeHeight', Math.min(px, composeMax))}
+      onreset={() => sections.reset('composeHeight')}
+    />
+  {/if}
+
+  <div
+    class="compose"
+    class:closed={closed.compose}
+    class:fill={!anyList && !closed.compose}
+    class:sized={composeDrawn !== null && !closed.compose}
+    style:height={composeDrawn !== null && !closed.compose ? `${composeDrawn}px` : null}
+    bind:clientHeight={composePx}
+  >
+    <h3>
+      <button
+        class="fold"
+        aria-expanded={!closed.compose}
+        aria-controls="staging-compose"
+        onclick={() => sections.toggle('compose')}
+      >
+        <span class="caret">
+          <Icon name={closed.compose ? 'chevronRight' : 'chevronDown'} size={13} />
+        </span>
+        Commit message
+      </button>
+    </h3>
+    {#if !closed.compose}
+    <div class="fields" id="staging-compose">
     <label class="amend">
       <input type="checkbox" bind:checked={draft.amend} />
       Amend the previous commit
@@ -292,6 +464,8 @@
     </div>
     <textarea class="description" rows="3" placeholder="Description" bind:value={draft.description}
     ></textarea>
+    </div>
+    {/if}
     <button class="commit" disabled={!canCommit} onclick={onCommit}>
       <!-- A disabled button says what is missing rather than what it would have done. -->
       {#if total === 0 && !draft.amend}
@@ -323,11 +497,15 @@
   .panel > section {
     flex: 1 1 0; min-height: 64px; display: flex; flex-direction: column;
   }
+  /* Folded to its heading, which gives its share of the height to whatever is still open. */
+  .panel > section.closed { flex: 0 0 auto; min-height: 0; }
   /* The heading stays put; the list under it is what moves. */
   .panel > section > h3 { flex: 0 0 auto; }
-  .panel > section > .flat,
-  .panel > section > :global(.tree) { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .panel > section > .list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
   .compose { flex: 0 0 auto; }
+  /* Both lists folded: the message box is all there is, so it takes the panel. */
+  .compose.fill { flex: 1 1 auto; min-height: 0; }
+  .compose.sized { min-height: 0; }
   /*
    * One line, whatever the branch is called. It used to wrap, and a branch name like
    * `feature/shout` was enough to put the discard button on a line of its own under the count,
@@ -384,7 +562,17 @@
   h3.conflict { color: var(--danger); }
   /* The heading is a label; the buttons on it are still sentences. */
   h3 button { text-transform: none; letter-spacing: normal; }
-  .caret { color: var(--fg-2); }
+  .caret { color: var(--fg-2); display: flex; }
+  /* The heading's own words are what fold the section, so it reads as a heading, not as a
+     button sitting on one. */
+  h3 .fold {
+    display: flex; align-items: center; gap: var(--space-1); cursor: pointer;
+    text-align: left; white-space: nowrap;
+    font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit;
+    padding: 0; margin: 0; background: none; border: 0; border-radius: var(--radius-0);
+  }
+  h3 .fold:hover { color: var(--fg-0); }
+  h3 .fold:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   /* The whole-list action, set apart from the heading it belongs to rather than looking like
      part of the count. */
   .all {
@@ -405,8 +593,8 @@
   .expand + .all { margin-left: var(--space-2); }
   /* A real edge, not a hairline: the two halves are different places and a file moves between
      them, which the eye has to be able to see happen. */
-  .between {
-    border: 0; height: 1px; margin: var(--space-3) 0;
+  .between, .rule {
+    flex: 0 0 auto; border: 0; height: 1px; margin: var(--space-3) 0;
     background: var(--border-strong);
   }
   .empty { margin: 0 0 var(--space-2) 4px; color: var(--fg-2); font-size: var(--text-sm); }
@@ -419,6 +607,7 @@
     flex: 1; min-width: 0; text-align: left; cursor: pointer;
     font: inherit; font-size: var(--text-base); padding: 2px var(--space-2);
     background: var(--bg-0); border: 0; border-radius: var(--radius-0); color: var(--fg-1);
+    min-height: calc(var(--row-h) - 4px);
   }
   .file.open { background: var(--accent-soft); color: var(--fg-0); }
   /* The end of a path identifies the file, so a long one is cut from the left. */
@@ -453,7 +642,7 @@
    * and giving it an edge and a fill of its own says which of the two it is.
    */
   .compose {
-    position: sticky; bottom: 0; margin-top: var(--space-3);
+    position: sticky; bottom: 0;
     display: flex; flex-direction: column; gap: var(--space-2);
     padding: var(--space-3); border: var(--hairline) solid var(--border);
     border-radius: var(--radius-2);
@@ -471,7 +660,15 @@
     transition: border-color var(--fast) var(--ease);
   }
   .summary { padding-right: 3em; font-weight: var(--weight-medium); }
-  .description { resize: vertical; line-height: var(--leading-body); }
+  /* The divider above the box is how it is made taller; a second grip on the field would be
+     two ways to do one thing, and only one of them would be remembered. */
+  .description { resize: none; line-height: var(--leading-body); }
+  .fields { display: flex; flex-direction: column; gap: var(--space-2); }
+  /* Given a height, the description is what takes it: that is the field a longer message
+     needs room in. */
+  .compose.sized .fields, .compose.fill .fields { flex: 1 1 auto; min-height: 0; }
+  .compose.sized .description, .compose.fill .description { flex: 1 1 auto; min-height: 2.6em; }
+  .compose h3 { margin: 0; }
   .summary:focus, .description:focus { border-color: var(--accent); }
   /*
    * Quiet until it matters. A number counting down beside every keystroke is a nag; what the
