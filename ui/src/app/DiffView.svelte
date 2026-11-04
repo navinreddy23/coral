@@ -530,9 +530,13 @@
       {:else if diff.blame === null || diff.text === null}
         <p class="muted">Working out who wrote each line…</p>
       {:else}
-        {#if range !== null}
-          <!-- Sticky over the table, so the way on from a pick is in view wherever it was made. -->
-          <div class="picked" role="status">
+        <!-- Always there, so picking a line moves nothing: a bar that appeared on the first
+             pick pushed every row down by its height, and the second click landed on the line
+             just picked and let it go. Sticky, so the way on is in view wherever it was made. -->
+        <div class="picked" role="status">
+          {#if range === null}
+            <span class="muted">Pick a line number for the history of that line; Shift-click another for the lines between.</span>
+          {:else}
             <span>{linesLabel(range.from, range.to)} picked</span>
             <button
               class="go"
@@ -543,8 +547,8 @@
             <button onclick={() => (range = null)} aria-label="Clear the picked lines">
               <Icon name="close" size={12} />
             </button>
-          </div>
-        {/if}
+          {/if}
+        </div>
         <table class="lines blame">
           <tbody>
             {#each blamed as line (line.no)}
@@ -559,7 +563,7 @@
                   {/if}
                 </td>
                 <td
-                  class="no pick"
+                  class="no line-pick"
                   onclick={(e) => pickLine(line.no, e)}
                   title="Pick this line; Shift-click another to pick the lines between"
                 >{line.no}</td>
@@ -888,8 +892,10 @@
     border-bottom: 1px solid var(--border); color: var(--fg-1); font-size: var(--text-sm);
   }
   .picked .go { color: var(--fg-0); border-color: var(--accent); }
-  td.no.pick { cursor: pointer; }
-  td.no.pick:hover { color: var(--fg-0); }
+  .picked { min-height: 20px; }
+  .picked .muted { color: var(--fg-2); }
+  td.no.line-pick { cursor: pointer; }
+  td.no.line-pick:hover { color: var(--fg-0); }
   tr.ranged td.no { background: var(--accent-soft); color: var(--fg-0); box-shadow: inset 2px 0 0 var(--accent-line); }
   tr.ranged td.text { background: var(--accent-soft); }
 

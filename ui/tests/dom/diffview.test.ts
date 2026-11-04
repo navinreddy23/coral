@@ -216,6 +216,9 @@ describe('the diff viewer', () => {
     const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
 
     const numbers = view.container.querySelectorAll('table.blame td.no');
+    // Not `.pick`: that is the line-staging button's class, and its full width pushed the
+    // code column a quarter of the pane to the right in the real window.
+    expect(numbers[0]?.classList.contains('pick')).toBe(false);
     await fireEvent.click(numbers[2] as HTMLElement);
     await fireEvent.click(numbers[0] as HTMLElement, { shiftKey: true });
     expect(view.container.querySelectorAll('tr.ranged')).toHaveLength(3);
@@ -231,7 +234,9 @@ describe('the diff viewer', () => {
     await fireEvent.click(numbers[1] as HTMLElement);
     expect(view.container.querySelector('.picked .go')?.textContent).toContain('this line');
     await fireEvent.click(numbers[1] as HTMLElement);
-    expect(view.container.querySelector('.picked')).toBeNull();
+    // The bar stays, saying how to pick, so nothing below it moves.
+    expect(view.container.querySelector('.picked .go')).toBeNull();
+    expect(view.container.querySelector('.picked')?.textContent).toContain('Pick a line number');
   });
 
   it('shows a blame that failed rather than waiting on it for ever', () => {
