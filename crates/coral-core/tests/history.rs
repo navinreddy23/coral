@@ -518,3 +518,47 @@ async fn dates_bound_the_search_even_under_an_older_commit() {
         .unwrap_err();
     assert_eq!(err.code(), "refused");
 }
+
+#[tokio::test]
+async fn the_history_of_some_lines_is_the_commits_that_changed_them_across_a_rename() {
+    let repo = TestRepo::new().write("f.txt", "a\nb\nc\nd\n").commit("one");
+    let repo = repo
+        .write("f.txt", "a\nB\nc\nd\n")
+        .commit("two changes line 2");
+    let repo = repo
+        .write("f.txt", "a\nB\nc\nD\n")
+        .commit("three changes line 4");
+    repo.git(["mv", "f.txt", "g.txt"]);
+    let repo = repo.commit("renamed");
+    let repo = repo
+        .write("g.txt", "a\nBB\nc\nD\n")
+        .commit("four changes line 2");
+
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+    let line_two = loc
+        .line_history(&runner, "HEAD", "g.txt", (2, 2), 50)
+        .await
+        .unwrap();
+    let said: Vec<String> = line_two.iter().map(|c| c.summary.to_string()).collect();
+    assert_eq!(said, ["four changes line 2", "two changes line 2", "one"]);
+
+    let line_four = loc
+        .line_history(&runner, "HEAD", "g.txt", (4, 4), 50)
+        .await
+        .unwrap();
+    assert_eq!(line_four[0].summary, "three changes line 4");
+
+    // The limit holds, and a range that is not one is refused before git is asked.
+    let newest = loc
+        .line_history(&runner, "HEAD", "g.txt", (2, 2), 1)
+        .await
+        .unwrap();
+    assert_eq!(newest.len(), 1);
+    assert!(
+        loc.line_history(&runner, "HEAD", "g.txt", (3, 2), 50)
+            .await
+            .is_err()
+    );
+}

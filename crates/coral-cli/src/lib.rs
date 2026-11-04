@@ -302,6 +302,10 @@ pub enum Command {
         /// Match added or removed content.
         #[arg(long)]
         search: Option<String>,
+        /// Only commits that changed these lines of --path, as `FROM,TO` at --rev. Follows the
+        /// lines across renames, so --follow is not needed.
+        #[arg(long, value_name = "FROM,TO", requires = "path", conflicts_with_all = ["follow", "author", "grep", "search"])]
+        lines: Option<String>,
         #[arg(long, default_value_t = 50)]
         limit: u64,
     },
@@ -558,26 +562,7 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
         Command::Diff { staged, paths } => {
             output::render(&commands::diff::run(repo, staged, &paths).await)
         }
-        Command::Log {
-            rev,
-            path,
-            follow,
-            author,
-            grep,
-            search,
-            limit,
-        } => {
-            let q = coral_core::history::LogQuery {
-                rev: Some(rev),
-                path,
-                follow,
-                author,
-                grep,
-                pickaxe: search,
-                limit: Some(limit),
-            };
-            output::render(&commands::log::run(repo, &q).await)
-        }
+        command @ Command::Log { .. } => dispatch_log(command, repo).await,
         Command::Find { query, limit } => {
             output::render(&commands::find::run(repo, &query, limit).await)
         }
@@ -631,6 +616,36 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
 }
 
 /// Remote-facing commands, split out so each dispatcher stays readable.
+async fn dispatch_log(command: Command, repo: &std::path::Path) -> output::Rendered {
+    let Command::Log {
+        rev,
+        path,
+        follow,
+        author,
+        grep,
+        search,
+        lines,
+        limit,
+    } = command
+    else {
+        unreachable!("routed by `dispatch`")
+    };
+    if let Some(lines) = lines {
+        let file = path.unwrap_or_default();
+        return output::render(&commands::log::lines(repo, &rev, &file, &lines, limit).await);
+    }
+    let q = coral_core::history::LogQuery {
+        rev: Some(rev),
+        path,
+        follow,
+        author,
+        grep,
+        pickaxe: search,
+        limit: Some(limit),
+    };
+    output::render(&commands::log::run(repo, &q).await)
+}
+
 async fn dispatch_remote(command: Command, repo: &std::path::Path) -> output::Rendered {
     match command {
         Command::Remotes => output::render(&commands::remote::list(repo).await),

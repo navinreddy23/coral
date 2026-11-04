@@ -168,6 +168,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         graph::worktree_diff,
         graph::file_blame,
         graph::file_history,
+        graph::line_history,
         graph::file_text,
         search::search_commits,
         search::stop_search,

@@ -306,6 +306,18 @@ export function fileHistory(
   return invoke<Commit[]>('file_history', { path, rev, file, limit });
 }
 
+/** The commits that changed lines `from` to `to` of a file as it stands at `rev`. */
+export function lineHistory(
+  path: string,
+  rev: string,
+  file: string,
+  from: number,
+  to: number,
+  limit: number,
+): Promise<Commit[]> {
+  return invoke<Commit[]>('line_history', { path, rev, file, from, to, limit });
+}
+
 /**
  * One file's diff in the working tree, staged or not.
  *

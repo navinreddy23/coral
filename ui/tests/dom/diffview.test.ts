@@ -163,6 +163,48 @@ describe('the diff viewer', () => {
     expect(blame.title).toContain('no lines to blame');
   });
 
+  it('picks a run of blame lines and offers their history', async () => {
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'a.c';
+    diff.file = fileDiff();
+    diff.setView('blame');
+    diff.blame = {
+      chunks: [{ oid: 'a'.repeat(40), finalLine: 1, origLine: 1, lines: 3 }],
+      commits: {
+        ['a'.repeat(40)]: {
+          oid: 'a'.repeat(40),
+          author: { name: 'Ada', email: 'ada@example.com', time: 1_700_000_000, offset: 0 },
+          summary: 'first',
+          filename: 'a.c',
+        },
+      },
+    } as unknown as NonNullable<typeof diff.blame>;
+    diff.text = 'one\ntwo\nthree\n';
+    const asked: [number, number][] = [];
+    diff.historyOfLines = async (a: number, b: number) => {
+      asked.push([a, b]);
+    };
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+
+    const numbers = view.container.querySelectorAll('table.blame td.no');
+    await fireEvent.click(numbers[2] as HTMLElement);
+    await fireEvent.click(numbers[0] as HTMLElement, { shiftKey: true });
+    expect(view.container.querySelectorAll('tr.ranged')).toHaveLength(3);
+    expect(view.container.querySelector('.picked')?.textContent).toContain('lines 1–3 picked');
+
+    const go = view.container.querySelector('.picked .go') as HTMLButtonElement;
+    expect(go.textContent).toContain('History of these lines');
+    await fireEvent.click(go);
+    expect(asked).toEqual([[1, 3]]);
+
+    // A second click on a single picked line lets it go.
+    await fireEvent.click(view.container.querySelector('.picked button[aria-label]') as HTMLElement);
+    await fireEvent.click(numbers[1] as HTMLElement);
+    expect(view.container.querySelector('.picked .go')?.textContent).toContain('this line');
+    await fireEvent.click(numbers[1] as HTMLElement);
+    expect(view.container.querySelector('.picked')).toBeNull();
+  });
+
   it('shows a blame that failed rather than waiting on it for ever', () => {
     const diff = new DiffState(new ViewsState());
     diff.path = 'vendor/sub';

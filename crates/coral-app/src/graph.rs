@@ -894,6 +894,28 @@ pub async fn file_history(
     Ok(loc.log(&runner, &query).await?)
 }
 
+/// The commits that changed some lines of one file, as the file stands at `rev`.
+///
+/// # Errors
+/// Propagates git failures, and refuses a range that is not one.
+#[tauri::command]
+pub async fn line_history(
+    path: String,
+    rev: String,
+    file: String,
+    from: u32,
+    to: u32,
+    limit: u64,
+) -> Result<Vec<coral_core::commit::Commit>, crate::commands::IpcError> {
+    tracing::info!(path, rev, file, from, to, limit, "line_history");
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc
+        .line_history(&runner, &rev, &file, (from, to), limit)
+        .await?)
+}
+
 /// One file's diff in the working tree, staged or not.
 ///
 /// Separate from [`file_diff`] because it is a different question: that one asks what a commit

@@ -594,6 +594,66 @@ impl RepoLocation {
         crate::history::parse(&out.stdout)
     }
 
+    /// The commits that changed lines `from` to `to` of `path` as it stands at `rev`, newest
+    /// first, followed back across renames and moves the way `git log -L` follows them.
+    ///
+    /// Two reads rather than one. `-L` prints each commit's piece of the patch whatever the
+    /// format, and whether `--no-patch` silences it has varied between git versions, so the
+    /// first read takes nothing from each record but its object id and the second reads the
+    /// commits through the ordinary history format.
+    /// <https://git-scm.com/docs/git-log#Documentation/git-log.txt--Lltstartgtltendgtltfilegt>
+    ///
+    /// # Errors
+    /// [`CoralError::Refused`] for a range that does not start at 1 or ends before it starts,
+    /// and git's own refusal for a range past the end of the file.
+    pub async fn line_history(
+        &self,
+        runner: &GitRunner,
+        rev: &str,
+        path: &str,
+        lines: (u32, u32),
+        limit: u64,
+    ) -> Result<Vec<crate::commit::Commit>, CoralError> {
+        let (from, to) = lines;
+        if from == 0 || to < from {
+            return Err(CoralError::Refused {
+                label: "read the history of those lines",
+                detail: format!("lines {from} to {to} are not a range of the file"),
+            });
+        }
+        let out = runner
+            .output(
+                GitCommand::read("log", self.display_path())
+                    .arg("log")
+                    .arg(format!("-L{from},{to}:{path}"))
+                    .args(["--no-patch", "--format=%x1e%H"])
+                    .arg(format!("--max-count={limit}"))
+                    .arg(rev),
+            )
+            .await?;
+        let oids: Vec<String> = out
+            .stdout
+            .split(|b| *b == 0x1e)
+            .filter_map(|record| {
+                // 40 hex digits, or 64 in a SHA-256 repository; whatever follows is patch.
+                let len = record.iter().take_while(|b| b.is_ascii_hexdigit()).count();
+                (len >= 40).then(|| String::from_utf8_lossy(&record[..len]).into_owned())
+            })
+            .collect();
+        if oids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let out = runner
+            .output(
+                GitCommand::read("log", self.display_path())
+                    .args(["log", "-z", "--no-walk=unsorted"])
+                    .arg(format!("--format={}", crate::history::FORMAT))
+                    .args(&oids),
+            )
+            .await?;
+        crate::history::parse(&out.stdout)
+    }
+
     /// Commits whose message, author or object id matches `query`.
     ///
     /// Three passes rather than one, because git ANDs `--author` with `--grep` and there is no

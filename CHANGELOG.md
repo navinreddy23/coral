@@ -9,6 +9,10 @@
   warns that it reads every diff, counts the seconds while it runs and can be stopped without
   losing the query.
 - `coral find`, the find box from the command line, qualifiers included.
+- **History of some lines.** In Blame, click a line number and Shift-click another, and
+  "History of these lines" lists only the commits that changed them, followed back across
+  renames and moves the way `git log -L` follows them. "Whole file" goes back.
+  `coral log --path F --lines 12,20` is the same from the command line.
 - `.mailmap` is honoured in the graph, the commit details and file history, as it already was
   in blame: someone who committed under several names and addresses reads as one person, with
   one picture. On the kernel that is the 989-line map its maintainers keep.
