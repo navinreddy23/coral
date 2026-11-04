@@ -153,6 +153,35 @@ impl RepoLocation {
                 .args(["apply", "--3way"])
                 .args(files.iter().map(|f| f.as_os_str())),
         };
-        self.run_stoppable(runner, cmd).await
+        let before = self.landing_print(runner).await;
+        let mut outcome = self.run_stoppable(runner, cmd).await?;
+        // Both landings exit 0 having done nothing when the patch is already there: `am` says
+        // so on a line among others and `apply` says nothing at all. Comparing the repository
+        // before and after is the one answer that holds for both.
+        if outcome.completed && before.is_some() && before == self.landing_print(runner).await {
+            ALREADY_APPLIED.clone_into(&mut outcome.message);
+        }
+        Ok(outcome)
+    }
+
+    /// Where HEAD is and what the worktree holds against it, which is everything applying a
+    /// patch can change. `None` when either cannot be read, so an unborn branch is never
+    /// reported as unchanged.
+    async fn landing_print(&self, runner: &GitRunner) -> Option<(String, Vec<u8>)> {
+        let head = self.rev_parse(runner, "HEAD").await.ok()?;
+        let diff = runner
+            .output(GitCommand::read("diff", self.display_path()).args([
+                "diff",
+                "HEAD",
+                "--binary",
+                "--no-ext-diff",
+                "--no-color",
+            ]))
+            .await
+            .ok()?;
+        Some((head, diff.stdout))
     }
 }
+
+/// What an apply that changed nothing reports, worded so the window can recognise it.
+pub const ALREADY_APPLIED: &str = "Already applied: nothing changed.";

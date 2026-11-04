@@ -492,6 +492,35 @@ async fn applying_a_patch_that_has_already_landed_is_not_a_stop() {
 
     assert!(again.completed, "the second run should not stop");
     assert_eq!(there.op_state(), coral_core::repo::OpState::Clean);
+    assert_eq!(again.message, coral_core::patch::ALREADY_APPLIED);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_patch_already_in_the_working_tree_says_so() {
+    let runner = GitRunner::discover().await.unwrap();
+    let source = TestRepo::new().write("a.txt", "one\n").commit("base");
+    let source = source.write("a.txt", "two\n").commit("the change");
+    let out = tempfile::tempdir().unwrap();
+    let loc = RepoLocation::discover(&runner, source.path())
+        .await
+        .unwrap();
+    let files = loc.format_patch(&runner, "HEAD", out.path()).await.unwrap();
+
+    let target = TestRepo::new().write("a.txt", "one\n").commit("base");
+    let there = RepoLocation::discover(&runner, target.path())
+        .await
+        .unwrap();
+    let first = there
+        .apply_patches(&runner, &files, PatchLanding::WorkingTree)
+        .await
+        .unwrap();
+    assert_ne!(first.message, coral_core::patch::ALREADY_APPLIED);
+    let again = there
+        .apply_patches(&runner, &files, PatchLanding::WorkingTree)
+        .await
+        .unwrap();
+    // git apply --3way over its own result exits 0 and says "Applied patch cleanly".
+    assert_eq!(again.message, coral_core::patch::ALREADY_APPLIED);
 }
 
 #[tokio::test(flavor = "multi_thread")]

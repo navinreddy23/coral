@@ -74,6 +74,12 @@ describe('phrasing an outcome', () => {
     expect(busy.detail).toContain('Fast-forward');
   });
 
+  it('says a patch that was already there changed nothing', () => {
+    const said = phrase('apply a patch', 'Already applied: nothing changed.', false);
+    expect(said.kind).toBe('info');
+    expect(said.title).toBe('apply a patch: already applied');
+  });
+
   it('marks a stop on conflicts as needing attention rather than as a success', () => {
     const said = phrase('merge', 'CONFLICT (content): Merge conflict in a.txt', true);
     expect(said.kind).toBe('warn');
