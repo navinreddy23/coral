@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { LANGUAGES, t } from '../state/locale.svelte';
   import { TERMINAL_FONT, ZOOMS } from './zoom';
   import Icon from './Icon.svelte';
   import type { IconName } from './icon';
@@ -82,6 +83,21 @@
       Every row in the window follows this, not only the commit list: the lanes beside the
       messages are drawn on a canvas and are laid on the same grid.
     </p>
+  </fieldset>
+
+  <fieldset>
+    <legend>{t('appearance.language')}</legend>
+    <label class="field">
+      <span class="name">{t('appearance.language')}</span>
+      <select
+        value={views.current.language}
+        onchange={(e) => views.set('language', e.currentTarget.value)}
+      >
+        <option value="system">{t('appearance.language.system')}</option>
+        {#each LANGUAGES as lang (lang.id)}<option value={lang.id}>{lang.name}</option>{/each}
+      </select>
+    </label>
+    <p class="hint">{t('appearance.language.hint')}</p>
   </fieldset>
 
   <fieldset>

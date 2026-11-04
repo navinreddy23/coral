@@ -545,3 +545,20 @@ describe('drafting a message', () => {
     expect(button.disabled).toBe(true);
   });
 });
+
+describe('in another language', () => {
+  it('names the lists and the commit button in German, with the plural German uses', async () => {
+    const { locale } = await import('../../src/state/locale.svelte');
+    locale.language = 'de';
+    try {
+      const { container, commit } = await panel();
+      expect(container.textContent).toContain('Vorgemerkte Dateien');
+      commit.summary = 'ui: etwas';
+      await tick();
+      const button = container.querySelector('button.commit') as HTMLButtonElement;
+      expect(button.textContent?.trim()).toBe('1 Datei committen');
+    } finally {
+      locale.language = 'en';
+    }
+  });
+});

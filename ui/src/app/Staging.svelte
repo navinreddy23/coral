@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../state/locale.svelte';
   import { tick, untrack } from 'svelte';
   import Icon from './Icon.svelte';
   import Splitter from './Splitter.svelte';
@@ -214,11 +215,11 @@
       change{(worktree.status?.entries.length ?? 0) === 1 ? '' : 's'}
     </span>
     {#if branch}
-      <span class="on">on</span><span class="branch" title={branch}>{branch}</span>
+      <span class="on">{t('staging.on')}</span><span class="branch" title={branch}>{branch}</span>
     {/if}
     <div class="toggle">
-      <button class:on={grouping === 'path'} onclick={() => onGrouping('path')}>Path</button>
-      <button class:on={grouping === 'tree'} onclick={() => onGrouping('tree')}>Tree</button>
+      <button class:on={grouping === 'path'} onclick={() => onGrouping('path')}>{t('staging.path')}</button>
+      <button class:on={grouping === 'tree'} onclick={() => onGrouping('tree')}>{t('staging.tree')}</button>
     </div>
     <!--
       Trailing, and last. It is the only control in this panel that takes something away, and
@@ -271,7 +272,7 @@
         <span class="caret">
           <Icon name={closed.unstaged ? 'chevronRight' : 'chevronDown'} size={13} />
         </span>
-        <span class="title">Unstaged files</span>
+        <span class="title">{t('staging.unstaged')}</span>
         <span class="tally">({worktree.unstaged.length})</span>
       </button>
       {#if !closed.unstaged && grouping === 'tree' && worktree.unstaged.length > 0}
@@ -284,13 +285,13 @@
         <button
           class="all"
           onclick={() => worktree.stage(worktree.unstaged.map((e) => e.path), true)}
-        >Stage all changes</button>
+        >{t('staging.stageAll')}</button>
       {/if}
     </h3>
     {#if !closed.unstaged}
     <div class="list" id="staging-unstaged">
     {#if worktree.unstaged.length === 0}
-      <p class="empty">Nothing unstaged.</p>
+      <p class="empty">{t('staging.nothingUnstaged')}</p>
     {:else if grouping === 'tree'}
       <Changes
         nodes={unstagedTree}
@@ -320,7 +321,7 @@
               <span class="name">{e.path}</span>
               <LockMark lock={locks.get(e.path)} />
             </button>
-            <button class="act" title="Stage it" onclick={() => worktree.stage([e.path], true)}>+</button>
+            <button class="act" title={t('staging.stageIt')} onclick={() => worktree.stage([e.path], true)}>+</button>
           </li>
         {/each}
       </ul>
@@ -364,20 +365,20 @@
         <span class="caret">
           <Icon name={closed.staged ? 'chevronRight' : 'chevronDown'} size={13} />
         </span>
-        <span class="title">Staged files</span>
+        <span class="title">{t('staging.staged')}</span>
         <span class="tally">({worktree.staged.length})</span>
       </button>
       {#if worktree.staged.length > 0}
         <button
           class="all"
           onclick={() => worktree.stage(worktree.staged.map((e) => e.path), false)}
-        >Unstage all changes</button>
+        >{t('staging.unstageAll')}</button>
       {/if}
     </h3>
     {#if !closed.staged}
     <div class="list" id="staging-staged">
     {#if worktree.staged.length === 0}
-      <p class="empty">Nothing staged. A commit needs something in here.</p>
+      <p class="empty">{t('staging.nothingStaged')}</p>
     {:else if grouping === 'tree'}
       <Changes
         nodes={stagedTree}
@@ -407,7 +408,7 @@
               <span class="name">{e.path}</span>
               <LockMark lock={locks.get(e.path)} />
             </button>
-            <button class="act" title="Unstage it" onclick={() => worktree.stage([e.path], false)}>−</button>
+            <button class="act" title={t('staging.unstageIt')} onclick={() => worktree.stage([e.path], false)}>−</button>
           </li>
         {/each}
       </ul>
@@ -448,7 +449,7 @@
         <span class="caret">
           <Icon name={closed.compose ? 'chevronRight' : 'chevronDown'} size={13} />
         </span>
-        Commit message
+        {t('staging.compose')}
       </button>
     </h3>
     {#if !closed.compose}
@@ -456,7 +457,7 @@
     <div class="above">
       <label class="amend">
         <input type="checkbox" bind:checked={draft.amend} />
-        Amend the previous commit
+        {t('staging.amend')}
       </label>
       {#if onDraft !== null}
         <button
@@ -464,13 +465,13 @@
           disabled={drafting || total === 0}
           onclick={onDraft}
           title="Write a message for what is staged with Claude, for you to read and change"
-        >{drafting ? 'Drafting…' : 'Draft'}</button>
+        >{drafting ? t('staging.drafting') : t('staging.draft')}</button>
       {/if}
     </div>
     <div class="field">
       <input
         class="summary"
-        placeholder="Commit summary"
+        placeholder={t('staging.summary')}
         bind:this={summaryField}
         bind:value={draft.summary}
       />
@@ -479,22 +480,22 @@
         {LIMIT - draft.summary.length}
       </span>
     </div>
-    <textarea class="description" rows="3" placeholder="Description" bind:value={draft.description}
+    <textarea class="description" rows="3" placeholder={t('staging.description')} bind:value={draft.description}
     ></textarea>
     </div>
     {/if}
     <button class="commit" disabled={!canCommit} onclick={onCommit}>
       <!-- A disabled button says what is missing rather than what it would have done. -->
       {#if total === 0 && !draft.amend}
-        Stage something to commit
+        {t('staging.needsStaged')}
       {:else if draft.summary.trim().length === 0}
-        Write a summary to commit
+        {t('staging.needsSummary')}
       {:else if draft.templated}
-        Fill in the template to commit
+        {t('staging.needsTemplate')}
       {:else if draft.amend}
-        Amend the previous commit
+        {t('staging.amend')}
       {:else}
-        Commit {total} file{total === 1 ? '' : 's'}
+        {t('staging.commitFiles', { n: total })}
       {/if}
     </button>
   </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../state/locale.svelte';
   import { forgeOf } from './forge';
   import Icon from './Icon.svelte';
   import type { Report } from '../state/actions.svelte';
@@ -95,18 +96,18 @@
       title={`${host.host.owner}/${host.host.repo} at ${host.host.origin}`}
     >
       {forgeOf(host.host.kind).label}
-      {#if host.token === 'none'}<span class="muted">· no token</span>{/if}
+      {#if host.token === 'none'}<span class="muted">{t('status.noToken')}</span>{/if}
     </button>
   {:else if host?.unplaced}
     <!-- A server Coral cannot place by its name, which a self-hosted Gitea or Forgejo is.
          Asking once is what lets it list that server's pull requests. -->
     <button class="host" onclick={onPlace} title="Say what {host.unplaced} runs">
-      {host.unplaced}<span class="muted">· what is this?</span>
+      {host.unplaced}<span class="muted">{t('status.whatIsThis')}</span>
     </button>
   {/if}
   {#if commits > 0}
     <!-- A repository with one commit in it has one commit in it. -->
-    <span class="count">{commits.toLocaleString()} commit{commits === 1 ? '' : 's'}</span>
+    <span class="count">{t('status.commits', { n: commits.toLocaleString() })}</span>
   {/if}
   <span class="muted">git {gitVersion}</span>
 

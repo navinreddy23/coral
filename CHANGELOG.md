@@ -99,6 +99,11 @@
   `claude-opus-5-5` by default, with Anthropic's own fallback if that model declines.
   `coral draft-message` from the command line.
 
+- **Languages, begun.** Preferences, Appearance has a language choice — as the desktop is set,
+  English, or German — and the toolbar, the Preferences navigation, the commit box and the
+  status bar follow it, plurals included. The rest of the window is still English, and says
+  so beside the choice; the German was machine-written and wants a native speaker's reading.
+
 ### Fixed
 
 - Applying a patch that is already there says so, instead of reporting a change it never made.

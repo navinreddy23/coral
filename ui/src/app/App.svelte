@@ -43,6 +43,7 @@
   import NewRequest from './NewRequest.svelte';
   import Review from './Review.svelte';
   import type { ActionContext, CustomAction, DiffOf } from '../ipc/commands';
+  import { locale, resolveLanguage } from '../state/locale.svelte';
   import { stepZoom } from './zoom';
   import { setZoom } from '../ipc/window';
   import { forgeOf } from './forge';
@@ -4548,6 +4549,13 @@
   // somebody is choosing what to work on next; nothing waits on the answer.
   $effect(() => {
     if (showStart && tabs.session.tabs.length > 0) void openRequests.load();
+  });
+
+  // The window's language, and the document's, which is what screen readers and the
+  // spelling check in a text box go by.
+  $effect(() => {
+    locale.language = resolveLanguage(views.current.language, navigator.languages ?? []);
+    document.documentElement.lang = locale.language;
   });
 
   // The window's scale, applied whenever it changes and once at start, since the webview

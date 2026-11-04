@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../state/locale.svelte';
   import Icon from './Icon.svelte';
   import type { AvatarState } from '../state/avatars.svelte';
   import type { IconName } from './icon';
@@ -93,15 +94,15 @@
    * them, so the rest arrive with the settings they hold.
    */
   const panes = $derived(([
-    { id: 'appearance', label: 'Appearance', icon: 'sun', needsRepository: false },
-    { id: 'profiles', label: 'Profiles', icon: 'blame', needsRepository: false },
-    { id: 'ssh', label: 'SSH', icon: 'shield', needsRepository: true },
-    { id: 'signing', label: 'Commit Signing', icon: 'edit', needsRepository: true },
-    { id: 'repository', label: 'Repository', icon: 'folder', needsRepository: true },
-    { id: 'terminal', label: 'Terminal', icon: 'terminal', needsRepository: false },
-    { id: 'tools', label: 'Tools', icon: 'external', needsRepository: false },
-    { id: 'experimental', label: 'Experimental', icon: 'beaker', needsRepository: false },
-    { id: 'about', label: 'About', icon: 'info', needsRepository: false },
+    { id: 'appearance', label: t('prefs.pane.appearance'), icon: 'sun', needsRepository: false },
+    { id: 'profiles', label: t('prefs.pane.profiles'), icon: 'blame', needsRepository: false },
+    { id: 'ssh', label: t('prefs.pane.ssh'), icon: 'shield', needsRepository: true },
+    { id: 'signing', label: t('prefs.pane.signing'), icon: 'edit', needsRepository: true },
+    { id: 'repository', label: t('prefs.pane.repository'), icon: 'folder', needsRepository: true },
+    { id: 'terminal', label: t('prefs.pane.terminal'), icon: 'terminal', needsRepository: false },
+    { id: 'tools', label: t('prefs.pane.tools'), icon: 'external', needsRepository: false },
+    { id: 'experimental', label: t('prefs.pane.experimental'), icon: 'beaker', needsRepository: false },
+    { id: 'about', label: t('prefs.pane.about'), icon: 'info', needsRepository: false },
   ] satisfies { id: string; label: string; icon: IconName; needsRepository: boolean }[]).filter(
     (pane) => hasRepository || !pane.needsRepository,
   ));
@@ -142,12 +143,12 @@
     side nav, reading as one more thing to open rather than as the way back.
   -->
   <header>
-    <h2>Preferences</h2>
+    <h2>{t('prefs.title')}</h2>
     {#if repoName !== ''}
       <span class="repo" title={repository}>{repoName}</span>
     {/if}
-    <button class="shut" onclick={onClose} title="Close preferences (Esc)">
-      <Icon name="close" size={15} />Close
+    <button class="shut" onclick={onClose} title={t('prefs.closeHint')}>
+      <Icon name="close" size={15} />{t('prefs.close')}
     </button>
   </header>
 
