@@ -2,8 +2,13 @@ import {
   openDifftool,
   openInEditor,
   openMergetool,
+  actionRun,
   toolsRead,
+  toolsSetActions,
   toolsSetEditor,
+  type ActionContext,
+  type ActionRun,
+  type CustomAction,
   type DiffOf,
   type ToolsView,
 } from '../ipc/commands';
@@ -44,6 +49,31 @@ export class ToolsState {
       this.error = null;
     } catch (e) {
       this.error = messageOf(e);
+    }
+  }
+
+  /** The saved actions about one kind of thing, for the menu or palette that offers them. */
+  actionsOn(on: CustomAction['on']): CustomAction[] {
+    return (this.view?.settings.actions ?? []).filter((a) => a.on === on);
+  }
+
+  async setActions(actions: CustomAction[]): Promise<void> {
+    try {
+      const settings = await toolsSetActions(actions);
+      if (this.view !== null) this.view = { ...this.view, settings };
+      this.error = null;
+    } catch (e) {
+      this.error = messageOf(e);
+    }
+  }
+
+  /** Runs a saved action, answering how it went, or with a sentence when it could not start. */
+  async run(id: string, context: ActionContext): Promise<ActionRun | string> {
+    if (this.#path === null) return 'No repository is open.';
+    try {
+      return await actionRun(this.#path, id, context);
+    } catch (e) {
+      return messageOf(e);
     }
   }
 

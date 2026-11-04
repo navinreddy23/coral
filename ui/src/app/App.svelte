@@ -42,7 +42,7 @@
   import BisectBar from './BisectBar.svelte';
   import NewRequest from './NewRequest.svelte';
   import Review from './Review.svelte';
-  import type { DiffOf } from '../ipc/commands';
+  import type { ActionContext, CustomAction, DiffOf } from '../ipc/commands';
   import { quoteRequest } from './request';
   import { ReviewState } from '../state/review.svelte';
   import { MergeState } from '../state/merge.svelte';
@@ -2463,6 +2463,7 @@
           worktree: true,
           run: () => void fixupInto(oid, summary),
         },
+        ...actionItems('commit', { commit: oid, branch: headName }),
         {
           kind: 'item',
           label: 'Note on this commit…',
@@ -3391,6 +3392,34 @@
   }
 
   /** A file in a commit's list: copy its path, or stop tracking it at the checked-out commit. */
+  /** Runs one of the user's own actions and says how it went. */
+  async function runAction(action: CustomAction, context: ActionContext) {
+    const ran = await tools.run(action.id, context);
+    if (typeof ran === 'string') {
+      toasts.push('error', `Could not run ${action.name}`, ran);
+      return;
+    }
+    toasts.push(ran.success ? 'ok' : 'error', ran.success ? `${action.name} finished` : `${action.name} failed`, ran.output);
+  }
+
+  /** A "Run" submenu of the actions about one kind of thing, or nothing when there are none. */
+  function actionItems(on: CustomAction['on'], context: ActionContext): MenuItem[] {
+    const own = tools.actionsOn(on);
+    if (own.length === 0) return [];
+    return [
+      { kind: 'separator' },
+      {
+        kind: 'submenu',
+        label: 'Run',
+        items: own.map((action) => ({
+          kind: 'item' as const,
+          label: action.name,
+          run: () => void runAction(action, context),
+        })),
+      },
+    ];
+  }
+
   /** Says why a program outside Coral did not start, when it did not. */
   async function launched(started: Promise<string | null>, what: string) {
     const why = await started;
@@ -3435,6 +3464,7 @@
       },
       { kind: 'separator' },
       ...toolItems(file, rev === null ? null : { kind: 'commit', rev }),
+      ...actionItems('file', { file, commit: rev, branch: headName }),
     ];
     if (atHead) {
       items.push(
@@ -3510,6 +3540,7 @@
         entry.path,
         entry.worktree === 'untracked' ? null : { kind: staged ? 'staged' : 'unstaged' },
       ),
+      ...actionItems('file', { file: entry.path, branch: headName }),
       { kind: 'separator' },
       staged
         ? {
@@ -3868,6 +3899,15 @@
     for (const r of refs.groups.tags) {
       out.push({ id: `co:${r.name}`, label: `Checkout tag ${r.short}`, group: 'Tag', run: () => void act({ kind: 'checkout', rev: r.short }) });
     }
+    for (const action of tools.actionsOn('repository')) {
+      out.push({ id: `action:${action.id}`, label: action.name, group: 'Your actions', run: () => void runAction(action, { branch: headName }) });
+    }
+    const picked = selection.detail?.commit.oid ?? null;
+    if (picked !== null) {
+      for (const action of tools.actionsOn('commit')) {
+        out.push({ id: `action:${action.id}`, label: `${action.name}: ${picked.slice(0, 8)}`, group: 'Your actions', run: () => void runAction(action, { commit: picked, branch: headName }) });
+      }
+    }
     return out;
   });
 
@@ -4206,6 +4246,9 @@
       // Deliberately not awaited: a host that is slow or unreachable must not hold up the
       // window, and the section simply appears when the answer arrives.
       void hosting.load(info.path);
+      // For the file and commit menus, which offer the diff tool and the user's own actions
+      // only when they exist. A few config reads, and nothing waits on them.
+      void tools.load(info.path);
     } catch (e) {
       // Nothing is open. The tab is named for the path that failed, and the last repository's
       // rows under that name are worse than an empty pane with the reason across the top:

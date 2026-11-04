@@ -52,6 +52,14 @@
   when the tool says it was resolved. Both run beside the window rather than under it, so a
   merge tool left open for an hour holds nothing up. `coral difftool`, `coral mergetool` and
   `coral tools` from the command line.
+- The diff tool and your own actions are read when a repository opens, so the menus offer
+  them straight away rather than after Preferences has been visited.
+- **Your own actions.** Preferences, Tools keeps command lines of your own, each about the
+  repository, a commit or a file, with `{commit}`, `{short}`, `{branch}`, `{file}`, `{path}`
+  and `{repo}` filled in as single arguments. Repository actions are in the command palette;
+  commit and file actions are under Run in those menus, and commit ones in the palette for the
+  commit selected. They run by id, never as a command line the window sends, and never through
+  a shell; what they print goes to the activity log and the end of it to a notice.
 - `.mailmap` is honoured in the graph, the commit details and file history, as it already was
   in blame: someone who committed under several names and addresses reads as one person, with
   one picture. On the kernel that is the 989-line map its maintainers keep.

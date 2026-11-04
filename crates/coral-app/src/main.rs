@@ -180,6 +180,8 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         repoconfig::repo_folders,
         tool::tools_read,
         tool::tools_set_editor,
+        tool::tools_set_actions,
+        tool::action_run,
         tool::open_in_editor,
         tool::open_difftool,
         tool::open_mergetool,

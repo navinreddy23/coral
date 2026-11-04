@@ -176,7 +176,7 @@ describe('the Repository pane', () => {
 describe('the Tools pane', () => {
   it('stores the editor command and names the tools git has set', async () => {
     const tools = new ToolsState();
-    tools.view = { settings: { editor: '' }, external: { diff: 'meld', merge: null } };
+    tools.view = { settings: { editor: '', actions: [] }, external: { diff: 'meld', merge: null } };
     const set = vi.spyOn(tools, 'setEditor').mockResolvedValue();
     const { container } = prefs({ tools, pane: 'tools' });
     const field = container.querySelector('#editor') as HTMLInputElement;
@@ -184,5 +184,33 @@ describe('the Tools pane', () => {
     expect(set).toHaveBeenCalledWith('code --goto {path}:{line}');
     expect(container.querySelector('dl')?.textContent).toContain('meld');
     expect(container.querySelector('dl')?.textContent).toContain('none set in this repository');
+  });
+
+  it('adds an action once it has a name and a command, and removes one', async () => {
+    const tools = new ToolsState();
+    tools.view = {
+      settings: {
+        editor: '',
+        actions: [{ id: 'action-1', name: 'Show stat', command: 'git show --stat {commit}', on: 'commit' }],
+      },
+      external: { diff: null, merge: null },
+    };
+    const set = vi.spyOn(tools, 'setActions').mockResolvedValue();
+    const { container } = prefs({ tools, pane: 'tools' });
+
+    await fireEvent.click([...container.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Add an action') as HTMLButtonElement);
+    const draft = container.querySelector('.draft') as HTMLElement;
+    await fireEvent.input(draft.querySelector('.label') as HTMLInputElement, { target: { value: 'Lines' } });
+    await fireEvent.input(draft.querySelector('.command') as HTMLInputElement, { target: { value: 'wc -l {path}' } });
+    // The select is left at its default: happy-dom does not drive a bound select, and the real
+    // window is where choosing another target is checked.
+    await fireEvent.click(draft.querySelector('.save') as HTMLButtonElement);
+    expect(set).toHaveBeenLastCalledWith([
+      { id: 'action-1', name: 'Show stat', command: 'git show --stat {commit}', on: 'commit' },
+      { id: 'action-2', name: 'Lines', command: 'wc -l {path}', on: 'commit' },
+    ]);
+
+    await fireEvent.click(container.querySelector('.actions .remove') as HTMLButtonElement);
+    expect(set).toHaveBeenLastCalledWith([]);
   });
 });

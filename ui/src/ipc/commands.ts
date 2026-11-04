@@ -956,6 +956,37 @@ export function appVersion(): Promise<AppVersion> {
 /** What `tools.json` holds: the editor's command line, empty for the desktop's own choice. */
 export interface ToolSettings {
   editor: string;
+  actions: CustomAction[];
+}
+
+/** A command line of the user's own; see `tool.rs`. */
+export interface CustomAction {
+  id: string;
+  name: string;
+  command: string;
+  on: 'repository' | 'commit' | 'file';
+}
+
+/** What an action is being run on. */
+export interface ActionContext {
+  commit?: string | null;
+  branch?: string | null;
+  file?: string | null;
+}
+
+export interface ActionRun {
+  success: boolean;
+  /** The last of what it printed; the whole of it is in the activity log. */
+  output: string;
+}
+
+export function toolsSetActions(actions: CustomAction[]): Promise<ToolSettings> {
+  return invoke<ToolSettings>('tools_set_actions', { actions });
+}
+
+/** Runs a saved action by its id; the window never sends a command line to run. */
+export function actionRun(path: string, id: string, context: ActionContext): Promise<ActionRun> {
+  return invoke<ActionRun>('action_run', { path, id, context });
 }
 
 export interface ToolsView {

@@ -281,6 +281,40 @@ describe('the commit menu', () => {
     expect(item.textContent).toContain('nothing is staged');
   });
 
+  it('offers the user\'s own commit actions under Run, by id, with the commit filled in', async () => {
+    const { container } = await shell({
+      tools_read: {
+        settings: {
+          editor: '',
+          actions: [
+            { id: 'action-1', name: 'Show stat', command: 'git show --stat {commit}', on: 'commit' },
+            { id: 'action-2', name: 'Count lines', command: 'wc -l {path}', on: 'file' },
+          ],
+        },
+        external: { diff: null, merge: null },
+      },
+      action_run: { success: true, output: '1 file changed' },
+    });
+    // The tools are read when the repository opens, beside the graph.
+    await waitFor(() => {
+      if (!invoke.mock.calls.some(([c]) => c === 'tools_read')) throw new Error('not read yet');
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    const labels = await openMenu(container);
+    expect(labels).toContain('Run');
+    const run = itemNamed(container, 'Run').closest('.wrap');
+    if (run) await fireEvent.mouseEnter(run);
+    const inside = [...container.querySelectorAll('.menu .label')].map((e) => e.textContent?.trim());
+    expect(inside).toContain('Show stat');
+    expect(inside).not.toContain('Count lines');
+    await fireEvent.click(itemNamed(container, 'Show stat'));
+    await waitFor(() => {
+      const call = invoke.mock.calls.find(([c]) => c === 'action_run');
+      if (!call) throw new Error('not run yet');
+      expect(call[1]).toMatchObject({ id: 'action-1', context: { commit: oidOf(frame, 0) } });
+    });
+  });
+
   it('checks a commit out by its own object id, not by its row', async () => {
     const { container } = await shell();
     await openMenu(container);
