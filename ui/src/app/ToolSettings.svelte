@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../state/locale.svelte';
   import Icon from './Icon.svelte';
   import type { CustomAction } from '../ipc/commands';
   import type { ToolsState } from '../state/tools.svelte';
@@ -50,7 +51,7 @@
 </script>
 
 <section class="pane">
-  <h2>Tools</h2>
+  <h2>{t('prefs.pane.tools')}</h2>
   <p class="lede">The programs a file's menu can open it in, outside Coral.</p>
   {#if tools.error}<p class="error" role="alert">{tools.error}</p>{/if}
 
@@ -92,7 +93,8 @@
     palette; one about a commit is in a commit's menu, and in the palette for the commit
     selected; one about a file is in a file's menu. <code>{'{commit}'}</code>,
     <code>{'{short}'}</code>, <code>{'{branch}'}</code>, <code>{'{file}'}</code>,
-    <code>{'{path}'}</code> and <code>{'{repo}'}</code> are filled in, each as one argument.
+    <code>{'{path}'}</code> and <code>{'{repo}'}</code> are filled in, each as one argument;
+    <code>{'{branch}'}</code> is the branch checked out, not one the commit is on.
     Nothing goes through a shell: for a pipe, write <code>sh -c '…'</code>. What it prints goes
     to the activity log.
   </p>
