@@ -2458,7 +2458,7 @@
         {
           kind: 'item',
           label: 'Move the commits above this onto…',
-          hint: offBranch ?? (where === 'same' ? 'none are above it' : `${short} stays behind`),
+          hint: offBranch ?? (where === 'same' ? 'none are above it' : 'it stays'),
           disabled: where !== 'behind' || actions.busy,
           worktree: true,
           run: () => void moveAbove(oid, short),

@@ -352,7 +352,9 @@ impl crate::repo::RepoLocation {
                     crate::process::shell_word(&path.display().to_string()),
                 ),
             )
-            .args(["rebase", "--interactive", "--no-autosquash"])
+            // Changes left unstaged are put aside and back, as a pull does: a fixup is made from
+            // part of the work, and the rest refusing the rebase that folds it in was a dead end.
+            .args(["rebase", "--interactive", "--no-autosquash", "--autostash"])
             .arg(onto);
 
         let result = runner.output(cmd).await;

@@ -745,3 +745,36 @@ fn a_fixup_commit_lands_in_the_commit_it_names() {
         "the fix is in the commit it named"
     );
 }
+
+/// A fixup made from part of the work, with the rest left unstaged: folding it in must not
+/// be refused for the work that was never part of it, and that work must come back.
+#[test]
+fn an_interactive_rebase_keeps_unstaged_work_aside_and_puts_it_back() {
+    let repo = TestRepo::new()
+        .write("a.txt", "a\n")
+        .commit("base")
+        .write("b.txt", "b\n")
+        .commit("commit b")
+        .write("c.txt", "c\n")
+        .commit("commit c");
+    std::fs::write(repo.path().join("c.txt"), "c, still being written\n").unwrap();
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+        let mut todo = loc.rebase_todo(&runner, "HEAD~2").await.unwrap();
+        todo.reorder(1, 0).unwrap();
+        let out = loc
+            .rebase_interactive(&runner, "HEAD~2", &todo, &coral_binary())
+            .await
+            .unwrap();
+        assert!(out.completed, "{}", out.message);
+    });
+
+    assert_eq!(summaries(&repo), ["commit b", "commit c", "base"]);
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("c.txt")).unwrap(),
+        "c, still being written\n"
+    );
+}
