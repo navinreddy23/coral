@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../state/locale.svelte';
   import { copyText } from './clipboard';
   import type { SshState } from '../state/ssh.svelte';
 
@@ -104,7 +105,7 @@
 
 <section class="pane">
   <header>
-    <h2>SSH</h2>
+    <h2>{t('prefs.pane.ssh')}</h2>
     <div class="levels">
       <button class:on={ssh.level === 'repo'} onclick={() => (ssh.level = 'repo')}>
         This repository

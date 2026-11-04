@@ -211,8 +211,9 @@
 <div class="panel" bind:clientHeight={panelPx}>
   <header>
     <span class="count">
-      {worktree.dirty ? worktree.status?.entries.length ?? 0 : 'No'} file
-      change{(worktree.status?.entries.length ?? 0) === 1 ? '' : 's'}
+      {worktree.dirty
+        ? t('staging.fileChanges', { n: worktree.status?.entries.length ?? 0 })
+        : t('staging.noFileChanges')}
     </span>
     {#if branch}
       <span class="on">{t('staging.on')}</span><span class="branch" title={branch}>{branch}</span>
@@ -279,7 +280,7 @@
         <button
           class="expand"
           onclick={() => (anyClosed ? expandAll('unstaged') : collapseAll('unstaged'))}
-        >{anyClosed ? 'Expand all' : 'Collapse all'}</button>
+        >{anyClosed ? t('staging.expandAll') : t('staging.collapseAll')}</button>
       {/if}
       {#if worktree.unstaged.length > 0}
         <button

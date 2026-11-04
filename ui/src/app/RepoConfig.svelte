@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../state/locale.svelte';
   import FolderPicker from './FolderPicker.svelte';
   import type { RepoConfigState } from '../state/repoconfig.svelte';
 
@@ -9,7 +10,7 @@
 </script>
 
 <section class="pane">
-  <h2>Repository</h2>
+  <h2>{t('prefs.pane.repository')}</h2>
   <p class="lede">
     Settings this repository keeps in its own git configuration, so git in a terminal follows
     them exactly as Coral does.

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../state/locale.svelte';
   import type { ExperimentalState } from '../state/experimental.svelte';
   import type { AssistState } from '../state/assist.svelte';
   import type { GitCandidate, GitChoice } from '../ipc/experimental';
@@ -65,7 +66,7 @@
 </script>
 
 <section>
-  <h2>Experimental</h2>
+  <h2>{t('prefs.pane.experimental')}</h2>
   <p class="lede">
     The settings here are unfinished, and are offered so they can be used before they are. They
     may behave unexpectedly, and may change or be withdrawn. Everything on this page is

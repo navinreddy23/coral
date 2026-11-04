@@ -43,6 +43,8 @@ export const en = {
   'appearance.language.hint':
     'Only part of the window is translated so far; the rest stays in English until it is.',
 
+  'staging.fileChanges': { one: '{n} file change', other: '{n} file changes' },
+  'staging.noFileChanges': 'No file changes',
   'staging.on': 'on',
   'staging.path': 'Path',
   'staging.tree': 'Tree',
@@ -50,6 +52,8 @@ export const en = {
   'staging.staged': 'Staged files',
   'staging.stageAll': 'Stage all changes',
   'staging.unstageAll': 'Unstage all changes',
+  'staging.expandAll': 'Expand all',
+  'staging.collapseAll': 'Collapse all',
   'staging.nothingUnstaged': 'Nothing unstaged.',
   'staging.nothingStaged': 'Nothing staged. A commit needs something in here.',
   'staging.stageIt': 'Stage it',
@@ -68,6 +72,7 @@ export const en = {
   'status.noToken': '· no token',
   'status.whatIsThis': '· what is this?',
   'status.commits': { one: '{n} commit', other: '{n} commits' },
+  'status.changed': '{n} changed',
 } as const;
 
 export type MessageKey = keyof typeof en;

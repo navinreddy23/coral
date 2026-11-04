@@ -552,7 +552,9 @@ describe('in another language', () => {
     locale.language = 'de';
     try {
       const { container, commit } = await panel();
-      expect(container.textContent).toContain('Vorgemerkte Dateien');
+      expect(container.textContent).toContain('Vorgemerkt');
+      // The count above the lists is German too, not an English "file change" beside "auf".
+      expect(container.querySelector('header .count')?.textContent).toMatch(/\d+ Änderung/u);
       commit.summary = 'ui: etwas';
       await tick();
       const button = container.querySelector('button.commit') as HTMLButtonElement;

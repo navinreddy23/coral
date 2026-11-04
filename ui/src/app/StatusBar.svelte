@@ -62,7 +62,7 @@
   {/if}
 
   {#if changed > 0}
-    <span class="changed">{changed} changed</span>
+    <span class="changed">{t('status.changed', { n: changed })}</span>
   {/if}
 
   <!--

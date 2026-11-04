@@ -33,7 +33,7 @@
 </script>
 
 <section class="pane">
-  <h2>Appearance</h2>
+  <h2>{t('prefs.pane.appearance')}</h2>
 
   <fieldset>
     <legend>Theme</legend>

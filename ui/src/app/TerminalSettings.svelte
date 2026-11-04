@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../state/locale.svelte';
   import Icon from './Icon.svelte';
   import type { ViewsState } from '../state/views.svelte';
   import { terminalDefaults, type TerminalDefaults } from '../ipc/terminal';
@@ -31,7 +32,7 @@
 </script>
 
 <section class="pane">
-  <h2>Terminal</h2>
+  <h2>{t('prefs.pane.terminal')}</h2>
   <p class="lede">
     The shell Coral opens on <code>Ctrl+`</code>, in the repository the tab is showing. It is
     started interactively, so your prompt, aliases and completions are the ones you already
