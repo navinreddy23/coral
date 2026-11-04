@@ -44,7 +44,11 @@ async fn the_diff_tool_is_handed_both_sides_of_one_commit() {
     repo.git([
         "config",
         "difftool.fake.cmd",
-        &format!("cat \"$LOCAL\" \"$REMOTE\" > '{}'", seen.display()),
+        // Forward slashes, which git's own shell on Windows reads as readily as `/` paths.
+        &format!(
+            "cat \"$LOCAL\" \"$REMOTE\" > '{}'",
+            seen.display().to_string().replace('\\', "/")
+        ),
     ]);
     let (runner, loc) = open(&repo).await;
     assert_eq!(

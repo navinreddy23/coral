@@ -153,11 +153,20 @@ pub fn words(line: &str) -> Vec<String> {
     out
 }
 
+// git names files with `/` on every platform; joined whole, that left `C:\repo\src/a.rs` for
+// the editor on Windows.
+fn on_disk(repo: &Path, file: &str) -> String {
+    file.split('/')
+        .fold(repo.to_path_buf(), |path, part| path.join(part))
+        .display()
+        .to_string()
+}
+
 /// The editor's argv for one file, with the placeholders filled in. A command that names no
 /// file gets the file's path appended, which is what nearly every editor expects.
 #[must_use]
 pub fn editor_argv(template: &str, repo: &Path, file: &str, line: Option<u32>) -> Vec<String> {
-    let path = repo.join(file).display().to_string();
+    let path = on_disk(repo, file);
     let line = line.unwrap_or(1).to_string();
     let mut named = false;
     let mut argv: Vec<String> = words(template)
@@ -191,10 +200,7 @@ pub fn action_argv(
         .commit
         .as_deref()
         .map(|c| c.chars().take(8).collect::<String>());
-    let path = context
-        .file
-        .as_deref()
-        .map(|f| repo.join(f).display().to_string());
+    let path = context.file.as_deref().map(|f| on_disk(repo, f));
     let fills: [(&str, Option<&str>); 6] = [
         ("{repo}", Some(&*repo.to_string_lossy())),
         ("{commit}", context.commit.as_deref()),
@@ -453,21 +459,34 @@ mod tests {
         assert_eq!(words("  "), Vec::<String>::new());
     }
 
+    // What the platform calls `parts` under `/r`, so these hold on Windows too.
+    fn under_r(parts: &[&str]) -> String {
+        parts
+            .iter()
+            .fold(Path::new("/r").to_path_buf(), |p, part| p.join(part))
+            .display()
+            .to_string()
+    }
+
     #[test]
     fn the_file_is_filled_in_or_added_at_the_end() {
         let repo = Path::new("/r");
         assert_eq!(
             editor_argv("code --goto {path}:{line}", repo, "src/a b.rs", Some(7)),
-            ["code", "--goto", "/r/src/a b.rs:7"]
+            [
+                "code",
+                "--goto",
+                &format!("{}:7", under_r(&["src", "a b.rs"]))
+            ]
         );
         assert_eq!(
             editor_argv("gedit", repo, "x.txt", None),
-            ["gedit", "/r/x.txt"]
+            ["gedit", &under_r(&["x.txt"])]
         );
         // A name that looks like an option is still only ever one argument.
         assert_eq!(
             editor_argv("subl", repo, "--help", None),
-            ["subl", "/r/--help"]
+            ["subl", &under_r(&["--help"])]
         );
     }
 
@@ -493,7 +512,7 @@ mod tests {
         };
         assert_eq!(
             action_argv("wc -l {path}", repo, &on_file).unwrap(),
-            ["wc", "-l", "/r/docs/a b.md"]
+            ["wc", "-l", &under_r(&["docs", "a b.md"])]
         );
         let e = action_argv("git show {commit}", repo, &on_file).unwrap_err();
         assert!(e.contains("{commit}"), "{e}");
