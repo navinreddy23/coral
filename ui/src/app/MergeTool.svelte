@@ -1,6 +1,7 @@
 <script lang="ts">
   import { elidePath } from './path';
   import CodeSheet from './CodeSheet.svelte';
+  import Icon from './Icon.svelte';
   import { outputRows, sideRows, type Row } from './sheet';
   import type { ConflictedFile } from '../ipc/types';
   import type { MergeState, Side } from '../state/merge.svelte';
@@ -341,12 +342,15 @@
               </button>
             {/if}
             {#if mergeTool !== null && blockwise}
+              <!-- Set apart and marked as a program of its own: beside the branch names it
+                   would otherwise read as a third side to take. -->
               <button
+                class="tool"
                 disabled={merge.busy}
                 title="Resolve it in {mergeTool}, git's merge tool here; it is staged when the tool says it is done"
                 onclick={() => onMergeTool(file.path)}
               >
-                {mergeTool}
+                <Icon name="external" size={11} />{mergeTool}
               </button>
             {/if}
             {#if file.deleteModify}
@@ -595,6 +599,7 @@
   .rerere p { margin: 0; flex: 1; line-height: 1.45; }
   .wholesale { display: flex; gap: 2px; flex: 0 0 auto; padding-left: var(--space-3); }
   .wholesale button { font-size: var(--text-xs); padding: 0 var(--space-2); }
+  .wholesale button.tool { display: inline-flex; align-items: center; gap: 3px; margin-left: var(--space-2); }
   .done { padding: var(--space-3); font-size: var(--text-base); color: var(--fg-2); }
 
   /* The pane holding everything to the right of the file list: a bar, the two sides, the

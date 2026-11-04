@@ -94,6 +94,9 @@ describe("the merge tool", () => {
       (b) => b.textContent?.trim() === "meld",
     );
     expect(meld).toHaveLength(1);
+    // Marked as a program of its own, not a third side to take.
+    expect(meld[0]?.classList.contains("tool")).toBe(true);
+    expect(meld[0]?.querySelector("svg")).not.toBeNull();
     await fireEvent.click(meld[0] as HTMLButtonElement);
     expect(opened).toEqual(["f.txt"]);
   });
