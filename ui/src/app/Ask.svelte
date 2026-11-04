@@ -159,7 +159,10 @@
     border-radius: var(--radius-3); box-shadow: var(--elevate-2);
   }
   .panel.code { width: min(900px, 94vw); }
-  .panel.code textarea { white-space: pre; overflow-x: auto; tab-size: 8; font-size: var(--text-sm); }
+  .panel.code textarea {
+    white-space: pre; overflow-x: auto; tab-size: 8;
+    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm);
+  }
   h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); color: var(--fg-0); }
   /* `pre-line`, so a detail can put the thing being destroyed on a line of its own and the
      warning on another. Run together they read as one sentence that says neither. */

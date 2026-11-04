@@ -231,6 +231,23 @@ describe('a question about code', () => {
     expect(answered).toHaveBeenCalledWith('stage', '\tif (x) {\n\t\treturn;\n');
   });
 
+  it('sets it in the same monospace face as the diff it came from', () => {
+    render(Ask, {
+      props: {
+        title: 'Stage this hunk as edited',
+        asksText: true,
+        code: true,
+        choices: [],
+        onAnswer: () => {},
+      },
+    });
+    const rule = [...document.styleSheets]
+      .flatMap((sheet) => [...(sheet.cssRules ?? [])])
+      .map((r) => r.cssText)
+      .find((text) => /\.panel\.code[^{]* textarea/u.test(text));
+    expect(rule).toMatch(/var\(--font-mono\)/u);
+  });
+
   it('still trims an ordinary answer', async () => {
     const answered = vi.fn();
     const view = render(Ask, {
