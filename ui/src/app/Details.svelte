@@ -8,7 +8,8 @@
   import { copyText } from './clipboard';
   import { authorColourIndex, initialsOf } from '../graph/initials';
   import { buildTree } from '../diff/tree';
-  import { commitTree } from '../ipc/commands';
+  import { commitTree, type Host, type IssueView } from '../ipc/commands';
+  import { linkOf, mentioned, segments } from './reference';
   import { messageOf } from '../ipc/error';
   import type { Entry } from './FileTree.svelte';
   import type { ChangedFile, CommitDetail, FileChange, LfsLock, Verification } from '../ipc/types';
@@ -42,6 +43,10 @@
     onClearCompare,
     onCopied,
     sections,
+    host = null,
+    tracker = null,
+    readIssue = null,
+    onOpenUrl = () => undefined,
   }: {
     detail: CommitDetail | null;
     /** The commit's note, from `refs/notes/commits`; null for none or not yet read. */
@@ -82,6 +87,13 @@
     onCopied: (ok: boolean, what: string) => void;
     /** How the panel's height is shared between the message and the files, and folds. */
     sections: SectionsState;
+    /** The repository's host, for the references in a message to link to. */
+    host?: Host | null;
+    /** Where `ABC-123` links to, with `{key}` in it. */
+    tracker?: string | null;
+    /** Reads one issue, or null where there is no host to ask or nothing to ask it with. */
+    readIssue?: ((number: number) => Promise<IssueView | null>) | null;
+    onOpenUrl?: (url: string) => void;
   } = $props();
 
   const closed = $derived(sections.collapsed);
@@ -232,6 +244,24 @@
     renamed: 'R',
     copied: 'C',
   };
+
+  /** The issues the message names, read from the host, a few at most and each once. */
+  let mentions = $state<IssueView[]>([]);
+  $effect(() => {
+    const commit = detail?.commit ?? null;
+    const read = readIssue;
+    mentions = [];
+    if (commit === null || read === null) return;
+    const wanted = mentioned(`${commit.summary}\n${commit.body}`, host?.kind ?? null).slice(0, 4);
+    if (wanted.length === 0) return;
+    let current = true;
+    void Promise.all(wanted.map((n) => read(n))).then((found) => {
+      if (current) mentions = found.filter((f): f is IssueView => f !== null);
+    });
+    return () => {
+      current = false;
+    };
+  });
 </script>
 
 <aside bind:clientHeight={asidePx}>
@@ -341,7 +371,25 @@
     </div>
 
     {#if detail.commit.body}
-      <pre class="body">{detail.commit.body}</pre>
+      <pre class="body">{#each segments(detail.commit.body, host?.kind ?? null, tracker) as part, i (i)}{#if part.kind === 'text'}{part.text}{:else}{@const url = linkOf(part, host, tracker)}<button
+            class="ref"
+            title={url ?? ''}
+            onclick={() => url && onOpenUrl(url)}>{part.text}</button
+          >{/if}{/each}</pre>
+    {/if}
+
+    {#if mentions.length > 0}
+      <ul class="mentions" aria-label="Issues this commit names">
+        {#each mentions as m (m.issue.number)}
+          <li>
+            <button onclick={() => onOpenUrl(m.issue.webUrl)} title={m.issue.webUrl}>
+              <span class="state {m.issue.state}">{m.issue.state}</span>
+              <span class="num">{host?.kind === 'azure' ? 'AB#' : '#'}{m.issue.number}</span>
+              <span class="title">{m.issue.title}</span>
+            </button>
+          </li>
+        {/each}
+      </ul>
     {/if}
 
     {#if note !== null}
@@ -588,6 +636,24 @@
     background: none; border: 0; padding: 0; color: var(--accent);
   }
   .single:hover { text-decoration: underline; }
+  .ref {
+    font: inherit; padding: 0; border: 0; cursor: pointer; background: none;
+    color: var(--accent); text-decoration: underline; text-underline-offset: 2px;
+  }
+  .mentions { list-style: none; margin: 0 0 var(--space-4); padding: 0; }
+  .mentions button {
+    display: flex; align-items: baseline; gap: var(--space-2); width: 100%; text-align: left;
+    font: inherit; font-size: var(--text-sm); cursor: pointer; padding: 2px var(--space-2);
+    background: var(--bg-0); border: 0; border-radius: var(--radius-1); color: var(--fg-1);
+  }
+  .mentions button:hover { background: var(--bg-2); color: var(--fg-0); }
+  .mentions .state {
+    flex: 0 0 auto; font-size: var(--text-xs); padding: 0 4px; border-radius: var(--radius-0);
+    border: 1px solid var(--border-strong); color: var(--fg-2);
+  }
+  .mentions .state.open { color: var(--accent); border-color: var(--accent-line); }
+  .mentions .num { flex: 0 0 auto; color: var(--fg-2); font-family: var(--font-mono); }
+  .mentions .title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .body {
     margin: 0 0 var(--space-4); padding: var(--space-3);
     /* A plate one step off the panel, holding the strongest text on it. */

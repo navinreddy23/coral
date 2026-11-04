@@ -282,6 +282,43 @@ pub async fn hosting_pull_requests(
         .map_err(|e| refused(listing, &e))?)
 }
 
+/// An issue on the repository's host, with the branch it would be worked on in.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueView {
+    pub issue: coral_hosting::issue::Issue,
+    /// A name for a branch to work on it in: its number and the first words of its title.
+    pub branch: String,
+}
+
+/// One issue, or work item on Azure DevOps, read from the repository's host.
+///
+/// # Errors
+/// As [`hosting_pull_requests`]; a repository whose tracker is switched off answers that it
+/// has no such issue.
+#[tauri::command]
+pub async fn hosting_issue(
+    profiles: tauri::State<'_, crate::profile::Profiles>,
+    path: String,
+    number: u64,
+) -> Result<IssueView, IpcError> {
+    tracing::info!(path, number, "hosting_issue");
+    let profile = current(&profiles);
+    let view = host_of(&path, &profile).await?;
+    let host = view.host.as_ref().ok_or_else(|| no_host(&view))?;
+    let reading = "read the issue";
+    let secret = secret_for(&view, host, &profile, reading)?;
+    let client = Client::new(secret).map_err(|e| refused(reading, &e))?;
+    let issue = client
+        .issue(host, number)
+        .await
+        .map_err(|e| refused(reading, &e))?;
+    Ok(IssueView {
+        branch: coral_hosting::issue::branch_name(&issue),
+        issue,
+    })
+}
+
 /// Whether a proposal's tip commit passes its checks.
 ///
 /// Asked per proposal by the window once the list is up, so a slow host never holds the list

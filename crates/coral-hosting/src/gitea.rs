@@ -33,6 +33,11 @@ pub fn status_url(host: &Host, sha: &str) -> String {
 }
 
 #[must_use]
+pub fn issue_url(host: &Host, number: u64) -> String {
+    format!("{}/issues/{number}", api_base(host))
+}
+
+#[must_use]
 pub fn comments_url(host: &Host, number: u64) -> String {
     format!("{}/issues/{number}/comments", api_base(host))
 }

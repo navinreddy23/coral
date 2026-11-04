@@ -16,6 +16,8 @@ pub struct RepoConfig {
     pub caches: coral_core::statuscache::StatusCaches,
     /// Which folders the working tree holds, when it does not hold them all.
     pub sparse: coral_core::sparse::Sparse,
+    /// Where `ABC-123` in a message links to, with `{key}` in it.
+    pub tracker: Option<String>,
 }
 
 async fn read(runner: &GitRunner, loc: &RepoLocation) -> Result<RepoConfig, IpcError> {
@@ -23,6 +25,7 @@ async fn read(runner: &GitRunner, loc: &RepoLocation) -> Result<RepoConfig, IpcE
         rerere: loc.rerere_enabled(runner).await?,
         caches: loc.status_caches(runner).await?,
         sparse: loc.sparse(runner).await?,
+        tracker: loc.tracker(runner).await?,
     })
 }
 
@@ -120,4 +123,16 @@ pub async fn repo_folders(path: String, under: Option<String>) -> Result<Vec<Str
     let runner = GitRunner::discover().await?;
     let loc = RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
     Ok(loc.folders(&runner, "HEAD", under.as_deref()).await?)
+}
+
+/// Sets where `ABC-123` in a message links to, or stops linking with `None`.
+///
+/// # Errors
+/// A URL with no `{key}` in it, or git failures.
+#[tauri::command]
+pub async fn repo_set_tracker(path: String, url: Option<String>) -> Result<RepoConfig, IpcError> {
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    loc.set_tracker(&runner, url.as_deref()).await?;
+    read(&runner, &loc).await
 }

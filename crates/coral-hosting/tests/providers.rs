@@ -469,3 +469,36 @@ mod review {
         assert_eq!(times, ["2026-10-01", "2026-10-02", "2026-10-03"]);
     }
 }
+
+#[test]
+fn an_issue_is_read_the_same_whichever_host_tracks_it() {
+    use coral_hosting::issue::IssueState;
+    let github = coral_hosting::github::parse_issue(
+        br#"{"number":12,"title":"Crash on open","state":"closed","html_url":"https://github.com/o/r/issues/12"}"#,
+    )
+    .unwrap();
+    assert_eq!((github.number, github.state), (12, IssueState::Closed));
+
+    let gitlab = coral_hosting::gitlab::parse_issue(
+        br#"{"id":9001,"iid":4,"title":"Slow walk","state":"opened","web_url":"https://gitlab.com/g/p/-/issues/4"}"#,
+    )
+    .unwrap();
+    // The number people quote, not the instance-wide id.
+    assert_eq!((gitlab.number, gitlab.state), (4, IssueState::Open));
+
+    let host = Host::detect("https://dev.azure.com/acme/Platform/_git/coral").unwrap();
+    let item = coral_hosting::azure::parse_work_item(
+        &host,
+        br#"{"id":77,"fields":{"System.Title":"Tidy","System.State":"Resolved"}}"#,
+    )
+    .unwrap();
+    assert_eq!(item.state, IssueState::Closed);
+    assert_eq!(
+        item.web_url,
+        "https://dev.azure.com/acme/Platform/_workitems/edit/77"
+    );
+    assert_eq!(
+        coral_hosting::azure::work_item_url(&host, 77),
+        "https://dev.azure.com/acme/Platform/_apis/wit/workitems/77?api-version=7.1"
+    );
+}

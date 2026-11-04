@@ -463,6 +463,8 @@ export interface RepoConfig {
   rerere: boolean;
   caches: StatusCaches;
   sparse: Sparse;
+  /** Where `ABC-123` in a message links to, with `{key}` in it. */
+  tracker: string | null;
 }
 
 export function repoConfig(path: string): Promise<RepoConfig> {
@@ -1027,4 +1029,26 @@ export function openDifftool(path: string, file: string, of: DiffOf): Promise<vo
 
 export function openMergetool(path: string, file: string): Promise<void> {
   return invoke<void>('open_mergetool', { path, file });
+}
+
+/** An issue on the repository's host, or a work item on Azure DevOps. */
+export interface Issue {
+  number: number;
+  title: string;
+  state: 'open' | 'closed';
+  webUrl: string;
+}
+
+export interface IssueView {
+  issue: Issue;
+  /** A branch to work on it in: its number and the first words of its title. */
+  branch: string;
+}
+
+export function hostingIssue(path: string, number: number): Promise<IssueView> {
+  return invoke<IssueView>('hosting_issue', { path, number });
+}
+
+export function repoSetTracker(path: string, url: string | null): Promise<RepoConfig> {
+  return invoke<RepoConfig>('repo_set_tracker', { path, url });
 }

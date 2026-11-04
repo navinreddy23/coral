@@ -48,6 +48,41 @@ pub fn comments_url(host: &Host, id: u64) -> String {
     format!("{}/pullrequests/{id}/comments?pagelen=100", api_base(host))
 }
 
+/// One issue, from the repository's own tracker, which a repository may not have switched on.
+#[must_use]
+pub fn issue_url(host: &Host, id: u64) -> String {
+    format!("{}/issues/{id}", api_base(host))
+}
+
+#[derive(Deserialize)]
+struct WireIssue {
+    id: u64,
+    title: String,
+    state: String,
+    links: Links,
+}
+
+/// Parses one issue. Bitbucket's states are many; resolved, closed, invalid, duplicate and
+/// wontfix all mean nothing is left to do.
+///
+/// # Errors
+/// [`HostingError::Malformed`] when the body is not an issue.
+pub fn parse_issue(body: &[u8]) -> Result<crate::issue::Issue, HostingError> {
+    let w: WireIssue =
+        serde_json::from_slice(body).map_err(|e| HostingError::Malformed(e.to_string()))?;
+    let open = matches!(w.state.as_str(), "new" | "open" | "on hold");
+    Ok(crate::issue::Issue {
+        number: w.id,
+        title: w.title,
+        state: if open {
+            crate::issue::IssueState::Open
+        } else {
+            crate::issue::IssueState::Closed
+        },
+        web_url: w.links.html.href,
+    })
+}
+
 #[must_use]
 pub fn create_body(new: &NewPullRequest) -> serde_json::Value {
     serde_json::json!({

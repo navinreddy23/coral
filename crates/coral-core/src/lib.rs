@@ -39,6 +39,7 @@ pub mod statuscache;
 pub mod submodule;
 pub mod template;
 pub mod tool;
+pub mod tracker;
 pub mod undo;
 pub mod verification;
 pub mod watch;

@@ -73,6 +73,25 @@
     </p>
   {/if}
 
+  <h3>Issue links</h3>
+  <div class="field">
+    <label for="tracker" class="name">Tracker</label>
+    <input
+      id="tracker"
+      value={config?.tracker ?? ''}
+      placeholder="https://jira.example.com/browse/{'{key}'}"
+      spellcheck="false"
+      disabled={config === null || repoConfig.busy}
+      onchange={(e) => void repoConfig.setTracker(e.currentTarget.value)}
+    />
+  </div>
+  <p class="muted">
+    Where <code>ABC-123</code> in a commit message links to, for issues kept somewhere other
+    than the host: <code>{'{key}'}</code> is replaced by the reference. Issues on the host
+    itself, <code>#12</code>, link without this. Kept in the repository's config as
+    <code>coral.issueUrl</code>.
+  </p>
+
   <h3>Sparse checkout</h3>
   {#if config === null}
     <p class="muted">Reading…</p>
@@ -144,6 +163,13 @@
   .check.off { color: var(--fg-2); }
   .folders { margin: 0 0 var(--space-3); padding-left: var(--space-4); max-height: 12em; overflow-y: auto; }
   .row { display: flex; gap: var(--space-2); }
+  .field { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2); }
+  .field .name { flex: 0 0 auto; width: 6em; color: var(--fg-2); }
+  #tracker {
+    flex: 1 1 auto; min-width: 0; max-width: 34em; font: inherit; font-family: var(--font-mono);
+    font-variant-ligatures: none; padding: 3px var(--space-2); background: var(--bg-0);
+    color: var(--fg-0); border: 1px solid var(--border-strong); border-radius: var(--radius-1);
+  }
   .row button {
     font: inherit; font-size: var(--text-base); cursor: pointer; padding: var(--space-1) var(--space-3);
     background: var(--bg-1); border: 1px solid var(--border-strong); border-radius: var(--radius-1); color: var(--fg-1);

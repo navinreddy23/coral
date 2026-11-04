@@ -488,6 +488,9 @@ pub enum Command {
     HostLogout,
     /// List the repository's pull or merge requests.
     PullRequests,
+    /// Show one issue on the repository's host (a work item on Azure DevOps), and the branch
+    /// it would be worked on in.
+    Issue { number: u64 },
     /// Say what kind of host a self-hosted server is, for one whose name does not: a Gitea or
     /// Forgejo instance can be called anything. `none` forgets it.
     HostKind {
@@ -684,6 +687,7 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
         }
         Command::HostLogout => output::render(&commands::hosting::logout(repo).await),
         Command::PullRequests => output::render(&commands::hosting::list(repo).await),
+        Command::Issue { number } => output::render(&commands::hosting::issue(repo, number).await),
         Command::HostKind { hostname, kind } => {
             output::render(&commands::hosting::declare(&hostname, &kind))
         }

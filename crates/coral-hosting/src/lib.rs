@@ -11,6 +11,7 @@ pub mod declared;
 pub mod gitea;
 pub mod github;
 pub mod gitlab;
+pub mod issue;
 pub mod provider;
 pub mod pull_request;
 pub mod review;

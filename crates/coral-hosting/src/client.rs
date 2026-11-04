@@ -1,6 +1,7 @@
 use secrecy::SecretString;
 
 use crate::checks::{self, Checks};
+use crate::issue::Issue;
 use crate::provider::{Host, HostKind, HostingError};
 use crate::pull_request::{NewPullRequest, PullRequest};
 use crate::review::{self, Remark, Reply};
@@ -147,6 +148,27 @@ impl Client {
             HostKind::Gitea => gitea::parse_one(&body),
             HostKind::Bitbucket => bitbucket::parse_one(&body),
             HostKind::Azure => azure::parse_one(host, &body),
+        }
+    }
+
+    /// One issue, or work item on Azure DevOps.
+    ///
+    /// # Errors
+    /// As [`Client::pull_requests`]; a repository with its tracker switched off answers 404.
+    pub async fn issue(&self, host: &Host, number: u64) -> Result<Issue, HostingError> {
+        let url = match host.kind {
+            HostKind::GitHub => github::issue_url(host, number),
+            HostKind::GitLab => gitlab::issue_url(host, number),
+            HostKind::Gitea => gitea::issue_url(host, number),
+            HostKind::Bitbucket => bitbucket::issue_url(host, number),
+            HostKind::Azure => azure::work_item_url(host, number),
+        };
+        let body = self.get(host, &url).await?;
+        match host.kind {
+            HostKind::GitHub | HostKind::Gitea => github::parse_issue(&body),
+            HostKind::GitLab => gitlab::parse_issue(&body),
+            HostKind::Bitbucket => bitbucket::parse_issue(&body),
+            HostKind::Azure => azure::parse_work_item(host, &body),
         }
     }
 

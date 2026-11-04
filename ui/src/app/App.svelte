@@ -2731,6 +2731,28 @@
   }
 
   /**
+   * A branch to work on an issue in, named for it: its number and the first words of its
+   * title, read from the host, which the name can still be changed from.
+   */
+  async function branchFromIssue() {
+    const typed = await askText('Create a branch from an issue', 'The issue\'s number.', '');
+    const number = Number((typed ?? '').replace(/^\D+/u, ''));
+    if (!Number.isInteger(number) || number <= 0) return;
+    const found = await hosting.issue(number);
+    if (found === null) {
+      toasts.push('error', `Could not read issue ${number}`, 'It may not exist, or the token cannot see it.');
+      return;
+    }
+    const name = await askText(
+      `Branch for: ${found.issue.title}`,
+      'Created at HEAD and checked out.',
+      found.branch,
+    );
+    if (name === null || name.trim() === '') return;
+    await act({ kind: 'branchCreate', name: name.trim(), at: null, checkout: true });
+  }
+
+  /**
    * Asks what an unrecognised server runs and remembers the answer, then offers to sign in.
    *
    * A self-hosted Gitea or Forgejo can be called anything, and nothing in its name says what
@@ -3935,6 +3957,9 @@
     for (const r of refs.groups.tags) {
       out.push({ id: `co:${r.name}`, label: `Checkout tag ${r.short}`, group: 'Tag', run: () => void act({ kind: 'checkout', rev: r.short }) });
     }
+    if (hosting.available) {
+      out.push({ id: 'issue-branch', label: 'Create a branch from an issue…', group: 'Branch', run: () => void branchFromIssue() });
+    }
     for (const action of tools.actionsOn('repository')) {
       out.push({ id: `action:${action.id}`, label: action.name, group: 'Your actions', run: () => void runAction(action, { branch: headName }) });
     }
@@ -4285,6 +4310,8 @@
       // For the file and commit menus, which offer the diff tool and the user's own actions
       // only when they exist. A few config reads, and nothing waits on them.
       void tools.load(info.path);
+      // Its tracker is what an `ABC-123` in a message links to.
+      void repoConfig.load(info.path);
     } catch (e) {
       // Nothing is open. The tab is named for the path that failed, and the last repository's
       // rows under that name are worse than an empty pane with the reason across the top:
@@ -5916,6 +5943,10 @@
           onFolderMenu={commitFolderMenu}
           locks={lfs.byPath}
           picture={detailPicture}
+          host={hosting.view?.host ?? null}
+          tracker={repoConfig.config?.tracker ?? null}
+          readIssue={hosting.available ? (n) => hosting.issue(n) : null}
+          onOpenUrl={(url) => void openInBrowser(url)}
           repo={info?.path ?? null}
           compare={selection.pair === null
             ? null

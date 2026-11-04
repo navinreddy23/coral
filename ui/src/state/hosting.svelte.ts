@@ -2,12 +2,14 @@ import { messageOf } from '../ipc/error';
 import {
   hostingChecks,
   hostingDeclare,
+  hostingIssue,
   hostingLogin,
   hostingLogout,
   hostingPullRequests,
   hostingStatus,
   type Checks,
   type HostView,
+  type IssueView,
   type PullRequest,
 } from '../ipc/commands';
 
@@ -44,6 +46,19 @@ export class HostingState {
    * The window says so, because signing out of it signs every other profile out too.
    */
   shared = $derived(this.view?.token === 'shared');
+
+  /**
+   * One issue on the host, or null when it cannot be read: no token, a tracker switched off, a
+   * number that names a pull request on a host that keeps the two apart.
+   */
+  async issue(number: number): Promise<IssueView | null> {
+    if (!this.available || this.#path === '') return null;
+    try {
+      return await hostingIssue(this.#path, number);
+    } catch {
+      return null;
+    }
+  }
 
   /**
    * Says what kind of server the remote is on, for one that could not be told from its name,

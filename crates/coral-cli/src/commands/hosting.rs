@@ -251,3 +251,50 @@ impl crate::output::Human for Declared {
         }
     }
 }
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueView {
+    pub issue: coral_hosting::issue::Issue,
+    pub branch: String,
+}
+
+/// One issue on the repository's host.
+///
+/// # Errors
+/// [`CoralError::Refused`] when there is no recognised host or no stored token, and for any
+/// refusal from the provider.
+pub async fn issue(path: &Path, number: u64) -> Result<IssueView, CoralError> {
+    let view = detect(path).await?;
+    let host = view.host.ok_or_else(|| CoralError::Refused {
+        label: "reach the host",
+        detail: view.detail.unwrap_or_else(|| "no host".to_owned()),
+    })?;
+    let secret = token::load(&host, &account())
+        .map_err(|e| refused("read the issue", &e))?
+        .ok_or_else(|| CoralError::Refused {
+            label: "read the issue",
+            detail: format!(
+                "no token stored for {}; run `coral host-login`",
+                host.origin
+            ),
+        })?;
+    let client = Client::new(secret).map_err(|e| refused("read the issue", &e))?;
+    let issue = client
+        .issue(&host, number)
+        .await
+        .map_err(|e| refused("read the issue", &e))?;
+    Ok(IssueView {
+        branch: coral_hosting::issue::branch_name(&issue),
+        issue,
+    })
+}
+
+impl crate::output::Human for IssueView {
+    fn human(&self) -> String {
+        format!(
+            "{} {} ({:?})\n  {}\n  branch: {}",
+            self.issue.number, self.issue.title, self.issue.state, self.issue.web_url, self.branch
+        )
+    }
+}

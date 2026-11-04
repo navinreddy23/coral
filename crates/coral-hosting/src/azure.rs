@@ -75,6 +75,53 @@ pub fn vote_url(host: &Host, id: u64, reviewer: &str) -> String {
     )
 }
 
+/// One work item, which is what an issue is on Azure DevOps: `AB#123` in a message.
+#[must_use]
+pub fn work_item_url(host: &Host, id: u64) -> String {
+    format!(
+        "{}/{}/_apis/wit/workitems/{id}?{VERSION}",
+        host.origin, host.owner
+    )
+}
+
+#[derive(Deserialize)]
+struct WireWorkItem {
+    id: u64,
+    fields: WorkFields,
+}
+
+#[derive(Deserialize)]
+struct WorkFields {
+    #[serde(rename = "System.Title", default)]
+    title: String,
+    #[serde(rename = "System.State", default)]
+    state: String,
+}
+
+/// Parses one work item. Its states are the process's own; done, closed, resolved and removed
+/// are the ones that mean nothing is left.
+///
+/// # Errors
+/// [`HostingError::Malformed`] when the body is not a work item.
+pub fn parse_work_item(host: &Host, body: &[u8]) -> Result<crate::issue::Issue, HostingError> {
+    let w: WireWorkItem =
+        serde_json::from_slice(body).map_err(|e| HostingError::Malformed(e.to_string()))?;
+    let done = matches!(
+        w.fields.state.to_ascii_lowercase().as_str(),
+        "done" | "closed" | "resolved" | "removed"
+    );
+    Ok(crate::issue::Issue {
+        number: w.id,
+        web_url: format!("{}/{}/_workitems/edit/{}", host.origin, host.owner, w.id),
+        title: w.fields.title,
+        state: if done {
+            crate::issue::IssueState::Closed
+        } else {
+            crate::issue::IssueState::Open
+        },
+    })
+}
+
 #[must_use]
 pub fn create_body(new: &NewPullRequest) -> serde_json::Value {
     serde_json::json!({

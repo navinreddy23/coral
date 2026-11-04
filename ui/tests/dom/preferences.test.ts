@@ -113,6 +113,7 @@ describe('the Repository pane', () => {
       rerere: false,
       caches: { untrackedCache: false, fsmonitor: false, fsmonitorSupported: false },
       sparse: { enabled: false, cone: true, folders: [] },
+      tracker: null,
     };
     const set = vi.spyOn(repoConfig, 'setRerere').mockResolvedValue();
     const { container } = prefs({ repoConfig, pane: 'repository' });
@@ -138,6 +139,7 @@ describe('the Repository pane', () => {
       rerere: false,
       caches: { untrackedCache: false, fsmonitor: false, fsmonitorSupported: false },
       sparse: { enabled: false, cone: true, folders: [] },
+      tracker: null,
     };
     const untracked = vi.spyOn(repoConfig, 'setUntrackedCache').mockResolvedValue();
     const { container } = prefs({ repoConfig, pane: 'repository' });
@@ -157,6 +159,7 @@ describe('the Repository pane', () => {
       rerere: false,
       caches: { untrackedCache: false, fsmonitor: false, fsmonitorSupported: false },
       sparse: { enabled: true, cone: true, folders: ['drivers/gpu', 'kernel'] },
+      tracker: null,
     };
     const off = vi.spyOn(repoConfig, 'disableSparse').mockResolvedValue();
     const { container } = prefs({ repoConfig, pane: 'repository' });

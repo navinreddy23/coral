@@ -3,6 +3,7 @@ import {
   repoDisableSparse,
   repoSetFsmonitor,
   repoSetSparse,
+  repoSetTracker,
   repoSetRerere,
   repoSetUntrackedCache,
   type RepoConfig,
@@ -46,6 +47,10 @@ export class RepoConfigState {
 
   async setSparse(folders: string[]): Promise<void> {
     await this.#change(() => repoSetSparse(this.#path, folders));
+  }
+
+  async setTracker(url: string): Promise<void> {
+    await this.#change(() => repoSetTracker(this.#path, url.trim() === '' ? null : url.trim()));
   }
 
   async disableSparse(): Promise<void> {

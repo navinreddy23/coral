@@ -149,6 +149,44 @@ fn convert(w: Wire) -> PullRequest {
     }
 }
 
+/// One issue. GitHub files pull requests under issues too, so a number names one or the other.
+#[must_use]
+pub fn issue_url(host: &Host, number: u64) -> String {
+    format!(
+        "{}/repos/{}/{}/issues/{number}",
+        api_base(host),
+        host.owner,
+        host.repo
+    )
+}
+
+#[derive(Deserialize)]
+struct WireIssue {
+    number: u64,
+    title: String,
+    state: String,
+    html_url: String,
+}
+
+/// Parses one issue; Gitea answers in the same shape.
+///
+/// # Errors
+/// [`HostingError::Malformed`] when the body is not an issue.
+pub fn parse_issue(body: &[u8]) -> Result<crate::issue::Issue, HostingError> {
+    let w: WireIssue =
+        serde_json::from_slice(body).map_err(|e| HostingError::Malformed(e.to_string()))?;
+    Ok(crate::issue::Issue {
+        number: w.number,
+        title: w.title,
+        state: if w.state == "closed" {
+            crate::issue::IssueState::Closed
+        } else {
+            crate::issue::IssueState::Open
+        },
+        web_url: w.html_url,
+    })
+}
+
 /// The conversation on a pull request: comments not tied to a line, which GitHub files under
 /// the pull request's issue.
 #[must_use]

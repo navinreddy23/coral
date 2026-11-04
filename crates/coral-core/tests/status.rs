@@ -239,3 +239,27 @@ async fn the_status_caches_are_switched_in_this_repository_and_read_back() {
         assert!(!loc.status_caches(&runner).await.unwrap().fsmonitor);
     }
 }
+
+#[tokio::test]
+async fn an_issue_tracker_needs_a_place_for_the_key_and_can_be_taken_away() {
+    let repo = TestRepo::new().write("a.txt", "a\n").commit("base");
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+    assert_eq!(loc.tracker(&runner).await.unwrap(), None);
+
+    let e = loc
+        .set_tracker(&runner, Some("https://jira.example.invalid/browse/"))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), "refused");
+
+    loc.set_tracker(&runner, Some(" https://jira.example.invalid/browse/{key} "))
+        .await
+        .unwrap();
+    assert_eq!(
+        loc.tracker(&runner).await.unwrap().as_deref(),
+        Some("https://jira.example.invalid/browse/{key}")
+    );
+    loc.set_tracker(&runner, None).await.unwrap();
+    assert_eq!(loc.tracker(&runner).await.unwrap(), None);
+}
