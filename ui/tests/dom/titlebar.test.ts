@@ -37,6 +37,7 @@ vi.mock('../../src/ipc/window', () => ({
   startResize: async (at: string) => void win.calls.push(`resize:${at}`),
   isMaximized: async () => win.maximized,
   isDecorated: async () => win.decorated,
+  setZoom: async () => undefined,
   setDecorations: async (on: boolean) => {
     win.calls.push(`setDecorations:${String(on)}`);
     win.decorated = on;

@@ -480,3 +480,23 @@ mod tests {
         assert!(stamped.is_empty(), "the agent stays the default");
     }
 }
+
+/// Scales the whole page, text and canvas together, as the browser's own zoom does.
+///
+/// The webview's zoom rather than CSS `zoom` on the page: that one leaves pointer positions
+/// in unzoomed pixels while the boxes they land on are zoomed, so every menu opened beside
+/// the pointer by a distance that grew with the scale.
+///
+/// # Errors
+/// [`coral_core::CoralError::Refused`] when the webview will not take it.
+// Tauri hands the window by value in a command signature; it is a handle, not the window.
+#[allow(clippy::needless_pass_by_value)]
+#[tauri::command]
+pub fn window_zoom(window: tauri::WebviewWindow, scale: f64) -> Result<(), IpcError> {
+    window.set_zoom(scale.clamp(0.5, 3.0)).map_err(|e| {
+        IpcError::from(coral_core::CoralError::Refused {
+            label: "zoom the window",
+            detail: e.to_string(),
+        })
+    })
+}

@@ -60,6 +60,10 @@
   commit and file actions are under Run in those menus, and commit ones in the palette for the
   commit selected. They run by id, never as a command line the window sends, and never through
   a shell; what they print goes to the activity log and the end of it to a notice.
+- **Zoom.** `Ctrl =`, `Ctrl -` and `Ctrl 0` scale the whole window, text and lanes together,
+  in steps from 80% to 200% that keep the rows on whole pixels; Preferences, Appearance has the
+  same, remembered. The terminal's text size is set there on its own and changes in place,
+  keeping the scrollback.
 - `.mailmap` is honoured in the graph, the commit details and file history, as it already was
   in blame: someone who committed under several names and addresses reads as one person, with
   one picture. On the kernel that is the 989-line map its maintainers keep.

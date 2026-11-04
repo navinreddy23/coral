@@ -1,3 +1,4 @@
+import { TERMINAL_FONT, ZOOMS } from '../app/zoom';
 import type { Density } from '../graph/layout';
 
 /**
@@ -77,6 +78,10 @@ export interface Views {
   systemTitleBar: boolean;
   /** Which sections of the sidebar are closed, by key. */
   collapsed: Record<string, boolean>;
+  /** How much the whole window is scaled, one of `ZOOMS`. */
+  zoom: number;
+  /** The terminal's text size in pixels, on its own: a shell is read at a different distance. */
+  terminalFontSize: number;
 }
 
 const KEY = 'coral.views';
@@ -100,6 +105,8 @@ function defaults(): Views {
     // Remote and tag lists run to hundreds on a real repository, so they start closed; local
     // branches are what people look at.
     collapsed: { remote: true, tags: true },
+    zoom: 1,
+    terminalFontSize: TERMINAL_FONT.usual,
   };
 }
 
@@ -172,6 +179,11 @@ function read(): Views {
     }
     if (typeof stored.terminalSize === 'number' && Number.isFinite(stored.terminalSize)) {
       out.terminalSize = Math.min(900, Math.max(120, Math.round(stored.terminalSize)));
+    }
+    const zoom = stored.zoom;
+    if (typeof zoom === 'number' && ZOOMS.some((z) => Math.abs(z - zoom) < 0.001)) out.zoom = zoom;
+    if (typeof stored.terminalFontSize === 'number' && Number.isFinite(stored.terminalFontSize)) {
+      out.terminalFontSize = Math.min(TERMINAL_FONT.max, Math.max(TERMINAL_FONT.min, Math.round(stored.terminalFontSize)));
     }
     if (typeof stored.collapsed === 'object' && stored.collapsed !== null) {
       const sections: Record<string, boolean> = {};

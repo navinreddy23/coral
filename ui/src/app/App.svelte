@@ -43,6 +43,8 @@
   import NewRequest from './NewRequest.svelte';
   import Review from './Review.svelte';
   import type { ActionContext, CustomAction, DiffOf } from '../ipc/commands';
+  import { stepZoom } from './zoom';
+  import { setZoom } from '../ipc/window';
   import { quoteRequest } from './request';
   import { ReviewState } from '../state/review.svelte';
   import { MergeState } from '../state/merge.svelte';
@@ -253,6 +255,7 @@
     'panel.left', 'panel.detail', 'help', 'undo', 'redo',
     'commit', 'commit.stageAll', 'commit.focus', 'stage.file', 'unstage.file',
     'branch.create', 'fetch.all', 'toolbar', 'filter.focus', 'preferences',
+    'zoom.in', 'zoom.out', 'zoom.reset',
   ]);
 
   function move(delta: number) {
@@ -363,6 +366,9 @@
       case 'branch.create': toolbarAction('branch'); break;
       case 'fetch.all': toolbarAction('fetch'); break;
       case 'toolbar': views.set('toolbar', !views.current.toolbar); break;
+      case 'zoom.in': views.set('zoom', stepZoom(views.current.zoom, 1)); break;
+      case 'zoom.out': views.set('zoom', stepZoom(views.current.zoom, -1)); break;
+      case 'zoom.reset': views.set('zoom', 1); break;
       case 'filter.focus': filterTick += 1; break;
       case 'commit': void recordCommit(false); break;
       case 'commit.stageAll': void recordCommit(true); break;
@@ -4448,6 +4454,12 @@
     }
   }
 
+  // The window's scale, applied whenever it changes and once at start, since the webview
+  // starts at its own and knows nothing of the stored one.
+  $effect(() => {
+    void setZoom(views.current.zoom);
+  });
+
   // Switching tabs loads that repository; nothing else in the shell needs to know.
   let loadedPath = $state('');
   $effect(() => {
@@ -5927,6 +5939,7 @@
               session={terminal}
               path={repo}
               theme={theme.current}
+              fontSize={views.current.terminalFontSize}
               onClose={() => (terminal.open = false)}
             />
           </div>

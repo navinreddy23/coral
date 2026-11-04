@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { TERMINAL_FONT, ZOOMS } from './zoom';
   import Icon from './Icon.svelte';
   import type { IconName } from './icon';
   import type { ThemeChoice, ThemeState } from '../state/theme.svelte';
@@ -83,6 +84,40 @@
     </p>
   </fieldset>
 
+  <fieldset>
+    <legend>Size</legend>
+    <label class="field">
+      <span class="name">Zoom</span>
+      <select
+        value={String(views.current.zoom)}
+        onchange={(e) => views.set('zoom', Number(e.currentTarget.value))}
+      >
+        {#each ZOOMS as z (z)}<option value={String(z)}>{Math.round(z * 100)}%</option>{/each}
+      </select>
+    </label>
+    <p class="hint">
+      The whole window, text and lanes together. <code>Ctrl =</code>, <code>Ctrl -</code> and
+      <code>Ctrl 0</code> do the same from anywhere.
+    </p>
+    <label class="field">
+      <span class="name">Terminal text</span>
+      <input
+        type="number"
+        min={TERMINAL_FONT.min}
+        max={TERMINAL_FONT.max}
+        value={views.current.terminalFontSize}
+        onchange={(e) => {
+          const n = Math.round(Number(e.currentTarget.value));
+          if (Number.isFinite(n)) {
+            views.set('terminalFontSize', Math.min(TERMINAL_FONT.max, Math.max(TERMINAL_FONT.min, n)));
+          }
+        }}
+      />
+      <span class="units">px</span>
+    </label>
+    <p class="hint">On its own, since a shell is often read from further away than a list.</p>
+  </fieldset>
+
   {#if avatars !== null}
     <fieldset>
       <legend>Authors</legend>
@@ -123,6 +158,16 @@
   /* Three cards rather than a dropdown: there are exactly three, they are not going to grow,
      and a control that shows all of its options at once needs no second click to be read. */
   .choices { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+  .field { display: flex; align-items: center; gap: var(--space-3); }
+  .field .name { width: 8em; color: var(--fg-1); }
+  .field select, .field input {
+    font: inherit; font-size: var(--text-base); padding: 3px var(--space-2);
+    background: var(--bg-0); color: var(--fg-0);
+    border: 1px solid var(--border-strong); border-radius: var(--radius-1);
+  }
+  .field input { width: 5em; }
+  .units { color: var(--fg-2); }
+  code { font-family: var(--font-mono); font-variant-ligatures: none; }
   .choice {
     display: flex; flex-direction: column; gap: var(--space-1); align-items: flex-start;
     width: 13.5em; padding: var(--space-3); text-align: left; cursor: pointer;

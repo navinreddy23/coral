@@ -356,6 +356,19 @@ describe('the shell', () => {
     });
   });
 
+  it('zooms the window in steps from the keyboard and back to actual size', async () => {
+    await shell();
+    const zooms = () =>
+      invoke.mock.calls.filter(([cmd]) => cmd === 'window_zoom').map(([, a]) => (a as { scale: number }).scale);
+    await waitFor(() => expect(zooms()).toContain(1));
+    await fireEvent.keyDown(window, { key: '=', ctrlKey: true });
+    await waitFor(() => expect(zooms().at(-1)).toBe(1.1));
+    await fireEvent.keyDown(window, { key: '=', ctrlKey: true });
+    await waitFor(() => expect(zooms().at(-1)).toBe(1.25));
+    await fireEvent.keyDown(window, { key: '0', ctrlKey: true });
+    await waitFor(() => expect(zooms().at(-1)).toBe(1));
+  });
+
   it('puts the caret in the branch filter when / is pressed', async () => {
     const { container } = await shell();
     const filter = container.querySelector('input.filter') as HTMLInputElement;

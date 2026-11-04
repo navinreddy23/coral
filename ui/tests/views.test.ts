@@ -119,4 +119,15 @@ describe('which shell the terminal runs', () => {
     localStorage.setItem('coral.views', JSON.stringify({ terminalLogin: 'yes please' }));
     expect(new ViewsState().current.terminalLogin).toBeNull();
   });
+
+  it('keeps a zoom only when it is one of the steps, and a terminal size within bounds', () => {
+    localStorage.setItem('coral.views', JSON.stringify({ zoom: 1.25, terminalFontSize: 40 }));
+    let read = new ViewsState().current;
+    expect(read.zoom).toBe(1.25);
+    expect(read.terminalFontSize).toBe(24);
+    localStorage.setItem('coral.views', JSON.stringify({ zoom: 1.37, terminalFontSize: 'big' }));
+    read = new ViewsState().current;
+    expect(read.zoom).toBe(1);
+    expect(read.terminalFontSize).toBe(12);
+  });
 });
