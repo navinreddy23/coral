@@ -282,6 +282,104 @@ pub async fn hosting_pull_requests(
         .map_err(|e| refused(listing, &e))?)
 }
 
+/// One open repository's requests, for the list of them across every tab.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoRequests {
+    pub path: String,
+    pub host: Option<Host>,
+    /// The open ones and the drafts: what is still waiting on somebody.
+    pub requests: Vec<PullRequest>,
+    /// Why there are none to show, when that is not simply that there are none.
+    pub problem: Option<String>,
+}
+
+/// The requests still open in every repository open in a tab, each asked of its own host at
+/// once, so one slow host holds up only its own row.
+///
+/// A repository with no host, or none signed in to, is listed with the reason rather than
+/// dropped: a list that silently leaves one out reads as that one having nothing open.
+///
+/// # Errors
+/// Never as a whole; each repository's failure is in its own row.
+#[tauri::command]
+pub async fn hosting_everywhere(
+    profiles: tauri::State<'_, crate::profile::Profiles>,
+    tabs: tauri::State<'_, crate::tabs::Tabs>,
+) -> Result<Vec<RepoRequests>, IpcError> {
+    let profile = current(&profiles);
+    let mut paths: Vec<String> = Vec::new();
+    for tab in tabs.read().tabs.iter().filter(|t| !t.missing) {
+        let path = crate::session::Session::working_path(tab)
+            .display()
+            .to_string();
+        if !paths.contains(&path) {
+            paths.push(path);
+        }
+    }
+    let mut asking = tokio::task::JoinSet::new();
+    for (at, path) in paths.iter().cloned().enumerate() {
+        let profile = profile.clone();
+        asking.spawn(async move { (at, requests_at(path, &profile).await) });
+    }
+    let mut rows: Vec<(usize, RepoRequests)> = Vec::new();
+    while let Some(done) = asking.join_next().await {
+        if let Ok(row) = done {
+            rows.push(row);
+        }
+    }
+    // In the order the tabs are in, whichever host answered first.
+    rows.sort_by_key(|(at, _)| *at);
+    Ok(rows.into_iter().map(|(_, row)| row).collect())
+}
+
+async fn requests_at(path: String, profile: &str) -> RepoRequests {
+    let row = |host: Option<Host>, problem: String| RepoRequests {
+        path: path.clone(),
+        host,
+        requests: Vec::new(),
+        problem: Some(problem),
+    };
+    let view = match host_of(&path, profile).await {
+        Ok(view) => view,
+        Err(e) => return row(None, e.message),
+    };
+    let Some(host) = view.host.clone() else {
+        return row(
+            None,
+            view.detail
+                .unwrap_or_else(|| "no recognised host".to_owned()),
+        );
+    };
+    if view.token == TokenSource::None {
+        return row(Some(host), "not signed in".to_owned());
+    }
+    let listed = match secret_for(&view, &host, profile, "list requests") {
+        Ok(secret) => match Client::new(secret) {
+            Ok(client) => client.pull_requests(&host).await.map_err(|e| e.to_string()),
+            Err(e) => Err(e.to_string()),
+        },
+        Err(e) => Err(e.message),
+    };
+    match listed {
+        Ok(all) => RepoRequests {
+            requests: all
+                .into_iter()
+                .filter(|pr| {
+                    matches!(
+                        pr.state,
+                        coral_hosting::PrState::Open | coral_hosting::PrState::Draft
+                    )
+                })
+                .collect(),
+            path: path.clone(),
+            host: Some(host),
+            problem: None,
+        },
+        Err(e) => row(Some(host), e),
+    }
+}
+
 /// An issue on the repository's host, with the branch it would be worked on in.
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

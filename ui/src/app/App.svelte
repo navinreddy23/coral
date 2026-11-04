@@ -91,6 +91,7 @@
   import { SigningState } from '../state/signing.svelte';
   import { RepoConfigState } from '../state/repoconfig.svelte';
   import { ToolsState } from '../state/tools.svelte';
+  import { RequestsState } from '../state/requests.svelte';
   import { SshState } from '../state/ssh.svelte';
   import { laneColour } from './lane';
   import { baseName, beside, elideRef } from './path';
@@ -618,6 +619,7 @@
   const signing = new SigningState();
   const repoConfig = new RepoConfigState();
   const tools = new ToolsState();
+  const openRequests = new RequestsState();
   const ssh = new SshState();
   const toasts = new ToastsState();
   const updates = new UpdateState();
@@ -4511,6 +4513,12 @@
     }
   }
 
+  // The Start page asks every tab's host what is open each time it is shown, which is when
+  // somebody is choosing what to work on next; nothing waits on the answer.
+  $effect(() => {
+    if (showStart && tabs.session.tabs.length > 0) void openRequests.load();
+  });
+
   // The window's scale, applied whenever it changes and once at start, since the webview
   // starts at its own and knows nothing of the stored one.
   $effect(() => {
@@ -5407,6 +5415,8 @@
   {#if onStart}
     <Start
       start={startPage}
+      requests={tabs.session.tabs.length === 0 ? null : openRequests}
+      onOpenRequest={(url) => void openInBrowser(url)}
       sshKeys={ssh.keys}
       defaultSshKey={profiles.current.settings.ssh.privateKey ?? ''}
       onOpen={(path, notes) => void openFromStart(path, notes)}

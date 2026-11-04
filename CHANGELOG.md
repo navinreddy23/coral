@@ -87,6 +87,10 @@
   (`coral.issueUrl`). "Create a branch from an issue…" in the command palette names the branch
   for the issue's number and title. `coral issue N` from the command line.
 
+- **Open requests across your tabs.** The Start page lists the pull and merge requests still
+  open in every repository open in a tab, each asked of its own host at once, drafts marked,
+  and says which repositories have no host or no sign-in rather than leaving them out.
+
 ### Fixed
 
 - Applying a patch that is already there says so, instead of reporting a change it never made.

@@ -1052,3 +1052,17 @@ export function hostingIssue(path: string, number: number): Promise<IssueView> {
 export function repoSetTracker(path: string, url: string | null): Promise<RepoConfig> {
   return invoke<RepoConfig>('repo_set_tracker', { path, url });
 }
+
+/** One open repository's requests still waiting on somebody, for the Start page. */
+export interface RepoRequests {
+  path: string;
+  host: Host | null;
+  requests: PullRequest[];
+  /** Why there are none to show, when that is not simply that there are none. */
+  problem: string | null;
+}
+
+/** The open requests in every repository open in a tab, each asked of its own host. */
+export function hostingEverywhere(): Promise<RepoRequests[]> {
+  return invoke<RepoRequests[]>('hosting_everywhere');
+}
