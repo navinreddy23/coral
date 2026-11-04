@@ -159,9 +159,21 @@ pub async fn merge(
 ///
 /// # Errors
 /// Propagates git failures that left no conflict behind.
-pub async fn rebase(path: &Path, onto: String, update_refs: bool) -> Result<OpOutcome, CoralError> {
-    journaled(path, &format!("rebase onto {onto}"), |r, l| async move {
-        l.rebase(&r, &onto, update_refs).await
+pub async fn rebase(
+    path: &Path,
+    onto: String,
+    from: Option<String>,
+    update_refs: bool,
+) -> Result<OpOutcome, CoralError> {
+    let label = match &from {
+        None => format!("rebase onto {onto}"),
+        Some(from) => format!("move the commits after {from} onto {onto}"),
+    };
+    journaled(path, &label, |r, l| async move {
+        match from {
+            None => l.rebase(&r, &onto, update_refs).await,
+            Some(from) => l.rebase_onto(&r, &onto, &from, update_refs).await,
+        }
     })
     .await
 }

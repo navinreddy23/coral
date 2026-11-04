@@ -558,6 +558,32 @@ impl RepoLocation {
         self.run_stoppable(runner, cmd.arg(onto)).await
     }
 
+    /// Replays the current branch's commits after `from` onto `onto`, leaving `from` and
+    /// everything below it behind: `git rebase --onto <onto> <from>`.
+    ///
+    /// The way a branch started from the wrong place is moved, or one cut from a feature
+    /// branch is moved to main without taking the feature with it. Always the current branch,
+    /// never git's third argument, which checks a branch out first and fails when another
+    /// worktree has it.
+    /// <https://git-scm.com/docs/git-rebase#Documentation/git-rebase.txt---ontoltnewbasegt>
+    ///
+    /// # Errors
+    /// Propagates git failures that left no conflict behind, including an unknown revision.
+    pub async fn rebase_onto(
+        &self,
+        runner: &GitRunner,
+        onto: &str,
+        from: &str,
+        update_refs: bool,
+    ) -> Result<OpOutcome, CoralError> {
+        let mut cmd = GitCommand::write("rebase", self.display_path()).arg("rebase");
+        if update_refs {
+            cmd = cmd.arg("--update-refs");
+        }
+        self.run_stoppable(runner, cmd.arg("--onto").arg(onto).arg(from))
+            .await
+    }
+
     /// Applies commits onto the current branch.
     ///
     /// # Errors

@@ -412,6 +412,31 @@ describe('the commit menu', () => {
     });
   });
 
+  it('moves the commits above one onto a base named in the question', async () => {
+    const { container } = await shell({ rev_ancestry: 'behind' });
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Move the commits above this onto…'));
+    const field = await waitFor(() => {
+      const found = container.querySelector('[role="dialog"] input, [role="dialog"] textarea');
+      if (!found) throw new Error('no field to name the base in');
+      return found as HTMLInputElement;
+    });
+    await fireEvent.input(field, { target: { value: ' main ' } });
+    await confirm(container, true);
+    await waitFor(() => {
+      expect(lastAction()).toEqual({ kind: 'rebase', onto: 'main', from: oidOf(frame, 0) });
+    });
+  });
+
+  it('offers no move for the commit at the tip, which has nothing above it', async () => {
+    const { container } = await shell({ rev_ancestry: 'same' });
+    await openMenu(container);
+    expect(disabledItem(container, 'Move the commits above this onto…')).toBe(true);
+    expect(itemNamed(container, 'Move the commits above this onto…').textContent).toContain(
+      'none are above it',
+    );
+  });
+
   it('offers the whole message when rewording, not just the summary', async () => {
     // The field held the summary and what came back replaced the entire message, so rewording
     // any commit with a body — on a kernel, every commit, with its explanation and its

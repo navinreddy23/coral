@@ -371,7 +371,7 @@ export type Action =
   | { kind: 'branchDelete'; name: string; force: boolean }
   | { kind: 'branchRename'; from: string; to: string }
   | { kind: 'merge'; rev: string; mode: 'auto' | 'noFf' | 'ffOnly' | 'squash' }
-  | { kind: 'rebase'; onto: string }
+  | { kind: 'rebase'; onto: string; from?: string | null }
   | { kind: 'cherryPick'; revs: string[]; commit: boolean; mainline?: number }
   | { kind: 'revert'; revs: string[]; mainline?: number }
   | {

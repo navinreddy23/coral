@@ -101,6 +101,10 @@ pub enum Command {
     /// Replay the current branch onto another.
     Rebase {
         onto: String,
+        /// Replay only the commits after this one, leaving it and what is below it behind
+        /// (`git rebase --onto ONTO FROM`).
+        #[arg(long, value_name = "REV")]
+        from: Option<String>,
         /// Move branches that point into the replayed range.
         #[arg(long)]
         update_refs: bool,
@@ -727,9 +731,11 @@ async fn dispatch_write(command: Command, repo: &std::path::Path) -> output::Ren
         Command::Merge { rev, mode, message } => {
             output::render_op(&commands::write::merge(repo, rev, mode, message).await)
         }
-        Command::Rebase { onto, update_refs } => {
-            output::render_op(&commands::write::rebase(repo, onto, update_refs).await)
-        }
+        Command::Rebase {
+            onto,
+            from,
+            update_refs,
+        } => output::render_op(&commands::write::rebase(repo, onto, from, update_refs).await),
         Command::CherryPick { revs, mainline } => {
             output::render_op(&commands::write::cherry_pick(repo, revs, mainline).await)
         }

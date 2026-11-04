@@ -2440,6 +2440,14 @@
         },
         {
           kind: 'item',
+          label: 'Move the commits above this onto…',
+          hint: offBranch ?? (where === 'same' ? 'none are above it' : `${short} stays behind`),
+          disabled: where !== 'behind' || actions.busy,
+          worktree: true,
+          run: () => void moveAbove(oid, short),
+        },
+        {
+          kind: 'item',
           label: 'Fix up with the staged changes',
           hint: offBranch ?? (worktree.staged.length === 0
             ? 'nothing is staged'
@@ -2707,6 +2715,21 @@
     );
     if (message === null || message.trim() === '') return;
     await act({ kind: 'rewrite', rev: oid, how: 'reword', message: message.trim() });
+  }
+
+  /**
+   * Replays the current branch's commits above `oid` onto another base, leaving `oid` and what
+   * is below it behind: a branch cut from a feature branch, moved to main without the feature.
+   */
+  async function moveAbove(oid: string, short: string) {
+    const branch = headName ?? 'HEAD';
+    const onto = await askText(
+      `Move ${branch}'s commits above ${short} onto…`,
+      `A branch, tag or commit. ${short} and everything below it stay where they are; the commits above it are replayed on top of what you name, so their object ids change.`,
+      '',
+    );
+    if (onto === null || onto.trim() === '') return;
+    await act({ kind: 'rebase', onto: onto.trim(), from: oid });
   }
 
   /**

@@ -73,6 +73,9 @@ pub enum Action {
     },
     Rebase {
         onto: String,
+        /// Only the commits after this one are replayed: `git rebase --onto <onto> <from>`.
+        #[serde(default)]
+        from: Option<String>,
     },
     CherryPick {
         revs: Vec<String>,
@@ -325,11 +328,9 @@ fn shortened(revs: &[String]) -> String {
 }
 
 impl Action {
-    /// What the journal should call this, and the label a failure is reported under.
-    fn label(&self) -> String {
+    /// [`Self::label`] for a push, which has the most ways to be one.
+    fn push_label(&self) -> String {
         match self {
-            Self::Fetch { .. } => "fetch".to_owned(),
-            Self::Pull { .. } => "pull".to_owned(),
             // Before the arm below it, which matches any push naming a ref and would
             // otherwise swallow this one and journal a deletion as a push.
             Self::Push {
@@ -346,7 +347,16 @@ impl Action {
                 force_with_lease: true,
                 ..
             } => "force push".to_owned(),
-            Self::Push { .. } => "push".to_owned(),
+            _ => "push".to_owned(),
+        }
+    }
+
+    /// What the journal should call this, and the label a failure is reported under.
+    fn label(&self) -> String {
+        match self {
+            Self::Fetch { .. } => "fetch".to_owned(),
+            Self::Pull { .. } => "pull".to_owned(),
+            Self::Push { .. } => self.push_label(),
             Self::Checkout { rev } => format!("checkout {}", named(rev)),
             Self::BranchCreate { name, .. } => format!("create branch {name}"),
             Self::BranchDelete { name, .. } => format!("delete branch {name}"),
@@ -355,7 +365,15 @@ impl Action {
                 MergeMode::FfOnly => format!("fast-forward to {}", named(rev)),
                 _ => format!("merge {}", named(rev)),
             },
-            Self::Rebase { onto } => format!("rebase onto {}", named(onto)),
+            Self::Rebase { onto, from: None } => format!("rebase onto {}", named(onto)),
+            Self::Rebase {
+                onto,
+                from: Some(from),
+            } => format!(
+                "move the commits after {} onto {}",
+                named(from),
+                named(onto)
+            ),
             Self::CherryPick { revs, commit, .. } => {
                 let what = shortened(revs);
                 if *commit {
@@ -790,10 +808,13 @@ async fn run_refs(
             let out = loc.merge(runner, &rev, mode, None).await?;
             return Ok(Done::from(&out));
         }
-        Action::Rebase { onto } => {
+        Action::Rebase { onto, from } => {
             // --update-refs carries any branches pointing inside the rebased range along with
             // it, which is what stops a stack of review branches being left behind.
-            let out = loc.rebase(runner, &onto, true).await?;
+            let out = match from {
+                None => loc.rebase(runner, &onto, true).await?,
+                Some(from) => loc.rebase_onto(runner, &onto, &from, true).await?,
+            };
             return Ok(Done::from(&out));
         }
         Action::CherryPick {

@@ -18,6 +18,11 @@
   picker folds every `fixup!` and `squash!` commit under the commit it names, as
   `git rebase --autosquash` does, with a switch to lay them out as plain picks instead.
   `coral commit --fixup REV` and `--squash REV` are the same from the command line.
+- **Move commits onto another base.** "Move the commits above this onto…" on a commit below
+  the tip replays only the commits above it onto the branch, tag or commit you name, leaving
+  it and everything below it behind: `git rebase --onto`, the way a branch cut from a feature
+  branch moves to main without the feature. `coral rebase ONTO --from REV` from the command
+  line.
 - `.mailmap` is honoured in the graph, the commit details and file history, as it already was
   in blame: someone who committed under several names and addresses reads as one person, with
   one picture. On the kernel that is the 989-line map its maintainers keep.

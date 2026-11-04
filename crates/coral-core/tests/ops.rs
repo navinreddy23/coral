@@ -1120,3 +1120,41 @@ async fn continuing_uses_a_message_edited_while_stopped() {
         "Picked, reworded while stopped"
     );
 }
+
+/// A topic cut from a feature branch, moved to main without taking the feature along: the
+/// case `--onto` exists for. Main moved on in the meantime, so a plain rebase onto it would
+/// have replayed the feature's commits too.
+#[tokio::test]
+async fn moving_a_branch_onto_another_leaves_the_commits_below_it_behind() {
+    let repo = TestRepo::new().write("base.txt", "base\n").commit("base");
+    repo.git(["checkout", "--quiet", "-b", "feature"]);
+    let repo = repo.write("f.txt", "f\n").commit("feature work");
+    repo.git(["checkout", "--quiet", "-b", "topic"]);
+    let repo = repo.write("t.txt", "t\n").commit("topic one");
+    let repo = repo.write("t.txt", "t\nt2\n").commit("topic two");
+    repo.git(["checkout", "--quiet", "main"]);
+    let repo = repo.write("m.txt", "m\n").commit("main moved on");
+    repo.git(["checkout", "--quiet", "topic"]);
+
+    let (runner, loc) = open(&repo).await;
+    let out = loc
+        .rebase_onto(&runner, "main", "feature", false)
+        .await
+        .unwrap();
+    assert!(out.completed, "{}", out.message);
+
+    let summaries: Vec<String> = repo
+        .git(["log", "--format=%s"])
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(
+        summaries,
+        ["topic two", "topic one", "main moved on", "base"]
+    );
+    assert!(
+        !repo.path().join("f.txt").exists(),
+        "the feature stayed where it was"
+    );
+    assert_eq!(repo.git(["symbolic-ref", "--short", "HEAD"]), "topic");
+}
