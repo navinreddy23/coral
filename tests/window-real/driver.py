@@ -22,6 +22,11 @@ PUNCTUATION = {
     ".": ("period",),
     "/": ("slash",),
     '"': ("Shift_L", "apostrophe"),
+    "{": ("Shift_L", "bracketleft"),
+    "}": ("Shift_L", "bracketright"),
+    "!": ("Shift_L", "1"),
+    "#": ("Shift_L", "3"),
+    "=": ("equal",),
 }
 
 
