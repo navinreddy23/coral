@@ -271,6 +271,39 @@ async fn log_reports_commits_newest_first() {
 }
 
 #[tokio::test]
+async fn find_answers_like_the_find_box_including_what_a_change_contained() {
+    let fixture = TestRepo::new().write("f.txt", "plain\n").commit("first");
+    let fixture = fixture
+        .write("f.txt", "plain\nneedle_here\n")
+        .commit("adds a line");
+    let fixture = fixture.write("g.txt", "x\n").commit("mentions needle_here");
+
+    let by_message = coral_cli::run(argv(&[
+        "--json",
+        "--repo",
+        fixture.path().to_str().unwrap(),
+        "find",
+        "needle_here",
+    ]))
+    .await;
+    let found = by_message.json["result"]["commits"].as_array().unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0]["summary"], "mentions needle_here");
+
+    let by_change = coral_cli::run(argv(&[
+        "--json",
+        "--repo",
+        fixture.path().to_str().unwrap(),
+        "find",
+        "code:needle_here",
+    ]))
+    .await;
+    let found = by_change.json["result"]["commits"].as_array().unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0]["summary"], "adds a line");
+}
+
+#[tokio::test]
 async fn blame_maps_lines_to_the_commits_that_wrote_them() {
     let fixture = TestRepo::new().write("f.txt", "a\nb\n").commit("first");
     let fixture = fixture.write("f.txt", "a\nCHANGED\n").commit("second");

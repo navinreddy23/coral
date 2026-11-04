@@ -276,9 +276,11 @@ What somebody typing a file name into a filter means is "which commits touched t
 pathspec answers exactly that from the index the walk already has. `:(icase)*query*` matches any
 part of any path, case-insensitively, the way the message and author passes match.
 
-Searching diff content is worth having one day, but as its own thing with its own affordance and
-its own warning about the cost, not folded into a filter that is expected to answer while you
-type.
+Searching diff content is its own thing, with its own affordance and its own warning about the
+cost. It is the `code:` qualifier (`code:text` as `-S`, `code:/regex/` as `-G`), which the find
+box's **In changes** button writes for you; the button's title says it reads every diff, the
+tally counts the seconds once it passes two, and a Stop button keeps the query while letting the
+walk go. `coral find` answers the same query from the command line.
 
 ## A shallow clone is grafted rather than refused or shelled out to
 

@@ -219,4 +219,27 @@ describe('finding a commit', () => {
       expect(container.querySelector('.find .tally')?.textContent).toContain('reading changes');
     });
   });
+
+  it('turns the typed words into a search of what changed, and back, from a button', async () => {
+    const asked: string[] = [];
+    const container = await search('render_row', async () => []);
+    const stubbed = invoke.getMockImplementation();
+    invoke.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === 'search_commits') asked.push((args as { query: string }).query);
+      return stubbed?.(cmd, args);
+    });
+    const toggle = container.querySelector('.find button.changes') as HTMLButtonElement;
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    // The cost is on the button, before anyone presses it.
+    expect(toggle.title).toContain('minutes');
+
+    await fireEvent.click(toggle);
+    const input = container.querySelector('.find input') as HTMLInputElement;
+    await waitFor(() => expect(input.value).toBe('code:render_row'));
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    await waitFor(() => expect(asked).toContain('code:render_row'), { timeout: 3000 });
+
+    await fireEvent.click(toggle);
+    await waitFor(() => expect(input.value).toBe('render_row'));
+  });
 });

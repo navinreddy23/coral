@@ -305,6 +305,13 @@ pub enum Command {
         #[arg(long, default_value_t = 50)]
         limit: u64,
     },
+    /// Find commits the way the window's find box does: message, author, path and object id,
+    /// narrowed by `code:text` (added or removed it), `code:/regex/`, `after:` and `before:`.
+    Find {
+        query: String,
+        #[arg(long, default_value_t = 50)]
+        limit: u64,
+    },
     /// Attribute each line of a file to the commit that last changed it.
     Blame {
         /// Revision to blame at.
@@ -570,6 +577,9 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
                 limit: Some(limit),
             };
             output::render(&commands::log::run(repo, &q).await)
+        }
+        Command::Find { query, limit } => {
+            output::render(&commands::find::run(repo, &query, limit).await)
         }
         Command::Blame { rev, file } => {
             output::render(&commands::blame::run(repo, &rev, &file).await)

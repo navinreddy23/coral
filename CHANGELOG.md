@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **In changes**, a button in the find box that searches what each commit added or removed
+  rather than what it says about itself. It writes the `code:` qualifier the box already read,
+  warns that it reads every diff, counts the seconds while it runs and can be stopped without
+  losing the query.
+- `coral find`, the find box from the command line, qualifiers included.
+
+### Fixed
+
+- Applying a patch that is already there says so, instead of reporting a change it never made.
+- A GitLab merge request is written `!42`, as GitLab writes it, rather than `#42`, which there
+  names an issue.
+
 ## 1.3.0
 
 ### Resizing and folding the right panel

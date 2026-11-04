@@ -19,12 +19,17 @@ export class FindState {
   at = $state(0);
   searching = $state(false);
   error = $state<string | null>(null);
+  /** Whole seconds the running search has taken, ticking only while one runs. */
+  seconds = $state(0);
+  /** Set when the reader stopped a search, so the box says why there are no matches. */
+  stopped = $state(false);
 
   /** Which query the held matches answer, so a stale reply cannot replace a newer one. */
   #token = 0;
   #timer: ReturnType<typeof setTimeout> | null = null;
   /** Where the search still running went, so closing the box can stop it there. */
   #repo: string | null = null;
+  #clock: ReturnType<typeof setInterval> | null = null;
 
   /**
    * Whether the query reads every diff, which on a large history is minutes rather than
@@ -69,6 +74,7 @@ export class FindState {
    */
   type(repo: string, query: string): void {
     this.query = query;
+    this.stopped = false;
     if (this.#timer !== null) clearTimeout(this.#timer);
     if (query.trim() === '') {
       this.#token += 1;
@@ -95,7 +101,9 @@ export class FindState {
     const token = ++this.#token;
     this.#repo = repo;
     this.searching = true;
+    this.stopped = false;
     this.error = null;
+    this.#startClock();
     try {
       const found = await searchCommits(repo, query, FIND_LIMIT);
       if (token !== this.#token) return;
@@ -109,8 +117,38 @@ export class FindState {
       if (token === this.#token) {
         this.searching = false;
         this.#repo = null;
+        this.#stopClock();
       }
     }
+  }
+
+  /**
+   * Stops the running search and keeps the query, for a `code:` search that is taking longer
+   * than the answer is worth.
+   */
+  stop(): void {
+    if (!this.searching) return;
+    this.#token += 1;
+    if (this.#timer !== null) clearTimeout(this.#timer);
+    this.#timer = null;
+    this.#stop();
+    this.matches = [];
+    this.at = 0;
+    this.stopped = true;
+  }
+
+  #startClock(): void {
+    this.#stopClock();
+    const started = Date.now();
+    this.#clock = setInterval(() => {
+      this.seconds = Math.floor((Date.now() - started) / 1000);
+    }, 1000);
+  }
+
+  #stopClock(): void {
+    if (this.#clock !== null) clearInterval(this.#clock);
+    this.#clock = null;
+    this.seconds = 0;
   }
 
   /** Stops whatever search is still running, which nobody now wants the answer to. */
@@ -118,6 +156,7 @@ export class FindState {
     const repo = this.#repo;
     this.#repo = null;
     this.searching = false;
+    this.#stopClock();
     if (repo !== null) void stopSearch(repo).catch(() => false);
   }
 
@@ -127,4 +166,33 @@ export class FindState {
     this.at = (this.at + direction + this.matches.length) % this.matches.length;
     return this.current;
   }
+}
+
+/** A `code:` qualifier, with its value quoted or bare. */
+const CODE = /(^|\s)code:("[^"]*"|\S+)/iu;
+/** The qualifiers that stay where they are when the text moves in or out of `code:`. */
+const KEPT = /^(?:after|before):\S/iu;
+
+/**
+ * The query with its words searched for in what each commit changed, or taken back out.
+ *
+ * On, the free words become one `code:"…"` and `after:`/`before:` stay; off, the `code:`
+ * value goes back to being free text, so toggling twice gives back what was typed.
+ */
+export function inChanges(query: string, on: boolean): string {
+  const found = CODE.exec(query);
+  if (!on) {
+    if (found === null) return query;
+    const value = (found[2] ?? '').replace(/^"(.*)"$/u, '$1').replace(/^\/(.*)\/$/u, '$1');
+    return `${query.slice(0, found.index)}${found[1] ?? ''}${value}${query.slice(found.index + found[0].length)}`
+      .replace(/\s+/gu, ' ')
+      .trim();
+  }
+  if (found !== null) return query;
+  const words = query.trim().split(/\s+/u).filter((w) => w !== '');
+  const kept = words.filter((w) => KEPT.test(w));
+  const text = words.filter((w) => !KEPT.test(w)).join(' ');
+  if (text === '') return [...kept, 'code:'].join(' ');
+  const value = /\s|"/u.test(text) ? `"${text.replace(/"/gu, '')}"` : text;
+  return [`code:${value}`, ...kept].join(' ');
 }

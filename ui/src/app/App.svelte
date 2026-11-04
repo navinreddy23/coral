@@ -72,7 +72,7 @@
   import { ActivityState } from '../state/activity.svelte';
   import { StashesState } from '../state/stashes.svelte';
   import { StartState } from '../state/start.svelte';
-  import { FindState } from '../state/find.svelte';
+  import { FindState, inChanges } from '../state/find.svelte';
   import { BisectState } from '../state/bisect.svelte';
   import { AvatarState } from '../state/avatars.svelte';
   import type { PlacedStash } from '../ipc/stash';
@@ -5390,9 +5390,31 @@
             placeholder="Message, author, path or id — code: after: before:"
             aria-label="Find a commit"
           />
+          <!--
+            The same thing as typing code:, made findable. Its title carries the cost, because
+            reading every diff on a history this size is minutes where the other passes are
+            seconds.
+          -->
+          <button
+            class="changes"
+            class:on={find.readsChanges}
+            aria-pressed={find.readsChanges}
+            onclick={() => {
+              if (!info) return;
+              find.type(info.path, inChanges(find.query, !find.readsChanges));
+              findField?.focus();
+            }}
+            title={find.readsChanges
+              ? 'Searching what each commit changed. Click to search messages, authors and paths again'
+              : 'Search what each commit added or removed instead. Reads every diff, so on a long history it takes minutes'}
+          >
+            <Icon name="diff" size={13} /> In changes
+          </button>
           <span class="tally" aria-live="polite">
             {#if find.searching}
-              {find.readsChanges ? 'reading changes…' : 'searching…'}
+              {find.readsChanges ? 'reading changes…' : 'searching…'}{find.seconds >= 2 ? ` ${find.seconds} s` : ''}
+            {:else if find.stopped}
+              stopped
             {:else if find.query.trim() === '' || find.error !== null}
               &nbsp;
             {:else if find.matches.length === 0}
@@ -5411,6 +5433,11 @@
             disabled={find.matches.length === 0}
             title="Next match">↓</button
           >
+          {#if find.searching && find.seconds >= 2}
+            <button class="halt" onclick={() => find.stop()} title="Stop this search and keep what was typed">
+              Stop
+            </button>
+          {/if}
           <button onclick={() => find.close()} title="Close the search">
             <Icon name="close" size={13} />
           </button>
@@ -5895,6 +5922,8 @@
   }
   .find button:hover:not(:disabled) { background: var(--bg-2); color: var(--fg-0); }
   .find button:disabled { color: var(--fg-2); cursor: default; }
+  .find button.changes { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .find button.changes.on { background: var(--accent-soft); color: var(--fg-0); border-color: var(--accent); }
   /* Its own line, so a long refusal never squeezes the field it is about. */
   .find .problem { flex: 1 0 100%; margin: 0; color: var(--danger); font-size: var(--text-sm); }
 
