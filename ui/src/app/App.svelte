@@ -42,6 +42,7 @@
   import BisectBar from './BisectBar.svelte';
   import NewRequest from './NewRequest.svelte';
   import Review from './Review.svelte';
+  import { quoteRequest } from './request';
   import { ReviewState } from '../state/review.svelte';
   import { MergeState } from '../state/merge.svelte';
   import RebasePicker from './RebasePicker.svelte';
@@ -4653,7 +4654,7 @@
       items: [
         {
           kind: 'item',
-          label: `Check out #${pr.number} locally`,
+          label: `Check out ${quoteRequest(hosting.view?.host?.kind, pr.number)} locally`,
           run: () => void act({ kind: 'checkoutProposal', number: pr.number }),
         },
         {
@@ -5228,6 +5229,7 @@
         checks={hosting.checks}
         onOpenChecks={(pr, found) => void openInBrowser(found.url ?? pr.webUrl)}
         pullRequestLabel={hosting.view?.host?.kind === 'gitlab' ? 'Merge requests' : 'Pull requests'}
+        quote={(n) => quoteRequest(hosting.view?.host?.kind, n)}
         focusFilter={filterTick}
         reveal={revealSection}
         collapsed={views.current.collapsed}
@@ -5277,6 +5279,7 @@
         pr={reviewing}
         label={requestWord}
         canRequestChanges={hosting.view?.host?.kind === 'github'}
+        quoted={quoteRequest(hosting.view?.host?.kind, reviewing.number)}
         onClose={() => (reviewing = null)}
       />
     {/if}
@@ -5303,7 +5306,7 @@
         }}
         onClose={() => (proposing = null)}
         onOpened={(made) => {
-          toasts.push('ok', `${requestWord} opened`, `#${made.number} ${made.title}`);
+          toasts.push('ok', `${requestWord} opened`, `${quoteRequest(hosting.view?.host?.kind, made.number)} ${made.title}`);
           void hosting.load(info?.path ?? '');
         }}
       />

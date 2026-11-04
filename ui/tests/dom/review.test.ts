@@ -27,7 +27,7 @@ function shown(canRequestChanges: boolean) {
     { author: 'cy', body: '', at: '2026-10-02T10:00:00Z', verdict: 'approved', path: null, line: null },
   ];
   return render(Review, {
-    props: { review, pr, label: 'Pull request', canRequestChanges, onClose: vi.fn() },
+    props: { review, pr, label: 'Pull request', canRequestChanges, quoted: '#7', onClose: vi.fn() },
   });
 }
 

@@ -22,6 +22,7 @@
     checks = {},
     onOpenChecks = () => undefined,
     pullRequestLabel,
+    quote = (n: number) => `#${n}`,
     onSelect,
     onOpenSubmodule,
     onDropRef,
@@ -75,6 +76,8 @@
     onOpenChecks?: (pr: PullRequest, checks: Checks) => void;
     /** What the host calls them: GitHub says pull, GitLab says merge. */
     pullRequestLabel: string;
+    /** A request number as its host writes it: `#42`, or `!42` on GitLab. */
+    quote?: (number: number) => string;
     onSelect: (row: number) => void;
     /** What can be done with one stash, asked for at the dots or by right-clicking. */
     onStashMenu: (event: MouseEvent, stash: PlacedStash) => void;
@@ -669,7 +672,7 @@
                 title={`${pr.title}\n${pr.author}: ${pr.sourceBranch} → ${pr.targetBranch}\n${pr.webUrl}`}
               >
                 <span class="state {pr.state}">{pr.state[0]?.toUpperCase()}</span>
-                <span class="num">#{pr.number}</span>
+                <span class="num">{quote(pr.number)}</span>
                 <span class="title">{pr.title}</span>
                 {#if checks[pr.number] !== undefined && checks[pr.number]?.state !== 'none'}
                   {@const found = checks[pr.number]}

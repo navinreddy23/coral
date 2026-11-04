@@ -70,6 +70,8 @@ pub async fn detect(path: &Path) -> Result<HostView, CoralError> {
 #[serde(rename_all = "camelCase")]
 pub struct PullRequests {
     pub pull_requests: Vec<PullRequest>,
+    #[serde(skip)]
+    pub sigil: char,
 }
 
 /// Lists the repository's pull or merge requests.
@@ -99,7 +101,10 @@ pub async fn list(path: &Path) -> Result<PullRequests, CoralError> {
         .pull_requests(&host)
         .await
         .map_err(|e| refused("list pull requests", &e))?;
-    Ok(PullRequests { pull_requests })
+    Ok(PullRequests {
+        pull_requests,
+        sigil: host.kind.sigil(),
+    })
 }
 
 /// Stores a token for the repository's host, read from stdin.
@@ -184,7 +189,8 @@ impl crate::output::Human for PullRequests {
         for pr in &self.pull_requests {
             let _ = write!(
                 out,
-                "\n  #{:<5} {:<10?} {:<28} {} → {}",
+                "\n  {}{:<5} {:<10?} {:<28} {} → {}",
+                self.sigil,
                 pr.number,
                 pr.state,
                 truncate(&pr.title, 28),

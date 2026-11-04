@@ -9,6 +9,18 @@ pub enum HostKind {
     GitLab,
 }
 
+impl HostKind {
+    /// What a request number is written after: GitLab keeps `#` for issues and quotes a
+    /// merge request as `!42`.
+    #[must_use]
+    pub fn sigil(self) -> char {
+        match self {
+            Self::GitHub => '#',
+            Self::GitLab => '!',
+        }
+    }
+}
+
 /// A host resolved from a remote URL. Self-hosted instances keep their own origin, which is
 /// why this carries a `Url` rather than just a kind.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
@@ -264,5 +276,11 @@ mod tests {
             Host::detect("https://bitbucket.org/o/r.git"),
             Err(HostingError::Unrecognised(_))
         ));
+    }
+
+    #[test]
+    fn a_merge_request_is_quoted_with_a_bang() {
+        assert_eq!(HostKind::GitHub.sigil(), '#');
+        assert_eq!(HostKind::GitLab.sigil(), '!');
     }
 }

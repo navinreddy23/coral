@@ -31,6 +31,15 @@ impl Proposal {
         }
     }
 
+    /// How people quote it: `#42` on GitHub, `!42` on GitLab, where `#42` is an issue.
+    #[must_use]
+    pub fn quoted(self) -> String {
+        match self {
+            Self::Pull(n) => format!("#{n}"),
+            Self::MergeRequest(n) => format!("!{n}"),
+        }
+    }
+
     /// The local branch it is checked out as: `pr/42`, or `mr/42` on GitLab, as each host's
     /// own instructions name it.
     #[must_use]
@@ -165,5 +174,11 @@ mod tests {
             "refs/merge-requests/7/head"
         );
         assert_eq!(Proposal::MergeRequest(7).branch(), "mr/7");
+    }
+
+    #[test]
+    fn each_is_quoted_the_way_its_host_writes_it() {
+        assert_eq!(Proposal::Pull(42).quoted(), "#42");
+        assert_eq!(Proposal::MergeRequest(42).quoted(), "!42");
     }
 }

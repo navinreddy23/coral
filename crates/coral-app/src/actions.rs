@@ -425,7 +425,7 @@ impl Action {
                 }
             }
             Self::BisectReset => "end the bisect".to_owned(),
-            Self::CheckoutProposal { number } => format!("check out #{number}"),
+            Self::CheckoutProposal { number } => format!("check out request {number}"),
             Self::Undo => "undo".to_owned(),
             Self::Redo => "redo".to_owned(),
         }
@@ -758,12 +758,13 @@ async fn run_remote(
                 .checkout_proposal(runner, &remote, proposal, |p| report(&p))
                 .await?;
             let branch = proposal.branch();
+            let quoted = proposal.quoted();
             Ok(Done {
                 conflicted: false,
                 message: match did {
-                    CheckedOut::Created => format!("#{number} is checked out as {branch}"),
-                    CheckedOut::Updated => format!("{branch} is brought up to #{number}"),
-                    CheckedOut::Unchanged => format!("{branch} already has all of #{number}"),
+                    CheckedOut::Created => format!("{quoted} is checked out as {branch}"),
+                    CheckedOut::Updated => format!("{branch} is brought up to {quoted}"),
+                    CheckedOut::Unchanged => format!("{branch} already has all of {quoted}"),
                 },
             })
         }
