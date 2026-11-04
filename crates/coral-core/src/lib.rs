@@ -17,6 +17,7 @@ pub mod history;
 pub mod identity;
 pub mod index;
 pub mod lfs;
+pub mod mailmap;
 pub mod notes;
 pub mod ops;
 pub mod patch;

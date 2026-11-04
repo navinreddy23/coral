@@ -400,3 +400,44 @@ async fn a_stash_lists_the_untracked_files_it_carries() {
         .unwrap();
     assert_eq!(commit.files.len(), 1);
 }
+
+/// One person under an old address: the graph's rows, the history and the details all show
+/// the name `.mailmap` gives, as `git log` does, not whatever was committed at the time.
+#[tokio::test]
+async fn a_mailmap_puts_one_name_on_every_address_a_person_used() {
+    let repo = TestRepo::new()
+        .write(
+            ".mailmap",
+            "Ada Lovelace <ada@new.invalid> <ada@old.invalid>\n",
+        )
+        .commit("map ada");
+    repo.git([
+        "commit",
+        "--quiet",
+        "--allow-empty",
+        "--author=ada <ada@old.invalid>",
+        "-m",
+        "from the old address",
+    ]);
+    let oid = repo.git(["rev-parse", "HEAD"]).trim().to_owned();
+
+    let (runner, loc) = open(&repo).await;
+    let meta = loc
+        .commit_metadata(&runner, std::slice::from_ref(&oid))
+        .await
+        .unwrap();
+    assert_eq!(meta[0].author, "Ada Lovelace");
+    assert_eq!(meta[0].email, "ada@new.invalid");
+
+    let detail = loc
+        .commit_detail(&runner, &oid, Listing::Commit)
+        .await
+        .unwrap();
+    assert_eq!(detail.commit.author.name, "Ada Lovelace");
+    assert_eq!(detail.commit.author.email, "ada@new.invalid");
+
+    // Someone the file does not mention keeps the name they committed under.
+    let first = repo.git(["rev-parse", "HEAD~1"]).trim().to_owned();
+    let meta = loc.commit_metadata(&runner, &[first]).await.unwrap();
+    assert_eq!(meta[0].author, "Coral Fixture");
+}

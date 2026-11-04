@@ -9,6 +9,9 @@
   warns that it reads every diff, counts the seconds while it runs and can be stopped without
   losing the query.
 - `coral find`, the find box from the command line, qualifiers included.
+- `.mailmap` is honoured in the graph, the commit details and file history, as it already was
+  in blame: someone who committed under several names and addresses reads as one person, with
+  one picture. On the kernel that is the 989-line map its maintainers keep.
 
 ### Fixed
 

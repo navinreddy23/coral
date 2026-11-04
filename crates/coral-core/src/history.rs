@@ -5,7 +5,10 @@ use crate::error::CoralError;
 
 /// Field order for [`parse`]. NUL between every field *and* between records, so a message
 /// containing newlines cannot be mistaken for a record boundary.
-pub const FORMAT: &str = "%H%x00%P%x00%an%x00%ae%x00%at%x00%cn%x00%ce%x00%ct%x00%s%x00%b";
+///
+/// `%aN` and the rest rather than `%an`: the capitals are the names after `.mailmap`, so one
+/// person reads as one person here as they do in the graph's rows.
+pub const FORMAT: &str = "%H%x00%P%x00%aN%x00%aE%x00%at%x00%cN%x00%cE%x00%ct%x00%s%x00%b";
 
 const FIELDS: usize = 10;
 
