@@ -239,6 +239,16 @@ describe('the diff viewer', () => {
     expect(view.container.querySelector('.picked')?.textContent).toContain('Pick a line number');
   });
 
+  it('keeps the picked-lines bar one height, hint or pick', () => {
+    // happy-dom lays nothing out, so the rule is what is checked: a height set, not a minimum
+    // its contents can grow past, and a hint that cannot wrap onto a second line.
+    const rules = [...document.styleSheets]
+      .flatMap((sheet) => [...(sheet.cssRules ?? [])])
+      .map((r) => r.cssText);
+    expect(rules.find((t) => /\.picked[^{ ]*\s*\{[^}]*\bheight:\s*30px/u.test(t))).toBeDefined();
+    expect(rules.find((t) => /\.picked[^{]*>\s*span[^{]*\{[^}]*white-space:\s*nowrap/u.test(t))).toBeDefined();
+  });
+
   it('shows a blame that failed rather than waiting on it for ever', () => {
     const diff = new DiffState(new ViewsState());
     diff.path = 'vendor/sub';

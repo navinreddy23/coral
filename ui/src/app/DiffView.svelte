@@ -892,8 +892,11 @@
     border-bottom: 1px solid var(--border); color: var(--fg-1); font-size: var(--text-sm);
   }
   .picked .go { color: var(--fg-0); border-color: var(--accent); }
-  .picked { min-height: 20px; }
-  .picked .muted { color: var(--fg-2); }
+  /* One height whatever it says, and the hint kept to one line: the bar is there so that
+     picking a line moves nothing, which a hint taller than the picked state undid. */
+  .picked { box-sizing: border-box; height: 30px; flex-wrap: nowrap; }
+  .picked > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .picked .muted { color: var(--fg-2); margin: 0; padding: 0; }
   td.no.line-pick { cursor: pointer; }
   td.no.line-pick:hover { color: var(--fg-0); }
   tr.ranged td.no { background: var(--accent-soft); color: var(--fg-0); box-shadow: inset 2px 0 0 var(--accent-line); }
