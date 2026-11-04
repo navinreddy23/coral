@@ -1,6 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
-  import { coneOf, coveredBy } from './cone';
+  import { coneOf, coveredBy, holds } from './cone';
   import { repoFolders } from '../ipc/commands';
   import { messageOf } from '../ipc/error';
 
@@ -94,6 +94,9 @@
           type="checkbox"
           checked={inherited || ticked.has(folder)}
           disabled={inherited}
+          {@attach (node) => {
+            node.indeterminate = !inherited && !ticked.has(folder) && holds(folder, ticked);
+          }}
           onchange={(e) => tick(folder, e.currentTarget.checked)}
         />
         <span class="mono">{name(folder)}</span>

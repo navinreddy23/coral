@@ -45,4 +45,24 @@ describe('the folder picker', () => {
     await fireEvent.click(view.container.querySelector('footer .primary') as HTMLElement);
     expect(applied).toEqual([['drivers', 'kernel']]);
   });
+
+  it('marks a closed folder that holds a ticked one, so the choice is not hidden', async () => {
+    invoke.mockImplementation(async (cmd: string, args: { under: string | null }) =>
+      cmd === 'repo_folders' ? (TREE[args.under ?? ''] ?? []) : null,
+    );
+    const view = render(FolderPicker, {
+      props: { repo: '/k', initial: ['drivers/gpu'], onApply: () => {}, onClose: () => {} },
+    });
+    await waitFor(() => expect(view.container.querySelectorAll('.tree li')).toHaveLength(3));
+    const box = (name: string) =>
+      [...view.container.querySelectorAll('.tree li')]
+        .find((li) => li.querySelector('.mono')?.textContent === name)
+        ?.querySelector('input') as HTMLInputElement;
+    expect(box('drivers').indeterminate).toBe(true);
+    expect(box('drivers').checked).toBe(false);
+    expect(box('kernel').indeterminate).toBe(false);
+    // Ticking it whole takes the mark away.
+    await fireEvent.click(box('drivers'));
+    expect(box('drivers').indeterminate).toBe(false);
+  });
 });

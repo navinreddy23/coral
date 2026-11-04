@@ -229,3 +229,14 @@ describe('the token file', () => {
     expect(tokens('light').has('text-mark')).toBe(true);
   });
 });
+
+describe('a check box that is partly ticked', () => {
+  // Every box is drawn by base.css with `appearance: none`, so WebKitGTK draws nothing for
+  // `indeterminate` unless a rule does: the folder picker's half-chosen folder looked unticked.
+  const BASE = readFileSync(resolve(import.meta.dirname, '../src/styles/base.css'), 'utf8');
+
+  it('is drawn, filled and with a bar where the tick would be', () => {
+    expect(BASE).toMatch(/input\[type='checkbox'\]:indeterminate\s*\{[^}]*background:\s*var\(--accent\)/u);
+    expect(BASE).toMatch(/input\[type='checkbox'\]:indeterminate::before\s*\{[^}]*transform:\s*scale\(1\)/u);
+  });
+});

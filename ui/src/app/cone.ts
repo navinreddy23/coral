@@ -14,3 +14,9 @@ export function coveredBy(folder: string, ticked: Iterable<string>): boolean {
   for (const t of ticked) if (folder.startsWith(`${t}/`)) return true;
   return false;
 }
+
+/** Whether a folder below `folder` is ticked, so the folder is partly in the cone. */
+export function holds(folder: string, ticked: Iterable<string>): boolean {
+  for (const t of ticked) if (t.startsWith(`${folder}/`)) return true;
+  return false;
+}

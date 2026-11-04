@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coneOf, coveredBy } from '../src/app/cone';
+import { coneOf, coveredBy, holds } from '../src/app/cone';
 
 describe('a cone from ticked folders', () => {
   it('leaves out a folder inside another ticked one, and sorts the rest', () => {
@@ -18,5 +18,16 @@ describe('a cone from ticked folders', () => {
     expect(coveredBy('drivers/gpu/drm', ticked)).toBe(true);
     expect(coveredBy('drivers/gpu', ticked)).toBe(false);
     expect(coveredBy('drivers/gpu2', ticked)).toBe(false);
+  });
+});
+
+describe('a folder partly in the cone', () => {
+  it('is one with a ticked folder somewhere below it, however deep', () => {
+    const ticked = new Set(['drivers/gpu/drm']);
+    expect(holds('drivers', ticked)).toBe(true);
+    expect(holds('drivers/gpu', ticked)).toBe(true);
+    expect(holds('drivers/gpu/drm', ticked)).toBe(false);
+    // A shared prefix is not a parent.
+    expect(holds('driver', ticked)).toBe(false);
   });
 });
