@@ -53,11 +53,17 @@ fn signed_in(request: &str) -> Option<(HostKind, SecretString)> {
     let credential = Credential::parse(request).ok()?;
     // Any owner and repository: git names only the host unless `credential.useHttpPath` is on,
     // and the host is all a token is stored under.
-    let url = format!(
-        "{}://{}/o/r.git",
-        credential.protocol()?,
-        credential.host()?
-    );
+    let host = credential.host()?;
+    // Azure DevOps addresses a repository inside a project, and its remotes say so; a
+    // placeholder of any other shape is not one its parser takes.
+    let path = if host == "dev.azure.com" || host.ends_with("@dev.azure.com") {
+        "o/p/_git/r"
+    } else if host.ends_with(".visualstudio.com") {
+        "p/_git/r"
+    } else {
+        "o/r.git"
+    };
+    let url = format!("{}://{host}/{path}", credential.protocol()?);
     let host = Host::detect(&url).ok()?;
     let accounts = [
         current_profile().map(|id| Account::of_profile(&id)),
@@ -75,7 +81,7 @@ fn signed_in(request: &str) -> Option<(HostKind, SecretString)> {
 /// Read from disk because the helper is its own process, started by git, and the profile can
 /// change while the window runs. Tauri's config directory is `dirs::config_dir()` joined with
 /// the application's identifier.
-fn current_profile() -> Option<String> {
+pub(crate) fn current_profile() -> Option<String> {
     let path = dirs::config_dir()?
         .join("dev.coral.app")
         .join("profiles.json");
@@ -86,18 +92,33 @@ fn current_profile() -> Option<String> {
 
 /// The response for `request` carrying `secret`.
 ///
-/// A token stands in for a password under any user name on both hosts; these are the ones
-/// each documents for it, used only when git did not send one of its own.
+/// A token stands in for a password under the user name each host documents for it, used only
+/// when git did not send one of its own. Gitea and Azure DevOps take any name at all. A
+/// Bitbucket API token belongs to an account and is stored as `user:secret`, so it is split
+/// into the two; an access token alone goes under the name Bitbucket reserves for one.
 fn answer(request: &str, kind: HostKind, secret: SecretString) -> Result<String, CoralError> {
     let mut credential = Credential::parse(request)?;
+    let (user, password) = match (kind, secret.expose_secret().split_once(':')) {
+        (HostKind::Bitbucket, Some((user, password))) => (
+            Some(user.to_owned()),
+            SecretString::from(password.to_owned()),
+        ),
+        _ => (None, secret),
+    };
     if credential.username().is_none() {
-        let name = match kind {
-            HostKind::GitHub => "x-access-token",
-            HostKind::GitLab => "oauth2",
-        };
-        credential.set("username", name);
+        let name = user.unwrap_or_else(|| {
+            match kind {
+                HostKind::GitHub => "x-access-token",
+                HostKind::GitLab => "oauth2",
+                HostKind::Bitbucket => "x-token-auth",
+                HostKind::Gitea => "git",
+                HostKind::Azure => "pat",
+            }
+            .to_owned()
+        });
+        credential.set("username", &name);
     }
-    credential.set_password(secret);
+    credential.set_password(password);
     Ok(credential.to_response())
 }
 
@@ -138,6 +159,22 @@ mod tests {
         let gitlab = gitlab.unwrap();
         assert!(gitlab.contains("username=oauth2\n"), "{gitlab}");
         assert!(gitlab.contains("password=t2\n"), "{gitlab}");
+    }
+
+    #[test]
+    fn the_other_hosts_get_their_names_and_a_bitbucket_api_token_is_split() {
+        let said = |kind, secret: &str| {
+            answer("protocol=https\nhost=x\n", kind, secret.to_owned().into()).unwrap()
+        };
+        assert!(said(HostKind::Gitea, "t").contains("username=git\n"));
+        assert!(said(HostKind::Azure, "t").contains("username=pat\n"));
+        let access = said(HostKind::Bitbucket, "ATCTT");
+        assert!(access.contains("username=x-token-auth\n"), "{access}");
+        assert!(access.contains("password=ATCTT\n"), "{access}");
+        let api = said(HostKind::Bitbucket, "ada@x.invalid:ATATT");
+        assert!(api.contains("username=ada@x.invalid\n"), "{api}");
+        assert!(api.contains("password=ATATT\n"), "{api}");
+        assert!(!api.contains("ada@x.invalid:ATATT"), "{api}");
     }
 
     #[test]

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { forgeOf } from './forge';
   import Icon from './Icon.svelte';
   import type { Report } from '../state/actions.svelte';
   import type { HostView } from '../ipc/commands';
@@ -16,6 +17,7 @@
     onDismiss,
     onLogs,
     onHost,
+    onPlace = () => undefined,
     update = null,
     onUpdate = () => {},
   }: {
@@ -33,6 +35,8 @@
     onLogs: () => void;
     /** Opens the host's account, which is what the chip saying "no token" is about. */
     onHost: () => void;
+    /** Asks what kind of host an unrecognised server is. */
+    onPlace?: () => void;
     /** A newer Coral that the check at launch found, or null. */
     update?: string | null;
     /** Opens About, where it can be installed. */
@@ -90,8 +94,14 @@
       onclick={onHost}
       title={`${host.host.owner}/${host.host.repo} at ${host.host.origin}`}
     >
-      {host.host.kind === 'gitlab' ? 'GitLab' : 'GitHub'}
+      {forgeOf(host.host.kind).label}
       {#if host.token === 'none'}<span class="muted">· no token</span>{/if}
+    </button>
+  {:else if host?.unplaced}
+    <!-- A server Coral cannot place by its name, which a self-hosted Gitea or Forgejo is.
+         Asking once is what lets it list that server's pull requests. -->
+    <button class="host" onclick={onPlace} title="Say what {host.unplaced} runs">
+      {host.unplaced}<span class="muted">· what is this?</span>
     </button>
   {/if}
   {#if commits > 0}

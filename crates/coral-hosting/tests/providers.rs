@@ -172,19 +172,45 @@ fn unknown_fields_are_ignored_so_a_provider_can_add_them() {
 
 #[test]
 fn each_provider_is_given_its_own_auth_header() {
-    use coral_hosting::token::{auth_header, keyring_service};
+    use coral_hosting::token::{Auth, auth, keyring_service};
     use secrecy::SecretString;
 
     let token = SecretString::from("ghp_secret".to_owned());
     // GitLab refuses a bearer personal access token, and the request is well formed when it
     // does, so the failure arrives as a bare 401 with nothing pointing at the header.
     assert_eq!(
-        auth_header(HostKind::GitHub, &token),
-        ("Authorization", "Bearer ghp_secret".to_owned())
+        auth(HostKind::GitHub, &token),
+        Auth::Header("Authorization", "Bearer ghp_secret".to_owned())
     );
     assert_eq!(
-        auth_header(HostKind::GitLab, &token),
-        ("PRIVATE-TOKEN", "ghp_secret".to_owned())
+        auth(HostKind::GitLab, &token),
+        Auth::Header("PRIVATE-TOKEN", "ghp_secret".to_owned())
+    );
+    assert_eq!(
+        auth(HostKind::Gitea, &token),
+        Auth::Header("Authorization", "token ghp_secret".to_owned())
+    );
+    // An access token alone is a bearer; an API token comes with the account it belongs to.
+    assert_eq!(
+        auth(HostKind::Bitbucket, &token),
+        Auth::Header("Authorization", "Bearer ghp_secret".to_owned())
+    );
+    assert_eq!(
+        auth(
+            HostKind::Bitbucket,
+            &SecretString::from("ada@x.invalid:ATAT123".to_owned())
+        ),
+        Auth::Basic {
+            user: "ada@x.invalid".to_owned(),
+            password: "ATAT123".to_owned()
+        }
+    );
+    assert_eq!(
+        auth(HostKind::Azure, &token),
+        Auth::Basic {
+            user: String::new(),
+            password: "ghp_secret".to_owned()
+        }
     );
 
     // Keyed by origin: someone can be signed in to github.com and to a company instance at

@@ -488,6 +488,14 @@ pub enum Command {
     HostLogout,
     /// List the repository's pull or merge requests.
     PullRequests,
+    /// Say what kind of host a self-hosted server is, for one whose name does not: a Gitea or
+    /// Forgejo instance can be called anything. `none` forgets it.
+    HostKind {
+        /// The server's name, as it appears in remote URLs: `git.example.com`.
+        hostname: String,
+        #[arg(value_parser = ["gitea", "github", "gitlab", "bitbucket", "azure", "none"])]
+        kind: String,
+    },
     /// Walk the commit graph and report rows with their lanes.
     Graph {
         /// Stop after this many commits. Note that this does not make a topological walk
@@ -676,6 +684,9 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
         }
         Command::HostLogout => output::render(&commands::hosting::logout(repo).await),
         Command::PullRequests => output::render(&commands::hosting::list(repo).await),
+        Command::HostKind { hostname, kind } => {
+            output::render(&commands::hosting::declare(&hostname, &kind))
+        }
         Command::Graph {
             limit,
             from,

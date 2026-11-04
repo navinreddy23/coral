@@ -45,6 +45,7 @@
   import type { ActionContext, CustomAction, DiffOf } from '../ipc/commands';
   import { stepZoom } from './zoom';
   import { setZoom } from '../ipc/window';
+  import { forgeOf } from './forge';
   import { quoteRequest } from './request';
   import { ReviewState } from '../state/review.svelte';
   import { MergeState } from '../state/merge.svelte';
@@ -63,7 +64,7 @@
   import { repoIdentity } from '../ipc/profiles';
   import type { IdentityScopes } from '../ipc/types';
   import Menu, { type MenuItem } from './Menu.svelte';
-  import HostMark, { hostOf } from './HostMark.svelte';
+  import HostMark, { hostOf, type HostMarkKind } from './HostMark.svelte';
   import RefMark from './RefMark.svelte';
   import Toasts from './Toasts.svelte';
   import Splash from './Splash.svelte';
@@ -597,9 +598,7 @@
   let proposing = $state<string | null>(null);
 
   /** What the host calls one. GitHub says pull, GitLab says merge. */
-  const requestWord = $derived(
-    hosting.view?.host?.kind === 'gitlab' ? 'Merge request' : 'Pull request',
-  );
+  const requestWord = $derived(forgeOf(hosting.view?.host?.kind).request);
 
   /**
    * Branches the host could merge into, by their bare names.
@@ -2729,6 +2728,37 @@
     );
     if (message === null || message.trim() === '') return;
     await act({ kind: 'rewrite', rev: oid, how: 'reword', message: message.trim() });
+  }
+
+  /**
+   * Asks what an unrecognised server runs and remembers the answer, then offers to sign in.
+   *
+   * A self-hosted Gitea or Forgejo can be called anything, and nothing in its name says what
+   * it is; GitHub Enterprise and GitLab can be installed under any name too.
+   */
+  async function placeHost() {
+    const server = hosting.view?.unplaced;
+    if (!server) return;
+    const { choice } = await ask({
+      title: `What runs ${server}?`,
+      detail:
+        'Coral can list its pull requests and their checks once it knows. The answer is kept for this server, and a remote on any other is still told apart by its name.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [
+        { id: 'gitea', label: 'Gitea or Forgejo', primary: true },
+        { id: 'gitlab', label: 'GitLab' },
+        { id: 'github', label: 'GitHub Enterprise' },
+      ],
+    });
+    if (choice !== 'gitea' && choice !== 'gitlab' && choice !== 'github') return;
+    await hosting.declare(choice);
+    if (hosting.error !== null) {
+      toasts.push('error', `Could not remember what ${server} is`, hosting.error);
+      return;
+    }
+    if (hosting.view?.host && hosting.view.token === 'none') showHostAccount = true;
   }
 
   /**
@@ -5191,7 +5221,7 @@
    * From the remote's URL, not from its name: a remote called `origin` says nothing about who
    * serves it, and a repository can have one on each host.
    */
-  function hostFor(short: string): 'github' | 'gitlab' | 'other' {
+  function hostFor(short: string): HostMarkKind {
     const remote = remoteOf(short);
     const url = remotes.list.find((r) => r.name === remote)?.fetchUrl ?? '';
     return url === '' ? 'other' : hostOf(url);
@@ -5389,7 +5419,7 @@
     {#if views.current.sidebar === 'rail'}
       <Rail
         counts={railCounts}
-        host={hosting.view?.host?.kind === 'gitlab' ? 'gitlab' : hosting.view?.host?.kind === 'github' ? 'github' : 'other'}
+        host={hosting.view?.host?.kind ?? 'other'}
         onOpen={openSidebarAt}
       />
     {/if}
@@ -5417,7 +5447,7 @@
         pullRequests={hosting.pullRequests}
         checks={hosting.checks}
         onOpenChecks={(pr, found) => void openInBrowser(found.url ?? pr.webUrl)}
-        pullRequestLabel={hosting.view?.host?.kind === 'gitlab' ? 'Merge requests' : 'Pull requests'}
+        pullRequestLabel={forgeOf(hosting.view?.host?.kind).requests}
         quote={(n) => quoteRequest(hosting.view?.host?.kind, n)}
         focusFilter={filterTick}
         reveal={revealSection}
@@ -5467,7 +5497,7 @@
         {review}
         pr={reviewing}
         label={requestWord}
-        canRequestChanges={hosting.view?.host?.kind === 'github'}
+        canRequestChanges={forgeOf(hosting.view?.host?.kind).requestsChanges}
         quoted={quoteRequest(hosting.view?.host?.kind, reviewing.number)}
         onClose={() => (reviewing = null)}
       />
@@ -5962,6 +5992,7 @@
       host={hosting.view}
       onLogs={() => openActivity()}
       onHost={() => (showHostAccount = true)}
+      onPlace={() => void placeHost()}
       update={updates.available ? (updates.result?.latest ?? null) : null}
       onUpdate={() => openPreferences('about')}
       report={actions.report}

@@ -214,3 +214,40 @@ fn truncate(s: &str, at: usize) -> String {
     }
     s.chars().take(at.saturating_sub(1)).collect::<String>() + "…"
 }
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Declared {
+    pub hostname: String,
+    pub kind: Option<coral_hosting::HostKind>,
+}
+
+/// Records what kind of host `hostname` is, beside the window's settings, where the window
+/// and the credential helper read it too.
+///
+/// # Errors
+/// [`CoralError::Io`] when the file cannot be written.
+pub fn declare(hostname: &str, kind: &str) -> Result<Declared, CoralError> {
+    let kind = match kind {
+        "gitea" => Some(coral_hosting::HostKind::Gitea),
+        "github" => Some(coral_hosting::HostKind::GitHub),
+        "gitlab" => Some(coral_hosting::HostKind::GitLab),
+        "bitbucket" => Some(coral_hosting::HostKind::Bitbucket),
+        "azure" => Some(coral_hosting::HostKind::Azure),
+        _ => None,
+    };
+    coral_hosting::declared::declare(hostname, kind)?;
+    Ok(Declared {
+        hostname: hostname.to_ascii_lowercase(),
+        kind,
+    })
+}
+
+impl crate::output::Human for Declared {
+    fn human(&self) -> String {
+        match self.kind {
+            Some(kind) => format!("{} is a {kind:?} host", self.hostname),
+            None => format!("{} is no longer declared", self.hostname),
+        }
+    }
+}

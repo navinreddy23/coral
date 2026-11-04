@@ -8,6 +8,7 @@
    * this says so, because signing out of it signs every other profile out too.
    */
   import HostMark from './HostMark.svelte';
+  import { forgeOf } from './forge';
   import type { HostView } from '../ipc/commands';
 
   const {
@@ -34,23 +35,18 @@
   let field = $state<HTMLInputElement | null>(null);
 
   const host = $derived(view.host);
-  const label = $derived(host?.kind === 'gitlab' ? 'GitLab' : 'GitHub');
+  const forge = $derived(forgeOf(host?.kind));
+  const label = $derived(forge.label);
   const signedIn = $derived(view.token !== 'none');
 
   /**
    * Where the user makes one, on their own instance rather than on the public one.
    *
-   * Both providers serve the page under the same path on a self-hosted install, so the origin
+   * Every provider serves the page under the same path on a self-hosted install, so the origin
    * from the remote is enough and there is nothing to configure.
    */
-  const makeUrl = $derived(
-    host === null
-      ? ''
-      : host.kind === 'gitlab'
-        ? `${host.origin}/-/user_settings/personal_access_tokens`
-        : `${host.origin}/settings/tokens`,
-  );
-  const scope = $derived(host?.kind === 'gitlab' ? 'api' : 'repo');
+  const makeUrl = $derived(host === null ? '' : forge.tokenPage(host));
+  const scope = $derived(forge.scope);
 
   $effect(() => {
     field?.focus();
@@ -97,7 +93,7 @@
     -->
     <p class="state" class:on={signedIn}>
       {#if !signedIn}
-        No token. Pull requests and their branches stay hidden until there is one.
+        No token. {forge.requests} and their branches stay hidden until there is one.
       {:else if shared}
         Signed in for every profile, with the token the command line stored.
       {:else}
@@ -130,7 +126,8 @@
     {#if makeUrl}
       <p class="hint">
         Make one at <a href={makeUrl} target="_blank" rel="noreferrer">{makeUrl}</a> with the
-        <code>{scope}</code> scope. It is kept in this machine's keyring, never in the repository.
+        <code>{scope}</code> scope{forge.shape ? `, and paste ${forge.shape}` : ''}. It is kept
+        in this machine's keyring, never in the repository.
       </p>
     {/if}
 

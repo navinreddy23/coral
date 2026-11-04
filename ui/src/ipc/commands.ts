@@ -508,9 +508,9 @@ export function operationStep(
   return invoke<OpOutcome>('operation_step', { path, step, message });
 }
 
-/** GitHub or GitLab, as identified from the remote URL. */
+/** The provider behind a remote, as identified from its URL or declared for it. */
 export interface Host {
-  kind: 'github' | 'gitlab';
+  kind: 'github' | 'gitlab' | 'gitea' | 'bitbucket' | 'azure';
   origin: string;
   owner: string;
   repo: string;
@@ -528,6 +528,17 @@ export interface HostView {
    * one every profile falls back to, and the only one the command line writes.
    */
   token: TokenSource;
+  /** The server the remote names when its kind could not be told, for the window to ask. */
+  unplaced?: string | null;
+}
+
+/** Says what kind of host a server is, for one its name does not give away. */
+export function hostingDeclare(
+  path: string,
+  hostname: string,
+  kind: Host['kind'] | null,
+): Promise<HostView> {
+  return invoke<HostView>('hosting_declare', { path, hostname, kind });
 }
 
 export type PrState = 'open' | 'draft' | 'merged' | 'closed';

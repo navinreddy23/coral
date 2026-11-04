@@ -218,6 +218,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         conflicts::resolve_conflict,
         conflicts::operation_step,
         hosting::hosting_status,
+        hosting::hosting_declare,
         hosting::hosting_login,
         hosting::hosting_logout,
         hosting::hosting_pull_requests,

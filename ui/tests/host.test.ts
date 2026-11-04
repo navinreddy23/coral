@@ -24,7 +24,6 @@ describe('recognising a host from a remote URL', () => {
     // The remote works perfectly well; it is simply not one we have a picture of.
     for (const url of [
       'https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git',
-      'https://bitbucket.org/owner/repo.git',
       'git@internal-server:team/app.git',
       '/srv/git/bare.git',
       '',
@@ -37,5 +36,13 @@ describe('recognising a host from a remote URL', () => {
     // The path is not the host: a repository called `github` on someone's own server is theirs.
     expect(hostOf('https://git.example.com/github/mirror.git')).toBe('other');
     expect(hostOf('git@example.com:gitlab/notes.git')).toBe('other');
+  });
+
+  it('names the three hosts added beside GitHub and GitLab', () => {
+    expect(hostOf('https://bitbucket.org/owner/repo.git')).toBe('bitbucket');
+    expect(hostOf('git@ssh.dev.azure.com:v3/acme/Platform/coral')).toBe('azure');
+    expect(hostOf('https://acme.visualstudio.com/Platform/_git/coral')).toBe('azure');
+    expect(hostOf('https://codeberg.org/forgejo/forgejo.git')).toBe('gitea');
+    expect(hostOf('git@forgejo.example.invalid:team/app.git')).toBe('gitea');
   });
 });

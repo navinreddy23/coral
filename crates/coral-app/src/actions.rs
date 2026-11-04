@@ -773,7 +773,7 @@ async fn run_remote(
         Action::CheckoutProposal { number } => {
             let (remote, proposal) = crate::hosting::proposal(loc, runner, number).await?;
             let did = loc
-                .checkout_proposal(runner, &remote, proposal, |p| report(&p))
+                .checkout_proposal(runner, &remote, &proposal, |p| report(&p))
                 .await?;
             let branch = proposal.branch();
             let quoted = proposal.quoted();

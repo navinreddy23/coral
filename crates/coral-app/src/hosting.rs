@@ -34,6 +34,9 @@ pub struct HostView {
     /// nothing here is allowed to stop it.
     pub detail: Option<String>,
     pub token: TokenSource,
+    /// The server the remote names when its kind could not be told, so the window can ask
+    /// what it is. A self-hosted Gitea or Forgejo can be called anything.
+    pub unplaced: Option<String>,
 }
 
 /// Which token would be used for `host` from `profile`.
@@ -92,10 +95,48 @@ pub async fn proposal(
     })?;
     let host = Host::detect(&remote.fetch_url).map_err(|e| refused("check out the request", &e))?;
     let proposal = match host.kind {
-        HostKind::GitHub => Proposal::Pull(number),
+        HostKind::GitHub | HostKind::Gitea => Proposal::Pull(number),
         HostKind::GitLab => Proposal::MergeRequest(number),
+        HostKind::Bitbucket | HostKind::Azure => Proposal::Branch {
+            number,
+            source: source_branch(&host, number).await?,
+            sigil: host.kind.sigil(),
+        },
     };
     Ok((remote.name.clone(), proposal))
+}
+
+/// The branch a request on Bitbucket or Azure DevOps was opened from, which is the only way to
+/// its tip there: neither publishes a ref for it.
+async fn source_branch(host: &Host, number: u64) -> Result<String, coral_core::CoralError> {
+    let label = "check out the request";
+    let accounts = [
+        crate::credentials::current_profile().map(|id| Account::of_profile(&id)),
+        Some(Account::shared()),
+    ];
+    let secret = accounts
+        .into_iter()
+        .flatten()
+        .find_map(|account| token::load(host, &account).ok().flatten())
+        .ok_or_else(|| coral_core::CoralError::Refused {
+            label,
+            detail: format!("no token stored for {}", host.origin),
+        })?;
+    let client = Client::new(secret).map_err(|e| refused(label, &e))?;
+    let found = client
+        .pull_requests(host)
+        .await
+        .map_err(|e| refused(label, &e))?
+        .into_iter()
+        .find(|pr| pr.number == number)
+        .ok_or_else(|| coral_core::CoralError::Refused {
+            label,
+            detail: format!(
+                "{}{number} is not among its recent requests",
+                host.kind.sigil()
+            ),
+        })?;
+    Ok(found.source_branch)
 }
 
 async fn host_of(path: &str, profile: &str) -> Result<HostView, IpcError> {
@@ -108,6 +149,7 @@ async fn host_of(path: &str, profile: &str) -> Result<HostView, IpcError> {
             host: None,
             detail: Some("the repository has no remotes".to_owned()),
             token: TokenSource::None,
+            unplaced: None,
         });
     };
 
@@ -118,14 +160,35 @@ async fn host_of(path: &str, profile: &str) -> Result<HostView, IpcError> {
                 host: Some(host),
                 detail: None,
                 token,
+                unplaced: None,
             }
         }
         Err(e) => HostView {
             host: None,
+            unplaced: matches!(e, coral_hosting::HostingError::Unrecognised(_))
+                .then(|| Host::hostname_of(&remote.fetch_url))
+                .flatten(),
             detail: Some(e.to_string()),
             token: TokenSource::None,
         },
     })
+}
+
+/// Says what kind of host the repository's remote is on, for one that could not be told from
+/// its name, and answers with the host as it now reads. `None` forgets the declaration.
+///
+/// # Errors
+/// Propagates git failures, and a declarations file that cannot be written.
+#[tauri::command]
+pub async fn hosting_declare(
+    profiles: tauri::State<'_, crate::profile::Profiles>,
+    path: String,
+    hostname: String,
+    kind: Option<HostKind>,
+) -> Result<HostView, IpcError> {
+    tracing::info!(path, hostname, ?kind, "hosting_declare");
+    coral_hosting::declared::declare(&hostname, kind).map_err(coral_core::CoralError::from)?;
+    host_of(&path, &current(&profiles)).await
 }
 
 /// The host behind the repository's remote, and which stored token reaches it.
@@ -348,6 +411,7 @@ fn secret_for(
 }
 
 /// The provider's own word for a request, so a GitLab user is not told about pull requests.
+/// Every other host calls them pull requests.
 fn verb(view: &HostView, github: &'static str, gitlab: &'static str) -> &'static str {
     match view.host.as_ref().map(|h| h.kind) {
         Some(coral_hosting::HostKind::GitLab) => gitlab,

@@ -68,6 +68,18 @@
   in blame: someone who committed under several names and addresses reads as one person, with
   one picture. On the kernel that is the 989-line map its maintainers keep.
 
+- **Gitea and Forgejo, Bitbucket Cloud and Azure DevOps**, beside GitHub and GitLab: their
+  pull requests in the sidebar with their checks, opened, reviewed, commented on, approved or
+  sent back for changes, and checked out as `pr/N` — from `refs/pull/N/head` on Gitea, and
+  from the request's source branch on Bitbucket and Azure DevOps, which publish no ref for one.
+  Pushing over https with the token works for each, under the user name each one wants.
+  Azure DevOps remotes in all three spellings are understood, and its requests are quoted
+  `!12`, as it writes them. A self-hosted server Coral cannot place by its name — a Gitea or
+  Forgejo can be called anything — shows its name in the status bar with "what is this?",
+  and saying what it runs is remembered for that server (`coral host-kind HOST gitea` from the
+  command line). Bitbucket takes a repository access token, or an Atlassian API token pasted
+  as `email:token`.
+
 ### Fixed
 
 - Applying a patch that is already there says so, instead of reporting a change it never made.

@@ -10,6 +10,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+dirs       = { workspace = true }
 keyring    = { workspace = true }
 reqwest    = { workspace = true }
 secrecy    = { workspace = true }
