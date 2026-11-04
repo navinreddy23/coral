@@ -45,6 +45,13 @@
   form can start with only the files at the top, which with file contents on demand is the
   cheapest way into a repository the size of the kernel's. `coral sparse --set …`,
   `coral sparse --off`, `coral folders` and `coral clone --sparse` from the command line.
+- **Open a file outside Coral.** Every file's menu has "Open in editor" — the command line set
+  in Preferences, Tools, with `{path}` and `{line}` filled in, or the desktop's own choice
+  when none is set — and "Open in diff tool", which starts git's configured `diff.tool`. A
+  conflicted file can be handed to git's `merge.tool` from the conflict tool, and is staged
+  when the tool says it was resolved. Both run beside the window rather than under it, so a
+  merge tool left open for an hour holds nothing up. `coral difftool`, `coral mergetool` and
+  `coral tools` from the command line.
 - `.mailmap` is honoured in the graph, the commit details and file history, as it already was
   in blame: someone who committed under several names and addresses reads as one person, with
   one picture. On the kernel that is the 989-line map its maintainers keep.

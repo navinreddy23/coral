@@ -14,6 +14,7 @@ import type {
   Verification,
   Todo,
   ConflictedFile,
+  ExternalTools,
   FileDiff,
   FoldInto,
   GitRef,
@@ -951,3 +952,37 @@ export function appVersion(): Promise<AppVersion> {
   return invoke<AppVersion>('app_version');
 }
 
+
+/** What `tools.json` holds: the editor's command line, empty for the desktop's own choice. */
+export interface ToolSettings {
+  editor: string;
+}
+
+export interface ToolsView {
+  settings: ToolSettings;
+  /** What git has configured in the repository asked about. */
+  external: ExternalTools;
+}
+
+export function toolsRead(path: string | null): Promise<ToolsView> {
+  return invoke<ToolsView>('tools_read', { path });
+}
+
+export function toolsSetEditor(editor: string): Promise<ToolSettings> {
+  return invoke<ToolSettings>('tools_set_editor', { editor });
+}
+
+export function openInEditor(path: string, file: string, line: number | null = null): Promise<void> {
+  return invoke<void>('open_in_editor', { path, file, line });
+}
+
+/** Which change of a file the diff tool is shown. */
+export type DiffOf = { kind: 'unstaged' } | { kind: 'staged' } | { kind: 'commit'; rev: string };
+
+export function openDifftool(path: string, file: string, of: DiffOf): Promise<void> {
+  return invoke<void>('open_difftool', { path, file, of });
+}
+
+export function openMergetool(path: string, file: string): Promise<void> {
+  return invoke<void>('open_mergetool', { path, file });
+}

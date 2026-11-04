@@ -28,6 +28,7 @@ pub mod ssh;
 pub mod tabs;
 pub mod template;
 pub mod terminal;
+pub mod tool;
 pub mod transfer;
 pub mod update;
 pub mod version;

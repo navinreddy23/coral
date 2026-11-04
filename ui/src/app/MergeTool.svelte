@@ -11,9 +11,15 @@
     onRefused = async () => false,
     message = () => null,
     onMessageUsed = () => undefined,
+    mergeTool = null,
+    onMergeTool = () => undefined,
   }: {
     merge: MergeState;
     onDone: () => void;
+    /** The merge tool git is configured with here, or null for none. */
+    mergeTool?: string | null;
+    /** Opens a file in that tool, which stages it when the tool says it was resolved. */
+    onMergeTool?: (file: string) => void;
     /** A message edited in the commit box while the operation waited, to continue with. */
     message?: () => string | null;
     /**
@@ -332,6 +338,15 @@
                 onclick={() => merge.take(file.path, { kind: 'theirs' })}
               >
                 {labels.theirs}
+              </button>
+            {/if}
+            {#if mergeTool !== null && blockwise}
+              <button
+                disabled={merge.busy}
+                title="Resolve it in {mergeTool}, git's merge tool here; it is staged when the tool says it is done"
+                onclick={() => onMergeTool(file.path)}
+              >
+                {mergeTool}
               </button>
             {/if}
             {#if file.deleteModify}

@@ -80,6 +80,24 @@ describe("the merge tool", () => {
     expect(take).toHaveBeenCalledWith("f.txt", { kind: "kept" });
   });
 
+  it("offers git's merge tool for a file that has lines to merge, when one is set", async () => {
+    const opened: string[] = [];
+    const { container } = render(MergeTool, {
+      props: {
+        merge: state([conflicted(), conflicted({ path: "logo.png", whole: "binary" })]),
+        onDone: noop,
+        mergeTool: "meld",
+        onMergeTool: (f: string) => opened.push(f),
+      },
+    });
+    const meld = [...container.querySelectorAll(".wholesale button")].filter(
+      (b) => b.textContent?.trim() === "meld",
+    );
+    expect(meld).toHaveLength(1);
+    await fireEvent.click(meld[0] as HTMLButtonElement);
+    expect(opened).toEqual(["f.txt"]);
+  });
+
   it("shows no rerere marks for an ordinary conflict", () => {
     const { container } = render(MergeTool, { props: { merge: state([conflicted()]), onDone: noop } });
     expect(container.querySelector(".recorded")).toBeNull();

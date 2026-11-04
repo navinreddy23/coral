@@ -4,7 +4,7 @@
 use coral_app_lib::{
     actions, activity, avatar, bisect, blob, commands, conflicts, experimental, gitignore, graph,
     hosting, lfs, notes, profile, recent, reflog, remotes, repoconfig, scope, search, signing, ssh,
-    tabs, template, terminal, transfer, update, version, watcher,
+    tabs, template, terminal, tool, transfer, update, version, watcher,
 };
 
 fn main() {
@@ -97,6 +97,7 @@ fn load_state(app: &tauri::App) {
     let settings = experimental::Experimental::load(dir.join("settings.json"));
     settings.apply();
     app.manage(settings);
+    app.manage(tool::Tools::load(dir.join("tools.json")));
 }
 
 /// Builds and runs the window.
@@ -177,6 +178,11 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         repoconfig::repo_set_sparse,
         repoconfig::repo_disable_sparse,
         repoconfig::repo_folders,
+        tool::tools_read,
+        tool::tools_set_editor,
+        tool::open_in_editor,
+        tool::open_difftool,
+        tool::open_mergetool,
         graph::file_text,
         search::search_commits,
         search::stop_search,

@@ -15,6 +15,7 @@ import { ProfilesState } from '../../src/state/profiles.svelte';
 import { SigningState } from '../../src/state/signing.svelte';
 import { SshState } from '../../src/state/ssh.svelte';
 import { RepoConfigState } from '../../src/state/repoconfig.svelte';
+import { ToolsState } from '../../src/state/tools.svelte';
 import { ThemeState } from '../../src/state/theme.svelte';
 import { ViewsState } from '../../src/state/views.svelte';
 import { UpdateState } from '../../src/state/update.svelte';
@@ -31,6 +32,7 @@ function prefs(over: Record<string, unknown> = {}) {
         signing: new SigningState(),
         ssh: new SshState(),
     repoConfig: new RepoConfigState(),
+    tools: new ToolsState(),
         experimental: new ExperimentalState(),
         profiles: new ProfilesState(),
         theme: new ThemeState(),
@@ -168,5 +170,19 @@ describe('the Repository pane', () => {
     ) as HTMLButtonElement;
     await fireEvent.click(all);
     expect(off).toHaveBeenCalledOnce();
+  });
+});
+
+describe('the Tools pane', () => {
+  it('stores the editor command and names the tools git has set', async () => {
+    const tools = new ToolsState();
+    tools.view = { settings: { editor: '' }, external: { diff: 'meld', merge: null } };
+    const set = vi.spyOn(tools, 'setEditor').mockResolvedValue();
+    const { container } = prefs({ tools, pane: 'tools' });
+    const field = container.querySelector('#editor') as HTMLInputElement;
+    await fireEvent.change(field, { target: { value: 'code --goto {path}:{line}' } });
+    expect(set).toHaveBeenCalledWith('code --goto {path}:{line}');
+    expect(container.querySelector('dl')?.textContent).toContain('meld');
+    expect(container.querySelector('dl')?.textContent).toContain('none set in this repository');
   });
 });

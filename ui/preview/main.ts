@@ -38,6 +38,7 @@ import { ProfilesState } from "../src/state/profiles.svelte";
 import { SigningState } from "../src/state/signing.svelte";
 import { SshState } from "../src/state/ssh.svelte";
 import { RepoConfigState } from "../src/state/repoconfig.svelte";
+import { ToolsState } from "../src/state/tools.svelte";
 import { DiffState } from "../src/state/diff.svelte";
 import { MergeState } from "../src/state/merge.svelte";
 import { RebaseState } from "../src/state/rebase.svelte";
@@ -382,6 +383,7 @@ mount(Preferences, {
     signing,
     ssh: new SshState(),
     repoConfig: new RepoConfigState(),
+    tools: new ToolsState(),
     experimental: new ExperimentalState(),
     profiles: new ProfilesState(),
     theme,

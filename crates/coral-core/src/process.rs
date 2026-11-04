@@ -985,6 +985,35 @@ impl GitRunner {
         })
     }
 
+    /// Starts git and leaves it running, for a tool with a window of its own: `difftool`,
+    /// `mergetool`. Nothing waits on it here, because it lasts as long as somebody keeps that
+    /// window open — under a clock it would be killed mid-merge, and under the write lock it
+    /// would stop every status until it closed. A thread reaps it so it never lingers as a
+    /// zombie, and what it changes reaches the window through the watcher like anything done in
+    /// a terminal.
+    ///
+    /// # Errors
+    /// [`CoralError::GitSpawn`] when git cannot be started at all.
+    pub fn launch(&self, cmd: &GitCommand) -> Result<(), CoralError> {
+        let mut c = self.std_command(cmd);
+        c.stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        let mut child = c.spawn().map_err(|source| CoralError::GitSpawn {
+            label: cmd.label,
+            argv: cmd
+                .args
+                .iter()
+                .map(|a| a.to_string_lossy().into_owned())
+                .collect(),
+            source,
+        })?;
+        std::thread::spawn(move || {
+            let _ = child.wait();
+        });
+        Ok(())
+    }
+
     /// Starts git in a process group of its own, with the guard that empties it.
     ///
     /// The group is what makes cancelling reach git's own children; see [`GroupGuard`]. On a

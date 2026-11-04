@@ -170,6 +170,11 @@ deleteModify: boolean,
 recorded: boolean, };
 
 /**
+ * The tools git would start, by the names git has for them, or `None` where none is set.
+ */
+export type ExternalTools = { diff: string | null, merge: string | null, };
+
+/**
  * What happened to a file between two trees.
  */
 export type FileChange = "added" | "deleted" | "modified" | "renamed" | "copied" | "unmerged";

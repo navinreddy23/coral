@@ -349,6 +349,20 @@ pub enum Command {
     },
     /// List submodules.
     Submodules,
+    /// Show the diff and merge tools git has configured here.
+    Tools,
+    /// Open one file's change in git's configured diff tool. Returns once it has started.
+    Difftool {
+        file: String,
+        /// The staged change rather than the unstaged one.
+        #[arg(long, conflicts_with = "rev")]
+        staged: bool,
+        /// What this commit did to the file.
+        #[arg(long)]
+        rev: Option<String>,
+    },
+    /// Open a conflicted file in git's configured merge tool.
+    Mergetool { file: String },
     /// Show whether git reuses recorded conflict resolutions here, or turn it on or off.
     Rerere {
         #[arg(long, conflicts_with = "off")]
@@ -627,6 +641,9 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
         Command::Submodules => output::render(&commands::submodule::run(repo).await),
         Command::Worktrees => output::render(&commands::worktree::list(repo).await),
         command @ (Command::Rerere { .. }
+        | Command::Tools
+        | Command::Difftool { .. }
+        | Command::Mergetool { .. }
         | Command::Sparse { .. }
         | Command::Folders { .. }
         | Command::StatusCache { .. }) => dispatch_config(command, repo).await,
@@ -677,6 +694,13 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
 /// The repository's own git switches: rerere, the status caches, the sparse checkout.
 async fn dispatch_config(command: Command, repo: &std::path::Path) -> output::Rendered {
     match command {
+        Command::Tools => output::render(&commands::tool::show(repo).await),
+        Command::Difftool { file, staged, rev } => {
+            output::render(&commands::tool::difftool(repo, &file, staged, rev).await)
+        }
+        Command::Mergetool { file } => {
+            output::render(&commands::tool::mergetool(repo, &file).await)
+        }
         Command::Rerere { on, off } => {
             let set = if on {
                 Some(true)

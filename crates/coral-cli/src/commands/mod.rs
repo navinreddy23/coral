@@ -17,6 +17,7 @@ pub mod signing;
 pub mod stage;
 pub mod status;
 pub mod submodule;
+pub mod tool;
 pub mod version;
 pub mod worktree;
 pub mod write;

@@ -10,6 +10,8 @@
   import RepoConfig from './RepoConfig.svelte';
   import Ssh from './Ssh.svelte';
   import TerminalSettings from './TerminalSettings.svelte';
+  import ToolSettings from './ToolSettings.svelte';
+  import type { ToolsState } from '../state/tools.svelte';
   import type { ExperimentalState } from '../state/experimental.svelte';
   import type { SigningState } from '../state/signing.svelte';
   import type { SshState } from '../state/ssh.svelte';
@@ -26,6 +28,7 @@
     signing,
     ssh,
     repoConfig,
+    tools,
     experimental,
     profiles,
     theme,
@@ -46,6 +49,7 @@
     signing: SigningState;
     ssh: SshState;
     repoConfig: RepoConfigState;
+    tools: ToolsState;
     experimental: ExperimentalState;
     profiles: ProfilesState;
     theme: ThemeState;
@@ -92,6 +96,7 @@
     { id: 'signing', label: 'Commit Signing', icon: 'edit', needsRepository: true },
     { id: 'repository', label: 'Repository', icon: 'folder', needsRepository: true },
     { id: 'terminal', label: 'Terminal', icon: 'terminal', needsRepository: false },
+    { id: 'tools', label: 'Tools', icon: 'external', needsRepository: false },
     { id: 'experimental', label: 'Experimental', icon: 'beaker', needsRepository: false },
     { id: 'about', label: 'About', icon: 'info', needsRepository: false },
   ] satisfies { id: string; label: string; icon: IconName; needsRepository: boolean }[]).filter(
@@ -172,6 +177,8 @@
     <Ssh {ssh} {onCopied} />
   {:else if active === 'terminal'}
     <TerminalSettings {views} />
+  {:else if active === 'tools'}
+    <ToolSettings {tools} />
   {:else if active === 'experimental'}
     <Experimental {experimental} {onPickGit} />
   {:else if active === 'about'}

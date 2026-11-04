@@ -42,6 +42,7 @@
   import BisectBar from './BisectBar.svelte';
   import NewRequest from './NewRequest.svelte';
   import Review from './Review.svelte';
+  import type { DiffOf } from '../ipc/commands';
   import { quoteRequest } from './request';
   import { ReviewState } from '../state/review.svelte';
   import { MergeState } from '../state/merge.svelte';
@@ -86,6 +87,7 @@
   import { TerminalState } from '../state/terminal.svelte';
   import { SigningState } from '../state/signing.svelte';
   import { RepoConfigState } from '../state/repoconfig.svelte';
+  import { ToolsState } from '../state/tools.svelte';
   import { SshState } from '../state/ssh.svelte';
   import { laneColour } from './lane';
   import { baseName, beside, elideRef } from './path';
@@ -610,6 +612,7 @@
   const rebase = new RebaseState();
   const signing = new SigningState();
   const repoConfig = new RepoConfigState();
+  const tools = new ToolsState();
   const ssh = new SshState();
   const toasts = new ToastsState();
   const updates = new UpdateState();
@@ -3388,11 +3391,41 @@
   }
 
   /** A file in a commit's list: copy its path, or stop tracking it at the checked-out commit. */
+  /** Says why a program outside Coral did not start, when it did not. */
+  async function launched(started: Promise<string | null>, what: string) {
+    const why = await started;
+    if (why !== null) toasts.push('error', `Could not start the ${what}`, why);
+  }
+
+  /** Open in the editor, and in git's diff tool when one is set, for a file's menus. */
+  function toolItems(file: string, of: DiffOf | null): MenuItem[] {
+    const items: MenuItem[] = [
+      {
+        kind: 'item',
+        label: 'Open in editor',
+        hint: tools.view?.settings.editor ? undefined : "the desktop's choice",
+        worktree: true,
+        run: () => void launched(tools.edit(file), 'editor'),
+      },
+    ];
+    if (of !== null) {
+      items.push({
+        kind: 'item',
+        label: 'Open in diff tool',
+        hint: tools.diff ?? 'set diff.tool in git',
+        disabled: tools.diff === null,
+        run: () => void launched(tools.diffTool(file, of), 'diff tool'),
+      });
+    }
+    return items;
+  }
+
   async function commitFileMenu(event: MouseEvent, file: string) {
     event.preventDefault();
     // Read before the await, as every other menu does: the event is recycled.
     const at = { x: event.clientX, y: event.clientY };
     const atHead = selection.detail !== null && selection.detail.commit.oid === headOid;
+    const rev = selection.detail?.commit.oid ?? null;
     const items: MenuItem[] = [
       {
         kind: 'item',
@@ -3400,6 +3433,8 @@
         hint: file,
         run: () => void copyName(file),
       },
+      { kind: 'separator' },
+      ...toolItems(file, rev === null ? null : { kind: 'commit', rev }),
     ];
     if (atHead) {
       items.push(
@@ -3471,6 +3506,10 @@
         label: 'Open the diff',
         run: () => openWorkingFile(entry.path, staged),
       },
+      ...toolItems(
+        entry.path,
+        entry.worktree === 'untracked' ? null : { kind: staged ? 'staged' : 'unstaged' },
+      ),
       { kind: 'separator' },
       staged
         ? {
@@ -4391,6 +4430,7 @@
     void signing.load(path);
     void ssh.load(path);
     void repoConfig.load(path);
+    void tools.load(path);
     // Read here rather than when a repository opens: it is only ever shown on this page, and
     // it is two git invocations nobody waiting for a graph should pay for.
     void repoIdentity(path)
@@ -5209,6 +5249,7 @@
       {signing}
       {ssh}
       {repoConfig}
+      {tools}
       {experimental}
       {profiles}
       {theme}
@@ -5417,6 +5458,8 @@
            takes the main pane outright rather than sitting behind the graph. -->
       <MergeTool
         {merge}
+        mergeTool={tools.merge}
+        onMergeTool={(file) => void launched(tools.mergeTool(file), 'merge tool')}
         onDone={reloadAll}
         onRefused={async (message) => needsIdentity(message) && (await sayWhoYouAre())}
         message={() => commitDraft.edited()}
