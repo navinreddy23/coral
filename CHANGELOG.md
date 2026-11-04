@@ -28,6 +28,11 @@
   debugging line out of the commit without taking it out of the file. The old side is never
   edited, so an index that has moved since is refused rather than written to.
   `coral stage --file F --hunk N --edited PATH` from the command line.
+- **Reuse recorded resolutions (rerere).** Preferences has a Repository pane, and its first
+  switch is `rerere.enabled`: git records how each conflict was resolved and resolves it the
+  same way when it comes back. The conflict tool marks a file resolved that way, says the file
+  on disk already holds the answer, and keeps it with one button instead of rebuilding the
+  conflict from the index. `coral rerere --on` / `--off` from the command line.
 - `.mailmap` is honoured in the graph, the commit details and file history, as it already was
   in blame: someone who committed under several names and addresses reads as one person, with
   one picture. On the kernel that is the 989-line map its maintainers keep.

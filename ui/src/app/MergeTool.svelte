@@ -299,9 +299,23 @@
             onclick={() => merge.open(file.path)}
           >
             <span class="name">{elidePath(file.path, 40)}</span>
-            {#if !blockwise}<span class="oneshot">whole file</span>{/if}
+            {#if file.recorded}
+              <span class="recorded" title="git resolved this as you resolved it before">recorded</span>
+            {:else if !blockwise}<span class="oneshot">whole file</span>{/if}
           </button>
           <span class="wholesale">
+            {#if file.recorded}
+              <!-- First, because it is the answer git already gave: what is on disk is the
+                   resolution recorded last time, and taking a side would throw it away. -->
+              <button
+                class="keep"
+                disabled={merge.busy}
+                title="Stage the file as rerere resolved it"
+                onclick={() => merge.take(file.path, { kind: 'kept' })}
+              >
+                keep
+              </button>
+            {/if}
             {#if has.ours}
               <button
                 disabled={merge.busy}
@@ -389,6 +403,22 @@
       {:else if merge.blocks === null}
         <p class="muted">Loading…</p>
       {:else}
+        {@const recorded = merge.files.find((f) => f.path === merge.active)?.recorded === true}
+        {#if recorded && merge.active !== null}
+          {@const path = merge.active}
+          <!-- The stages below are the conflict as git found it, not the file as it is: rerere
+               has already written last time's answer to disk. Saying so is what stops a side
+               being taken over an answer nobody looked at. -->
+          <div class="rerere" role="status">
+            <p>
+              git resolved this file the way it was resolved before, and the file on disk holds
+              that answer. Keep it, or settle the conflicts below to replace it.
+            </p>
+            <button class="primary" disabled={merge.busy} onclick={() => merge.take(path, { kind: 'kept' })}>
+              Keep the recorded resolution
+            </button>
+          </div>
+        {/if}
         <div class="bar">
           <span class="path mono">{merge.active}</span>
           <span class="muted">
@@ -539,6 +569,15 @@
    * light fill, fifteen pixels wide, with the words spilling past it.
    */
   .oneshot { font-size: var(--text-xs); color: var(--fg-2); }
+  .recorded {
+    font-size: var(--text-xs); color: var(--accent); border: 1px solid var(--accent-line);
+    border-radius: var(--radius-0); padding: 0 4px; background: var(--accent-soft);
+  }
+  .rerere {
+    display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3);
+    background: var(--accent-soft); border-bottom: 1px solid var(--accent-line); color: var(--fg-0);
+  }
+  .rerere p { margin: 0; flex: 1; line-height: 1.45; }
   .wholesale { display: flex; gap: 2px; flex: 0 0 auto; padding-left: var(--space-3); }
   .wholesale button { font-size: var(--text-xs); padding: 0 var(--space-2); }
   .done { padding: var(--space-3); font-size: var(--text-base); color: var(--fg-2); }

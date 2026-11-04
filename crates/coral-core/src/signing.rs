@@ -161,11 +161,11 @@ impl RepoLocation {
             sign_commits: self
                 .config_get(runner, Scope::Repository, "commit.gpgsign")
                 .await?
-                .map(|v| is_true(&v)),
+                .map(|v| crate::config::truthy(&v)),
             sign_tags: self
                 .config_get(runner, Scope::Repository, "tag.gpgSign")
                 .await?
-                .map(|v| is_true(&v)),
+                .map(|v| crate::config::truthy(&v)),
         };
 
         Ok(SigningScopes {
@@ -296,11 +296,11 @@ impl RepoLocation {
             sign_commits: self
                 .config_get(runner, scope, "commit.gpgsign")
                 .await?
-                .is_some_and(|v| is_true(&v)),
+                .is_some_and(|v| crate::config::truthy(&v)),
             sign_tags: self
                 .config_get(runner, scope, "tag.gpgSign")
                 .await?
-                .is_some_and(|v| is_true(&v)),
+                .is_some_and(|v| crate::config::truthy(&v)),
         })
     }
 }
@@ -318,13 +318,6 @@ const fn bool_str(on: bool) -> &'static str {
 /// signing for every repository that asked for it.
 fn some_unless_empty(value: &str) -> Option<&str> {
     if value.is_empty() { None } else { Some(value) }
-}
-
-fn is_true(value: &str) -> bool {
-    matches!(
-        value.trim().to_ascii_lowercase().as_str(),
-        "true" | "yes" | "on" | "1"
-    )
 }
 
 /// Parses `--with-colons` output from gpg or gpgsm into the keys that can sign.

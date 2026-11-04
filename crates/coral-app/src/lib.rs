@@ -19,6 +19,7 @@ pub mod profile;
 pub mod recent;
 pub mod reflog;
 pub mod remotes;
+pub mod repoconfig;
 pub mod scope;
 pub mod search;
 pub mod session;

@@ -162,7 +162,12 @@ whole: Whole | null,
 /**
  * One side deleted the file, so keeping or deleting is the only meaningful choice.
  */
-deleteModify: boolean, };
+deleteModify: boolean, 
+/**
+ * rerere has resolved it the way it was resolved before. The file on disk holds that
+ * answer and the index still holds the conflict, so the stages are not what to show.
+ */
+recorded: boolean, };
 
 /**
  * What happened to a file between two trees.

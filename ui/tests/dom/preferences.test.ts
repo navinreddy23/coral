@@ -14,6 +14,7 @@ import { ExperimentalState } from '../../src/state/experimental.svelte';
 import { ProfilesState } from '../../src/state/profiles.svelte';
 import { SigningState } from '../../src/state/signing.svelte';
 import { SshState } from '../../src/state/ssh.svelte';
+import { RepoConfigState } from '../../src/state/repoconfig.svelte';
 import { ThemeState } from '../../src/state/theme.svelte';
 import { ViewsState } from '../../src/state/views.svelte';
 import { UpdateState } from '../../src/state/update.svelte';
@@ -29,6 +30,7 @@ function prefs(over: Record<string, unknown> = {}) {
         updates: new UpdateState(),
         signing: new SigningState(),
         ssh: new SshState(),
+    repoConfig: new RepoConfigState(),
         experimental: new ExperimentalState(),
         profiles: new ProfilesState(),
         theme: new ThemeState(),
@@ -99,5 +101,28 @@ describe('the way out of preferences', () => {
       .map((r) => r.cssText)
       .find((text) => /header[^{]*\{/u.test(text) && /background:/u.test(text));
     expect(rule).toBeDefined();
+  });
+});
+
+describe('the Repository pane', () => {
+  it('shows whether recorded resolutions are reused and changes it through the state', async () => {
+    const repoConfig = new RepoConfigState();
+    repoConfig.config = { rerere: false };
+    const set = vi.spyOn(repoConfig, 'setRerere').mockResolvedValue();
+    const { container } = prefs({ repoConfig, pane: 'repository' });
+
+    expect(container.querySelector('.page h2')?.textContent).toBe('Repository');
+    const box = [...container.querySelectorAll('label')].find((l) =>
+      l.textContent?.includes('Reuse recorded resolutions'),
+    )?.querySelector('input') as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    await fireEvent.click(box);
+    expect(set).toHaveBeenCalledWith(true);
+  });
+
+  it('is not offered without a repository', () => {
+    const { container } = prefs({ hasRepository: false });
+    const panes = [...container.querySelectorAll('nav .pane')].map((b) => b.textContent?.trim());
+    expect(panes).not.toContain('Repository');
   });
 });

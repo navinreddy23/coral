@@ -37,6 +37,7 @@ import { ExperimentalState } from "../src/state/experimental.svelte";
 import { ProfilesState } from "../src/state/profiles.svelte";
 import { SigningState } from "../src/state/signing.svelte";
 import { SshState } from "../src/state/ssh.svelte";
+import { RepoConfigState } from "../src/state/repoconfig.svelte";
 import { DiffState } from "../src/state/diff.svelte";
 import { MergeState } from "../src/state/merge.svelte";
 import { RebaseState } from "../src/state/rebase.svelte";
@@ -163,12 +164,14 @@ merge.files = [
     kind: "both_modified",
     whole: null,
     deleteModify: false,
+    recorded: false,
   },
   {
     path: "assets/logo.png",
     kind: "both_added",
     whole: "binary",
     deleteModify: false,
+    recorded: false,
   },
 ];
 merge.active = "ui/src/graph/render.ts";
@@ -378,6 +381,7 @@ mount(Preferences, {
     updates: new UpdateState(),
     signing,
     ssh: new SshState(),
+    repoConfig: new RepoConfigState(),
     experimental: new ExperimentalState(),
     profiles: new ProfilesState(),
     theme,

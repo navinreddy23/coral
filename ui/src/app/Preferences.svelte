@@ -7,11 +7,13 @@
   import CommitSigning from './CommitSigning.svelte';
   import Experimental from './Experimental.svelte';
   import Profiles from './Profiles.svelte';
+  import RepoConfig from './RepoConfig.svelte';
   import Ssh from './Ssh.svelte';
   import TerminalSettings from './TerminalSettings.svelte';
   import type { ExperimentalState } from '../state/experimental.svelte';
   import type { SigningState } from '../state/signing.svelte';
   import type { SshState } from '../state/ssh.svelte';
+  import type { RepoConfigState } from '../state/repoconfig.svelte';
   import type { ProfilesState } from '../state/profiles.svelte';
   import type { ThemeState } from '../state/theme.svelte';
   import type { ViewsState } from '../state/views.svelte';
@@ -23,6 +25,7 @@
     avatars = null,
     signing,
     ssh,
+    repoConfig,
     experimental,
     profiles,
     theme,
@@ -42,6 +45,7 @@
     avatars?: AvatarState | null;
     signing: SigningState;
     ssh: SshState;
+    repoConfig: RepoConfigState;
     experimental: ExperimentalState;
     profiles: ProfilesState;
     theme: ThemeState;
@@ -86,6 +90,7 @@
     { id: 'profiles', label: 'Profiles', icon: 'blame', needsRepository: false },
     { id: 'ssh', label: 'SSH', icon: 'shield', needsRepository: true },
     { id: 'signing', label: 'Commit Signing', icon: 'edit', needsRepository: true },
+    { id: 'repository', label: 'Repository', icon: 'folder', needsRepository: true },
     { id: 'terminal', label: 'Terminal', icon: 'terminal', needsRepository: false },
     { id: 'experimental', label: 'Experimental', icon: 'beaker', needsRepository: false },
     { id: 'about', label: 'About', icon: 'info', needsRepository: false },
@@ -161,6 +166,8 @@
     />
   {:else if active === 'signing'}
     <CommitSigning {signing} />
+  {:else if active === 'repository'}
+    <RepoConfig {repoConfig} />
   {:else if active === 'ssh'}
     <Ssh {ssh} {onCopied} />
   {:else if active === 'terminal'}

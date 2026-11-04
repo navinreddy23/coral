@@ -27,6 +27,7 @@ pub mod reflog;
 pub mod refs;
 pub mod remote;
 pub mod repo;
+pub mod rerere;
 pub mod search;
 pub mod sequence;
 pub mod signing;

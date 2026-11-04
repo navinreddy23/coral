@@ -143,3 +143,33 @@ pub async fn resolve(path: &Path, file: &str, how: How) -> Result<Resolved, Cora
         remaining: loc.conflicts(&runner).await?.len(),
     })
 }
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Rerere {
+    pub enabled: bool,
+}
+
+/// Whether git reuses recorded resolutions here, after turning it on or off when `set` says.
+///
+/// # Errors
+/// [`CoralError::NotARepository`], or any git failure.
+pub async fn rerere(path: &Path, set: Option<bool>) -> Result<Rerere, CoralError> {
+    let (runner, loc) = open(path).await?;
+    if let Some(on) = set {
+        loc.set_rerere(&runner, on).await?;
+    }
+    Ok(Rerere {
+        enabled: loc.rerere_enabled(&runner).await?,
+    })
+}
+
+impl crate::output::Human for Rerere {
+    fn human(&self) -> String {
+        if self.enabled {
+            "rerere is on: resolved conflicts are recorded and reused".to_owned()
+        } else {
+            "rerere is off".to_owned()
+        }
+    }
+}

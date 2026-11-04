@@ -346,6 +346,13 @@ pub enum Command {
     },
     /// List submodules.
     Submodules,
+    /// Show whether git reuses recorded conflict resolutions here, or turn it on or off.
+    Rerere {
+        #[arg(long, conflicts_with = "off")]
+        on: bool,
+        #[arg(long)]
+        off: bool,
+    },
     /// Report commit signing at every level for this repository.
     Signing,
     /// List the keys that could sign.
@@ -587,6 +594,16 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
         Command::Refs { kind } => output::render(&commands::refs::run(repo, kind).await),
         Command::Submodules => output::render(&commands::submodule::run(repo).await),
         Command::Worktrees => output::render(&commands::worktree::list(repo).await),
+        Command::Rerere { on, off } => {
+            let set = if on {
+                Some(true)
+            } else if off {
+                Some(false)
+            } else {
+                None
+            };
+            output::render(&commands::conflicts::rerere(repo, set).await)
+        }
         Command::Signing => output::render(&commands::signing::show(repo).await),
         Command::SigningKeys => output::render(&commands::signing::keys(repo).await),
         Command::SigningSet {

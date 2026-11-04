@@ -20,6 +20,9 @@ pub struct ConflictedFile {
     pub whole: Option<Whole>,
     /// One side deleted the file, so keeping or deleting is the only meaningful choice.
     pub delete_modify: bool,
+    /// rerere has resolved it the way it was resolved before. The file on disk holds that
+    /// answer and the index still holds the conflict, so the stages are not what to show.
+    pub recorded: bool,
 }
 
 /// Why a conflicted path has no lines of its own to choose between.
@@ -58,6 +61,8 @@ pub enum Resolution {
     Delete,
     /// Write this exact content, which is what the merge tool's editable output produces.
     Content(BString),
+    /// The file as it stands in the working tree, which is what rerere wrote there.
+    Kept,
 }
 
 /// The mode git gives a submodule's entry: its object is a commit.
@@ -142,6 +147,7 @@ impl RepoLocation {
             .await?;
         let stages = self.unmerged(runner, &paths).await?;
         let sizes = self.sizes(runner, &stages).await?;
+        let remaining = self.rerere_remaining(runner).await?;
 
         let mut out = Vec::new();
         for entry in status.conflicted() {
@@ -161,11 +167,17 @@ impl RepoLocation {
                     .await
                     .then_some(Whole::Binary),
             };
+            // rerere only records text conflicts both sides made, so nothing else can have been
+            // resolved by it, whatever `remaining` leaves out.
+            let recorded = whole.is_none()
+                && matches!(kind, ConflictKind::BothModified | ConflictKind::BothAdded)
+                && remaining.as_ref().is_some_and(|r| !r.contains(&path));
             out.push(ConflictedFile {
                 path,
                 kind,
                 whole,
                 delete_modify,
+                recorded,
             });
         }
         Ok(out)
@@ -280,6 +292,7 @@ impl RepoLocation {
             Resolution::Content(content) => {
                 self.write_worktree(path, content)?;
             }
+            Resolution::Kept => {}
         }
 
         runner

@@ -451,7 +451,22 @@ export type Choice =
   | { kind: 'ours' }
   | { kind: 'theirs' }
   | { kind: 'delete' }
-  | { kind: 'content'; text: string };
+  | { kind: 'content'; text: string }
+  /** The file as it stands: for a conflict rerere resolved, the recorded answer. */
+  | { kind: 'kept' };
+
+/** The per-repository switches that are git configuration: `repoconfig.rs`. */
+export interface RepoConfig {
+  rerere: boolean;
+}
+
+export function repoConfig(path: string): Promise<RepoConfig> {
+  return invoke<RepoConfig>('repo_config', { path });
+}
+
+export function repoSetRerere(path: string, on: boolean): Promise<RepoConfig> {
+  return invoke<RepoConfig>('repo_set_rerere', { path, on });
+}
 
 export function resolveConflict(path: string, file: string, choice: Choice): Promise<void> {
   return invoke<void>('resolve_conflict', { path, file, choice });

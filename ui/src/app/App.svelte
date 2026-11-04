@@ -85,6 +85,7 @@
   import Terminal from './Terminal.svelte';
   import { TerminalState } from '../state/terminal.svelte';
   import { SigningState } from '../state/signing.svelte';
+  import { RepoConfigState } from '../state/repoconfig.svelte';
   import { SshState } from '../state/ssh.svelte';
   import { laneColour } from './lane';
   import { baseName, beside, elideRef } from './path';
@@ -608,6 +609,7 @@
   ].sort());
   const rebase = new RebaseState();
   const signing = new SigningState();
+  const repoConfig = new RepoConfigState();
   const ssh = new SshState();
   const toasts = new ToastsState();
   const updates = new UpdateState();
@@ -4388,6 +4390,7 @@
     const path = loadedPath;
     void signing.load(path);
     void ssh.load(path);
+    void repoConfig.load(path);
     // Read here rather than when a repository opens: it is only ever shown on this page, and
     // it is two git invocations nobody waiting for a graph should pay for.
     void repoIdentity(path)
@@ -5205,6 +5208,7 @@
       {avatars}
       {signing}
       {ssh}
+      {repoConfig}
       {experimental}
       {profiles}
       {theme}
