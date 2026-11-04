@@ -83,6 +83,45 @@ pub async fn partial(
     })
 }
 
+/// Stages one hunk as `edited` rewrites its new side, `-` being standard input.
+///
+/// # Errors
+/// [`CoralError::Io`] when the text cannot be read, and whatever
+/// [`coral_core::index::build_edited_patch`] or git refuses.
+pub async fn edited(
+    path: &Path,
+    file: &str,
+    hunk: usize,
+    edited: &Path,
+) -> Result<Staged, CoralError> {
+    let text = if edited.as_os_str() == "-" {
+        let mut buf = Vec::new();
+        std::io::Read::read_to_end(&mut std::io::stdin(), &mut buf)?;
+        buf
+    } else {
+        std::fs::read(edited)?
+    };
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, path).await?;
+    let files = loc
+        .diff(&runner, false, &[file], DiffOptions::default())
+        .await?;
+    let target = files
+        .iter()
+        .find(|f| f.path == file)
+        .ok_or_else(|| CoralError::Protocol {
+            label: "apply",
+            detail: format!("{file} has no unstaged changes"),
+        })?;
+    let generated = coral_core::index::build_edited_patch(target, hunk, &text)?;
+    loc.apply_to_index(&runner, &generated, Direction::Stage)
+        .await?;
+    Ok(Staged {
+        paths: vec![file.to_owned()],
+        direction: label(Direction::Stage),
+    })
+}
+
 /// Throws away worktree changes.
 ///
 /// # Errors

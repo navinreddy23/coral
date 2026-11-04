@@ -206,3 +206,45 @@ describe('a question with more than one answer', () => {
     ]);
   });
 });
+
+describe('a question about code', () => {
+  it('hands back the text exactly as typed, indentation and all', async () => {
+    const answered = vi.fn();
+    const view = render(Ask, {
+      props: {
+        title: 'Stage this hunk as edited',
+        asksText: true,
+        lines: 6,
+        code: true,
+        optional: true,
+        initial: '\tif (x) {\n\t\treturn;\n',
+        choices: [{ id: 'stage', label: 'Stage as edited', primary: true }],
+        onAnswer: answered,
+      },
+    });
+    const box = view.container.querySelector('textarea') as HTMLTextAreaElement;
+    expect(box.getAttribute('wrap')).toBe('off');
+    expect(view.container.querySelector('.panel.code')).not.toBeNull();
+    await fireEvent.click([...view.container.querySelectorAll('button')].find(
+      (b) => b.textContent?.includes('Stage as edited'),
+    ) as HTMLButtonElement);
+    expect(answered).toHaveBeenCalledWith('stage', '\tif (x) {\n\t\treturn;\n');
+  });
+
+  it('still trims an ordinary answer', async () => {
+    const answered = vi.fn();
+    const view = render(Ask, {
+      props: {
+        title: 'Name the branch',
+        asksText: true,
+        initial: '  topic  ',
+        choices: [{ id: 'ok', label: 'Create', primary: true }],
+        onAnswer: answered,
+      },
+    });
+    await fireEvent.click([...view.container.querySelectorAll('button')].find(
+      (b) => b.textContent?.includes('Create'),
+    ) as HTMLButtonElement);
+    expect(answered).toHaveBeenCalledWith('ok', 'topic');
+  });
+});

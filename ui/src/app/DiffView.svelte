@@ -10,7 +10,7 @@
   import type { DiffState } from '../state/diff.svelte';
   import type { FileDiff } from '../ipc/types';
 
-  const { diff, onClose, onPart }: {
+  const { diff, onClose, onPart, onEdit = () => undefined }: {
     diff: DiffState;
     onClose: () => void;
     /**
@@ -21,6 +21,8 @@
      * that has to be answered first.
      */
     onPart: (part: 'stage' | 'unstage' | 'discard', hunk: number, lines: number[]) => void;
+    /** Stage a hunk as rewritten: its new side, context and added lines, as text to edit. */
+    onEdit?: (hunk: number, text: string) => void;
   } = $props();
 
   /**
@@ -357,6 +359,11 @@
     range = null;
   });
 
+  /** A hunk's new side as text: what the index will hold for it once it is staged. */
+  function newSide(hunk: { lines: { kind: string; text: string }[] }): string {
+    return hunk.lines.filter((l) => l.kind !== 'remove').map((l) => `${l.text}\n`).join('');
+  }
+
   function linesLabel(from: number, to: number): string {
     return from === to ? `line ${from}` : `lines ${from}–${to}`;
   }
@@ -632,6 +639,10 @@
                       {side === 'stage' ? 'Stage hunk' : 'Unstage hunk'}
                     </button>
                     {#if side === 'stage'}
+                      <button
+                        onclick={() => onEdit(h, newSide(hunk))}
+                        title="Stage this hunk as you rewrite it, leaving the file on disk alone"
+                      >Edit…</button>
                       <button class="risky" onclick={() => onPart('discard', h, pickedIn(h))}>
                         Discard{pickedIn(h).length > 0 ? ' lines' : ' hunk'}
                       </button>

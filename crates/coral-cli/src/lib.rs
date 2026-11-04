@@ -259,6 +259,10 @@ pub enum Command {
         /// Stage only these line indices within --hunk.
         #[arg(long, requires = "hunk", value_delimiter = ',')]
         lines: Option<Vec<usize>>,
+        /// Stage --hunk as this file's text reads instead of as the worktree has it: the
+        /// hunk's new side, context and added lines, rewritten. `-` reads standard input.
+        #[arg(long, value_name = "PATH", requires = "hunk", conflicts_with = "lines")]
+        edited: Option<std::path::PathBuf>,
     },
     /// Unstage changes, leaving the worktree alone.
     Unstage {
@@ -807,10 +811,17 @@ async fn dispatch_tree(command: Command, repo: &std::path::Path) -> output::Rend
         Command::Redo => output::render(&commands::write::redo(repo).await),
         Command::Journal => output::render(&commands::write::journal(repo).await),
         Command::Stage {
+            hunk: Some(hunk),
+            file: Some(file),
+            edited: Some(edited),
+            ..
+        } => output::render(&commands::stage::edited(repo, &file, hunk, &edited).await),
+        Command::Stage {
             paths,
             hunk,
             file,
             lines,
+            ..
         } => output::render(&stage_or_unstage(repo, paths, hunk, file, lines, D::Stage).await),
         Command::Unstage {
             paths,

@@ -1,5 +1,6 @@
 import {
   applyPart,
+  stageEdited,
   commitStaged,
   deletePaths,
   discardPaths,
@@ -87,6 +88,12 @@ export class WorktreeState {
   ): Promise<void> {
     const path = this.#path;
     await this.#run(() => applyPart(path, file, part, hunk, lines, options));
+  }
+
+  /** Stages one hunk as rewritten in `text`, its new side, leaving the working tree alone. */
+  async stageEdited(file: string, hunk: number, text: string, options: ReadOptions): Promise<void> {
+    const path = this.#path;
+    await this.#run(() => stageEdited(path, file, hunk, text, options));
   }
 
   /** Deletes files outright. The caller asks first; this does not. */

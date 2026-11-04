@@ -792,6 +792,51 @@ pub async fn apply_part(
     Ok(loc.status(&runner).await?)
 }
 
+/// Stages one hunk of a file as the user rewrote it rather than as the working tree has it.
+///
+/// `text` is the hunk's new side as edited. The hunk itself is read from the diff again here,
+/// for the reason [`apply_part`] gives.
+///
+/// # Errors
+/// Propagates git failures and whatever [`coral_core::index::build_edited_patch`] refuses;
+/// refuses while whitespace is ignored, as [`apply_part`] does.
+#[tauri::command]
+pub async fn stage_edited(
+    path: String,
+    file: String,
+    hunk: usize,
+    text: String,
+    options: ReadOptions,
+) -> Result<coral_core::status::Status, crate::commands::IpcError> {
+    tracing::info!(path, file, hunk, "stage_edited");
+    if options.ignore_whitespace {
+        return Err(coral_core::CoralError::Refused {
+            label: "stage an edited hunk",
+            detail: "whitespace is being ignored, so the hunks on screen are not the file's"
+                .to_owned(),
+        }
+        .into());
+    }
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    let files = loc
+        .diff(&runner, false, &[file.as_str()], options.into())
+        .await?;
+    let target =
+        files
+            .iter()
+            .find(|f| f.path == file)
+            .ok_or_else(|| coral_core::CoralError::Protocol {
+                label: "apply",
+                detail: format!("{file} has no unstaged changes"),
+            })?;
+    let generated = coral_core::index::build_edited_patch(target, hunk, text.as_bytes())?;
+    loc.apply_to_index(&runner, &generated, coral_core::index::Direction::Stage)
+        .await?;
+    Ok(loc.status(&runner).await?)
+}
+
 /// The files that differ between two commits, for the panel to list.
 ///
 /// `from` is the older of the pair as the graph reads it, so what the newer one gained is an

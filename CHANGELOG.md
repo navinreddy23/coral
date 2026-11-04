@@ -23,6 +23,11 @@
   it and everything below it behind: `git rebase --onto`, the way a branch cut from a feature
   branch moves to main without the feature. `coral rebase ONTO --from REV` from the command
   line.
+- **Edit a hunk before staging it.** "Edit…" on an unstaged hunk opens its new side as text;
+  what you leave there is what is staged, and the file on disk keeps its own lines — take a
+  debugging line out of the commit without taking it out of the file. The old side is never
+  edited, so an index that has moved since is refused rather than written to.
+  `coral stage --file F --hunk N --edited PATH` from the command line.
 - `.mailmap` is honoured in the graph, the commit details and file history, as it already was
   in blame: someone who committed under several names and addresses reads as one person, with
   one picture. On the kernel that is the 989-line map its maintainers keep.

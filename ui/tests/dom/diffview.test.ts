@@ -163,6 +163,35 @@ describe('the diff viewer', () => {
     expect(blame.title).toContain('no lines to blame');
   });
 
+  it('offers to stage an unstaged hunk as edited, handing over its new side as text', async () => {
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'kernel/sched/core.c';
+    diff.source = 'unstaged';
+    diff.file = fileDiff();
+    diff.setMode('inline');
+    const edits: [number, string][] = [];
+    const view = render(DiffView, {
+      props: { diff, onClose: () => {}, onPart: () => {}, onEdit: (h: number, t: string) => edits.push([h, t]) },
+    });
+    const edit = [...view.container.querySelectorAll('.hunk-acts button')].find(
+      (b) => b.textContent?.trim() === 'Edit…',
+    ) as HTMLButtonElement;
+    await fireEvent.click(edit);
+    // Context and the added line, not the removed one: what the index will hold.
+    expect(edits).toEqual([[0, 'one\nTWO\nthree\n']]);
+  });
+
+  it('offers no edit for a hunk that is already staged', () => {
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'kernel/sched/core.c';
+    diff.source = 'staged';
+    diff.file = fileDiff();
+    diff.setMode('inline');
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+    const labels = [...view.container.querySelectorAll('.hunk-acts button')].map((b) => b.textContent?.trim());
+    expect(labels).not.toContain('Edit…');
+  });
+
   it('picks a run of blame lines and offers their history', async () => {
     const diff = new DiffState(new ViewsState());
     diff.path = 'a.c';

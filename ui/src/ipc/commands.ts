@@ -259,6 +259,17 @@ export function applyPart(
   return invoke<Status>('apply_part', { path, file, part, hunk, lines, options });
 }
 
+/** Stages one hunk as `text` rewrites its new side, rather than as the working tree has it. */
+export function stageEdited(
+  path: string,
+  file: string,
+  hunk: number,
+  text: string,
+  options: ReadOptions,
+): Promise<Status> {
+  return invoke<Status>('stage_edited', { path, file, hunk, text, options });
+}
+
 /** Deletes files outright: gone from the working tree, and staged as removed if tracked. */
 export function deletePaths(
   path: string,

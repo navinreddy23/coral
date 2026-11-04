@@ -529,3 +529,73 @@ async fn discards_a_single_removal_out_of_several() {
         "the line whose deletion was undone is back, the other is still gone"
     );
 }
+
+/// One side of a hunk as text, leaving out the lines of kind `without`.
+fn side_text(hunk: &coral_core::diff::Hunk, without: coral_core::diff::LineKind) -> String {
+    hunk.lines
+        .iter()
+        .filter(|l| l.kind != without)
+        .fold(String::new(), |mut out, l| {
+            let _ = writeln!(out, "{}", String::from_utf8_lossy(&l.text));
+            out
+        })
+}
+
+/// Staging a hunk as rewritten, not as the working tree has it: the index gets the edit, the
+/// working tree keeps what was typed there, and the rest of the file is untouched.
+#[tokio::test]
+async fn an_edited_hunk_stages_what_was_written_in_place_of_what_is_on_disk() {
+    let repo = TestRepo::new()
+        .write("f.txt", &numbered_lines(20))
+        .commit("base");
+    let changed = numbered_lines(20)
+        .replace("line 5\n", "line 5 DEBUG print\nline 5\n")
+        .replace("line 15\n", "line fifteen\n");
+    std::fs::write(repo.path().join("f.txt"), &changed).unwrap();
+
+    let diff = unstaged_diff(&repo).await;
+    let first = &diff[0].hunks[0];
+    // The new side of the first hunk, with the debug line taken out and a word changed.
+    let new_side = side_text(first, coral_core::diff::LineKind::Remove);
+    let edited = new_side
+        .replace("line 5 DEBUG print\n", "")
+        .replace("line 4\n", "line four\n");
+    let patch = coral_core::index::build_edited_patch(&diff[0], 0, edited.as_bytes()).unwrap();
+
+    let (runner, loc) = open(&repo).await;
+    loc.apply_to_index(&runner, &patch, Direction::Stage)
+        .await
+        .unwrap();
+
+    let staged = staged_content(&repo, "f.txt");
+    assert!(staged.contains("line four\nline 5\nline 6"), "{staged}");
+    assert!(!staged.contains("DEBUG"), "the debug line was edited out");
+    assert!(staged.contains("line 15"), "the second hunk was not staged");
+    let on_disk = std::fs::read_to_string(repo.path().join("f.txt")).unwrap();
+    assert_eq!(
+        on_disk, changed,
+        "the working tree keeps what was typed there"
+    );
+}
+
+#[tokio::test]
+async fn an_edit_that_changes_nothing_or_reaches_a_missing_newline_is_refused() {
+    let repo = TestRepo::new().write("f.txt", "a\nb\nc").commit("base");
+    std::fs::write(repo.path().join("f.txt"), "a\nB\nc").unwrap();
+    let diff = unstaged_diff(&repo).await;
+    let e = coral_core::index::build_edited_patch(&diff[0], 0, b"a\nB2\nc").unwrap_err();
+    assert_eq!(e.code(), "refused");
+
+    let repo = TestRepo::new()
+        .write("f.txt", &numbered_lines(5))
+        .commit("base");
+    std::fs::write(
+        repo.path().join("f.txt"),
+        numbered_lines(5).replace("line 3", "line three"),
+    )
+    .unwrap();
+    let diff = unstaged_diff(&repo).await;
+    let index_side = side_text(&diff[0].hunks[0], coral_core::diff::LineKind::Add);
+    let e = coral_core::index::build_edited_patch(&diff[0], 0, index_side.as_bytes()).unwrap_err();
+    assert!(e.to_string().contains("already"), "{e}");
+}

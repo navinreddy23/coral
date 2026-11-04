@@ -679,6 +679,8 @@
     lines?: number;
     /** Empty is a valid answer, so the choices are not greyed out without text. */
     optional?: boolean;
+    /** The text is code: kept as typed, in a wide box that does not wrap. */
+    code?: boolean;
     placeholder: string;
     initial: string;
     choices: Choice[];
@@ -3573,6 +3575,35 @@
    * Discarding asks first: it is the only one of the three that throws work away, and a hunk
    * is small enough to click by accident.
    */
+  /**
+   * Stages one hunk as rewritten, not as the working tree has it: drop a debugging line, fix a
+   * typo in what is about to be recorded, keep the file on disk as it is.
+   */
+  async function editHunk(hunk: number, text: string) {
+    const file = diff.path;
+    if (!info || file === null || diff.atCommit !== null) return;
+    const lines = text.split('\n').length;
+    const { choice, text: edited } = await ask({
+      title: `Stage this hunk of ${file.split('/').at(-1) ?? file} as edited`,
+      detail:
+        'What is staged is what you leave here. The file on disk keeps its own lines, so the edit shows as an unstaged change afterwards. Ctrl+Enter stages.',
+      asksText: true,
+      lines: Math.min(24, Math.max(6, lines + 1)),
+      code: true,
+      optional: true,
+      placeholder: '',
+      initial: text,
+      choices: [{ id: 'stage', label: 'Stage as edited', primary: true }],
+    });
+    if (choice !== 'stage') return;
+    await worktree.stageEdited(file, hunk, edited, diff.reading);
+    if (worktree.error) {
+      toasts.push('error', 'Could not stage that', worktree.error);
+      return;
+    }
+    await reloadDiff(info.path);
+  }
+
   async function applyPart(
     part: 'stage' | 'unstage' | 'discard',
     hunk: number,
@@ -5388,7 +5419,7 @@
         onMessageUsed={() => commitDraft.clear()}
       />
     {:else if diff.path !== null}
-      <DiffView {diff} onClose={() => diff.close()} onPart={applyPart} />
+      <DiffView {diff} onClose={() => diff.close()} onPart={applyPart} onEdit={editHunk} />
     {/if}
     <div class="plot" class:hidden={diff.path !== null || merge.inProgress}>
       <!-- Above the list it is about, and above the column handles, which run full height. -->
@@ -5862,6 +5893,7 @@
     detail={question.detail}
     asksText={question.asksText}
     lines={question.lines ?? 1}
+    code={question.code ?? false}
     optional={question.optional ?? false}
     placeholder={question.placeholder}
     initial={question.initial}
