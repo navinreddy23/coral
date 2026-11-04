@@ -79,6 +79,11 @@ impl crate::output::Human for Done {
 
 impl crate::output::Human for OpOutcome {
     fn human(&self) -> String {
+        // On success the message is git's own chatter, except for a patch that was already in:
+        // "completed" alone would read as though it had just been applied.
+        if self.completed && self.message == coral_core::patch::ALREADY_APPLIED {
+            return self.message.clone();
+        }
         if self.completed {
             return format!("completed ({:?})", self.state);
         }
@@ -510,5 +515,29 @@ impl crate::output::Human for Drafted {
         } else {
             format!("{}\n\n{}", self.draft.summary, self.draft.body)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::output::Human;
+
+    fn outcome(message: &str) -> OpOutcome {
+        OpOutcome {
+            completed: true,
+            state: coral_core::repo::OpState::Clean,
+            conflicts: Vec::new(),
+            message: message.to_owned(),
+        }
+    }
+
+    #[test]
+    fn a_patch_already_in_says_so_rather_than_completed() {
+        assert_eq!(
+            outcome(coral_core::patch::ALREADY_APPLIED).human(),
+            coral_core::patch::ALREADY_APPLIED
+        );
+        assert_eq!(outcome("Applying: readme").human(), "completed (Clean)");
     }
 }
