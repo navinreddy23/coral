@@ -825,6 +825,7 @@ dependencies = [
 name = "coral-app"
 version = "1.3.0"
 dependencies = [
+ "coral-assist",
  "coral-core",
  "coral-hosting",
  "dirs",
@@ -845,10 +846,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "coral-assist"
+version = "1.3.0"
+dependencies = [
+ "keyring",
+ "reqwest",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
 name = "coral-cli"
 version = "1.3.0"
 dependencies = [
  "clap",
+ "coral-assist",
  "coral-core",
  "coral-hosting",
  "insta",
@@ -887,6 +902,7 @@ dependencies = [
 name = "coral-hosting"
 version = "1.3.0"
 dependencies = [
+ "dirs",
  "keyring",
  "reqwest",
  "secrecy",

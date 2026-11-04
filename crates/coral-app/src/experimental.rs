@@ -36,6 +36,17 @@ pub enum GitChoice {
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
     pub git: GitChoice,
+    /// Drafting commit messages with Claude, which is off until turned on.
+    pub assist: Assist,
+}
+
+/// Whether commit messages can be drafted, and by which model.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Assist {
+    pub enabled: bool,
+    /// Empty for the default.
+    pub model: String,
 }
 
 /// One git the user could choose, as the screen shows it.
@@ -92,7 +103,7 @@ impl Experimental {
             .clone()
     }
 
-    fn write(&self, next: Settings) {
+    pub(crate) fn write(&self, next: Settings) {
         let mut held = self
             .inner
             .lock()
@@ -269,7 +280,10 @@ pub async fn experimental_set_git(
     settings: tauri::State<'_, Experimental>,
     choice: GitChoice,
 ) -> Result<GitView, IpcError> {
-    settings.write(Settings { git: choice });
+    settings.write(Settings {
+        git: choice,
+        ..settings.read()
+    });
     settings.apply();
     experimental_git(settings).await
 }

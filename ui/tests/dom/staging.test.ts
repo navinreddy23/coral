@@ -523,3 +523,25 @@ describe('the staging panel sections', () => {
     }
   });
 });
+
+describe('drafting a message', () => {
+  it('offers Draft only when drafting is on, and only with something staged', async () => {
+    const asked = vi.fn();
+    const { container } = await panel({ onDraft: asked });
+    const button = container.querySelector('button.draft') as HTMLButtonElement;
+    expect(button.textContent).toBe('Draft');
+    expect(button.disabled).toBe(false);
+    await fireEvent.click(button);
+    expect(asked).toHaveBeenCalledOnce();
+
+    const off = await panel();
+    expect(off.container.querySelector('button.draft')).toBeNull();
+  });
+
+  it('says it is drafting while the answer is on its way', async () => {
+    const { container } = await panel({ onDraft: vi.fn(), drafting: true });
+    const button = container.querySelector('button.draft') as HTMLButtonElement;
+    expect(button.textContent).toBe('Drafting…');
+    expect(button.disabled).toBe(true);
+  });
+});

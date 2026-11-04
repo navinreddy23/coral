@@ -19,6 +19,7 @@ tauri-build = { workspace = true }
 [dependencies]
 coral-core    = { workspace = true }
 coral-hosting = { workspace = true }
+coral-assist  = { workspace = true }
 secrecy       = { workspace = true }
 dirs          = { workspace = true }
 gix        = { workspace = true }

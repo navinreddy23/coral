@@ -488,6 +488,13 @@ pub enum Command {
     HostLogout,
     /// List the repository's pull or merge requests.
     PullRequests,
+    /// Draft a commit message for what is staged, with Claude, on the API key the app keeps.
+    /// Prints the draft; nothing is committed.
+    DraftMessage {
+        /// The model to ask, instead of the default.
+        #[arg(long)]
+        model: Option<String>,
+    },
     /// Show one issue on the repository's host (a work item on Azure DevOps), and the branch
     /// it would be worked on in.
     Issue { number: u64 },
@@ -687,6 +694,9 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
         }
         Command::HostLogout => output::render(&commands::hosting::logout(repo).await),
         Command::PullRequests => output::render(&commands::hosting::list(repo).await),
+        Command::DraftMessage { model } => {
+            output::render(&commands::write::draft_message(repo, model).await)
+        }
         Command::Issue { number } => output::render(&commands::hosting::issue(repo, number).await),
         Command::HostKind { hostname, kind } => {
             output::render(&commands::hosting::declare(&hostname, &kind))

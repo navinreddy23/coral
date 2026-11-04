@@ -12,6 +12,7 @@
   import TerminalSettings from './TerminalSettings.svelte';
   import ToolSettings from './ToolSettings.svelte';
   import type { ToolsState } from '../state/tools.svelte';
+  import type { AssistState } from '../state/assist.svelte';
   import type { ExperimentalState } from '../state/experimental.svelte';
   import type { SigningState } from '../state/signing.svelte';
   import type { SshState } from '../state/ssh.svelte';
@@ -29,6 +30,7 @@
     ssh,
     repoConfig,
     tools,
+    assist = null,
     experimental,
     profiles,
     theme,
@@ -50,6 +52,7 @@
     ssh: SshState;
     repoConfig: RepoConfigState;
     tools: ToolsState;
+    assist?: AssistState | null;
     experimental: ExperimentalState;
     profiles: ProfilesState;
     theme: ThemeState;
@@ -180,7 +183,7 @@
   {:else if active === 'tools'}
     <ToolSettings {tools} />
   {:else if active === 'experimental'}
-    <Experimental {experimental} {onPickGit} />
+    <Experimental {experimental} {assist} {onPickGit} />
   {:else if active === 'about'}
     <About {onCopied} {updates} />
   {/if}

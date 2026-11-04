@@ -1066,3 +1066,36 @@ export interface RepoRequests {
 export function hostingEverywhere(): Promise<RepoRequests[]> {
   return invoke<RepoRequests[]>('hosting_everywhere');
 }
+
+/** Drafting commit messages with Claude: on or off, the model, and whether a key is kept. */
+export interface AssistView {
+  enabled: boolean;
+  model: string;
+  hasKey: boolean;
+  defaultModel: string;
+}
+
+/** A drafted message, split as the commit box holds it. */
+export interface Draft {
+  summary: string;
+  body: string;
+  /** The model that wrote it, which a fallback can make different from the one asked. */
+  model: string;
+}
+
+export function assistRead(): Promise<AssistView> {
+  return invoke<AssistView>('assist_read');
+}
+
+export function assistSet(enabled: boolean, model: string): Promise<AssistView> {
+  return invoke<AssistView>('assist_set', { enabled, model });
+}
+
+/** Keeps a key in the keyring, or forgets it with null. The key is never read back. */
+export function assistSetKey(key: string | null): Promise<AssistView> {
+  return invoke<AssistView>('assist_set_key', { key });
+}
+
+export function assistDraft(path: string): Promise<Draft> {
+  return invoke<Draft>('assist_draft', { path });
+}

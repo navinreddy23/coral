@@ -92,6 +92,7 @@
   import { RepoConfigState } from '../state/repoconfig.svelte';
   import { ToolsState } from '../state/tools.svelte';
   import { RequestsState } from '../state/requests.svelte';
+  import { AssistState } from '../state/assist.svelte';
   import { SshState } from '../state/ssh.svelte';
   import { laneColour } from './lane';
   import { baseName, beside, elideRef } from './path';
@@ -620,6 +621,7 @@
   const repoConfig = new RepoConfigState();
   const tools = new ToolsState();
   const openRequests = new RequestsState();
+  const assist = new AssistState();
   const ssh = new SshState();
   const toasts = new ToastsState();
   const updates = new UpdateState();
@@ -2755,6 +2757,30 @@
   }
 
   /**
+   * Puts a drafted message in the commit box, for the user to read and change before anything
+   * is committed. A message already being written is not replaced without asking.
+   */
+  async function draftMessage() {
+    if (!info) return;
+    const path = info.path;
+    if (commitDraft.summary.trim() !== '' || commitDraft.description.trim() !== '') {
+      const replace = await confirmThat(
+        'Replace the message being written?',
+        'The draft takes the place of what is in the summary and description now.',
+      );
+      if (!replace) return;
+    }
+    const made = await assist.draft(path);
+    if (made === null) {
+      toasts.push('error', 'No draft', assist.error ?? '');
+      return;
+    }
+    if (info?.path !== path) return;
+    commitDraft.summary = made.summary;
+    commitDraft.description = made.body;
+  }
+
+  /**
    * Asks what an unrecognised server runs and remembers the answer, then offers to sign in.
    *
    * A self-hosted Gitea or Forgejo can be called anything, and nothing in its name says what
@@ -4513,6 +4539,11 @@
     }
   }
 
+  // Whether to offer a draft is a setting of the app's, read once; the pane changes it in place.
+  $effect(() => {
+    void assist.load();
+  });
+
   // The Start page asks every tab's host what is open each time it is shown, which is when
   // somebody is choosing what to work on next; nothing waits on the answer.
   $effect(() => {
@@ -5370,6 +5401,7 @@
       {ssh}
       {repoConfig}
       {tools}
+      {assist}
       {experimental}
       {profiles}
       {theme}
@@ -5938,6 +5970,8 @@
             onDiscard={(entries) => void discardChanges(entries)}
             onFileMenu={fileMenu}
             onCommit={() => void recordCommit(false)}
+            onDraft={assist.ready ? () => void draftMessage() : null}
+            drafting={assist.drafting}
             locks={lfs.byPath}
             {sections}
           />

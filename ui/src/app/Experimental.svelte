@@ -1,9 +1,12 @@
 <script lang="ts">
   import type { ExperimentalState } from '../state/experimental.svelte';
+  import type { AssistState } from '../state/assist.svelte';
   import type { GitCandidate, GitChoice } from '../ipc/experimental';
 
-  const { experimental, onPickGit }: {
+  const { experimental, assist = null, onPickGit }: {
     experimental: ExperimentalState;
+    /** Drafting commit messages with Claude; null where the window has none to offer. */
+    assist?: AssistState | null;
     /** Asks for a git binary or an installation directory; the file picker is the window's. */
     onPickGit: () => void;
   } = $props();
@@ -123,9 +126,68 @@
       </p>
     {/if}
   {/if}
+  {#if assist !== null}
+    {@const a = assist.view}
+    <h3>Draft commit messages with Claude</h3>
+    <label class="check">
+      <input
+        type="checkbox"
+        checked={a?.enabled ?? false}
+        disabled={a === null}
+        onchange={(e) => void assist.set(e.currentTarget.checked, a?.model ?? '')}
+      />
+      Offer a Draft button beside the commit message
+    </label>
+    <p class="note">
+      Pressing it sends the staged diff and the subjects of the last few commits to Anthropic,
+      on your own API key, and puts the answer in the message box for you to read and change.
+      Nothing is sent until you press it, and nothing at all while this is off. The key is kept
+      in this machine's keyring.
+    </p>
+    {#if a !== null && a.enabled}
+      <div class="field">
+        <span class="name"><label for="assist-key">API key</label></span>
+        {#if a.hasKey}
+          <span class="kept">Kept in the keyring</span>
+          <button onclick={() => void assist.setKey(null)}>Forget it</button>
+        {:else}
+          <input
+            id="assist-key"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="sk-ant-…"
+            onchange={(e) => {
+              const k = e.currentTarget.value;
+              e.currentTarget.value = '';
+              void assist.setKey(k);
+            }}
+          />
+        {/if}
+      </div>
+      <div class="field">
+        <span class="name"><label for="assist-model">Model</label></span>
+        <input
+          id="assist-model"
+          value={a.model}
+          placeholder={a.defaultModel}
+          spellcheck="false"
+          onchange={(e) => void assist.set(true, e.currentTarget.value)}
+        />
+      </div>
+    {/if}
+    {#if assist.error}<p class="error">{assist.error}</p>{/if}
+  {/if}
 </section>
 
 <style>
+  .check { display: flex; align-items: center; gap: var(--space-2); }
+  .kept { color: var(--fg-1); }
+  #assist-key, #assist-model {
+    flex: 1 1 auto; min-width: 0; max-width: 28em; font: inherit; font-family: var(--font-mono);
+    padding: 3px var(--space-2); background: var(--bg-0); color: var(--fg-0);
+    border: 1px solid var(--border-strong); border-radius: var(--radius-1);
+  }
   section {
     flex: 1; min-width: 0; overflow-y: auto; padding: var(--space-4) var(--space-5);
     background: var(--bg-0); color: var(--fg-1); font-size: var(--text-base);

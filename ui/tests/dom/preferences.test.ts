@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render } from '@testing-library/svelte';
+import { cleanup, render, waitFor } from '@testing-library/svelte';
 import { fireEvent } from '@testing-library/dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -215,5 +215,40 @@ describe('the Tools pane', () => {
 
     await fireEvent.click(container.querySelector('.actions .remove') as HTMLButtonElement);
     expect(set).toHaveBeenLastCalledWith([]);
+  });
+});
+
+describe('drafting with Claude, in Experimental', () => {
+  it('is off until turned on, keeps a key without showing it, and names the model', async () => {
+    const { AssistState } = await import('../../src/state/assist.svelte');
+    const assist = new AssistState();
+    assist.view = { enabled: false, model: '', hasKey: false, defaultModel: 'claude-opus-5-5' };
+    const set = vi.spyOn(assist, 'set').mockImplementation(async (enabled: boolean) => {
+      assist.view = { enabled, model: '', hasKey: false, defaultModel: 'claude-opus-5-5' };
+    });
+    const keep = vi.spyOn(assist, 'setKey').mockResolvedValue();
+    const { container } = prefs({ assist, pane: 'experimental' });
+    expect(container.querySelector('#assist-key')).toBeNull();
+    expect(container.textContent).toContain('Nothing is sent until you press it');
+
+    const box = [...container.querySelectorAll('label')].find((l) =>
+      l.textContent?.includes('Offer a Draft button'),
+    )?.querySelector('input') as HTMLInputElement;
+    await fireEvent.click(box);
+    expect(set).toHaveBeenCalledWith(true, '');
+
+    const key = await waitFor(() => {
+      const k = container.querySelector('#assist-key') as HTMLInputElement | null;
+      if (!k) throw new Error('no key field yet');
+      return k;
+    });
+    expect(key.type).toBe('password');
+    await fireEvent.change(key, { target: { value: 'sk-ant-test-not-real' } });
+    expect(keep).toHaveBeenCalledWith('sk-ant-test-not-real');
+    // Cleared once handed over, so the key does not sit in the page.
+    expect(key.value).toBe('');
+    expect((container.querySelector('#assist-model') as HTMLInputElement).placeholder).toBe(
+      'claude-opus-5-5',
+    );
   });
 });

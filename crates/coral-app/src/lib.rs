@@ -3,6 +3,7 @@
 
 pub mod actions;
 pub mod activity;
+pub mod assist;
 pub mod avatar;
 pub mod bisect;
 pub mod blob;

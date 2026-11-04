@@ -91,6 +91,14 @@
   open in every repository open in a tab, each asked of its own host at once, drafts marked,
   and says which repositories have no host or no sign-in rather than leaving them out.
 
+- **Draft a commit message with Claude**, off until turned on in Preferences, Experimental,
+  and only on your own Anthropic API key, kept in the keyring. A Draft button beside the
+  message box sends the staged diff and the last few commit subjects, and puts the answer in
+  the box to read and change; a message already being written is not replaced without asking.
+  A staged change too large to send is refused with a sentence rather than cut short. It asks
+  `claude-opus-5-5` by default, with Anthropic's own fallback if that model declines.
+  `coral draft-message` from the command line.
+
 ### Fixed
 
 - Applying a patch that is already there says so, instead of reporting a change it never made.

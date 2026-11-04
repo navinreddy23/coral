@@ -555,6 +555,24 @@ impl RepoLocation {
         Ok(files)
     }
 
+    /// The staged change as git prints it, for something to read rather than to apply: renames
+    /// found, no colour, and no external diff program standing in for git's own.
+    ///
+    /// # Errors
+    /// Propagates git failures.
+    pub async fn staged_patch(&self, runner: &GitRunner) -> Result<String, CoralError> {
+        let out = runner
+            .output(GitCommand::read("diff", self.display_path()).args([
+                "diff",
+                "--cached",
+                "--find-renames",
+                "--no-color",
+                "--no-ext-diff",
+            ]))
+            .await?;
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    }
+
     /// Reads commit history, optionally narrowed by [`crate::history::LogQuery`].
     ///
     /// # Errors

@@ -29,6 +29,8 @@
     onCommit,
     sections,
     locks = new Map(),
+    onDraft = null,
+    drafting = false,
   }: {
     worktree: WorktreeState;
     /**
@@ -36,6 +38,9 @@
      * the selection moves off the working copy and a half-written message must survive that.
      */
     commit: CommitState;
+    /** Drafts a message with Claude, when that is turned on; null hides the button. */
+    onDraft?: (() => void) | null;
+    drafting?: boolean;
     /** What the changes are on, which is what the header names. */
     branch: string | null;
     /** Files locked on the LFS server, by path. */
@@ -448,10 +453,20 @@
     </h3>
     {#if !closed.compose}
     <div class="fields" id="staging-compose">
-    <label class="amend">
-      <input type="checkbox" bind:checked={draft.amend} />
-      Amend the previous commit
-    </label>
+    <div class="above">
+      <label class="amend">
+        <input type="checkbox" bind:checked={draft.amend} />
+        Amend the previous commit
+      </label>
+      {#if onDraft !== null}
+        <button
+          class="draft"
+          disabled={drafting || total === 0}
+          onclick={onDraft}
+          title="Write a message for what is staged with Claude, for you to read and change"
+        >{drafting ? 'Drafting…' : 'Draft'}</button>
+      {/if}
+    </div>
     <div class="field">
       <input
         class="summary"
@@ -486,6 +501,15 @@
 </div>
 
 <style>
+  .above { display: flex; align-items: center; gap: var(--space-2); }
+  .above .amend { flex: 1; }
+  .draft {
+    flex: 0 0 auto; font: inherit; font-size: var(--text-sm); cursor: pointer; white-space: nowrap;
+    padding: 1px var(--space-2); background: var(--bg-1); color: var(--fg-1);
+    border: 1px solid var(--border-strong); border-radius: var(--radius-1);
+  }
+  .draft:hover:not(:disabled) { background: var(--bg-2); color: var(--fg-0); }
+  .draft:disabled { opacity: 0.6; cursor: default; }
   /*
    * The whole height, and none of it wasted: the two lists take what is left after the header
    * and the commit box, half each, and scroll inside themselves. Before this the panel was a

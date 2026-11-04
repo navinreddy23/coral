@@ -454,3 +454,61 @@ pub async fn stash(
     })
     .await
 }
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Drafted {
+    #[serde(flatten)]
+    pub draft: coral_assist::Draft,
+}
+
+/// Drafts a message for what is staged, on the key the app keeps in the keyring.
+///
+/// # Errors
+/// [`CoralError::Refused`] with no key kept, nothing staged, too much staged, or the API's
+/// own refusal; and git failures.
+pub async fn draft_message(path: &Path, model: Option<String>) -> Result<Drafted, CoralError> {
+    let refused = |e: coral_assist::DraftError| CoralError::Refused {
+        label: "draft a message",
+        detail: e.to_string(),
+    };
+    let key = coral_assist::key::load()
+        .map_err(refused)?
+        .ok_or_else(|| CoralError::Refused {
+            label: "draft a message",
+            detail: "no API key is kept; add one in the app's Preferences, Experimental".to_owned(),
+        })?;
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, path).await?;
+    let recent = loc
+        .log(
+            &runner,
+            &coral_core::history::LogQuery {
+                limit: Some(12),
+                ..Default::default()
+            },
+        )
+        .await
+        .map(|c| c.into_iter().map(|c| c.summary.to_string()).collect())
+        .unwrap_or_default();
+    let request = coral_assist::Request {
+        diff: loc.staged_patch(&runner).await?,
+        recent,
+        model: model.unwrap_or_default(),
+    };
+    let endpoint = std::env::var("CORAL_ASSIST_URL").ok();
+    let draft = coral_assist::draft(&key, &request, endpoint.as_deref())
+        .await
+        .map_err(refused)?;
+    Ok(Drafted { draft })
+}
+
+impl crate::output::Human for Drafted {
+    fn human(&self) -> String {
+        if self.draft.body.is_empty() {
+            self.draft.summary.clone()
+        } else {
+            format!("{}\n\n{}", self.draft.summary, self.draft.body)
+        }
+    }
+}
