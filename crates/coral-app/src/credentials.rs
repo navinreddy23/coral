@@ -53,18 +53,7 @@ fn signed_in(request: &str) -> Option<(HostKind, SecretString)> {
     let credential = Credential::parse(request).ok()?;
     // Any owner and repository: git names only the host unless `credential.useHttpPath` is on,
     // and the host is all a token is stored under.
-    let host = credential.host()?;
-    // Azure DevOps addresses a repository inside a project, and its remotes say so; a
-    // placeholder of any other shape is not one its parser takes.
-    let path = if host == "dev.azure.com" || host.ends_with("@dev.azure.com") {
-        "o/p/_git/r"
-    } else if host.ends_with(".visualstudio.com") {
-        "p/_git/r"
-    } else {
-        "o/r.git"
-    };
-    let url = format!("{}://{host}/{path}", credential.protocol()?);
-    let host = Host::detect(&url).ok()?;
+    let host = placeholder_host(credential.protocol()?, credential.host()?)?;
     let accounts = [
         current_profile().map(|id| Account::of_profile(&id)),
         Some(Account::shared()),
@@ -74,6 +63,17 @@ fn signed_in(request: &str) -> Option<(HostKind, SecretString)> {
         .flatten()
         .find_map(|account| token::load(&host, &account).ok().flatten())
         .map(|secret| (host.kind, secret))
+}
+
+/// The host a credential request is about, from a placeholder remote on it.
+///
+/// Every shape a remote can take there is tried, since only the host is known: `owner/repo`,
+/// and Azure DevOps's repository inside a project — on `dev.azure.com`, on a `visualstudio.com`
+/// organisation, or on a server declared as Azure DevOps, whose name says nothing.
+fn placeholder_host(protocol: &str, host: &str) -> Option<Host> {
+    ["o/r.git", "o/p/_git/r", "p/_git/r"]
+        .iter()
+        .find_map(|path| Host::detect(&format!("{protocol}://{host}/{path}")).ok())
 }
 
 /// The profile at the window, from the registry it keeps beside its settings.
@@ -175,6 +175,16 @@ mod tests {
         assert!(api.contains("username=ada@x.invalid\n"), "{api}");
         assert!(api.contains("password=ATATT\n"), "{api}");
         assert!(!api.contains("ada@x.invalid:ATATT"), "{api}");
+    }
+
+    #[test]
+    fn a_request_for_any_kind_of_host_finds_that_host() {
+        let kind = |host: &str| super::placeholder_host("https", host).map(|h| h.kind);
+        assert_eq!(kind("github.com"), Some(HostKind::GitHub));
+        assert_eq!(kind("dev.azure.com"), Some(HostKind::Azure));
+        assert_eq!(kind("acme.visualstudio.com"), Some(HostKind::Azure));
+        assert_eq!(kind("bitbucket.org"), Some(HostKind::Bitbucket));
+        assert_eq!(kind("git.example.invalid"), None);
     }
 
     #[test]
