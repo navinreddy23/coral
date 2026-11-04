@@ -29,6 +29,7 @@ import type {
   SshOverrides,
   SshScopes,
   Status,
+  StatusCaches,
   Submodule,
   SubmoduleRevision,
   SubmoduleSsh,
@@ -458,6 +459,7 @@ export type Choice =
 /** The per-repository switches that are git configuration: `repoconfig.rs`. */
 export interface RepoConfig {
   rerere: boolean;
+  caches: StatusCaches;
 }
 
 export function repoConfig(path: string): Promise<RepoConfig> {
@@ -466,6 +468,14 @@ export function repoConfig(path: string): Promise<RepoConfig> {
 
 export function repoSetRerere(path: string, on: boolean): Promise<RepoConfig> {
   return invoke<RepoConfig>('repo_set_rerere', { path, on });
+}
+
+export function repoSetUntrackedCache(path: string, on: boolean): Promise<RepoConfig> {
+  return invoke<RepoConfig>('repo_set_untracked_cache', { path, on });
+}
+
+export function repoSetFsmonitor(path: string, on: boolean): Promise<RepoConfig> {
+  return invoke<RepoConfig>('repo_set_fsmonitor', { path, on });
 }
 
 export function resolveConflict(path: string, file: string, choice: Choice): Promise<void> {

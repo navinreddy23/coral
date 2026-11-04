@@ -172,6 +172,8 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         graph::stage_edited,
         repoconfig::repo_config,
         repoconfig::repo_set_rerere,
+        repoconfig::repo_set_untracked_cache,
+        repoconfig::repo_set_fsmonitor,
         graph::file_text,
         search::search_commits,
         search::stop_search,

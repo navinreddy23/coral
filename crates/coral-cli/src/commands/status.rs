@@ -43,3 +43,47 @@ impl crate::output::Human for Status {
         out
     }
 }
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Caches {
+    #[serde(flatten)]
+    pub caches: coral_core::statuscache::StatusCaches,
+}
+
+/// The status caches here, after switching whichever were asked for.
+///
+/// # Errors
+/// [`CoralError::NotARepository`], a monitor this git cannot run, or any git failure.
+pub async fn caches(
+    path: &Path,
+    untracked: Option<bool>,
+    fsmonitor: Option<bool>,
+) -> Result<Caches, CoralError> {
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, path).await?;
+    if let Some(on) = untracked {
+        loc.set_untracked_cache(&runner, on).await?;
+    }
+    if let Some(on) = fsmonitor {
+        loc.set_fsmonitor(&runner, on).await?;
+    }
+    Ok(Caches {
+        caches: loc.status_caches(&runner).await?,
+    })
+}
+
+impl crate::output::Human for Caches {
+    fn human(&self) -> String {
+        let word = |on: bool| if on { "on" } else { "off" };
+        let monitor = if self.caches.fsmonitor_supported {
+            word(self.caches.fsmonitor).to_owned()
+        } else {
+            "not in this git".to_owned()
+        };
+        format!(
+            "untracked cache {}, filesystem monitor {monitor}",
+            word(self.caches.untracked_cache)
+        )
+    }
+}

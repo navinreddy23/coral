@@ -1,4 +1,10 @@
-import { repoConfig, repoSetRerere, type RepoConfig } from '../ipc/commands';
+import {
+  repoConfig,
+  repoSetFsmonitor,
+  repoSetRerere,
+  repoSetUntrackedCache,
+  type RepoConfig,
+} from '../ipc/commands';
 import { messageOf } from '../ipc/error';
 
 /**
@@ -26,6 +32,14 @@ export class RepoConfigState {
 
   async setRerere(on: boolean): Promise<void> {
     await this.#change(() => repoSetRerere(this.#path, on));
+  }
+
+  async setUntrackedCache(on: boolean): Promise<void> {
+    await this.#change(() => repoSetUntrackedCache(this.#path, on));
+  }
+
+  async setFsmonitor(on: boolean): Promise<void> {
+    await this.#change(() => repoSetFsmonitor(this.#path, on));
   }
 
   async #change(write: () => Promise<RepoConfig>): Promise<void> {

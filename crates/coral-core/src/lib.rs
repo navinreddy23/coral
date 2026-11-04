@@ -34,6 +34,7 @@ pub mod signing;
 pub mod ssh;
 pub mod stash;
 pub mod status;
+pub mod statuscache;
 pub mod submodule;
 pub mod template;
 pub mod undo;

@@ -353,6 +353,15 @@ pub enum Command {
         #[arg(long)]
         off: bool,
     },
+    /// Show the caches git keeps to answer a status quickly, or switch them here.
+    StatusCache {
+        /// The untracked cache: `on` or `off`.
+        #[arg(long, value_parser = ["on", "off"])]
+        untracked: Option<String>,
+        /// git's own filesystem monitor: `on` or `off`. Refused by a git built without one.
+        #[arg(long, value_parser = ["on", "off"])]
+        fsmonitor: Option<String>,
+    },
     /// Report commit signing at every level for this repository.
     Signing,
     /// List the keys that could sign.
@@ -604,6 +613,17 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
             };
             output::render(&commands::conflicts::rerere(repo, set).await)
         }
+        Command::StatusCache {
+            untracked,
+            fsmonitor,
+        } => output::render(
+            &commands::status::caches(
+                repo,
+                untracked.map(|v| v == "on"),
+                fsmonitor.map(|v| v == "on"),
+            )
+            .await,
+        ),
         Command::Signing => output::render(&commands::signing::show(repo).await),
         Command::SigningKeys => output::render(&commands::signing::keys(repo).await),
         Command::SigningSet {

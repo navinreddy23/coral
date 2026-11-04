@@ -1,6 +1,8 @@
 //! Table-driven tests over verbatim `--porcelain=v2 -z` output captured from git 2.43, plus
 //! live fixtures so the captures cannot silently drift from what git actually emits.
 
+use coral_core::process::GitRunner;
+use coral_core::repo::RepoLocation;
 use coral_core::status::{Change, ConflictKind, Status};
 use coral_core::testutil::TestRepo;
 
@@ -197,4 +199,43 @@ fn parses_live_output_from_a_real_repository() {
     assert!(paths.contains(&"keep.txt".to_owned()));
     assert!(paths.contains(&"new.txt".to_owned()));
     assert!(paths.contains(&"untracked.txt".to_owned()));
+}
+
+#[tokio::test]
+async fn the_status_caches_are_switched_in_this_repository_and_read_back() {
+    let repo = TestRepo::new().write("a.txt", "a\n").commit("base");
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+    let before = loc.status_caches(&runner).await.unwrap();
+    assert!(!before.untracked_cache);
+
+    loc.set_untracked_cache(&runner, true).await.unwrap();
+    assert!(loc.status_caches(&runner).await.unwrap().untracked_cache);
+    assert_eq!(
+        repo.git(["config", "--local", "core.untrackedCache"]),
+        "true"
+    );
+    // The next status takes the cache on, and says the same as before.
+    std::fs::write(repo.path().join("new.txt"), "n\n").unwrap();
+    let status = loc.status(&runner).await.unwrap();
+    assert!(status.entries.iter().any(|e| e.path == "new.txt"));
+
+    loc.set_untracked_cache(&runner, false).await.unwrap();
+    assert!(!loc.status_caches(&runner).await.unwrap().untracked_cache);
+
+    // Turning the monitor on is refused where git has none to run, rather than written and
+    // left to fail every status.
+    let supported = coral_core::statuscache::fsmonitor_supported(&runner)
+        .await
+        .unwrap();
+    let on = loc.set_fsmonitor(&runner, true).await;
+    if supported {
+        on.unwrap();
+        assert!(loc.status_caches(&runner).await.unwrap().fsmonitor);
+        loc.set_fsmonitor(&runner, false).await.unwrap();
+    } else {
+        assert_eq!(on.unwrap_err().code(), "refused");
+        assert!(!loc.status_caches(&runner).await.unwrap().fsmonitor);
+    }
 }

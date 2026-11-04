@@ -107,7 +107,10 @@ describe('the way out of preferences', () => {
 describe('the Repository pane', () => {
   it('shows whether recorded resolutions are reused and changes it through the state', async () => {
     const repoConfig = new RepoConfigState();
-    repoConfig.config = { rerere: false };
+    repoConfig.config = {
+      rerere: false,
+      caches: { untrackedCache: false, fsmonitor: false, fsmonitorSupported: false },
+    };
     const set = vi.spyOn(repoConfig, 'setRerere').mockResolvedValue();
     const { container } = prefs({ repoConfig, pane: 'repository' });
 
@@ -124,5 +127,23 @@ describe('the Repository pane', () => {
     const { container } = prefs({ hasRepository: false });
     const panes = [...container.querySelectorAll('nav .pane')].map((b) => b.textContent?.trim());
     expect(panes).not.toContain('Repository');
+  });
+
+  it('switches the untracked cache, and explains a monitor this git does not have', async () => {
+    const repoConfig = new RepoConfigState();
+    repoConfig.config = {
+      rerere: false,
+      caches: { untrackedCache: false, fsmonitor: false, fsmonitorSupported: false },
+    };
+    const untracked = vi.spyOn(repoConfig, 'setUntrackedCache').mockResolvedValue();
+    const { container } = prefs({ repoConfig, pane: 'repository' });
+    const box = (text: string) =>
+      [...container.querySelectorAll('label')].find((l) => l.textContent?.includes(text))
+        ?.querySelector('input') as HTMLInputElement;
+
+    await fireEvent.click(box('Remember which folders hold nothing new'));
+    expect(untracked).toHaveBeenCalledWith(true);
+    expect(box('Watch the working tree for changes').disabled).toBe(true);
+    expect(container.textContent).toContain('built without its filesystem monitor');
   });
 });

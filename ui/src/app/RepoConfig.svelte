@@ -33,6 +33,43 @@
     marks a file it resolved this way, for you to check and keep. This is
     <code>rerere.enabled</code>.
   </p>
+
+  <h3>Speed</h3>
+  <p class="muted">
+    Two caches git keeps in the index so a status need not look at every file. Neither changes
+    what a status says, only how long it takes: on the Linux kernel's working tree the untracked
+    cache alone takes a full status from about 215 ms to about 80 ms.
+  </p>
+  <label class="check">
+    <input
+      type="checkbox"
+      checked={config?.caches.untrackedCache ?? false}
+      disabled={config === null || repoConfig.busy}
+      onchange={(e) => void repoConfig.setUntrackedCache(e.currentTarget.checked)}
+    />
+    Remember which folders hold nothing new
+  </label>
+  <p class="muted">The untracked cache, <code>core.untrackedCache</code>.</p>
+  <label class="check" class:off={config !== null && !config.caches.fsmonitorSupported}>
+    <input
+      type="checkbox"
+      checked={config?.caches.fsmonitor ?? false}
+      disabled={config === null || repoConfig.busy || (!config.caches.fsmonitorSupported && !config.caches.fsmonitor)}
+      onchange={(e) => void repoConfig.setFsmonitor(e.currentTarget.checked)}
+    />
+    Watch the working tree for changes
+  </label>
+  {#if config !== null && !config.caches.fsmonitorSupported}
+    <p class="muted">
+      This git was built without its filesystem monitor, as the usual Linux builds are, so
+      there is nothing here to turn on. git for macOS and Windows has one.
+    </p>
+  {:else}
+    <p class="muted">
+      git's own monitor, <code>core.fsmonitor</code>: a small daemon per repository that tells
+      git which paths changed since it last asked.
+    </p>
+  {/if}
 </section>
 
 <style>
@@ -53,6 +90,7 @@
   .muted { color: var(--fg-2); }
   .error { color: var(--danger); }
   code { font-family: var(--font-mono); font-variant-ligatures: none; }
+  .check.off { color: var(--fg-2); }
   .check {
     display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2);
     color: var(--fg-0); background: var(--bg-0);

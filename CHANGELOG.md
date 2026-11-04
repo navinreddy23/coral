@@ -33,6 +33,12 @@
   same way when it comes back. The conflict tool marks a file resolved that way, says the file
   on disk already holds the answer, and keeps it with one button instead of rebuilding the
   conflict from the index. `coral rerere --on` / `--off` from the command line.
+- **Status caches.** The Repository pane switches git's untracked cache
+  (`core.untrackedCache`), which on the kernel's working tree takes a full status from about
+  215 ms to about 80 ms, and git's own filesystem monitor (`core.fsmonitor`) where git was
+  built with one; the usual Linux builds are not, and the pane says so rather than offering a
+  switch that would make every status fail. `coral status-cache --untracked on` from the
+  command line.
 - `.mailmap` is honoured in the graph, the commit details and file history, as it already was
   in blame: someone who committed under several names and addresses reads as one person, with
   one picture. On the kernel that is the 989-line map its maintainers keep.

@@ -640,6 +640,17 @@ automatic: boolean, };
 
 export type Status = { branch: string | null, oid: string | null, upstream: string | null, ahead: bigint, behind: bigint, stashCount: number, entries: Array<StatusEntry>, };
 
+/**
+ * Whether each cache is on here, and whether this git can run the monitor at all.
+ */
+export type StatusCaches = { untrackedCache: boolean, fsmonitor: boolean, 
+/**
+ * Whether this git was built with its own monitor daemon. Builds for macOS and Windows
+ * are; the usual Linux ones are not, and there `core.fsmonitor = true` makes every
+ * status fail rather than run slowly.
+ */
+fsmonitorSupported: boolean, };
+
 export type StatusEntry = { path: string, 
 /**
  * Where a rename or copy came from.
