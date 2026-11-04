@@ -82,7 +82,8 @@
 
 - **Issues.** A commit's message links the issues and requests it names, written the way its
   host writes them — `#12`, `!7` on GitLab and Azure DevOps, `AB#12` for an Azure work item —
-  and lists the issues it names with their titles and whether they are still open. `ABC-123`
+  and lists the issues it names with their titles and whether they are still open; what the
+  summary line names is listed under it, since the summary is what folds the message. `ABC-123`
   links to an issue tracker kept elsewhere once its address is set in Preferences, Repository
   (`coral.issueUrl`). "Create a branch from an issue…" in the command palette names the branch
   for the issue's number and title. `coral issue N` from the command line.

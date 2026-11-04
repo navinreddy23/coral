@@ -247,20 +247,44 @@
 
   /** The issues the message names, read from the host, a few at most and each once. */
   let mentions = $state<IssueView[]>([]);
+  /** Whether the host has answered for them, so a plain link does not stand in meanwhile. */
+  let mentionsRead = $state(true);
   $effect(() => {
     const commit = detail?.commit ?? null;
     const read = readIssue;
     mentions = [];
+    mentionsRead = true;
     if (commit === null || read === null) return;
     const wanted = mentioned(`${commit.summary}\n${commit.body}`, host?.kind ?? null).slice(0, 4);
     if (wanted.length === 0) return;
+    mentionsRead = false;
     let current = true;
     void Promise.all(wanted.map((n) => read(n))).then((found) => {
-      if (current) mentions = found.filter((f): f is IssueView => f !== null);
+      if (!current) return;
+      mentions = found.filter((f): f is IssueView => f !== null);
+      mentionsRead = true;
     });
     return () => {
       current = false;
     };
+  });
+
+  /**
+   * What the summary refers to that the list of issues above does not already show. The
+   * summary is the button that folds the message, so it cannot hold links of its own, and it is
+   * where a reference is most often written.
+   */
+  const summaryLinks = $derived.by(() => {
+    const commit = detail?.commit ?? null;
+    if (commit === null) return [];
+    const out = new Map<string, string>();
+    for (const part of segments(commit.summary, host?.kind ?? null, tracker)) {
+      if (part.kind === 'text') continue;
+      if (part.kind === 'issue' && (!mentionsRead || mentions.some((m) => m.issue.number === part.number))) continue;
+      const url = linkOf(part, host, tracker);
+      if (url !== null) out.set(part.text, url);
+    }
+    return [...out].map(([text, url]) => ({ text, url, where: URL.canParse(url) ? new URL(url).host : url }));
   });
 </script>
 
@@ -378,7 +402,7 @@
           >{/if}{/each}</pre>
     {/if}
 
-    {#if mentions.length > 0}
+    {#if mentions.length > 0 || summaryLinks.length > 0}
       <ul class="mentions" aria-label="Issues this commit names">
         {#each mentions as m (m.issue.number)}
           <li>
@@ -386,6 +410,14 @@
               <span class="state {m.issue.state}">{m.issue.state}</span>
               <span class="num">{host?.kind === 'azure' ? 'AB#' : '#'}{m.issue.number}</span>
               <span class="title">{m.issue.title}</span>
+            </button>
+          </li>
+        {/each}
+        {#each summaryLinks as link (link.text)}
+          <li>
+            <button onclick={() => onOpenUrl(link.url)} title={link.url}>
+              <span class="num">{link.text}</span>
+              <span class="title muted">{link.where}</span>
             </button>
           </li>
         {/each}
