@@ -157,3 +157,60 @@ fn renders_every_verb_git_understands() {
     }
     assert_eq!(Todo::parse(&rendered).unwrap(), all);
 }
+
+#[test]
+fn autosquash_puts_each_fixup_after_the_commit_it_names() {
+    let mut todo = Todo {
+        items: vec![
+            item(Step::Pick, "aaaa111", "parser: read the header"),
+            item(Step::Pick, "bbbb222", "ui: draw the header"),
+            item(Step::Pick, "cccc333", "fixup! parser: read the header"),
+            item(Step::Pick, "dddd444", "squash! ui: draw"),
+            item(
+                Step::Pick,
+                "eeee555",
+                "fixup! fixup! parser: read the header",
+            ),
+            item(Step::Pick, "ffff666", "fixup! aaaa111"),
+            item(Step::Pick, "0000777", "fixup! not in this range"),
+            item(Step::Pick, "1111888", "amend! ui: draw the header"),
+        ],
+    };
+    assert_eq!(todo.autosquash(), 4);
+
+    let said: Vec<(Step, &str)> = todo
+        .items
+        .iter()
+        .map(|i| (i.step, i.oid.as_str()))
+        .collect();
+    assert_eq!(
+        said,
+        [
+            (Step::Pick, "aaaa111"),
+            // In the order they were made, under the commit they fix.
+            (Step::Fixup, "cccc333"),
+            (Step::Fixup, "eeee555"),
+            (Step::Fixup, "ffff666"),
+            (Step::Pick, "bbbb222"),
+            // Named by the start of its summary, and a squash keeps its own message.
+            (Step::Squash, "dddd444"),
+            // Nothing in the range to fold into, and amend! needs what this list cannot say.
+            (Step::Pick, "0000777"),
+            (Step::Pick, "1111888"),
+        ]
+    );
+    assert!(todo.first_step_is_valid());
+}
+
+#[test]
+fn autosquash_leaves_a_list_without_fixups_alone() {
+    let mut todo = Todo {
+        items: vec![
+            item(Step::Pick, "aaaa111", "one"),
+            item(Step::Pick, "bbbb222", "two"),
+        ],
+    };
+    let before = todo.clone();
+    assert_eq!(todo.autosquash(), 0);
+    assert_eq!(todo, before);
+}

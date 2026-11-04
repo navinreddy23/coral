@@ -235,6 +235,52 @@ describe('the commit menu', () => {
     expect(labels.some((l) => l.startsWith('Reset master to'))).toBe(true);
   });
 
+  it('fixes a commit up with what is staged, and offers to fold it in', async () => {
+    const staged = {
+      path: 'a.c', origPath: null, index: 'modified', worktree: 'unmodified', conflict: null,
+      score: null, submodule: false, modeChanged: false,
+    };
+    const { container } = await shell({
+      repo_status: { entries: [staged], branch: 'master', upstream: null, ahead: 0, behind: 0 },
+      commit_staged: { entries: [], branch: 'master', upstream: null, ahead: 0, behind: 0 },
+      rebase_todo: { items: [] },
+      rev_ancestry: 'same',
+    });
+    // Wait for the status to land, or the item reads "nothing is staged".
+    await waitFor(() => {
+      if (!container.textContent?.includes('WIP')) throw new Error('no status yet');
+    });
+    await openMenu(container);
+    const item = itemNamed(container, 'Fix up with the staged changes') as HTMLButtonElement;
+    expect(item.disabled).toBe(false);
+    expect(item.textContent).toContain('1 staged file');
+
+    await fireEvent.click(item);
+    await waitFor(() => {
+      const call = invoke.mock.calls.find(([cmd]) => cmd === 'commit_staged');
+      if (!call) throw new Error('not committed yet');
+      expect(call[1]).toMatchObject({
+        message: '',
+        amend: false,
+        fold: { how: 'fixup', target: frameOids[0] },
+      });
+    });
+    await confirm(container, true);
+    await waitFor(() => {
+      const call = invoke.mock.calls.find(([cmd]) => cmd === 'rebase_todo');
+      if (!call) throw new Error('the picker was not opened');
+      expect(call[1]).toMatchObject({ onto: `${frameOids[0]}~1`, autosquash: true });
+    });
+  });
+
+  it('will not offer a fixup with nothing staged', async () => {
+    const { container } = await shell({ rev_ancestry: 'same' });
+    await openMenu(container);
+    const item = itemNamed(container, 'Fix up with the staged changes') as HTMLButtonElement;
+    expect(item.disabled).toBe(true);
+    expect(item.textContent).toContain('nothing is staged');
+  });
+
   it('checks a commit out by its own object id, not by its row', async () => {
     const { container } = await shell();
     await openMenu(container);

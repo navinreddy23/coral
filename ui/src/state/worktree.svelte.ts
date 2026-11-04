@@ -103,6 +103,15 @@ export class WorktreeState {
     );
   }
 
+  /**
+   * Records what is staged as a fixup of an earlier commit, for the next interactive rebase
+   * to fold in. No message: git writes `fixup! <its subject>`, and a fixup's own message is
+   * thrown away when it is folded.
+   */
+  async fixup(target: string): Promise<void> {
+    await this.#run(() => commitStaged(this.#path, '', false, { how: 'fixup', target }));
+  }
+
   async #run(action: () => Promise<Status>): Promise<void> {
     if (!this.#path) return;
     // Which repository this belongs to. A status for the one being left answers after the

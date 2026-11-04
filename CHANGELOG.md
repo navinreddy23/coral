@@ -13,6 +13,11 @@
   "History of these lines" lists only the commits that changed them, followed back across
   renames and moves the way `git log -L` follows them. "Whole file" goes back.
   `coral log --path F --lines 12,20` is the same from the command line.
+- **Fixups.** A commit's menu has "Fix up with the staged changes", which records them as
+  `fixup! <its subject>` and offers to fold the fixup in there and then. The interactive rebase
+  picker folds every `fixup!` and `squash!` commit under the commit it names, as
+  `git rebase --autosquash` does, with a switch to lay them out as plain picks instead.
+  `coral commit --fixup REV` and `--squash REV` are the same from the command line.
 - `.mailmap` is honoured in the graph, the commit details and file history, as it already was
   in blame: someone who committed under several names and addresses reads as one person, with
   one picture. On the kernel that is the 989-line map its maintainers keep.

@@ -694,3 +694,54 @@ fn abandoning_a_rebase_forgets_the_messages_it_owed() {
             .exists()
     );
 }
+
+/// The whole loop: stage a correction to an older commit, record it as that commit's fixup,
+/// and let the picker's autosquash fold it in. The older commit carries the fix and nothing
+/// says `fixup!` afterwards.
+#[test]
+fn a_fixup_commit_lands_in_the_commit_it_names() {
+    let repo = TestRepo::new()
+        .write("base.txt", "base\n")
+        .commit("base")
+        .write("a.txt", "a with a tpyo\n")
+        .commit("commit a")
+        .write("b.txt", "b\n")
+        .commit("commit b");
+    let target = repo.git(["rev-parse", "HEAD~1"]).trim().to_owned();
+    std::fs::write(repo.path().join("a.txt"), "a with a typo fixed\n").unwrap();
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+        loc.stage(&runner, &["a.txt"]).await.unwrap();
+        loc.commit(
+            &runner,
+            &coral_core::ops::CommitOpts {
+                fold: Some(coral_core::ops::FoldInto {
+                    how: coral_core::ops::Fold::Fixup,
+                    target: target.clone(),
+                }),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(summaries(&repo)[0], "fixup! commit a");
+
+        let mut todo = loc.rebase_todo(&runner, "HEAD~3").await.unwrap();
+        assert_eq!(todo.autosquash(), 1);
+        let out = loc
+            .rebase_interactive(&runner, "HEAD~3", &todo, &coral_binary())
+            .await
+            .unwrap();
+        assert!(out.completed, "{}", out.message);
+    });
+
+    assert_eq!(summaries(&repo), ["commit b", "commit a", "base"]);
+    assert_eq!(
+        repo.git(["show", "HEAD~1:a.txt"]),
+        "a with a typo fixed",
+        "the fix is in the commit it named"
+    );
+}

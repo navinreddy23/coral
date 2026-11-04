@@ -190,6 +190,16 @@ mode: ModeChange | null,
  */
 tooLarge: boolean, };
 
+/**
+ * How a commit is folded in. `git commit --fixup` and `--squash`.
+ */
+export type Fold = "fixup" | "squash";
+
+/**
+ * An earlier commit a new one is meant to be folded into.
+ */
+export type FoldInto = { how: Fold, target: string, };
+
 export type GitRef = { 
 /**
  * Full name, e.g. `refs/heads/main`.

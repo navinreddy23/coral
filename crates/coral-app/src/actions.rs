@@ -935,10 +935,15 @@ async fn run_tree(
 pub async fn rebase_todo(
     path: String,
     onto: String,
+    autosquash: bool,
 ) -> Result<coral_core::sequence::Todo, IpcError> {
     let runner = GitRunner::discover().await?;
     let loc = RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
-    Ok(loc.rebase_todo(&runner, &onto).await?)
+    let mut todo = loc.rebase_todo(&runner, &onto).await?;
+    if autosquash {
+        todo.autosquash();
+    }
+    Ok(todo)
 }
 
 /// Runs an interactive rebase against a todo the user has decided.

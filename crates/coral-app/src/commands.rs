@@ -374,19 +374,25 @@ pub async fn commit_staged(
     path: String,
     message: String,
     amend: bool,
+    fold: Option<coral_core::ops::FoldInto>,
 ) -> Result<coral_core::Status, IpcError> {
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    // Lowercase, like every other journal label: undo reads them back as "undid <label>", so
+    // a capitalised noun lands in the middle of a sentence.
+    let label = match (&fold, amend) {
+        (Some(f), _) if f.how == coral_core::ops::Fold::Fixup => "commit a fixup",
+        (Some(_), _) => "commit a squash",
+        (None, true) => "amend the commit",
+        (None, false) => "commit",
+    };
     let opts = coral_core::ops::CommitOpts {
         message,
         amend,
+        fold,
         ..coral_core::ops::CommitOpts::default()
     };
-
-    // Lowercase, like every other journal label: undo reads them back as "undid <label>", so
-    // a capitalised noun lands in the middle of a sentence.
-    let label = if amend { "amend the commit" } else { "commit" };
     let logged = crate::activity::started(&path, label);
     // Journalled like any other operation that moves a ref, so Undo reaches the commonest one
     // of all. It comes back staged rather than discarded: the refs go where they were and the

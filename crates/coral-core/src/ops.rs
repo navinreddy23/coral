@@ -17,6 +17,29 @@ pub struct CommitOpts {
     pub author: Option<String>,
     /// Commit even with nothing staged, which a merge or an empty marker commit needs.
     pub allow_empty: bool,
+    /// Record the commit as one to be folded into an earlier one by the next autosquash.
+    pub fold: Option<FoldInto>,
+}
+
+/// An earlier commit a new one is meant to be folded into.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "types.ts"))]
+#[serde(rename_all = "camelCase")]
+pub struct FoldInto {
+    pub how: Fold,
+    pub target: String,
+}
+
+/// How a commit is folded in. `git commit --fixup` and `--squash`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "types.ts"))]
+#[serde(rename_all = "camelCase")]
+pub enum Fold {
+    /// Its changes join the target and its message is thrown away: `fixup! <subject>`.
+    Fixup,
+    /// Its changes join the target and its message is offered beside the target's:
+    /// `squash! <subject>`, with whatever was typed as the body.
+    Squash,
 }
 
 /// Where a reset leaves the index and worktree.
@@ -73,8 +96,27 @@ impl RepoLocation {
     /// # Errors
     /// Propagates git failures; a failing hook surfaces with its own output in the error.
     pub async fn commit(&self, runner: &GitRunner, o: &CommitOpts) -> Result<String, CoralError> {
-        let mut cmd = GitCommand::write("commit", self.display_path())
-            .args(["commit", "--quiet", "-m", &o.message]);
+        let mut cmd = GitCommand::write("commit", self.display_path()).args(["commit", "--quiet"]);
+        cmd = match &o.fold {
+            None => cmd.args(["-m", &o.message]),
+            Some(_) if o.amend => {
+                return Err(CoralError::Refused {
+                    label: "fold a commit in",
+                    detail: "an amend replaces the last commit; a fixup is a new one".to_owned(),
+                });
+            }
+            // git writes the subject itself, from the target's; a fixup's message is
+            // discarded when it is folded, so it takes none.
+            Some(f) => match f.how {
+                Fold::Fixup => cmd.arg(format!("--fixup={}", f.target)),
+                Fold::Squash if o.message.trim().is_empty() => {
+                    cmd.arg(format!("--squash={}", f.target))
+                }
+                Fold::Squash => cmd
+                    .arg(format!("--squash={}", f.target))
+                    .args(["-m", &o.message]),
+            },
+        };
         if o.amend {
             cmd = cmd.arg("--amend");
         }

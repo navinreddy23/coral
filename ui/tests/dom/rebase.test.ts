@@ -4,7 +4,8 @@ import { fireEvent } from '@testing-library/dom';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
-vi.mock('../../src/ipc/invoke', () => ({ invoke: vi.fn(), isPreview: () => false }));
+const invoke = vi.hoisted(() => vi.fn());
+vi.mock('../../src/ipc/invoke', () => ({ invoke, isPreview: () => false }));
 // The window subscribes to terminal output and to repository changes. Neither channel
 // exists without the Tauri shell, and the real `listen` throws rather than returning.
 vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => undefined }));
@@ -163,5 +164,45 @@ describe('what the picker calls the target', () => {
     const said = box.querySelector('header')?.textContent ?? '';
     expect(said).toContain('d38081e9~1');
     expect(said).not.toContain(long);
+  });
+
+  it('folds fixups in by default, says so, and lays them out again when asked', async () => {
+    const asked: boolean[] = [];
+    invoke.mockImplementation(async (cmd: string, args: { autosquash: boolean }) => {
+      if (cmd !== 'rebase_todo') return null;
+      asked.push(args.autosquash);
+      const a = item('aaa', 'commit a');
+      const fix = item('fff', 'fixup! commit a');
+      const b = item('bbb', 'commit b');
+      return {
+        items: args.autosquash ? [a, { ...fix, step: 'fixup' }, b] : [a, b, fix],
+      };
+    });
+    const rebase = new RebaseState();
+    const view = render(RebasePicker, { props: { rebase, onDone: () => {} } });
+    await rebase.load('/repo', 'main~3');
+
+    expect(asked).toEqual([true]);
+    expect(rebase.foldable).toBe(true);
+    expect(rebase.items[1]?.step).toBe('fixup');
+    const box = await vi.waitFor(() => {
+      const found = view.container.querySelector('.fold input') as HTMLInputElement | null;
+      if (!found) throw new Error('no fold switch yet');
+      return found;
+    });
+    expect(box.checked).toBe(true);
+
+    await fireEvent.click(box);
+    await vi.waitFor(() => expect(asked).toEqual([true, false]));
+    expect(rebase.items.map((i) => i.step)).toEqual(['pick', 'pick', 'pick']);
+
+    // A new picker starts folded again.
+    rebase.close();
+    expect(rebase.folded).toBe(true);
+  });
+
+  it('offers no fold switch for a range without fixups', () => {
+    const { container } = picker(three());
+    expect(container.querySelector('.fold')).toBeNull();
   });
 });

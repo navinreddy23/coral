@@ -2440,6 +2440,16 @@
         },
         {
           kind: 'item',
+          label: 'Fix up with the staged changes',
+          hint: offBranch ?? (worktree.staged.length === 0
+            ? 'nothing is staged'
+            : `${worktree.staged.length} staged ${worktree.staged.length === 1 ? 'file' : 'files'}`),
+          disabled: offBranch !== null || worktree.staged.length === 0 || actions.busy,
+          worktree: true,
+          run: () => void fixupInto(oid, summary),
+        },
+        {
+          kind: 'item',
           label: 'Note on this commit…',
           hint: 'kept beside it, not in it',
           run: () => void editNote(oid),
@@ -2697,6 +2707,31 @@
     );
     if (message === null || message.trim() === '') return;
     await act({ kind: 'rewrite', rev: oid, how: 'reword', message: message.trim() });
+  }
+
+  /**
+   * Commits what is staged as a fixup of an older commit, then offers to fold it in.
+   *
+   * The two halves stay separate because they are: a fixup is an ordinary commit that can be
+   * pushed for review as it is, and folding it in rewrites everything above its target.
+   */
+  async function fixupInto(oid: string, summary: string) {
+    if (!info) return;
+    const path = info.path;
+    await worktree.fixup(oid);
+    if (worktree.error !== null) {
+      toasts.push('error', 'The fixup was not made', worktree.error);
+      return;
+    }
+    const { choice } = await ask({
+      title: 'Fixup recorded',
+      detail: `fixup! ${summary}\n\nFold it into that commit now? Everything above the commit is replayed, so their object ids change.`,
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'fold', label: 'Fold it in now', primary: true }],
+    });
+    if (choice === 'fold' && info?.path === path) await rebase.load(path, `${oid}~1`);
   }
 
   async function confirmDrop(oid: string, summary: string) {

@@ -15,6 +15,7 @@ import type {
   Todo,
   ConflictedFile,
   FileDiff,
+  FoldInto,
   GitRef,
   Operation,
   OpOutcome,
@@ -579,8 +580,8 @@ export function openInBrowser(url: string): Promise<void> {
 }
 
 /** The todo list an interactive rebase onto `onto` would start from, oldest first. */
-export function rebaseTodo(path: string, onto: string): Promise<Todo> {
-  return invoke<Todo>('rebase_todo', { path, onto });
+export function rebaseTodo(path: string, onto: string, autosquash = false): Promise<Todo> {
+  return invoke<Todo>('rebase_todo', { path, onto, autosquash });
 }
 
 /** Runs an interactive rebase against a todo the user has decided. */
@@ -740,8 +741,14 @@ export function discardPaths(
   return invoke<Status>('discard_paths', { path, restore, remove });
 }
 
-export function commitStaged(path: string, message: string, amend: boolean): Promise<Status> {
-  return invoke<Status>('commit_staged', { path, message, amend });
+/** Records what is staged; with `fold`, as a fixup or squash of an earlier commit. */
+export function commitStaged(
+  path: string,
+  message: string,
+  amend: boolean,
+  fold: FoldInto | null = null,
+): Promise<Status> {
+  return invoke<Status>('commit_staged', { path, message, amend, fold });
 }
 
 /**

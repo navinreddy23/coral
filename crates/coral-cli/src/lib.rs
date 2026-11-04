@@ -68,7 +68,8 @@ pub enum Command {
     Status,
     /// Record a commit from the staged changes.
     Commit {
-        #[arg(short, long)]
+        /// Required, except with --fixup, whose message git writes.
+        #[arg(short, long, default_value = "", required_unless_present_any = ["fixup", "squash"])]
         message: String,
         /// Replace the previous commit rather than adding one.
         #[arg(long)]
@@ -82,6 +83,12 @@ pub enum Command {
         /// Commit even with nothing staged.
         #[arg(long)]
         allow_empty: bool,
+        /// Record it as a fixup of this commit, to be folded in by the next autosquash.
+        #[arg(long, value_name = "REV", conflicts_with_all = ["amend", "squash"])]
+        fixup: Option<String>,
+        /// Record it as a squash into this commit; --message becomes the extra text.
+        #[arg(long, value_name = "REV", conflicts_with = "amend")]
+        squash: Option<String>,
     },
     /// Merge a revision into the current branch.
     Merge {
@@ -693,13 +700,27 @@ async fn dispatch_write(command: Command, repo: &std::path::Path) -> output::Ren
             signoff,
             author,
             allow_empty,
+            fixup,
+            squash,
         } => {
+            let fold = match (fixup, squash) {
+                (Some(target), _) => Some(coral_core::ops::FoldInto {
+                    how: coral_core::ops::Fold::Fixup,
+                    target,
+                }),
+                (None, Some(target)) => Some(coral_core::ops::FoldInto {
+                    how: coral_core::ops::Fold::Squash,
+                    target,
+                }),
+                (None, None) => None,
+            };
             let opts = coral_core::ops::CommitOpts {
                 message,
                 amend,
                 signoff,
                 author,
                 allow_empty,
+                fold,
             };
             output::render(&commands::write::commit(repo, opts).await)
         }
