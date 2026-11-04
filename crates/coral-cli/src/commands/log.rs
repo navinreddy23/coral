@@ -25,6 +25,34 @@ pub async fn run(path: &Path, q: &LogQuery) -> Result<Log, CoralError> {
     })
 }
 
+/// The commits that changed some lines of one file, `FROM,TO` as written on the command line.
+///
+/// # Errors
+/// [`CoralError::Refused`] for a range that does not read as two numbers, and whatever
+/// [`RepoLocation::line_history`] refuses.
+pub async fn lines(
+    path: &Path,
+    rev: &str,
+    file: &str,
+    range: &str,
+    limit: u64,
+) -> Result<Log, CoralError> {
+    let parsed = range
+        .split_once(',')
+        .and_then(|(a, b)| Some((a.trim().parse().ok()?, b.trim().parse().ok()?)));
+    let Some(lines) = parsed else {
+        return Err(CoralError::Refused {
+            label: "read the history of those lines",
+            detail: format!("--lines takes FROM,TO, such as 12,20; got {range}"),
+        });
+    };
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, path).await?;
+    Ok(Log {
+        commits: loc.line_history(&runner, rev, file, lines, limit).await?,
+    })
+}
+
 impl crate::output::Human for Log {
     fn human(&self) -> String {
         if self.commits.is_empty() {

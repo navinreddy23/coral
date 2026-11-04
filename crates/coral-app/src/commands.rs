@@ -171,6 +171,9 @@ pub struct CloneRequest {
     /// Leave file contents on the server until something reads one.
     #[serde(default)]
     pub blobless: bool,
+    /// Check out only the top-level files, for folders to be picked afterwards.
+    #[serde(default)]
+    pub sparse: bool,
 }
 
 /// Clones a repository and answers with where it landed.
@@ -191,6 +194,7 @@ pub async fn repo_clone(
         ssh_key,
         depth,
         blobless,
+        sparse,
     } = request;
     let mut settings = profiles.read().current().settings.clone();
     let runner = coral_core::process::GitRunner::discover().await?;
@@ -208,6 +212,7 @@ pub async fn repo_clone(
         ssh_key: key,
         depth: depth.filter(|d| *d > 0),
         blobless,
+        sparse,
     };
     let logged = crate::activity::started(&parent, &format!("Clone {}", what.url));
     // Keyed by where it will land, since there is no repository to name yet and that is the
@@ -374,19 +379,25 @@ pub async fn commit_staged(
     path: String,
     message: String,
     amend: bool,
+    fold: Option<coral_core::ops::FoldInto>,
 ) -> Result<coral_core::Status, IpcError> {
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    // Lowercase, like every other journal label: undo reads them back as "undid <label>", so
+    // a capitalised noun lands in the middle of a sentence.
+    let label = match (&fold, amend) {
+        (Some(f), _) if f.how == coral_core::ops::Fold::Fixup => "commit a fixup",
+        (Some(_), _) => "commit a squash",
+        (None, true) => "amend the commit",
+        (None, false) => "commit",
+    };
     let opts = coral_core::ops::CommitOpts {
         message,
         amend,
+        fold,
         ..coral_core::ops::CommitOpts::default()
     };
-
-    // Lowercase, like every other journal label: undo reads them back as "undid <label>", so
-    // a capitalised noun lands in the middle of a sentence.
-    let label = if amend { "amend the commit" } else { "commit" };
     let logged = crate::activity::started(&path, label);
     // Journalled like any other operation that moves a ref, so Undo reaches the commonest one
     // of all. It comes back staged rather than discarded: the refs go where they were and the
@@ -468,4 +479,24 @@ mod tests {
         let stamped = ssh_for_clone(&SshOverrides::default(), None);
         assert!(stamped.is_empty(), "the agent stays the default");
     }
+}
+
+/// Scales the whole page, text and canvas together, as the browser's own zoom does.
+///
+/// The webview's zoom rather than CSS `zoom` on the page: that one leaves pointer positions
+/// in unzoomed pixels while the boxes they land on are zoomed, so every menu opened beside
+/// the pointer by a distance that grew with the scale.
+///
+/// # Errors
+/// [`coral_core::CoralError::Refused`] when the webview will not take it.
+// Tauri hands the window by value in a command signature; it is a handle, not the window.
+#[allow(clippy::needless_pass_by_value)]
+#[tauri::command]
+pub fn window_zoom(window: tauri::WebviewWindow, scale: f64) -> Result<(), IpcError> {
+    window.set_zoom(scale.clamp(0.5, 3.0)).map_err(|e| {
+        IpcError::from(coral_core::CoralError::Refused {
+            label: "zoom the window",
+            detail: e.to_string(),
+        })
+    })
 }

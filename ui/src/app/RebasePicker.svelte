@@ -46,6 +46,18 @@
       <p class="error">{rebase.error}</p>
     {/if}
 
+    {#if rebase.foldable}
+      <label class="fold" title="Starts the list again from the range">
+        <input
+          type="checkbox"
+          checked={rebase.folded}
+          onchange={(e) => void rebase.setFolded(e.currentTarget.checked)}
+        />
+        Fold <span class="mono">fixup!</span> and <span class="mono">squash!</span> commits into the
+        commits they name
+      </label>
+    {/if}
+
     {#if rebase.loading}
       <p class="muted pad">Reading the range…</p>
     {:else}
@@ -124,6 +136,11 @@
     padding: var(--space-3); border-bottom: 1px solid var(--border); background: var(--bg-1);
   }
   ul { list-style: none; margin: 0; padding: var(--space-1) 0; overflow-y: auto; flex: 1; }
+  .fold {
+    display: flex; align-items: center; gap: var(--space-2); color: var(--fg-1);
+    padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border);
+    font-size: var(--text-sm);
+  }
   li {
     display: flex; align-items: center; gap: var(--space-2);
     padding: 2px var(--space-3);

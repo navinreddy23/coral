@@ -3,13 +3,15 @@
   import type { PullRequest, Reply } from '../ipc/commands';
   import type { ReviewState } from '../state/review.svelte';
 
-  const { review, pr, label, canRequestChanges, onClose }: {
+  const { review, pr, label, canRequestChanges, quoted, onClose }: {
     review: ReviewState;
     pr: PullRequest;
     /** What the host calls one: GitHub says pull, GitLab says merge. */
     label: string;
     /** GitHub can; GitLab has no verdict short of approving for a merge request. */
     canRequestChanges: boolean;
+    /** The number as its host writes it: `#42`, or `!42` on GitLab. */
+    quoted: string;
     onClose: () => void;
   } = $props();
 
@@ -39,7 +41,7 @@
 <div class="panel">
   <header>
     <button class="back" onclick={onClose}>← Close</button>
-    <p class="heading">#{pr.number} {pr.title}</p>
+    <p class="heading">{quoted} {pr.title}</p>
     <p class="sub">{label} by {pr.author}, {pr.sourceBranch} into {pr.targetBranch}</p>
   </header>
 

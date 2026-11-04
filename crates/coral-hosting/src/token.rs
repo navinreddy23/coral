@@ -46,16 +46,41 @@ impl Account {
 }
 
 /// How a token is presented to the provider.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Auth {
+    /// A header of the host's own choosing, and its value.
+    Header(&'static str, String),
+    /// HTTP Basic, which the HTTP client encodes.
+    Basic { user: String, password: String },
+}
+
+/// How each provider wants its token.
 ///
 /// GitHub takes a bearer token like any OAuth API. GitLab has its own header and refuses a
 /// bearer personal access token, which is the confusing half of getting this wrong: the
-/// request is well formed and comes back 401.
+/// request is well formed and comes back 401. Gitea wants the word `token`. Bitbucket takes a
+/// repository or workspace access token as a bearer, and an API token as Basic with the
+/// account it belongs to, which is why that one is stored as `user:secret`. Azure DevOps
+/// takes a personal access token as the password of Basic with no user at all.
 #[must_use]
-pub fn auth_header(kind: HostKind, token: &SecretString) -> (&'static str, String) {
+pub fn auth(kind: HostKind, token: &SecretString) -> Auth {
     use secrecy::ExposeSecret as _;
+    let secret = token.expose_secret();
     match kind {
-        HostKind::GitHub => ("Authorization", format!("Bearer {}", token.expose_secret())),
-        HostKind::GitLab => ("PRIVATE-TOKEN", token.expose_secret().to_owned()),
+        HostKind::GitHub => Auth::Header("Authorization", format!("Bearer {secret}")),
+        HostKind::GitLab => Auth::Header("PRIVATE-TOKEN", secret.to_owned()),
+        HostKind::Gitea => Auth::Header("Authorization", format!("token {secret}")),
+        HostKind::Bitbucket => match secret.split_once(':') {
+            Some((user, password)) => Auth::Basic {
+                user: user.to_owned(),
+                password: password.to_owned(),
+            },
+            None => Auth::Header("Authorization", format!("Bearer {secret}")),
+        },
+        HostKind::Azure => Auth::Basic {
+            user: String::new(),
+            password: secret.to_owned(),
+        },
     }
 }
 

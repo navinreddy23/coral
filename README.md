@@ -101,7 +101,7 @@ worktrees, patches, a command palette, GitKraken's keyboard shortcuts, and light
 
 ## Two front ends, one engine
 
-`coral-cli` is not a demo. It exposes the whole engine — fifty-four commands, from `open` and
+`coral-cli` is not a demo. It exposes the whole engine — fifty-five commands, from `open` and
 `status` through `rebase`, `conflict-resolve`, `blame` and `graph` — and answers in a stable
 JSON envelope with documented exit codes:
 

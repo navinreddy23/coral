@@ -59,6 +59,15 @@ impl Scope<'_> {
     }
 }
 
+/// A boolean as git reads one: `true`, `yes`, `on` and `1`, in any case.
+/// <https://git-scm.com/docs/git-config#Documentation/git-config.txt-boolean>
+pub(crate) fn truthy(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "true" | "yes" | "on" | "1"
+    )
+}
+
 impl RepoLocation {
     /// Reads one key, or `None` when it is not set at that level.
     pub(crate) async fn config_get(

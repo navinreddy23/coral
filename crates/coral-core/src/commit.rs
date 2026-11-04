@@ -107,7 +107,18 @@ impl crate::repo::RepoLocation {
                     .stdin_bytes(stdin),
             )
             .await?;
-        Ok(parse_batch(&out.stdout))
+        let mut metas = parse_batch(&out.stdout);
+        let mailmap =
+            crate::mailmap::Mailmap::load(self.workdir.as_deref().unwrap_or(&self.git_dir));
+        if !mailmap.is_empty() {
+            for m in &mut metas {
+                if let Some((name, email)) = mailmap.person(&m.author, &m.email) {
+                    m.author = name;
+                    m.email = email;
+                }
+            }
+        }
+        Ok(metas)
     }
 }
 

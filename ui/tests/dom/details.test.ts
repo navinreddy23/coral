@@ -346,3 +346,106 @@ describe('the commit panel sections', () => {
     expect(rule).not.toMatch(/padding-bottom:/u);
   });
 });
+
+describe('what a message refers to', () => {
+  it('links the issues and requests it names, and lists the issues with their titles', async () => {
+    const d = detail();
+    d.commit.summary = 'Fix the crash in #12';
+    d.commit.body = 'Follows !7. Also see #12 and PROJ-3.';
+    const opened: string[] = [];
+    const asked: number[] = [];
+    const { container } = render(Details, {
+      props: {
+        ...props,
+        detail: d,
+        host: { kind: 'gitlab', origin: 'https://gitlab.com', owner: 'g', repo: 'p' },
+        tracker: 'https://jira.example.invalid/browse/{key}',
+        readIssue: async (n: number) => {
+          asked.push(n);
+          return {
+            issue: { number: n, title: 'Crash on open', state: 'closed', webUrl: `https://gitlab.com/g/p/-/issues/${n}` },
+            branch: `${n}-crash-on-open`,
+          };
+        },
+        onOpenUrl: (url: string) => opened.push(url),
+      },
+    });
+    const refs = [...container.querySelectorAll('pre.body button.ref')].map((b) => b.textContent);
+    expect(refs).toEqual(['!7', '#12', 'PROJ-3']);
+    await fireEvent.click(container.querySelectorAll('pre.body button.ref')[2] as HTMLElement);
+    expect(opened).toEqual(['https://jira.example.invalid/browse/PROJ-3']);
+
+    const listed = await waitFor(() => {
+      const li = container.querySelector('.mentions li');
+      if (!li) throw new Error('no mentions yet');
+      return li;
+    });
+    // Named twice, read once.
+    expect(asked).toEqual([12]);
+    expect(listed.textContent).toContain('Crash on open');
+    expect(listed.querySelector('.state')?.textContent).toBe('closed');
+  });
+
+  it('leaves the message as text without a host, and asks nothing', () => {
+    const d = detail();
+    d.commit.body = 'See #12.';
+    const { container } = render(Details, { props: { ...props, detail: d } });
+    expect(container.querySelector('pre.body button.ref')).toBeNull();
+    expect(container.querySelector('pre.body')?.textContent).toBe('See #12.');
+  });
+
+  it('lists what the summary names, since the summary folds the message and holds no links', async () => {
+    const d = detail();
+    d.commit.summary = 'parse: name line five (PROJ-7), see !4 and #9';
+    d.commit.body = '';
+    const opened: string[] = [];
+    const { container } = render(Details, {
+      props: {
+        ...props,
+        detail: d,
+        host: { kind: 'gitlab', origin: 'https://gitlab.com', owner: 'g', repo: 'p' },
+        tracker: 'https://jira.example.invalid/browse/{key}',
+        // The host has no #9 to read: it is still listed, as a link.
+        readIssue: async () => null,
+        onOpenUrl: (url: string) => opened.push(url),
+      },
+    });
+    const rows = await waitFor(() => {
+      const found = [...container.querySelectorAll('.mentions li button')];
+      expect(found).toHaveLength(3);
+      return found;
+    });
+    expect(rows.map((b) => b.querySelector('.num')?.textContent)).toEqual(['PROJ-7', '!4', '#9']);
+    expect(rows[0]?.textContent).toContain('jira.example.invalid');
+    await fireEvent.click(rows[0] as HTMLElement);
+    expect(opened).toEqual(['https://jira.example.invalid/browse/PROJ-7']);
+  });
+
+  it('lists nothing extra for a summary issue the host has already shown', async () => {
+    const d = detail();
+    d.commit.summary = 'Fix the crash in #12';
+    d.commit.body = '';
+    const { container } = render(Details, {
+      props: {
+        ...props,
+        detail: d,
+        host: { kind: 'gitlab', origin: 'https://gitlab.com', owner: 'g', repo: 'p' },
+        readIssue: async (n: number) => ({
+          issue: { number: n, title: 'Crash on open', state: 'open', webUrl: `https://gitlab.com/g/p/-/issues/${n}` },
+          branch: `${n}-crash`,
+        }),
+      },
+    });
+    await waitFor(() => expect(container.textContent).toContain('Crash on open'));
+    expect(container.querySelectorAll('.mentions li')).toHaveLength(1);
+  });
+
+  it('keeps a tracker that is not a web address from taking the panel down', () => {
+    const d = detail();
+    d.commit.summary = 'PROJ-7';
+    const { container } = render(Details, {
+      props: { ...props, detail: d, host: null, tracker: 'not a url {key}' },
+    });
+    expect(container.querySelector('.mentions .num')?.textContent).toBe('PROJ-7');
+  });
+});

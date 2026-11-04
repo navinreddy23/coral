@@ -60,6 +60,31 @@ function called(name: string) {
 }
 
 describe('the file panel', () => {
+  it('reads the history of picked lines at the revision blame numbered them at, and goes back', async () => {
+    answering({ line_history: [], file_history: [] });
+    const diff = new DiffState(new ViewsState());
+    await diff.open('/repo', 'deadbeef', 'a.c');
+    diff.setView('blame');
+    await vi.waitFor(() => expect(diff.blame).not.toBeNull());
+
+    // Picked bottom-up, read top-down.
+    await diff.historyOfLines(9, 4);
+    expect(diff.view).toBe('history');
+    expect(diff.lines).toEqual({ from: 4, to: 9, rev: 'deadbeef' });
+    expect(called('line_history')[0]?.[1]).toMatchObject({
+      path: '/repo', rev: 'deadbeef', file: 'a.c', from: 4, to: 9,
+    });
+
+    await diff.historyOfFile();
+    expect(diff.lines).toBeNull();
+    await vi.waitFor(() => expect(called('file_history').length).toBeGreaterThan(0));
+
+    // Another file starts from the whole file again.
+    await diff.historyOfLines(1, 1);
+    await diff.open('/repo', 'deadbeef', 'b.c');
+    expect(diff.lines).toBeNull();
+  });
+
   it('asks for nothing beyond the diff until a view that needs it is chosen', async () => {
     answering();
     const diff = new DiffState(new ViewsState());

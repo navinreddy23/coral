@@ -253,7 +253,29 @@ describe('the start page', () => {
         sshKey: null,
         depth: null,
         blobless: false,
+        sparse: false,
       },
+    });
+  });
+
+  it('asks for a sparse clone when the files at the top are all that is wanted', async () => {
+    const { view, opened } = await page();
+    await fireEvent.click(view.getByText('Clone'));
+    await fireEvent.input(view.getByPlaceholderText('https://host/team/thing.git'), {
+      target: { value: 'git@gitlab.com:open-source-23/coral.git' },
+    });
+    await fireEvent.click(view.getByText('Choose…'));
+    await fireEvent.click(view.getByText('Only the files at the top, to pick folders from afterwards'));
+    expect(view.container.textContent).toContain('Choose the folders in Preferences, Repository');
+    await waitFor(() => {
+      if (!view.container.textContent?.includes('/home/someone/Work/coral')) throw new Error('not yet');
+    });
+    await fireEvent.click(view.getByText('Clone', { selector: '.primary' }));
+    await waitFor(() => {
+      if (opened.length === 0) throw new Error('not yet');
+    });
+    expect(invoke).toHaveBeenCalledWith('repo_clone', {
+      request: expect.objectContaining({ sparse: true }),
     });
   });
 
@@ -364,6 +386,7 @@ describe('choosing which ssh key clones', () => {
         sshKey: '/home/someone/.ssh/id_work',
         depth: null,
         blobless: false,
+        sparse: false,
       },
     });
   });
@@ -501,5 +524,53 @@ describe('the directory a clone or a new repository lands in', () => {
       ?.querySelector('input') as HTMLInputElement;
     expect(into.placeholder).toBe('type or choose a directory');
     expect(into.readOnly).toBe(false);
+  });
+});
+
+describe('the open requests across the tabs', () => {
+  it('lists each tab\'s open requests, says why one has none, and opens on click', async () => {
+    const { RequestsState } = await import('../../src/state/requests.svelte');
+    const requests = new RequestsState();
+    requests.rows = [
+      {
+        path: '/work/coral',
+        host: { kind: 'gitlab', origin: 'https://gitlab.com', owner: 'g', repo: 'coral' },
+        problem: null,
+        requests: [
+          { number: 7, title: 'Tidy the panel', state: 'draft', author: 'ada', sourceBranch: 'tidy',
+            targetBranch: 'main', webUrl: 'https://gitlab.com/g/coral/-/merge_requests/7',
+            updatedAt: '2026-11-01T00:00:00Z', headSha: '' },
+        ],
+      },
+      { path: '/work/quiet', host: null, problem: null, requests: [] },
+      { path: '/work/elsewhere', host: null, problem: 'not signed in', requests: [] },
+    ];
+    const urls: string[] = [];
+    const opened: string[] = [];
+    const view = render(Start, {
+      props: {
+        start: new StartState(),
+        requests,
+        onOpenRequest: (u: string) => urls.push(u),
+        onOpen: (p: string) => opened.push(p),
+        onPickDirectory: async () => null,
+        onClose: null,
+        sshKeys: KEYS,
+        defaultSshKey: '',
+        onConfirm: async () => true,
+      },
+    });
+    const lines = [...view.container.querySelectorAll('.asked > li')];
+    expect(lines).toHaveLength(3);
+    expect(lines[0]?.textContent).toContain('1 open');
+    expect(lines[0]?.querySelector('.num')?.textContent).toBe('!7');
+    expect(lines[0]?.querySelector('.draft')).not.toBeNull();
+    expect(lines[1]?.textContent).toContain('nothing open');
+    expect(lines[2]?.textContent).toContain('not signed in');
+
+    await fireEvent.click(lines[0]?.querySelector('.requests button') as HTMLElement);
+    expect(urls).toEqual(['https://gitlab.com/g/coral/-/merge_requests/7']);
+    await fireEvent.click(lines[2]?.querySelector('.repo-line') as HTMLElement);
+    expect(opened).toEqual(['/work/elsewhere']);
   });
 });

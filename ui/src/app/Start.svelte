@@ -1,4 +1,7 @@
 <script lang="ts">
+  import HostMark from './HostMark.svelte';
+  import { quoteRequest } from './request';
+  import type { RequestsState } from '../state/requests.svelte';
   import Icon from './Icon.svelte';
   import Mark from './Mark.svelte';
   import type { StartState } from '../state/start.svelte';
@@ -8,6 +11,8 @@
 
   const {
     start,
+    requests = null,
+    onOpenRequest = () => undefined,
     sshKeys,
     defaultSshKey,
     onOpen,
@@ -16,6 +21,10 @@
     onConfirm,
   }: {
     start: StartState;
+    /** The requests open across every tab, or null where there are no tabs to ask about. */
+    requests?: RequestsState | null;
+    /** Opens a request on its host. */
+    onOpenRequest?: (url: string) => void;
     /** Every key pair on this machine, for the clone form to offer. */
     sshKeys: SshKey[];
     /** The current profile's key, which is what the form starts on. */
@@ -47,6 +56,7 @@
   // svelte-ignore state_referenced_locally
   let cloneKey = $state(defaultSshKey);
   let cloneHistory = $state<CloneHistory>('full');
+  let cloneSparse = $state(false);
   let cloneDepth = $state(1);
 
   /**
@@ -102,6 +112,7 @@
       sshKey: overSsh ? cloneKey : '',
       history: cloneHistory,
       depth: cloneDepth,
+      sparse: cloneSparse,
     });
     // The notice goes with it: opening the repository takes this screen away, and a clone
     // that checked nothing out is exactly the one worth saying something about.
@@ -282,6 +293,16 @@
             opening an old file needs the network. The host has to support it.
           </p>
         {/if}
+        <label class="tick">
+          <input type="checkbox" bind:checked={cloneSparse} />
+          <span>Only the files at the top, to pick folders from afterwards</span>
+        </label>
+        {#if cloneSparse}
+          <p class="note">
+            A sparse checkout. Choose the folders in Preferences, Repository, once it is open;
+            with file contents on demand it is the cheapest way into a very large repository.
+          </p>
+        {/if}
         {#if cloneParent && clonedAs}
           <p class="says">It will be at <span class="mono">{cloneParent}/{clonedAs}</span></p>
         {/if}
@@ -336,6 +357,51 @@
           </button>
         </div>
       </form>
+    {/if}
+
+    {#if requests !== null}
+      <div class="recent-head">
+        <h3>Open requests in your tabs</h3>
+        <button class="clear" onclick={() => void requests.load()} disabled={requests.loading}>
+          {requests.loading ? 'Reading…' : 'Read again'}
+        </button>
+      </div>
+      {#if requests.error}
+        <p class="none">{requests.error}</p>
+      {:else if requests.rows.length === 0 && !requests.loading}
+        <p class="none">No tabs are open to ask about.</p>
+      {:else}
+        <ul class="asked">
+          {#each requests.rows as row (row.path)}
+            <li>
+              <button class="repo-line" onclick={() => onOpen(row.path)} title={row.path}>
+                <HostMark kind={row.host?.kind ?? 'other'} />
+                <span class="repo-name">{row.path.split('/').filter(Boolean).at(-1) ?? row.path}</span>
+                <span class="repo-when">
+                  {row.problem ?? (row.requests.length === 0 ? 'nothing open' : `${row.requests.length} open`)}
+                </span>
+              </button>
+              {#if row.requests.length > 0}
+                <ul class="requests">
+                  {#each row.requests.slice(0, 8) as pr (pr.number)}
+                    <li>
+                      <button onclick={() => onOpenRequest(pr.webUrl)} title={`${pr.title}\n${pr.sourceBranch} → ${pr.targetBranch}\n${pr.webUrl}`}>
+                        <span class="num mono">{quoteRequest(row.host?.kind, pr.number)}</span>
+                        <span class="title">{pr.title}</span>
+                        {#if pr.state === 'draft'}<span class="draft">draft</span>{/if}
+                        <span class="by">{pr.author}</span>
+                      </button>
+                    </li>
+                  {/each}
+                  {#if row.requests.length > 8}
+                    <li class="more">and {row.requests.length - 8} more</li>
+                  {/if}
+                </ul>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
     {/if}
 
     <input class="filter" placeholder="Search repositories" bind:value={start.filter} />
@@ -485,6 +551,26 @@
   .filter:focus { border-color: var(--accent); outline: none; }
 
   .recent-head { display: flex; align-items: baseline; gap: var(--space-3); }
+  .asked, .requests { list-style: none; margin: 0; padding: 0; }
+  .asked { margin-bottom: var(--space-4); }
+  .repo-line {
+    display: flex; align-items: center; gap: var(--space-2); width: 100%; text-align: left;
+    font: inherit; cursor: pointer; padding: var(--space-1) var(--space-2);
+    background: none; border: 0; border-radius: var(--radius-1); color: var(--fg-1);
+  }
+  .repo-line:hover, .requests button:hover { background: var(--bg-1); }
+  .repo-line .repo-when { margin-left: auto; }
+  .requests button {
+    display: flex; align-items: baseline; gap: var(--space-2); width: 100%; text-align: left;
+    font: inherit; font-size: var(--text-sm); cursor: pointer;
+    padding: 2px var(--space-2) 2px calc(var(--space-2) + 20px);
+    background: none; border: 0; border-radius: var(--radius-1); color: var(--fg-1);
+  }
+  .requests .num { flex: 0 0 auto; color: var(--fg-2); }
+  .requests .title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-0); }
+  .requests .draft { flex: 0 0 auto; font-size: var(--text-xs); color: var(--fg-2); border: 1px solid var(--border-strong); border-radius: var(--radius-0); padding: 0 4px; }
+  .requests .by { flex: 0 0 auto; margin-left: auto; color: var(--fg-2); }
+  .requests .more { padding: 2px var(--space-2) 2px calc(var(--space-2) + 20px); color: var(--fg-2); font-size: var(--text-sm); }
   .clear {
     margin-left: auto; font: inherit; font-size: var(--text-sm); cursor: pointer;
     background: none; border: 0; color: var(--fg-2); padding: 0;

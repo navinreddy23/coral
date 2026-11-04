@@ -70,6 +70,8 @@ pub async fn detect(path: &Path) -> Result<HostView, CoralError> {
 #[serde(rename_all = "camelCase")]
 pub struct PullRequests {
     pub pull_requests: Vec<PullRequest>,
+    #[serde(skip)]
+    pub sigil: char,
 }
 
 /// Lists the repository's pull or merge requests.
@@ -99,7 +101,10 @@ pub async fn list(path: &Path) -> Result<PullRequests, CoralError> {
         .pull_requests(&host)
         .await
         .map_err(|e| refused("list pull requests", &e))?;
-    Ok(PullRequests { pull_requests })
+    Ok(PullRequests {
+        pull_requests,
+        sigil: host.kind.sigil(),
+    })
 }
 
 /// Stores a token for the repository's host, read from stdin.
@@ -184,7 +189,8 @@ impl crate::output::Human for PullRequests {
         for pr in &self.pull_requests {
             let _ = write!(
                 out,
-                "\n  #{:<5} {:<10?} {:<28} {} → {}",
+                "\n  {}{:<5} {:<10?} {:<28} {} → {}",
+                self.sigil,
                 pr.number,
                 pr.state,
                 truncate(&pr.title, 28),
@@ -207,4 +213,88 @@ fn truncate(s: &str, at: usize) -> String {
         return s.to_owned();
     }
     s.chars().take(at.saturating_sub(1)).collect::<String>() + "…"
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Declared {
+    pub hostname: String,
+    pub kind: Option<coral_hosting::HostKind>,
+}
+
+/// Records what kind of host `hostname` is, beside the window's settings, where the window
+/// and the credential helper read it too.
+///
+/// # Errors
+/// [`CoralError::Io`] when the file cannot be written.
+pub fn declare(hostname: &str, kind: &str) -> Result<Declared, CoralError> {
+    let kind = match kind {
+        "gitea" => Some(coral_hosting::HostKind::Gitea),
+        "github" => Some(coral_hosting::HostKind::GitHub),
+        "gitlab" => Some(coral_hosting::HostKind::GitLab),
+        "bitbucket" => Some(coral_hosting::HostKind::Bitbucket),
+        "azure" => Some(coral_hosting::HostKind::Azure),
+        _ => None,
+    };
+    coral_hosting::declared::declare(hostname, kind)?;
+    Ok(Declared {
+        hostname: hostname.to_ascii_lowercase(),
+        kind,
+    })
+}
+
+impl crate::output::Human for Declared {
+    fn human(&self) -> String {
+        match self.kind {
+            Some(kind) => format!("{} is a {kind:?} host", self.hostname),
+            None => format!("{} is no longer declared", self.hostname),
+        }
+    }
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueView {
+    pub issue: coral_hosting::issue::Issue,
+    pub branch: String,
+}
+
+/// One issue on the repository's host.
+///
+/// # Errors
+/// [`CoralError::Refused`] when there is no recognised host or no stored token, and for any
+/// refusal from the provider.
+pub async fn issue(path: &Path, number: u64) -> Result<IssueView, CoralError> {
+    let view = detect(path).await?;
+    let host = view.host.ok_or_else(|| CoralError::Refused {
+        label: "reach the host",
+        detail: view.detail.unwrap_or_else(|| "no host".to_owned()),
+    })?;
+    let secret = token::load(&host, &account())
+        .map_err(|e| refused("read the issue", &e))?
+        .ok_or_else(|| CoralError::Refused {
+            label: "read the issue",
+            detail: format!(
+                "no token stored for {}; run `coral host-login`",
+                host.origin
+            ),
+        })?;
+    let client = Client::new(secret).map_err(|e| refused("read the issue", &e))?;
+    let issue = client
+        .issue(&host, number)
+        .await
+        .map_err(|e| refused("read the issue", &e))?;
+    Ok(IssueView {
+        branch: coral_hosting::issue::branch_name(&issue),
+        issue,
+    })
+}
+
+impl crate::output::Human for IssueView {
+    fn human(&self) -> String {
+        format!(
+            "{} {} ({:?})\n  {}\n  branch: {}",
+            self.issue.number, self.issue.title, self.issue.state, self.issue.web_url, self.branch
+        )
+    }
 }

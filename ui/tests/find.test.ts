@@ -4,7 +4,7 @@ const invoke = vi.fn();
 vi.mock('../src/ipc/invoke', () => ({ invoke: (...a: unknown[]) => invoke(...a), isPreview: () => false }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
-import { FindState } from '../src/state/find.svelte';
+import { FindState, inChanges } from '../src/state/find.svelte';
 
 beforeEach(() => {
   invoke.mockReset();
@@ -125,5 +125,40 @@ describe('finding a commit', () => {
     const find = new FindState();
     await find.run('/repo', 'after:soon');
     expect(find.error).toContain('not a date');
+  });
+});
+
+describe('searching what commits changed', () => {
+  it('moves the free words into code: and back out again, keeping the dates', () => {
+    expect(inChanges('parser', true)).toBe('code:parser');
+    expect(inChanges('two words after:2024-01-01', true)).toBe('code:"two words" after:2024-01-01');
+    expect(inChanges('code:"two words" after:2024-01-01', false)).toBe('two words after:2024-01-01');
+    expect(inChanges('code:/re+gex/', false)).toBe('re+gex');
+    // Already on, or already off: nothing to do.
+    expect(inChanges('code:x', true)).toBe('code:x');
+    expect(inChanges('plain', false)).toBe('plain');
+    // Toggling twice gives back what was typed.
+    expect(inChanges(inChanges('a b', true), false)).toBe('a b');
+  });
+
+  it('stops a slow search, keeps the query, and says it stopped', async () => {
+    let settle: (v: unknown) => void = () => undefined;
+    invoke.mockImplementation((cmd: string) =>
+      cmd === 'search_commits' ? new Promise((r) => (settle = r)) : Promise.resolve(true));
+    const find = new FindState();
+    find.query = 'code:needle';
+    const running = find.run('/repo', 'code:needle');
+    expect(find.searching).toBe(true);
+
+    find.stop();
+    expect(find.searching).toBe(false);
+    expect(find.stopped).toBe(true);
+    expect(find.query).toBe('code:needle');
+    expect(invoke).toHaveBeenCalledWith('stop_search', expect.anything());
+
+    // The answer that arrives after the stop is not wanted.
+    settle(found([3]));
+    await running;
+    expect(find.matches).toHaveLength(0);
   });
 });

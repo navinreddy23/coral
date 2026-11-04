@@ -13,37 +13,56 @@ use crate::remote::{Progress, parse_progress};
 use crate::repo::{Head, RepoLocation};
 
 /// A proposal, by the number people quote.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Proposal {
-    /// A GitHub pull request.
+    /// A pull request on GitHub, or on Gitea or Forgejo, which publish it the same way.
     Pull(u64),
     /// A GitLab merge request.
     MergeRequest(u64),
+    /// One on a host that publishes no ref for its tip — Bitbucket, Azure DevOps — reached by
+    /// its source branch instead, which is the tip as long as it is not from a fork.
+    Branch {
+        number: u64,
+        source: String,
+        /// How the host quotes the number: `#` on Bitbucket, `!` on Azure DevOps.
+        sigil: char,
+    },
 }
 
 impl Proposal {
     /// Where the host keeps the proposal's tip.
     #[must_use]
-    pub fn head_ref(self) -> String {
+    pub fn head_ref(&self) -> String {
         match self {
             Self::Pull(n) => format!("refs/pull/{n}/head"),
             Self::MergeRequest(n) => format!("refs/merge-requests/{n}/head"),
+            Self::Branch { source, .. } => format!("refs/heads/{source}"),
+        }
+    }
+
+    /// How people quote it: `#42` on GitHub, `!42` on GitLab, where `#42` is an issue.
+    #[must_use]
+    pub fn quoted(&self) -> String {
+        match self {
+            Self::Pull(n) => format!("#{n}"),
+            Self::MergeRequest(n) => format!("!{n}"),
+            Self::Branch { number, sigil, .. } => format!("{sigil}{number}"),
         }
     }
 
     /// The local branch it is checked out as: `pr/42`, or `mr/42` on GitLab, as each host's
     /// own instructions name it.
     #[must_use]
-    pub fn branch(self) -> String {
+    pub fn branch(&self) -> String {
         match self {
-            Self::Pull(n) => format!("pr/{n}"),
+            Self::Pull(n) | Self::Branch { number: n, .. } => format!("pr/{n}"),
             Self::MergeRequest(n) => format!("mr/{n}"),
         }
     }
 
     /// The remote-tracking ref the tip is fetched into, beside the remote's own branches.
     #[must_use]
-    pub fn tracking_ref(self, remote: &str) -> String {
+    pub fn tracking_ref(&self, remote: &str) -> String {
         format!("refs/remotes/{remote}/{}", self.branch())
     }
 }
@@ -73,7 +92,7 @@ impl RepoLocation {
         &self,
         runner: &GitRunner,
         remote: &str,
-        proposal: Proposal,
+        proposal: &Proposal,
         mut on_progress: F,
     ) -> Result<CheckedOut, CoralError>
     where
@@ -165,5 +184,11 @@ mod tests {
             "refs/merge-requests/7/head"
         );
         assert_eq!(Proposal::MergeRequest(7).branch(), "mr/7");
+    }
+
+    #[test]
+    fn each_is_quoted_the_way_its_host_writes_it() {
+        assert_eq!(Proposal::Pull(42).quoted(), "#42");
+        assert_eq!(Proposal::MergeRequest(42).quoted(), "!42");
     }
 }

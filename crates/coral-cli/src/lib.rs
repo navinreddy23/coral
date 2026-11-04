@@ -60,6 +60,9 @@ pub enum Command {
         /// Leave file contents on the server until something reads one. History stays whole.
         #[arg(long)]
         blobless: bool,
+        /// Check out only the files at the top; pick folders afterwards with `coral sparse`.
+        #[arg(long)]
+        sparse: bool,
         /// Do not draw progress on stderr.
         #[arg(long)]
         quiet: bool,
@@ -68,7 +71,8 @@ pub enum Command {
     Status,
     /// Record a commit from the staged changes.
     Commit {
-        #[arg(short, long)]
+        /// Required, except with --fixup, whose message git writes.
+        #[arg(short, long, default_value = "", required_unless_present_any = ["fixup", "squash"])]
         message: String,
         /// Replace the previous commit rather than adding one.
         #[arg(long)]
@@ -82,6 +86,12 @@ pub enum Command {
         /// Commit even with nothing staged.
         #[arg(long)]
         allow_empty: bool,
+        /// Record it as a fixup of this commit, to be folded in by the next autosquash.
+        #[arg(long, value_name = "REV", conflicts_with_all = ["amend", "squash"])]
+        fixup: Option<String>,
+        /// Record it as a squash into this commit; --message becomes the extra text.
+        #[arg(long, value_name = "REV", conflicts_with = "amend")]
+        squash: Option<String>,
     },
     /// Merge a revision into the current branch.
     Merge {
@@ -94,6 +104,10 @@ pub enum Command {
     /// Replay the current branch onto another.
     Rebase {
         onto: String,
+        /// Replay only the commits after this one, leaving it and what is below it behind
+        /// (`git rebase --onto ONTO FROM`).
+        #[arg(long, value_name = "REV")]
+        from: Option<String>,
         /// Move branches that point into the replayed range.
         #[arg(long)]
         update_refs: bool,
@@ -248,6 +262,10 @@ pub enum Command {
         /// Stage only these line indices within --hunk.
         #[arg(long, requires = "hunk", value_delimiter = ',')]
         lines: Option<Vec<usize>>,
+        /// Stage --hunk as this file's text reads instead of as the worktree has it: the
+        /// hunk's new side, context and added lines, rewritten. `-` reads standard input.
+        #[arg(long, value_name = "PATH", requires = "hunk", conflicts_with = "lines")]
+        edited: Option<std::path::PathBuf>,
     },
     /// Unstage changes, leaving the worktree alone.
     Unstage {
@@ -302,6 +320,17 @@ pub enum Command {
         /// Match added or removed content.
         #[arg(long)]
         search: Option<String>,
+        /// Only commits that changed these lines of --path, as `FROM,TO` at --rev. Follows the
+        /// lines across renames, so --follow is not needed.
+        #[arg(long, value_name = "FROM,TO", requires = "path", conflicts_with_all = ["follow", "author", "grep", "search"])]
+        lines: Option<String>,
+        #[arg(long, default_value_t = 50)]
+        limit: u64,
+    },
+    /// Find commits the way the window's find box does: message, author, path and object id,
+    /// narrowed by `code:text` (added or removed it), `code:/regex/`, `after:` and `before:`.
+    Find {
+        query: String,
         #[arg(long, default_value_t = 50)]
         limit: u64,
     },
@@ -320,6 +349,51 @@ pub enum Command {
     },
     /// List submodules.
     Submodules,
+    /// Show the diff and merge tools git has configured here.
+    Tools,
+    /// Open one file's change in git's configured diff tool. Returns once it has started.
+    Difftool {
+        file: String,
+        /// The staged change rather than the unstaged one.
+        #[arg(long, conflicts_with = "rev")]
+        staged: bool,
+        /// What this commit did to the file.
+        #[arg(long)]
+        rev: Option<String>,
+    },
+    /// Open a conflicted file in git's configured merge tool.
+    Mergetool { file: String },
+    /// Show whether git reuses recorded conflict resolutions here, or turn it on or off.
+    Rerere {
+        #[arg(long, conflicts_with = "off")]
+        on: bool,
+        #[arg(long)]
+        off: bool,
+    },
+    /// Show which folders a sparse working tree holds, or change them.
+    Sparse {
+        /// Check out only these folders, and the files at the top. None leaves just those.
+        #[arg(long, num_args = 0.., value_name = "FOLDER", conflicts_with = "off")]
+        set: Option<Vec<String>>,
+        /// Check out everything again.
+        #[arg(long)]
+        off: bool,
+    },
+    /// List the folders directly inside one, as the sparse picker does.
+    Folders {
+        under: Option<String>,
+        #[arg(long, default_value = "HEAD")]
+        rev: String,
+    },
+    /// Show the caches git keeps to answer a status quickly, or switch them here.
+    StatusCache {
+        /// The untracked cache: `on` or `off`.
+        #[arg(long, value_parser = ["on", "off"])]
+        untracked: Option<String>,
+        /// git's own filesystem monitor: `on` or `off`. Refused by a git built without one.
+        #[arg(long, value_parser = ["on", "off"])]
+        fsmonitor: Option<String>,
+    },
     /// Report commit signing at every level for this repository.
     Signing,
     /// List the keys that could sign.
@@ -414,6 +488,24 @@ pub enum Command {
     HostLogout,
     /// List the repository's pull or merge requests.
     PullRequests,
+    /// Draft a commit message for what is staged, with Claude, on the API key the app keeps.
+    /// Prints the draft; nothing is committed.
+    DraftMessage {
+        /// The model to ask, instead of the default.
+        #[arg(long)]
+        model: Option<String>,
+    },
+    /// Show one issue on the repository's host (a work item on Azure DevOps), and the branch
+    /// it would be worked on in.
+    Issue { number: u64 },
+    /// Say what kind of host a self-hosted server is, for one whose name does not: a Gitea or
+    /// Forgejo instance can be called anything. `none` forgets it.
+    HostKind {
+        /// The server's name, as it appears in remote URLs: `git.example.com`.
+        hostname: String,
+        #[arg(value_parser = ["gitea", "github", "gitlab", "bitbucket", "azure", "none"])]
+        kind: String,
+    },
     /// Walk the commit graph and report rows with their lanes.
     Graph {
         /// Stop after this many commits. Note that this does not make a topological walk
@@ -538,38 +630,27 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
             ssh_key,
             depth,
             blobless,
+            sparse,
             quiet,
         } => {
-            let into = into.map_or_else(|| repo.to_path_buf(), |dir| repo.join(dir));
-            let name = name.filter(|n| !n.trim().is_empty());
-            let key = ssh_key.filter(|k| !k.trim().is_empty());
-            output::render(
-                &commands::create::clone(url, &into, name, key, depth, blobless, quiet).await,
-            )
+            let what = coral_core::create::Cloned {
+                url,
+                parent: into.map_or_else(|| repo.to_path_buf(), |dir| repo.join(dir)),
+                name: name.filter(|n| !n.trim().is_empty()),
+                ssh_key: ssh_key.filter(|k| !k.trim().is_empty()),
+                depth,
+                blobless,
+                sparse,
+            };
+            output::render(&commands::create::clone(&what, quiet).await)
         }
         Command::Status => output::render(&commands::status::run(repo).await),
         Command::Diff { staged, paths } => {
             output::render(&commands::diff::run(repo, staged, &paths).await)
         }
-        Command::Log {
-            rev,
-            path,
-            follow,
-            author,
-            grep,
-            search,
-            limit,
-        } => {
-            let q = coral_core::history::LogQuery {
-                rev: Some(rev),
-                path,
-                follow,
-                author,
-                grep,
-                pickaxe: search,
-                limit: Some(limit),
-            };
-            output::render(&commands::log::run(repo, &q).await)
+        command @ Command::Log { .. } => dispatch_log(command, repo).await,
+        Command::Find { query, limit } => {
+            output::render(&commands::find::run(repo, &query, limit).await)
         }
         Command::Blame { rev, file } => {
             output::render(&commands::blame::run(repo, &rev, &file).await)
@@ -577,6 +658,13 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
         Command::Refs { kind } => output::render(&commands::refs::run(repo, kind).await),
         Command::Submodules => output::render(&commands::submodule::run(repo).await),
         Command::Worktrees => output::render(&commands::worktree::list(repo).await),
+        command @ (Command::Rerere { .. }
+        | Command::Tools
+        | Command::Difftool { .. }
+        | Command::Mergetool { .. }
+        | Command::Sparse { .. }
+        | Command::Folders { .. }
+        | Command::StatusCache { .. }) => dispatch_config(command, repo).await,
         Command::Signing => output::render(&commands::signing::show(repo).await),
         Command::SigningKeys => output::render(&commands::signing::keys(repo).await),
         Command::SigningSet {
@@ -606,6 +694,13 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
         }
         Command::HostLogout => output::render(&commands::hosting::logout(repo).await),
         Command::PullRequests => output::render(&commands::hosting::list(repo).await),
+        Command::DraftMessage { model } => {
+            output::render(&commands::write::draft_message(repo, model).await)
+        }
+        Command::Issue { number } => output::render(&commands::hosting::issue(repo, number).await),
+        Command::HostKind { hostname, kind } => {
+            output::render(&commands::hosting::declare(&hostname, &kind))
+        }
         Command::Graph {
             limit,
             from,
@@ -621,6 +716,77 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
 }
 
 /// Remote-facing commands, split out so each dispatcher stays readable.
+/// The repository's own git switches: rerere, the status caches, the sparse checkout.
+async fn dispatch_config(command: Command, repo: &std::path::Path) -> output::Rendered {
+    match command {
+        Command::Tools => output::render(&commands::tool::show(repo).await),
+        Command::Difftool { file, staged, rev } => {
+            output::render(&commands::tool::difftool(repo, &file, staged, rev).await)
+        }
+        Command::Mergetool { file } => {
+            output::render(&commands::tool::mergetool(repo, &file).await)
+        }
+        Command::Rerere { on, off } => {
+            let set = if on {
+                Some(true)
+            } else if off {
+                Some(false)
+            } else {
+                None
+            };
+            output::render(&commands::conflicts::rerere(repo, set).await)
+        }
+        Command::Sparse { set, off } => {
+            output::render(&commands::status::sparse(repo, set, off).await)
+        }
+        Command::Folders { under, rev } => {
+            output::render(&commands::status::folders(repo, &rev, under.as_deref()).await)
+        }
+        Command::StatusCache {
+            untracked,
+            fsmonitor,
+        } => output::render(
+            &commands::status::caches(
+                repo,
+                untracked.map(|v| v == "on"),
+                fsmonitor.map(|v| v == "on"),
+            )
+            .await,
+        ),
+        _ => unreachable!("routed by `dispatch`"),
+    }
+}
+
+async fn dispatch_log(command: Command, repo: &std::path::Path) -> output::Rendered {
+    let Command::Log {
+        rev,
+        path,
+        follow,
+        author,
+        grep,
+        search,
+        lines,
+        limit,
+    } = command
+    else {
+        unreachable!("routed by `dispatch`")
+    };
+    if let Some(lines) = lines {
+        let file = path.unwrap_or_default();
+        return output::render(&commands::log::lines(repo, &rev, &file, &lines, limit).await);
+    }
+    let q = coral_core::history::LogQuery {
+        rev: Some(rev),
+        path,
+        follow,
+        author,
+        grep,
+        pickaxe: search,
+        limit: Some(limit),
+    };
+    output::render(&commands::log::run(repo, &q).await)
+}
+
 async fn dispatch_remote(command: Command, repo: &std::path::Path) -> output::Rendered {
     match command {
         Command::Remotes => output::render(&commands::remote::list(repo).await),
@@ -668,22 +834,38 @@ async fn dispatch_write(command: Command, repo: &std::path::Path) -> output::Ren
             signoff,
             author,
             allow_empty,
+            fixup,
+            squash,
         } => {
+            let fold = match (fixup, squash) {
+                (Some(target), _) => Some(coral_core::ops::FoldInto {
+                    how: coral_core::ops::Fold::Fixup,
+                    target,
+                }),
+                (None, Some(target)) => Some(coral_core::ops::FoldInto {
+                    how: coral_core::ops::Fold::Squash,
+                    target,
+                }),
+                (None, None) => None,
+            };
             let opts = coral_core::ops::CommitOpts {
                 message,
                 amend,
                 signoff,
                 author,
                 allow_empty,
+                fold,
             };
             output::render(&commands::write::commit(repo, opts).await)
         }
         Command::Merge { rev, mode, message } => {
             output::render_op(&commands::write::merge(repo, rev, mode, message).await)
         }
-        Command::Rebase { onto, update_refs } => {
-            output::render_op(&commands::write::rebase(repo, onto, update_refs).await)
-        }
+        Command::Rebase {
+            onto,
+            from,
+            update_refs,
+        } => output::render_op(&commands::write::rebase(repo, onto, from, update_refs).await),
         Command::CherryPick { revs, mainline } => {
             output::render_op(&commands::write::cherry_pick(repo, revs, mainline).await)
         }
@@ -755,10 +937,17 @@ async fn dispatch_tree(command: Command, repo: &std::path::Path) -> output::Rend
         Command::Redo => output::render(&commands::write::redo(repo).await),
         Command::Journal => output::render(&commands::write::journal(repo).await),
         Command::Stage {
+            hunk: Some(hunk),
+            file: Some(file),
+            edited: Some(edited),
+            ..
+        } => output::render(&commands::stage::edited(repo, &file, hunk, &edited).await),
+        Command::Stage {
             paths,
             hunk,
             file,
             lines,
+            ..
         } => output::render(&stage_or_unstage(repo, paths, hunk, file, lines, D::Stage).await),
         Command::Unstage {
             paths,

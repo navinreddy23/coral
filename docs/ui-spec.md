@@ -112,7 +112,9 @@ The graph filter is not here. It is opened over the list it searches with `Ctrl+
 result count and up and down through the matches. Words match the message, author, path or
 object id; `code:text` (or `code:/regex/`) narrows to commits that added or removed it, and
 `after:`/`before:` take `2024-05-01` or `2.weeks`. A qualifier it cannot read is said on a line
-under the field, and a `code:` search says it is reading changes while it runs.
+under the field, and a `code:` search says it is reading changes while it runs. **In changes**
+beside the field writes and removes the `code:` for you; past two seconds the tally counts
+them and a Stop button lets the walk go without clearing the query.
 
 ## Sidebar
 

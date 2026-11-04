@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../state/locale.svelte';
   import { appVersion, openInBrowser, type AppVersion } from '../ipc/commands';
   import { messageOf } from '../ipc/error';
   import type { UpdateState } from '../state/update.svelte';
@@ -45,7 +46,7 @@
 </script>
 
 <section>
-  <h2>About</h2>
+  <h2>{t('prefs.pane.about')}</h2>
   {#if error !== null}
     <p class="bad">{error}</p>
   {:else if build === null}

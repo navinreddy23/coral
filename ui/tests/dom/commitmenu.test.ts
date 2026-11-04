@@ -235,6 +235,86 @@ describe('the commit menu', () => {
     expect(labels.some((l) => l.startsWith('Reset master to'))).toBe(true);
   });
 
+  it('fixes a commit up with what is staged, and offers to fold it in', async () => {
+    const staged = {
+      path: 'a.c', origPath: null, index: 'modified', worktree: 'unmodified', conflict: null,
+      score: null, submodule: false, modeChanged: false,
+    };
+    const { container } = await shell({
+      repo_status: { entries: [staged], branch: 'master', upstream: null, ahead: 0, behind: 0 },
+      commit_staged: { entries: [], branch: 'master', upstream: null, ahead: 0, behind: 0 },
+      rebase_todo: { items: [] },
+      rev_ancestry: 'same',
+    });
+    // Wait for the status to land, or the item reads "nothing is staged".
+    await waitFor(() => {
+      if (!container.textContent?.includes('WIP')) throw new Error('no status yet');
+    });
+    await openMenu(container);
+    const item = itemNamed(container, 'Fix up with the staged changes') as HTMLButtonElement;
+    expect(item.disabled).toBe(false);
+    expect(item.textContent).toContain('1 staged file');
+
+    await fireEvent.click(item);
+    await waitFor(() => {
+      const call = invoke.mock.calls.find(([cmd]) => cmd === 'commit_staged');
+      if (!call) throw new Error('not committed yet');
+      expect(call[1]).toMatchObject({
+        message: '',
+        amend: false,
+        fold: { how: 'fixup', target: frameOids[0] },
+      });
+    });
+    await confirm(container, true);
+    await waitFor(() => {
+      const call = invoke.mock.calls.find(([cmd]) => cmd === 'rebase_todo');
+      if (!call) throw new Error('the picker was not opened');
+      expect(call[1]).toMatchObject({ onto: `${frameOids[0]}~1`, autosquash: true });
+    });
+  });
+
+  it('will not offer a fixup with nothing staged', async () => {
+    const { container } = await shell({ rev_ancestry: 'same' });
+    await openMenu(container);
+    const item = itemNamed(container, 'Fix up with the staged changes') as HTMLButtonElement;
+    expect(item.disabled).toBe(true);
+    expect(item.textContent).toContain('nothing is staged');
+  });
+
+  it('offers the user\'s own commit actions under Run, by id, with the commit filled in', async () => {
+    const { container } = await shell({
+      tools_read: {
+        settings: {
+          editor: '',
+          actions: [
+            { id: 'action-1', name: 'Show stat', command: 'git show --stat {commit}', on: 'commit' },
+            { id: 'action-2', name: 'Count lines', command: 'wc -l {path}', on: 'file' },
+          ],
+        },
+        external: { diff: null, merge: null },
+      },
+      action_run: { success: true, output: '1 file changed' },
+    });
+    // The tools are read when the repository opens, beside the graph.
+    await waitFor(() => {
+      if (!invoke.mock.calls.some(([c]) => c === 'tools_read')) throw new Error('not read yet');
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    const labels = await openMenu(container);
+    expect(labels).toContain('Run');
+    const run = itemNamed(container, 'Run').closest('.wrap');
+    if (run) await fireEvent.mouseEnter(run);
+    const inside = [...container.querySelectorAll('.menu .label')].map((e) => e.textContent?.trim());
+    expect(inside).toContain('Show stat');
+    expect(inside).not.toContain('Count lines');
+    await fireEvent.click(itemNamed(container, 'Show stat'));
+    await waitFor(() => {
+      const call = invoke.mock.calls.find(([c]) => c === 'action_run');
+      if (!call) throw new Error('not run yet');
+      expect(call[1]).toMatchObject({ id: 'action-1', context: { commit: oidOf(frame, 0) } });
+    });
+  });
+
   it('checks a commit out by its own object id, not by its row', async () => {
     const { container } = await shell();
     await openMenu(container);
@@ -364,6 +444,31 @@ describe('the commit menu', () => {
     await waitFor(() => {
       expect(lastAction()).toEqual({ kind: 'reset', rev: oidOf(frame, 0), mode: 'soft' });
     });
+  });
+
+  it('moves the commits above one onto a base named in the question', async () => {
+    const { container } = await shell({ rev_ancestry: 'behind' });
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Move the commits above this onto…'));
+    const field = await waitFor(() => {
+      const found = container.querySelector('[role="dialog"] input, [role="dialog"] textarea');
+      if (!found) throw new Error('no field to name the base in');
+      return found as HTMLInputElement;
+    });
+    await fireEvent.input(field, { target: { value: ' main ' } });
+    await confirm(container, true);
+    await waitFor(() => {
+      expect(lastAction()).toEqual({ kind: 'rebase', onto: 'main', from: oidOf(frame, 0) });
+    });
+  });
+
+  it('offers no move for the commit at the tip, which has nothing above it', async () => {
+    const { container } = await shell({ rev_ancestry: 'same' });
+    await openMenu(container);
+    expect(disabledItem(container, 'Move the commits above this onto…')).toBe(true);
+    expect(itemNamed(container, 'Move the commits above this onto…').textContent).toContain(
+      'none are above it',
+    );
   });
 
   it('offers the whole message when rewording, not just the summary', async () => {

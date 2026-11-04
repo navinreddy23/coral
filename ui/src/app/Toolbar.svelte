@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../state/locale.svelte';
   import Icon from './Icon.svelte';
   import type { IconName } from './icon';
   import { keysOf } from '../state/shortcuts';
@@ -116,7 +117,7 @@
     [
       {
         name: 'undo',
-        label: 'Undo',
+        label: t('toolbar.undo'),
         icon: 'undo',
         hint: journal.undo ?? 'Nothing to undo',
         binding: 'undo',
@@ -124,7 +125,7 @@
       },
       {
         name: 'redo',
-        label: 'Redo',
+        label: t('toolbar.redo'),
         icon: 'redo',
         hint: journal.redo ?? 'Nothing to redo',
         binding: 'redo',
@@ -136,7 +137,7 @@
       // with git's "No configured push destination".
       {
         name: 'fetch',
-        label: 'Fetch',
+        label: t('toolbar.fetch'),
         icon: 'fetch',
         hint: remoteless ? NO_REMOTE : 'and prune',
         binding: 'fetch.all',
@@ -144,14 +145,14 @@
       },
       {
         name: 'pull',
-        label: 'Pull',
+        label: t('toolbar.pull'),
         icon: 'pull',
         hint: remoteless ? NO_REMOTE : 'fast-forward only',
         disabled: remoteless,
       },
       {
         name: 'push',
-        label: 'Push',
+        label: t('toolbar.push'),
         icon: 'push',
         hint: remoteless ? NO_REMOTE : 'setting the upstream if needed',
         disabled: remoteless,
@@ -160,14 +161,14 @@
     [
       {
         name: 'branch',
-        label: 'Branch',
+        label: t('toolbar.branch'),
         icon: 'branch',
         hint: 'create one here',
         binding: 'branch.create',
       },
       {
         name: 'stash',
-        label: 'Stash',
+        label: t('toolbar.stash'),
         icon: 'stashPush',
         hint: unborn
           ? 'Make the first commit before stashing'
@@ -178,14 +179,14 @@
       },
       {
         name: 'pop',
-        label: 'Pop',
+        label: t('toolbar.pop'),
         icon: 'stashPop',
         hint: stashes > 0 ? 'apply the latest stash and drop it' : 'Nothing stashed',
         disabled: stashes === 0,
       },
       {
         name: 'patch',
-        label: 'Patch',
+        label: t('toolbar.patch'),
         icon: 'patch',
         hint: comparing
           ? 'write the commits between the two picked ones out as files'
@@ -217,7 +218,7 @@
   const parts = $derived<Action[]>([
     {
       name: 'panel.left',
-      label: 'Left panel',
+      label: t('toolbar.leftPanel'),
       icon: LEFT[leftPanel].icon,
       hint: 'branches, tags and stashes',
       binding: 'panel.left',
@@ -226,7 +227,7 @@
     },
     {
       name: 'panel.right',
-      label: 'Right panel',
+      label: t('toolbar.rightPanel'),
       icon: rightPanel ? 'panelRight' : 'panelRightOff',
       hint: rightPanelUsable
         ? 'the commit, or what you are about to commit'
@@ -237,7 +238,7 @@
     },
     {
       name: 'terminal',
-      label: 'Terminal',
+      label: t('toolbar.terminal'),
       icon: 'terminal',
       hint: 'a shell in this repository',
       binding: 'terminal',
@@ -281,24 +282,24 @@
   -->
   <div class="where" style:--crumb={submodule === null ? '240px' : '370px'}>
     <span class="step" title={path}>
-      <span class="label">repository</span>
+      <span class="label">{t('toolbar.crumb.repository')}</span>
       <span class="value">{repo}</span>
     </span>
     {#if crumb}
       <span class="sep"><Icon name="chevronRight" size={12} /></span>
       <span class="step sub">
-        <button class="leave" onclick={onLeaveSubmodule} title="Back to {repo}">
+        <button class="leave" onclick={onLeaveSubmodule} title={t('toolbar.backTo', { repo })}>
           <Icon name="close" size={12} />
         </button>
         <span class="col">
-          <span class="label">submodule</span>
+          <span class="label">{t('toolbar.crumb.submodule')}</span>
           <span class="value" title={submodule}>{crumb}</span>
         </span>
       </span>
     {/if}
     <span class="sep"><Icon name="chevronRight" size={12} /></span>
     <span class="step">
-      <span class="label">branch</span>
+      <span class="label">{t('toolbar.crumb.branch')}</span>
       <span class="value">{branch}</span>
     </span>
   </div>
@@ -319,13 +320,13 @@
         {#if action.name === 'pull'}
           <!-- How a pull integrates is a real choice, and it belongs on the button that
                would otherwise make it silently. -->
-          <button class="caret" disabled={busy || remoteless} title="Choose how to pull" onclick={onPullMenu}>
+          <button class="caret" disabled={busy || remoteless} title={t('toolbar.pullMenu')} onclick={onPullMenu}>
             <Icon name="chevronDown" size={11} />
           </button>
         {/if}
         {#if action.name === 'push'}
           <!-- Tags do not travel with a push; git sends them only when they are asked for. -->
-          <button class="caret" disabled={busy || remoteless} title="Choose what to push" onclick={onPushMenu}>
+          <button class="caret" disabled={busy || remoteless} title={t('toolbar.pushMenu')} onclick={onPushMenu}>
             <Icon name="chevronDown" size={11} />
           </button>
         {/if}

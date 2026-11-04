@@ -492,6 +492,35 @@ async fn applying_a_patch_that_has_already_landed_is_not_a_stop() {
 
     assert!(again.completed, "the second run should not stop");
     assert_eq!(there.op_state(), coral_core::repo::OpState::Clean);
+    assert_eq!(again.message, coral_core::patch::ALREADY_APPLIED);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_patch_already_in_the_working_tree_says_so() {
+    let runner = GitRunner::discover().await.unwrap();
+    let source = TestRepo::new().write("a.txt", "one\n").commit("base");
+    let source = source.write("a.txt", "two\n").commit("the change");
+    let out = tempfile::tempdir().unwrap();
+    let loc = RepoLocation::discover(&runner, source.path())
+        .await
+        .unwrap();
+    let files = loc.format_patch(&runner, "HEAD", out.path()).await.unwrap();
+
+    let target = TestRepo::new().write("a.txt", "one\n").commit("base");
+    let there = RepoLocation::discover(&runner, target.path())
+        .await
+        .unwrap();
+    let first = there
+        .apply_patches(&runner, &files, PatchLanding::WorkingTree)
+        .await
+        .unwrap();
+    assert_ne!(first.message, coral_core::patch::ALREADY_APPLIED);
+    let again = there
+        .apply_patches(&runner, &files, PatchLanding::WorkingTree)
+        .await
+        .unwrap();
+    // git apply --3way over its own result exits 0 and says "Applied patch cleanly".
+    assert_eq!(again.message, coral_core::patch::ALREADY_APPLIED);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -663,5 +692,89 @@ fn abandoning_a_rebase_forgets_the_messages_it_owed() {
             .join(".git")
             .join("coral-rebase-rewords")
             .exists()
+    );
+}
+
+/// The whole loop: stage a correction to an older commit, record it as that commit's fixup,
+/// and let the picker's autosquash fold it in. The older commit carries the fix and nothing
+/// says `fixup!` afterwards.
+#[test]
+fn a_fixup_commit_lands_in_the_commit_it_names() {
+    let repo = TestRepo::new()
+        .write("base.txt", "base\n")
+        .commit("base")
+        .write("a.txt", "a with a tpyo\n")
+        .commit("commit a")
+        .write("b.txt", "b\n")
+        .commit("commit b");
+    let target = repo.git(["rev-parse", "HEAD~1"]).trim().to_owned();
+    std::fs::write(repo.path().join("a.txt"), "a with a typo fixed\n").unwrap();
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+        loc.stage(&runner, &["a.txt"]).await.unwrap();
+        loc.commit(
+            &runner,
+            &coral_core::ops::CommitOpts {
+                fold: Some(coral_core::ops::FoldInto {
+                    how: coral_core::ops::Fold::Fixup,
+                    target: target.clone(),
+                }),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(summaries(&repo)[0], "fixup! commit a");
+
+        let mut todo = loc.rebase_todo(&runner, "HEAD~3").await.unwrap();
+        assert_eq!(todo.autosquash(), 1);
+        let out = loc
+            .rebase_interactive(&runner, "HEAD~3", &todo, &coral_binary())
+            .await
+            .unwrap();
+        assert!(out.completed, "{}", out.message);
+    });
+
+    assert_eq!(summaries(&repo), ["commit b", "commit a", "base"]);
+    assert_eq!(
+        repo.git(["show", "HEAD~1:a.txt"]),
+        "a with a typo fixed",
+        "the fix is in the commit it named"
+    );
+}
+
+/// A fixup made from part of the work, with the rest left unstaged: folding it in must not
+/// be refused for the work that was never part of it, and that work must come back.
+#[test]
+fn an_interactive_rebase_keeps_unstaged_work_aside_and_puts_it_back() {
+    let repo = TestRepo::new()
+        .write("a.txt", "a\n")
+        .commit("base")
+        .write("b.txt", "b\n")
+        .commit("commit b")
+        .write("c.txt", "c\n")
+        .commit("commit c");
+    std::fs::write(repo.path().join("c.txt"), "c, still being written\n").unwrap();
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+        let mut todo = loc.rebase_todo(&runner, "HEAD~2").await.unwrap();
+        todo.reorder(1, 0).unwrap();
+        let out = loc
+            .rebase_interactive(&runner, "HEAD~2", &todo, &coral_binary())
+            .await
+            .unwrap();
+        assert!(out.completed, "{}", out.message);
+    });
+
+    assert_eq!(summaries(&repo), ["commit b", "commit c", "base"]);
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("c.txt")).unwrap(),
+        "c, still being written\n"
     );
 }

@@ -1,3 +1,4 @@
+import { invoke } from './invoke';
 import { getCurrentWindow, type Window } from '@tauri-apps/api/window';
 
 /**
@@ -83,5 +84,14 @@ export async function onResized(run: () => void): Promise<() => void> {
     return await window.onResized(() => run());
   } catch {
     return () => undefined;
+  }
+}
+
+/** Scales the whole window, text and canvas together. Answers nothing outside the app. */
+export async function setZoom(scale: number): Promise<void> {
+  try {
+    await invoke<void>('window_zoom', { scale });
+  } catch {
+    // Under vitest and in a plain browser there is no webview to zoom.
   }
 }

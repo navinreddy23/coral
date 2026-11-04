@@ -1,5 +1,6 @@
 import {
   applyPart,
+  stageEdited,
   commitStaged,
   deletePaths,
   discardPaths,
@@ -89,6 +90,12 @@ export class WorktreeState {
     await this.#run(() => applyPart(path, file, part, hunk, lines, options));
   }
 
+  /** Stages one hunk as rewritten in `text`, its new side, leaving the working tree alone. */
+  async stageEdited(file: string, hunk: number, text: string, options: ReadOptions): Promise<void> {
+    const path = this.#path;
+    await this.#run(() => stageEdited(path, file, hunk, text, options));
+  }
+
   /** Deletes files outright. The caller asks first; this does not. */
   async delete(tracked: string[], untracked: string[]): Promise<void> {
     if (tracked.length === 0 && untracked.length === 0) return;
@@ -101,6 +108,15 @@ export class WorktreeState {
     await this.#run(() =>
       commitStaged(this.#path, message, amend),
     );
+  }
+
+  /**
+   * Records what is staged as a fixup of an earlier commit, for the next interactive rebase
+   * to fold in. No message: git writes `fixup! <its subject>`, and a fixup's own message is
+   * thrown away when it is folded.
+   */
+  async fixup(target: string): Promise<void> {
+    await this.#run(() => commitStaged(this.#path, '', false, { how: 'fixup', target }));
   }
 
   async #run(action: () => Promise<Status>): Promise<void> {

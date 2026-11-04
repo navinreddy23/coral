@@ -48,19 +48,7 @@ pub fn build_patch(
     direction: Direction,
 ) -> Result<BString, CoralError> {
     let mut out = BString::from(Vec::new());
-    let old_path = file.old_path.as_ref().unwrap_or(&file.path);
-
-    out.extend_from_slice(b"diff --git ");
-    side(b'a', old_path, &mut out);
-    out.push(b' ');
-    side(b'b', &file.path, &mut out);
-    out.push(b'\n');
-    out.extend_from_slice(b"--- ");
-    side(b'a', old_path, &mut out);
-    out.push(b'\n');
-    out.extend_from_slice(b"+++ ");
-    side(b'b', &file.path, &mut out);
-    out.push(b'\n');
+    header(file, &mut out);
 
     // Each retained hunk shifts the lines after it on the side being rebuilt.
     let mut drift: i64 = 0;
@@ -71,6 +59,110 @@ pub fn build_patch(
         })?;
         let rendered = render_hunk(hunk, selection, direction, &mut drift);
         out.extend_from_slice(&rendered);
+    }
+    Ok(out)
+}
+
+fn header(file: &FileDiff, out: &mut BString) {
+    let old_path = file.old_path.as_ref().unwrap_or(&file.path);
+    out.extend_from_slice(b"diff --git ");
+    side(b'a', old_path, out);
+    out.push(b' ');
+    side(b'b', &file.path, out);
+    out.push(b'\n');
+    out.extend_from_slice(b"--- ");
+    side(b'a', old_path, out);
+    out.push(b'\n');
+    out.extend_from_slice(b"+++ ");
+    side(b'b', &file.path, out);
+    out.push(b'\n');
+}
+
+/// Builds a patch that stages one hunk as the user has rewritten it, rather than as the
+/// working tree has it: `git add -e` for one hunk.
+///
+/// `edited` is the hunk's new side — its context and added lines — as the user wants the
+/// index to read. The old side is never edited: it is what the index holds, emitted as the
+/// lines git must find there, so an index that has moved since the hunk was read refuses the
+/// patch instead of taking it somewhere else. Lines the two share at either end stay context,
+/// which keeps the patch to what was actually changed.
+///
+/// # Errors
+/// [`CoralError::Protocol`] if the hunk does not exist; [`CoralError::Refused`] when it touches
+/// a line with no newline at the end of the file, whose marker an arbitrary edit cannot be
+/// trusted to keep, and when the edit leaves the index exactly as it is.
+pub fn build_edited_patch(
+    file: &FileDiff,
+    index: usize,
+    edited: &[u8],
+) -> Result<BString, CoralError> {
+    let hunk = file.hunks.get(index).ok_or_else(|| CoralError::Protocol {
+        label: "apply",
+        detail: format!("hunk {index} does not exist"),
+    })?;
+    if hunk.lines.iter().any(|l| l.no_newline) {
+        return Err(CoralError::Refused {
+            label: "stage an edited hunk",
+            detail: "this hunk reaches the end of a file with no final newline; stage it, \
+                     or lines of it, as it is"
+                .to_owned(),
+        });
+    }
+    let old: Vec<&[u8]> = hunk
+        .lines
+        .iter()
+        .filter(|l| l.kind != LineKind::Add)
+        .map(|l| l.text.as_slice())
+        .collect();
+    let edited = edited.strip_suffix(b"\n").unwrap_or(edited);
+    let new: Vec<&[u8]> = if edited.is_empty() {
+        Vec::new()
+    } else {
+        edited.split(|b| *b == b'\n').collect()
+    };
+    if old == new {
+        return Err(CoralError::Refused {
+            label: "stage an edited hunk",
+            detail: "the edit leaves these lines as the index already has them".to_owned(),
+        });
+    }
+
+    let prefix = old.iter().zip(&new).take_while(|(a, b)| a == b).count();
+    let suffix = old[prefix..]
+        .iter()
+        .rev()
+        .zip(new[prefix..].iter().rev())
+        .take_while(|(a, b)| a == b)
+        .count();
+
+    let mut out = BString::from(Vec::new());
+    header(file, &mut out);
+    out.extend_from_slice(
+        format!(
+            "@@ -{},{} +{},{} @@\n",
+            hunk.old_start,
+            old.len(),
+            hunk.old_start,
+            new.len()
+        )
+        .as_bytes(),
+    );
+    let mut line = |marker: u8, text: &[u8]| {
+        out.push(marker);
+        out.extend_from_slice(text);
+        out.push(b'\n');
+    };
+    for text in &old[..prefix] {
+        line(b' ', text);
+    }
+    for text in &old[prefix..old.len() - suffix] {
+        line(b'-', text);
+    }
+    for text in &new[prefix..new.len() - suffix] {
+        line(b'+', text);
+    }
+    for text in &old[old.len() - suffix..] {
+        line(b' ', text);
     }
     Ok(out)
 }

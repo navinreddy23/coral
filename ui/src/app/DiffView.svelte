@@ -10,7 +10,7 @@
   import type { DiffState } from '../state/diff.svelte';
   import type { FileDiff } from '../ipc/types';
 
-  const { diff, onClose, onPart }: {
+  const { diff, onClose, onPart, onEdit = () => undefined }: {
     diff: DiffState;
     onClose: () => void;
     /**
@@ -21,6 +21,8 @@
      * that has to be answered first.
      */
     onPart: (part: 'stage' | 'unstage' | 'discard', hunk: number, lines: number[]) => void;
+    /** Stage a hunk as rewritten: its new side, context and added lines, as text to edit. */
+    onEdit?: (hunk: number, text: string) => void;
   } = $props();
 
   /**
@@ -330,6 +332,42 @@
     });
   });
 
+  /**
+   * The run of blame lines picked for a history of their own, by clicking a number and
+   * Shift-clicking another. Numbered as blame numbers them, which is the file at the revision
+   * being shown, and that is what the history is read against.
+   */
+  let range = $state<{ from: number; to: number } | null>(null);
+  let rangeAnchor = 0;
+
+  function pickLine(no: number, event: MouseEvent) {
+    if (event.shiftKey && range !== null) {
+      range = { from: Math.min(rangeAnchor, no), to: Math.max(rangeAnchor, no) };
+      return;
+    }
+    if (range !== null && range.from === no && range.to === no) {
+      range = null;
+      return;
+    }
+    rangeAnchor = no;
+    range = { from: no, to: no };
+  }
+
+  /** A new file, or a new revision of it, numbers its lines afresh. */
+  $effect(() => {
+    void diff.blame;
+    range = null;
+  });
+
+  /** A hunk's new side as text: what the index will hold for it once it is staged. */
+  function newSide(hunk: { lines: { kind: string; text: string }[] }): string {
+    return hunk.lines.filter((l) => l.kind !== 'remove').map((l) => `${l.text}\n`).join('');
+  }
+
+  function linesLabel(from: number, to: number): string {
+    return from === to ? `line ${from}` : `lines ${from}–${to}`;
+  }
+
   function jump(event: MouseEvent) {
     const el = scroller;
     if (el === null) return;
@@ -443,6 +481,14 @@
       the file, which is the question a file history is opened to answer.
     -->
     <ul class="history">
+      {#if diff.lines !== null}
+        <li class="scope">
+          <span>History of {linesLabel(diff.lines.from, diff.lines.to)}</span>
+          <button onclick={() => void diff.historyOfFile()} title="The history of the whole file again">
+            Whole file
+          </button>
+        </li>
+      {/if}
       {#each diff.history ?? [] as commit (commit.oid)}
         <li>
           <button
@@ -462,9 +508,13 @@
       {#if diff.sideError}
         <li class="error">{diff.sideError}</li>
       {:else if diff.history === null}
-        <li class="muted">Reading what has touched this file…</li>
+        <li class="muted">
+          {diff.lines === null ? 'Reading what has touched this file…' : 'Reading what has changed these lines…'}
+        </li>
       {:else if diff.history.length === 0}
-        <li class="muted">Nothing has touched this file.</li>
+        <li class="muted">
+          {diff.lines === null ? 'Nothing has touched this file.' : 'Nothing has changed these lines.'}
+        </li>
       {:else if diff.moreHistory}
         <li>
           <button class="deeper" onclick={() => void diff.deeper()}>Go deeper</button>
@@ -480,10 +530,29 @@
       {:else if diff.blame === null || diff.text === null}
         <p class="muted">Working out who wrote each line…</p>
       {:else}
+        <!-- Always there, so picking a line moves nothing: a bar that appeared on the first
+             pick pushed every row down by its height, and the second click landed on the line
+             just picked and let it go. Sticky, so the way on is in view wherever it was made. -->
+        <div class="picked" role="status">
+          {#if range === null}
+            <span class="muted">Pick a line number for the history of that line; Shift-click another for the lines between.</span>
+          {:else}
+            <span>{linesLabel(range.from, range.to)} picked</span>
+            <button
+              class="go"
+              onclick={() => {
+                if (range !== null) void diff.historyOfLines(range.from, range.to);
+              }}
+            >History of {range.from === range.to ? 'this line' : 'these lines'}</button>
+            <button onclick={() => (range = null)} aria-label="Clear the picked lines">
+              <Icon name="close" size={12} />
+            </button>
+          {/if}
+        </div>
         <table class="lines blame">
           <tbody>
             {#each blamed as line (line.no)}
-              <tr>
+              <tr class:ranged={range !== null && line.no >= range.from && line.no <= range.to}>
                 <td class="author">
                   {#if line.oid !== null}
                     <span class="chip" title="{line.summary}&#10;{line.who}">
@@ -493,7 +562,11 @@
                     </span>
                   {/if}
                 </td>
-                <td class="no">{line.no}</td>
+                <td
+                  class="no line-pick"
+                  onclick={(e) => pickLine(line.no, e)}
+                  title="Pick this line; Shift-click another to pick the lines between"
+                >{line.no}</td>
                 <td class="text">{line.content}</td>
               </tr>
             {/each}
@@ -570,6 +643,10 @@
                       {side === 'stage' ? 'Stage hunk' : 'Unstage hunk'}
                     </button>
                     {#if side === 'stage'}
+                      <button
+                        onclick={() => onEdit(h, newSide(hunk))}
+                        title="Stage this hunk as you rewrite it, leaving the file on disk alone"
+                      >Edit…</button>
                       <button class="risky" onclick={() => onPart('discard', h, pickedIn(h))}>
                         Discard{pickedIn(h).length > 0 ? ' lines' : ' hunk'}
                       </button>
@@ -798,6 +875,32 @@
     color: var(--fg-1); padding: var(--space-1);
   }
   .deeper:hover { background: var(--bg-3); color: var(--fg-0); }
+  .scope {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+    padding: var(--space-1) var(--space-2) var(--space-2); color: var(--fg-1); font-size: var(--text-sm);
+    border-bottom: 1px solid var(--border); margin-bottom: var(--space-1);
+  }
+  .scope button, .picked button {
+    font: inherit; font-size: var(--text-sm); cursor: pointer; white-space: nowrap;
+    background: var(--bg-0); color: var(--fg-1); border: 1px solid var(--border);
+    border-radius: var(--radius-0); padding: 0 var(--space-2); line-height: 18px;
+  }
+  .scope button:hover, .picked button:hover { background: var(--bg-2); color: var(--fg-0); }
+  .picked {
+    position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: var(--space-2);
+    padding: var(--space-1) var(--space-2); background: var(--bg-1);
+    border-bottom: 1px solid var(--border); color: var(--fg-1); font-size: var(--text-sm);
+  }
+  .picked .go { color: var(--fg-0); border-color: var(--accent); }
+  /* One height whatever it says, and the hint kept to one line: the bar is there so that
+     picking a line moves nothing, which a hint taller than the picked state undid. */
+  .picked { box-sizing: border-box; height: 30px; flex-wrap: nowrap; }
+  .picked > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .picked .muted { color: var(--fg-2); margin: 0; padding: 0; }
+  td.no.line-pick { cursor: pointer; }
+  td.no.line-pick:hover { color: var(--fg-0); }
+  tr.ranged td.no { background: var(--accent-soft); color: var(--fg-0); box-shadow: inset 2px 0 0 var(--accent-line); }
+  tr.ranged td.text { background: var(--accent-soft); }
 
   .modes code {
     font-family: var(--font-mono); font-size: var(--text-sm);

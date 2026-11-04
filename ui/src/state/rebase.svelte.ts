@@ -16,6 +16,13 @@ export class RebaseState {
   loading = $state(false);
   busy = $state(false);
   error = $state<string | null>(null);
+  /**
+   * Whether `fixup!` and `squash!` commits are put under the commits they name, which is what
+   * making one was for. On unless turned off; it only shows when the range holds one.
+   */
+  folded = $state(true);
+  /** Whether the range holds a `fixup!` or `squash!` commit at all. */
+  foldable = $state(false);
 
   #path = '';
 
@@ -53,8 +60,9 @@ export class RebaseState {
     this.error = null;
     this.loading = true;
     try {
-      const todo = await rebaseTodo(path, onto);
+      const todo = await rebaseTodo(path, onto, this.folded);
       this.items = todo.items;
+      this.foldable = todo.items.some((i) => /^(?:fixup|squash)! /u.test(i.summary));
       if (todo.items.length === 0) this.error = `Nothing to rebase onto ${onto}.`;
     } catch (e) {
       this.error = messageOf(e);
@@ -63,8 +71,21 @@ export class RebaseState {
     }
   }
 
+  /**
+   * Folds the fixups in or lays them out as plain picks again. The list is read afresh, so
+   * any steps already chosen go back to what the range says.
+   */
+  async setFolded(on: boolean): Promise<void> {
+    const onto = this.onto;
+    if (on === this.folded || onto === null) return;
+    this.folded = on;
+    await this.load(this.#path, onto);
+  }
+
   close(): void {
     this.onto = null;
+    this.folded = true;
+    this.foldable = false;
     this.items = [];
     this.error = null;
   }

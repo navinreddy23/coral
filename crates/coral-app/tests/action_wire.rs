@@ -28,6 +28,7 @@ fn every_action_the_window_can_send_is_understood() {
         r#"{"kind":"branchDelete","name":"topic","force":false}"#,
         r#"{"kind":"merge","rev":"topic"}"#,
         r#"{"kind":"rebase","onto":"main"}"#,
+        r#"{"kind":"rebase","onto":"main","from":"feature"}"#,
         r#"{"kind":"cherryPick","revs":["abc"],"commit":true}"#,
         r#"{"kind":"cherryPick","revs":["abc"],"commit":false}"#,
         r#"{"kind":"revert","revs":["abc"]}"#,

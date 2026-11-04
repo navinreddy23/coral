@@ -87,6 +87,11 @@ export function describe(
   if (/(?:already|everything) up[- ]to[- ]date/i.test(text)) {
     return { kind: 'info', title: `${what}: already up to date`, detail: '' };
   }
+  // The engine's wording for a patch that was already there: git exits 0 for it and says
+  // nothing that reads as "nothing happened".
+  if (/^already applied: nothing changed/i.test(text)) {
+    return { kind: 'info', title: `${what}: already applied`, detail: 'Nothing changed.' };
+  }
   return { kind: 'ok', title: `${what} complete`, detail: text };
 }
 

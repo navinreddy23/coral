@@ -52,6 +52,8 @@ pub enum Choice {
     Content {
         text: String,
     },
+    /// The file as it stands, which for a conflict rerere resolved is the recorded answer.
+    Kept,
 }
 
 /// Applies a resolution and stages the result.
@@ -66,6 +68,7 @@ pub async fn resolve_conflict(path: String, file: String, choice: Choice) -> Res
         Choice::Theirs => Resolution::TakeTheirs,
         Choice::Delete => Resolution::Delete,
         Choice::Content { text } => Resolution::Content(text.into()),
+        Choice::Kept => Resolution::Kept,
     };
     let logged = crate::activity::started(&path, &format!("resolve {file}"));
     match loc.resolve(&runner, &file, &resolution).await {

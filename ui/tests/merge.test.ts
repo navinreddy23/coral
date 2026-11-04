@@ -261,6 +261,7 @@ describe("arriving at a stopped operation", () => {
       kind: string;
       whole: string | null;
       deleteModify: boolean;
+      recorded?: boolean;
     }[],
   ) {
     // Each case counts its own calls; the spies outlive the test that made them otherwise.
@@ -345,6 +346,7 @@ describe("arriving at a stopped operation", () => {
         kind: "both_modified",
         whole: "binary",
         deleteModify: false,
+        recorded: false,
       },
     ]);
     const merge = new MergeState();
@@ -384,6 +386,7 @@ describe("stepping an operation on", () => {
         kind: "both_modified",
         whole: null,
         deleteModify: false,
+        recorded: false,
       },
     ]);
     return merge;

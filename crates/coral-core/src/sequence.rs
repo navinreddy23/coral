@@ -142,6 +142,39 @@ impl Todo {
         Ok(())
     }
 
+    /// Moves each `fixup!` and `squash!` commit to just after the commit it names, as a fixup
+    /// or a squash, the way `git rebase --autosquash` arranges the list it opens. Returns how
+    /// many were placed.
+    ///
+    /// A target is named by its summary, by the start of it, or by an object id prefix, and
+    /// has to come earlier in the list: one that is not in the range stays a pick where it
+    /// was. A `fixup! fixup! x` is about `x`. Several fixups of one commit keep their order.
+    /// `amend!` is left alone, since it needs a `fixup -C` this list does not carry.
+    /// <https://git-scm.com/docs/git-rebase#Documentation/git-rebase.txt---autosquash>
+    pub fn autosquash(&mut self) -> usize {
+        let mut out: Vec<TodoItem> = Vec::with_capacity(self.items.len());
+        let mut placed = 0;
+        for item in std::mem::take(&mut self.items) {
+            let Some((step, subject)) = fold_of(&item.summary) else {
+                out.push(item);
+                continue;
+            };
+            let Some(target) = out.iter().position(|t| names(t, subject)) else {
+                out.push(item);
+                continue;
+            };
+            // After the target and whatever has already been folded into it.
+            let mut at = target + 1;
+            while at < out.len() && matches!(out[at].step, Step::Fixup | Step::Squash) {
+                at += 1;
+            }
+            out.insert(at, TodoItem { step, ..item });
+            placed += 1;
+        }
+        self.items = out;
+        placed
+    }
+
     /// The first item cannot be squashed or fixed up: there is nothing before it to fold into.
     #[must_use]
     pub fn first_step_is_valid(&self) -> bool {
@@ -150,6 +183,42 @@ impl Todo {
             Some(Step::Squash | Step::Fixup)
         )
     }
+}
+
+/// What a `fixup!` or `squash!` subject asks for, and the subject it names with every such
+/// prefix taken off.
+fn fold_of(summary: &BString) -> Option<(Step, &[u8])> {
+    let step = if summary.starts_with(b"fixup! ") {
+        Step::Fixup
+    } else if summary.starts_with(b"squash! ") {
+        Step::Squash
+    } else {
+        return None;
+    };
+    let mut rest: &[u8] = summary.as_slice();
+    loop {
+        if let Some(r) = rest.strip_prefix(b"fixup! ") {
+            rest = r;
+        } else if let Some(r) = rest.strip_prefix(b"squash! ") {
+            rest = r;
+        } else {
+            break;
+        }
+    }
+    Some((step, rest.trim()))
+}
+
+/// Whether `subject` names this item: its summary, the start of it, or its object id.
+fn names(item: &TodoItem, subject: &[u8]) -> bool {
+    if subject.is_empty() || matches!(item.step, Step::Fixup | Step::Squash) {
+        return false;
+    }
+    if item.summary.as_slice() == subject || item.summary.starts_with(subject) {
+        return true;
+    }
+    subject.len() >= 4
+        && subject.iter().all(u8::is_ascii_hexdigit)
+        && item.oid.as_bytes().starts_with(subject)
 }
 
 impl crate::repo::RepoLocation {
@@ -283,7 +352,9 @@ impl crate::repo::RepoLocation {
                     crate::process::shell_word(&path.display().to_string()),
                 ),
             )
-            .args(["rebase", "--interactive", "--no-autosquash"])
+            // Changes left unstaged are put aside and back, as a pull does: a fixup is made from
+            // part of the work, and the rest refusing the rebase that folds it in was a dead end.
+            .args(["rebase", "--interactive", "--no-autosquash", "--autostash"])
             .arg(onto);
 
         let result = runner.output(cmd).await;

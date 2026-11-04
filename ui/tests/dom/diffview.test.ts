@@ -163,6 +163,92 @@ describe('the diff viewer', () => {
     expect(blame.title).toContain('no lines to blame');
   });
 
+  it('offers to stage an unstaged hunk as edited, handing over its new side as text', async () => {
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'kernel/sched/core.c';
+    diff.source = 'unstaged';
+    diff.file = fileDiff();
+    diff.setMode('inline');
+    const edits: [number, string][] = [];
+    const view = render(DiffView, {
+      props: { diff, onClose: () => {}, onPart: () => {}, onEdit: (h: number, t: string) => edits.push([h, t]) },
+    });
+    const edit = [...view.container.querySelectorAll('.hunk-acts button')].find(
+      (b) => b.textContent?.trim() === 'Edit…',
+    ) as HTMLButtonElement;
+    await fireEvent.click(edit);
+    // Context and the added line, not the removed one: what the index will hold.
+    expect(edits).toEqual([[0, 'one\nTWO\nthree\n']]);
+  });
+
+  it('offers no edit for a hunk that is already staged', () => {
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'kernel/sched/core.c';
+    diff.source = 'staged';
+    diff.file = fileDiff();
+    diff.setMode('inline');
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+    const labels = [...view.container.querySelectorAll('.hunk-acts button')].map((b) => b.textContent?.trim());
+    expect(labels).not.toContain('Edit…');
+  });
+
+  it('picks a run of blame lines and offers their history', async () => {
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'a.c';
+    diff.file = fileDiff();
+    diff.setView('blame');
+    diff.blame = {
+      chunks: [{ oid: 'a'.repeat(40), finalLine: 1, origLine: 1, lines: 3 }],
+      commits: {
+        ['a'.repeat(40)]: {
+          oid: 'a'.repeat(40),
+          author: { name: 'Ada', email: 'ada@example.com', time: 1_700_000_000, offset: 0 },
+          summary: 'first',
+          filename: 'a.c',
+        },
+      },
+    } as unknown as NonNullable<typeof diff.blame>;
+    diff.text = 'one\ntwo\nthree\n';
+    const asked: [number, number][] = [];
+    diff.historyOfLines = async (a: number, b: number) => {
+      asked.push([a, b]);
+    };
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+
+    const numbers = view.container.querySelectorAll('table.blame td.no');
+    // Not `.pick`: that is the line-staging button's class, and its full width pushed the
+    // code column a quarter of the pane to the right in the real window.
+    expect(numbers[0]?.classList.contains('pick')).toBe(false);
+    await fireEvent.click(numbers[2] as HTMLElement);
+    await fireEvent.click(numbers[0] as HTMLElement, { shiftKey: true });
+    expect(view.container.querySelectorAll('tr.ranged')).toHaveLength(3);
+    expect(view.container.querySelector('.picked')?.textContent).toContain('lines 1–3 picked');
+
+    const go = view.container.querySelector('.picked .go') as HTMLButtonElement;
+    expect(go.textContent).toContain('History of these lines');
+    await fireEvent.click(go);
+    expect(asked).toEqual([[1, 3]]);
+
+    // A second click on a single picked line lets it go.
+    await fireEvent.click(view.container.querySelector('.picked button[aria-label]') as HTMLElement);
+    await fireEvent.click(numbers[1] as HTMLElement);
+    expect(view.container.querySelector('.picked .go')?.textContent).toContain('this line');
+    await fireEvent.click(numbers[1] as HTMLElement);
+    // The bar stays, saying how to pick, so nothing below it moves.
+    expect(view.container.querySelector('.picked .go')).toBeNull();
+    expect(view.container.querySelector('.picked')?.textContent).toContain('Pick a line number');
+  });
+
+  it('keeps the picked-lines bar one height, hint or pick', () => {
+    // happy-dom lays nothing out, so the rule is what is checked: a height set, not a minimum
+    // its contents can grow past, and a hint that cannot wrap onto a second line.
+    const rules = [...document.styleSheets]
+      .flatMap((sheet) => [...(sheet.cssRules ?? [])])
+      .map((r) => r.cssText);
+    expect(rules.find((t) => /\.picked[^{ ]*\s*\{[^}]*\bheight:\s*30px/u.test(t))).toBeDefined();
+    expect(rules.find((t) => /\.picked[^{]*>\s*span[^{]*\{[^}]*white-space:\s*nowrap/u.test(t))).toBeDefined();
+  });
+
   it('shows a blame that failed rather than waiting on it for ever', () => {
     const diff = new DiffState(new ViewsState());
     diff.path = 'vendor/sub';

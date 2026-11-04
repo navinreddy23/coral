@@ -42,6 +42,42 @@ pub fn merge_requests_url(host: &Host, per_page: u32) -> String {
 }
 
 #[must_use]
+pub fn issue_url(host: &Host, iid: u64) -> String {
+    format!(
+        "{}/projects/{}/issues/{iid}",
+        api_base(host),
+        project_id(host)
+    )
+}
+
+#[derive(Deserialize)]
+struct WireIssue {
+    iid: u64,
+    title: String,
+    state: String,
+    web_url: String,
+}
+
+/// Parses one issue.
+///
+/// # Errors
+/// [`HostingError::Malformed`] when the body is not an issue.
+pub fn parse_issue(body: &[u8]) -> Result<crate::issue::Issue, HostingError> {
+    let w: WireIssue =
+        serde_json::from_slice(body).map_err(|e| HostingError::Malformed(e.to_string()))?;
+    Ok(crate::issue::Issue {
+        number: w.iid,
+        title: w.title,
+        state: if w.state == "closed" {
+            crate::issue::IssueState::Closed
+        } else {
+            crate::issue::IssueState::Open
+        },
+        web_url: w.web_url,
+    })
+}
+
+#[must_use]
 pub fn create_url(host: &Host) -> String {
     format!(
         "{}/projects/{}/merge_requests",

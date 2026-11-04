@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../state/locale.svelte';
   import { tick, untrack } from 'svelte';
   import Icon from './Icon.svelte';
   import Splitter from './Splitter.svelte';
@@ -29,6 +30,8 @@
     onCommit,
     sections,
     locks = new Map(),
+    onDraft = null,
+    drafting = false,
   }: {
     worktree: WorktreeState;
     /**
@@ -36,6 +39,9 @@
      * the selection moves off the working copy and a half-written message must survive that.
      */
     commit: CommitState;
+    /** Drafts a message with Claude, when that is turned on; null hides the button. */
+    onDraft?: (() => void) | null;
+    drafting?: boolean;
     /** What the changes are on, which is what the header names. */
     branch: string | null;
     /** Files locked on the LFS server, by path. */
@@ -205,15 +211,16 @@
 <div class="panel" bind:clientHeight={panelPx}>
   <header>
     <span class="count">
-      {worktree.dirty ? worktree.status?.entries.length ?? 0 : 'No'} file
-      change{(worktree.status?.entries.length ?? 0) === 1 ? '' : 's'}
+      {worktree.dirty
+        ? t('staging.fileChanges', { n: worktree.status?.entries.length ?? 0 })
+        : t('staging.noFileChanges')}
     </span>
     {#if branch}
-      <span class="on">on</span><span class="branch" title={branch}>{branch}</span>
+      <span class="on">{t('staging.on')}</span><span class="branch" title={branch}>{branch}</span>
     {/if}
     <div class="toggle">
-      <button class:on={grouping === 'path'} onclick={() => onGrouping('path')}>Path</button>
-      <button class:on={grouping === 'tree'} onclick={() => onGrouping('tree')}>Tree</button>
+      <button class:on={grouping === 'path'} onclick={() => onGrouping('path')}>{t('staging.path')}</button>
+      <button class:on={grouping === 'tree'} onclick={() => onGrouping('tree')}>{t('staging.tree')}</button>
     </div>
     <!--
       Trailing, and last. It is the only control in this panel that takes something away, and
@@ -266,26 +273,26 @@
         <span class="caret">
           <Icon name={closed.unstaged ? 'chevronRight' : 'chevronDown'} size={13} />
         </span>
-        <span class="title">Unstaged files</span>
+        <span class="title">{t('staging.unstaged')}</span>
         <span class="tally">({worktree.unstaged.length})</span>
       </button>
       {#if !closed.unstaged && grouping === 'tree' && worktree.unstaged.length > 0}
         <button
           class="expand"
           onclick={() => (anyClosed ? expandAll('unstaged') : collapseAll('unstaged'))}
-        >{anyClosed ? 'Expand all' : 'Collapse all'}</button>
+        >{anyClosed ? t('staging.expandAll') : t('staging.collapseAll')}</button>
       {/if}
       {#if worktree.unstaged.length > 0}
         <button
           class="all"
           onclick={() => worktree.stage(worktree.unstaged.map((e) => e.path), true)}
-        >Stage all changes</button>
+        >{t('staging.stageAll')}</button>
       {/if}
     </h3>
     {#if !closed.unstaged}
     <div class="list" id="staging-unstaged">
     {#if worktree.unstaged.length === 0}
-      <p class="empty">Nothing unstaged.</p>
+      <p class="empty">{t('staging.nothingUnstaged')}</p>
     {:else if grouping === 'tree'}
       <Changes
         nodes={unstagedTree}
@@ -315,7 +322,7 @@
               <span class="name">{e.path}</span>
               <LockMark lock={locks.get(e.path)} />
             </button>
-            <button class="act" title="Stage it" onclick={() => worktree.stage([e.path], true)}>+</button>
+            <button class="act" title={t('staging.stageIt')} onclick={() => worktree.stage([e.path], true)}>+</button>
           </li>
         {/each}
       </ul>
@@ -359,20 +366,20 @@
         <span class="caret">
           <Icon name={closed.staged ? 'chevronRight' : 'chevronDown'} size={13} />
         </span>
-        <span class="title">Staged files</span>
+        <span class="title">{t('staging.staged')}</span>
         <span class="tally">({worktree.staged.length})</span>
       </button>
       {#if worktree.staged.length > 0}
         <button
           class="all"
           onclick={() => worktree.stage(worktree.staged.map((e) => e.path), false)}
-        >Unstage all changes</button>
+        >{t('staging.unstageAll')}</button>
       {/if}
     </h3>
     {#if !closed.staged}
     <div class="list" id="staging-staged">
     {#if worktree.staged.length === 0}
-      <p class="empty">Nothing staged. A commit needs something in here.</p>
+      <p class="empty">{t('staging.nothingStaged')}</p>
     {:else if grouping === 'tree'}
       <Changes
         nodes={stagedTree}
@@ -402,7 +409,7 @@
               <span class="name">{e.path}</span>
               <LockMark lock={locks.get(e.path)} />
             </button>
-            <button class="act" title="Unstage it" onclick={() => worktree.stage([e.path], false)}>−</button>
+            <button class="act" title={t('staging.unstageIt')} onclick={() => worktree.stage([e.path], false)}>−</button>
           </li>
         {/each}
       </ul>
@@ -443,19 +450,29 @@
         <span class="caret">
           <Icon name={closed.compose ? 'chevronRight' : 'chevronDown'} size={13} />
         </span>
-        Commit message
+        {t('staging.compose')}
       </button>
     </h3>
     {#if !closed.compose}
     <div class="fields" id="staging-compose">
-    <label class="amend">
-      <input type="checkbox" bind:checked={draft.amend} />
-      Amend the previous commit
-    </label>
+    <div class="above">
+      <label class="amend">
+        <input type="checkbox" bind:checked={draft.amend} />
+        {t('staging.amend')}
+      </label>
+      {#if onDraft !== null}
+        <button
+          class="draft"
+          disabled={drafting || total === 0}
+          onclick={onDraft}
+          title="Write a message for what is staged with Claude, for you to read and change"
+        >{drafting ? t('staging.drafting') : t('staging.draft')}</button>
+      {/if}
+    </div>
     <div class="field">
       <input
         class="summary"
-        placeholder="Commit summary"
+        placeholder={t('staging.summary')}
         bind:this={summaryField}
         bind:value={draft.summary}
       />
@@ -464,28 +481,37 @@
         {LIMIT - draft.summary.length}
       </span>
     </div>
-    <textarea class="description" rows="3" placeholder="Description" bind:value={draft.description}
+    <textarea class="description" rows="3" placeholder={t('staging.description')} bind:value={draft.description}
     ></textarea>
     </div>
     {/if}
     <button class="commit" disabled={!canCommit} onclick={onCommit}>
       <!-- A disabled button says what is missing rather than what it would have done. -->
       {#if total === 0 && !draft.amend}
-        Stage something to commit
+        {t('staging.needsStaged')}
       {:else if draft.summary.trim().length === 0}
-        Write a summary to commit
+        {t('staging.needsSummary')}
       {:else if draft.templated}
-        Fill in the template to commit
+        {t('staging.needsTemplate')}
       {:else if draft.amend}
-        Amend the previous commit
+        {t('staging.amend')}
       {:else}
-        Commit {total} file{total === 1 ? '' : 's'}
+        {t('staging.commitFiles', { n: total })}
       {/if}
     </button>
   </div>
 </div>
 
 <style>
+  .above { display: flex; align-items: center; gap: var(--space-2); }
+  .above .amend { flex: 1; }
+  .draft {
+    flex: 0 0 auto; font: inherit; font-size: var(--text-sm); cursor: pointer; white-space: nowrap;
+    padding: 1px var(--space-2); background: var(--bg-1); color: var(--fg-1);
+    border: 1px solid var(--border-strong); border-radius: var(--radius-1);
+  }
+  .draft:hover:not(:disabled) { background: var(--bg-2); color: var(--fg-0); }
+  .draft:disabled { opacity: 0.6; cursor: default; }
   /*
    * The whole height, and none of it wasted: the two lists take what is left after the header
    * and the commit box, half each, and scroll inside themselves. Before this the panel was a

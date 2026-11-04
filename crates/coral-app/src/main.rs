@@ -2,9 +2,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use coral_app_lib::{
-    actions, activity, avatar, bisect, blob, commands, conflicts, experimental, gitignore, graph,
-    hosting, lfs, notes, profile, recent, reflog, remotes, scope, search, signing, ssh, tabs,
-    template, terminal, transfer, update, version, watcher,
+    actions, activity, assist, avatar, bisect, blob, commands, conflicts, experimental, gitignore,
+    graph, hosting, lfs, notes, profile, recent, reflog, remotes, repoconfig, scope, search,
+    signing, ssh, tabs, template, terminal, tool, transfer, update, version, watcher,
 };
 
 fn main() {
@@ -97,6 +97,7 @@ fn load_state(app: &tauri::App) {
     let settings = experimental::Experimental::load(dir.join("settings.json"));
     settings.apply();
     app.manage(settings);
+    app.manage(tool::Tools::load(dir.join("tools.json")));
 }
 
 /// Builds and runs the window.
@@ -150,6 +151,10 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         activity::activity_clear,
         experimental::experimental_git,
         experimental::experimental_set_git,
+        assist::assist_read,
+        assist::assist_set,
+        assist::assist_set_key,
+        assist::assist_draft,
         graph::repo_submodules,
         graph::repo_worktrees,
         graph::submodule_revision,
@@ -168,6 +173,24 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         graph::worktree_diff,
         graph::file_blame,
         graph::file_history,
+        graph::line_history,
+        graph::stage_edited,
+        repoconfig::repo_config,
+        repoconfig::repo_set_rerere,
+        repoconfig::repo_set_untracked_cache,
+        repoconfig::repo_set_fsmonitor,
+        repoconfig::repo_set_sparse,
+        repoconfig::repo_disable_sparse,
+        repoconfig::repo_folders,
+        repoconfig::repo_set_tracker,
+        commands::window_zoom,
+        tool::tools_read,
+        tool::tools_set_editor,
+        tool::tools_set_actions,
+        tool::action_run,
+        tool::open_in_editor,
+        tool::open_difftool,
+        tool::open_mergetool,
         graph::file_text,
         search::search_commits,
         search::stop_search,
@@ -200,6 +223,9 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         conflicts::resolve_conflict,
         conflicts::operation_step,
         hosting::hosting_status,
+        hosting::hosting_declare,
+        hosting::hosting_issue,
+        hosting::hosting_everywhere,
         hosting::hosting_login,
         hosting::hosting_logout,
         hosting::hosting_pull_requests,

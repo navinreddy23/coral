@@ -1,5 +1,116 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **In changes**, a button in the find box that searches what each commit added or removed
+  rather than what it says about itself. It writes the `code:` qualifier the box already read,
+  warns that it reads every diff, counts the seconds while it runs and can be stopped without
+  losing the query.
+- `coral find`, the find box from the command line, qualifiers included.
+- **History of some lines.** In Blame, click a line number and Shift-click another, and
+  "History of these lines" lists only the commits that changed them, followed back across
+  renames and moves the way `git log -L` follows them. "Whole file" goes back.
+  `coral log --path F --lines 12,20` is the same from the command line.
+- **Fixups.** A commit's menu has "Fix up with the staged changes", which records them as
+  `fixup! <its subject>` and offers to fold the fixup in there and then. The interactive rebase
+  picker folds every `fixup!` and `squash!` commit under the commit it names, as
+  `git rebase --autosquash` does, with a switch to lay them out as plain picks instead.
+  `coral commit --fixup REV` and `--squash REV` are the same from the command line.
+- **Move commits onto another base.** "Move the commits above this onto…" on a commit below
+  the tip replays only the commits above it onto the branch, tag or commit you name, leaving
+  it and everything below it behind: `git rebase --onto`, the way a branch cut from a feature
+  branch moves to main without the feature. `coral rebase ONTO --from REV` from the command
+  line.
+- **Edit a hunk before staging it.** "Edit…" on an unstaged hunk opens its new side as text;
+  what you leave there is what is staged, and the file on disk keeps its own lines — take a
+  debugging line out of the commit without taking it out of the file. The old side is never
+  edited, so an index that has moved since is refused rather than written to.
+  `coral stage --file F --hunk N --edited PATH` from the command line.
+- **Reuse recorded resolutions (rerere).** Preferences has a Repository pane, and its first
+  switch is `rerere.enabled`: git records how each conflict was resolved and resolves it the
+  same way when it comes back. The conflict tool marks a file resolved that way, says the file
+  on disk already holds the answer, and keeps it with one button instead of rebuilding the
+  conflict from the index. `coral rerere --on` / `--off` from the command line.
+- **Status caches.** The Repository pane switches git's untracked cache
+  (`core.untrackedCache`), which on the kernel's working tree takes a full status from about
+  215 ms to about 80 ms, and git's own filesystem monitor (`core.fsmonitor`) where git was
+  built with one; the usual Linux builds are not, and the pane says so rather than offering a
+  switch that would make every status fail. `coral status-cache --untracked on` from the
+  command line.
+- **Sparse checkout.** The Repository pane shows which folders a sparse working tree holds and
+  picks them from the repository's own tree, read a level at a time; a ticked folder brings
+  everything inside it, as git's cone mode does. "Check out everything" undoes it. The clone
+  form can start with only the files at the top, which with file contents on demand is the
+  cheapest way into a repository the size of the kernel's. `coral sparse --set …`,
+  `coral sparse --off`, `coral folders` and `coral clone --sparse` from the command line.
+- **Open a file outside Coral.** Every file's menu has "Open in editor" — the command line set
+  in Preferences, Tools, with `{path}` and `{line}` filled in, or the desktop's own choice
+  when none is set — and "Open in diff tool", which starts git's configured `diff.tool`. A
+  conflicted file can be handed to git's `merge.tool` from the conflict tool, and is staged
+  when the tool says it was resolved. Both run beside the window rather than under it, so a
+  merge tool left open for an hour holds nothing up. `coral difftool`, `coral mergetool` and
+  `coral tools` from the command line.
+- The diff tool and your own actions are read when a repository opens, so the menus offer
+  them straight away rather than after Preferences has been visited.
+- **Your own actions.** Preferences, Tools keeps command lines of your own, each about the
+  repository, a commit or a file, with `{commit}`, `{short}`, `{branch}`, `{file}`, `{path}`
+  and `{repo}` filled in as single arguments. Repository actions are in the command palette;
+  commit and file actions are under Run in those menus, and commit ones in the palette for the
+  commit selected. They run by id, never as a command line the window sends, and never through
+  a shell; what they print goes to the activity log and the end of it to a notice.
+- **Zoom.** `Ctrl =`, `Ctrl -` and `Ctrl 0` scale the whole window, text and lanes together,
+  in steps from 80% to 200% that keep the rows on whole pixels; Preferences, Appearance has the
+  same, remembered. The terminal's text size is set there on its own and changes in place,
+  keeping the scrollback.
+- `.mailmap` is honoured in the graph, the commit details and file history, as it already was
+  in blame: someone who committed under several names and addresses reads as one person, with
+  one picture. On the kernel that is the 989-line map its maintainers keep.
+
+- **Gitea and Forgejo, Bitbucket Cloud and Azure DevOps**, beside GitHub and GitLab: their
+  pull requests in the sidebar with their checks, opened, reviewed, commented on, approved or
+  sent back for changes, and checked out as `pr/N` — from `refs/pull/N/head` on Gitea, and
+  from the request's source branch on Bitbucket and Azure DevOps, which publish no ref for one.
+  Pushing over https with the token works for each, under the user name each one wants.
+  Azure DevOps remotes in all three spellings are understood, and its requests are quoted
+  `!12`, as it writes them. A self-hosted server Coral cannot place by its name — a Gitea or
+  Forgejo can be called anything — shows its name in the status bar with "what is this?",
+  and saying what it runs is remembered for that server (`coral host-kind HOST gitea` from the
+  command line). Bitbucket takes a repository access token, or an Atlassian API token pasted
+  as `email:token`.
+
+- **Issues.** A commit's message links the issues and requests it names, written the way its
+  host writes them — `#12`, `!7` on GitLab and Azure DevOps, `AB#12` for an Azure work item —
+  and lists the issues it names with their titles and whether they are still open; what the
+  summary line names is listed under it, since the summary is what folds the message. `ABC-123`
+  links to an issue tracker kept elsewhere once its address is set in Preferences, Repository
+  (`coral.issueUrl`). "Create a branch from an issue…" in the command palette names the branch
+  for the issue's number and title. `coral issue N` from the command line.
+
+- **Open requests across your tabs.** The Start page lists the pull and merge requests still
+  open in every repository open in a tab, each asked of its own host at once, drafts marked,
+  and says which repositories have no host or no sign-in rather than leaving them out.
+
+- **Draft a commit message with Claude**, off until turned on in Preferences, Experimental,
+  and only on your own Anthropic API key, kept in the keyring. A Draft button beside the
+  message box sends the staged diff and the last few commit subjects, and puts the answer in
+  the box to read and change; a message already being written is not replaced without asking.
+  A staged change too large to send is refused with a sentence rather than cut short. It asks
+  `claude-opus-5-5` by default, with Anthropic's own fallback if that model declines.
+  `coral draft-message` from the command line.
+
+- **Languages, begun.** Preferences, Appearance has a language choice — as the desktop is set,
+  English, or German — and the toolbar, the Preferences navigation, the commit box and the
+  status bar follow it, plurals included. The rest of the window is still English, and says
+  so beside the choice; the German was machine-written and wants a native speaker's reading.
+
+### Fixed
+
+- Applying a patch that is already there says so, instead of reporting a change it never made.
+- A GitLab merge request is written `!42`, as GitLab writes it, rather than `#42`, which there
+  names an issue.
+
 ## 1.3.0
 
 ### Resizing and folding the right panel

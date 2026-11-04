@@ -15,11 +15,13 @@
   } from '../state/terminal.svelte';
   import type { Theme } from '../state/theme.svelte';
 
-  const { session, path, theme, onClose }: {
+  const { session, path, theme, fontSize = 12, onClose }: {
     session: TerminalState;
     path: string;
     theme: Theme;
     onClose: () => void;
+    /** The text size in pixels. Changed in place, keeping the scrollback. */
+    fontSize?: number;
   } = $props();
 
   let host = $state<HTMLDivElement | null>(null);
@@ -89,7 +91,8 @@
       fontFamily: getComputedStyle(document.documentElement)
         .getPropertyValue('--font-mono')
         .trim(),
-      fontSize: 12,
+      // svelte-ignore state_referenced_locally
+      fontSize,
       // Deep enough to scroll back through a long log or a rebase todo.
       scrollback: 10_000,
       cursorBlink: true,
@@ -134,6 +137,15 @@
   $effect(() => {
     void theme;
     if (term) term.options.theme = palette();
+  });
+
+  /** A new size refits the grid and tells the shell how many columns it now has. */
+  $effect(() => {
+    const size = fontSize;
+    if (!term || term.options.fontSize === size) return;
+    term.options.fontSize = size;
+    fit?.fit();
+    void send({ cols: term.cols, rows: term.rows });
   });
 
   /**

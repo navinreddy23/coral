@@ -1,6 +1,6 @@
 <script lang="ts" module>
   /** Which host a remote URL belongs to, as far as a glyph is concerned. */
-  export type HostMarkKind = 'github' | 'gitlab' | 'other';
+  export type HostMarkKind = 'github' | 'gitlab' | 'gitea' | 'bitbucket' | 'azure' | 'other';
 
   /**
    * Recognises a host from a remote URL.
@@ -14,6 +14,13 @@
     const lower = host.toLowerCase();
     if (lower === 'github.com' || lower.startsWith('github.')) return 'github';
     if (lower === 'gitlab.com' || lower.startsWith('gitlab.')) return 'gitlab';
+    if (lower === 'bitbucket.org') return 'bitbucket';
+    if (lower === 'dev.azure.com' || lower === 'ssh.dev.azure.com' || lower.endsWith('.visualstudio.com')) {
+      return 'azure';
+    }
+    if (lower === 'codeberg.org' || lower === 'gitea.com' || lower.startsWith('gitea.') || lower.startsWith('forgejo.')) {
+      return 'gitea';
+    }
     return 'other';
   }
 </script>
@@ -61,6 +68,16 @@
          .99.75a.67.67 0 0 0 .81 0l.99-.75 1.63-1.23 3.31-2.48.01-.01a4.01 4.01 0 0 0
          1.45-4.63Z"
     />
+  {:else if kind === 'gitea'}
+    <!-- A cup with a handle: Coral's own drawing, not the project's mark, for the hosts that
+         run Gitea or Forgejo under any name. -->
+    <path d="M2 4.5h9v5.25A3.25 3.25 0 0 1 7.75 13h-2.5A3.25 3.25 0 0 1 2 9.75Zm9 1h1.25a2 2 0 0 1 0 4H11v-1.5h1.25a.5.5 0 0 0 0-1H11Z" />
+  {:else if kind === 'bitbucket'}
+    <!-- A pail, narrowing to its base. -->
+    <path d="M1.5 3h13l-1.9 10.2a1 1 0 0 1-1 .8H4.4a1 1 0 0 1-1-.8Zm4.6 4.2.5 3h2.8l.5-3Z" />
+  {:else if kind === 'azure'}
+    <!-- Two slanted strokes meeting at the top, after the letter. -->
+    <path d="M6.9 2h2.6L5.2 14H1.5Zm2.9 3.4L14.5 14H6.4l5.3-1.2-2.9-3.5Z" />
   {:else}
     <!-- A cloud, for a host Coral has no picture of. Not a question mark: the remote works
          perfectly well, it is simply not one of the two we can name. -->

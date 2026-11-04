@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../state/locale.svelte';
   import Icon from './Icon.svelte';
   import type { AvatarState } from '../state/avatars.svelte';
   import type { IconName } from './icon';
@@ -7,11 +8,16 @@
   import CommitSigning from './CommitSigning.svelte';
   import Experimental from './Experimental.svelte';
   import Profiles from './Profiles.svelte';
+  import RepoConfig from './RepoConfig.svelte';
   import Ssh from './Ssh.svelte';
   import TerminalSettings from './TerminalSettings.svelte';
+  import ToolSettings from './ToolSettings.svelte';
+  import type { ToolsState } from '../state/tools.svelte';
+  import type { AssistState } from '../state/assist.svelte';
   import type { ExperimentalState } from '../state/experimental.svelte';
   import type { SigningState } from '../state/signing.svelte';
   import type { SshState } from '../state/ssh.svelte';
+  import type { RepoConfigState } from '../state/repoconfig.svelte';
   import type { ProfilesState } from '../state/profiles.svelte';
   import type { ThemeState } from '../state/theme.svelte';
   import type { ViewsState } from '../state/views.svelte';
@@ -23,6 +29,9 @@
     avatars = null,
     signing,
     ssh,
+    repoConfig,
+    tools,
+    assist = null,
     experimental,
     profiles,
     theme,
@@ -42,6 +51,9 @@
     avatars?: AvatarState | null;
     signing: SigningState;
     ssh: SshState;
+    repoConfig: RepoConfigState;
+    tools: ToolsState;
+    assist?: AssistState | null;
     experimental: ExperimentalState;
     profiles: ProfilesState;
     theme: ThemeState;
@@ -82,13 +94,15 @@
    * them, so the rest arrive with the settings they hold.
    */
   const panes = $derived(([
-    { id: 'appearance', label: 'Appearance', icon: 'sun', needsRepository: false },
-    { id: 'profiles', label: 'Profiles', icon: 'blame', needsRepository: false },
-    { id: 'ssh', label: 'SSH', icon: 'shield', needsRepository: true },
-    { id: 'signing', label: 'Commit Signing', icon: 'edit', needsRepository: true },
-    { id: 'terminal', label: 'Terminal', icon: 'terminal', needsRepository: false },
-    { id: 'experimental', label: 'Experimental', icon: 'beaker', needsRepository: false },
-    { id: 'about', label: 'About', icon: 'info', needsRepository: false },
+    { id: 'appearance', label: t('prefs.pane.appearance'), icon: 'sun', needsRepository: false },
+    { id: 'profiles', label: t('prefs.pane.profiles'), icon: 'blame', needsRepository: false },
+    { id: 'ssh', label: t('prefs.pane.ssh'), icon: 'shield', needsRepository: true },
+    { id: 'signing', label: t('prefs.pane.signing'), icon: 'edit', needsRepository: true },
+    { id: 'repository', label: t('prefs.pane.repository'), icon: 'folder', needsRepository: true },
+    { id: 'terminal', label: t('prefs.pane.terminal'), icon: 'terminal', needsRepository: false },
+    { id: 'tools', label: t('prefs.pane.tools'), icon: 'external', needsRepository: false },
+    { id: 'experimental', label: t('prefs.pane.experimental'), icon: 'beaker', needsRepository: false },
+    { id: 'about', label: t('prefs.pane.about'), icon: 'info', needsRepository: false },
   ] satisfies { id: string; label: string; icon: IconName; needsRepository: boolean }[]).filter(
     (pane) => hasRepository || !pane.needsRepository,
   ));
@@ -129,12 +143,12 @@
     side nav, reading as one more thing to open rather than as the way back.
   -->
   <header>
-    <h2>Preferences</h2>
+    <h2>{t('prefs.title')}</h2>
     {#if repoName !== ''}
       <span class="repo" title={repository}>{repoName}</span>
     {/if}
-    <button class="shut" onclick={onClose} title="Close preferences (Esc)">
-      <Icon name="close" size={15} />Close
+    <button class="shut" onclick={onClose} title={t('prefs.closeHint')}>
+      <Icon name="close" size={15} />{t('prefs.close')}
     </button>
   </header>
 
@@ -161,12 +175,16 @@
     />
   {:else if active === 'signing'}
     <CommitSigning {signing} />
+  {:else if active === 'repository'}
+    <RepoConfig {repoConfig} />
   {:else if active === 'ssh'}
     <Ssh {ssh} {onCopied} />
   {:else if active === 'terminal'}
     <TerminalSettings {views} />
+  {:else if active === 'tools'}
+    <ToolSettings {tools} />
   {:else if active === 'experimental'}
-    <Experimental {experimental} {onPickGit} />
+    <Experimental {experimental} {assist} {onPickGit} />
   {:else if active === 'about'}
     <About {onCopied} {updates} />
   {/if}

@@ -42,6 +42,12 @@
   import BisectBar from './BisectBar.svelte';
   import NewRequest from './NewRequest.svelte';
   import Review from './Review.svelte';
+  import type { ActionContext, CustomAction, DiffOf } from '../ipc/commands';
+  import { locale, resolveLanguage } from '../state/locale.svelte';
+  import { stepZoom } from './zoom';
+  import { setZoom } from '../ipc/window';
+  import { forgeOf } from './forge';
+  import { quoteRequest } from './request';
   import { ReviewState } from '../state/review.svelte';
   import { MergeState } from '../state/merge.svelte';
   import RebasePicker from './RebasePicker.svelte';
@@ -59,7 +65,7 @@
   import { repoIdentity } from '../ipc/profiles';
   import type { IdentityScopes } from '../ipc/types';
   import Menu, { type MenuItem } from './Menu.svelte';
-  import HostMark, { hostOf } from './HostMark.svelte';
+  import HostMark, { hostOf, type HostMarkKind } from './HostMark.svelte';
   import RefMark from './RefMark.svelte';
   import Toasts from './Toasts.svelte';
   import Splash from './Splash.svelte';
@@ -71,7 +77,7 @@
   import { ActivityState } from '../state/activity.svelte';
   import { StashesState } from '../state/stashes.svelte';
   import { StartState } from '../state/start.svelte';
-  import { FindState } from '../state/find.svelte';
+  import { FindState, inChanges } from '../state/find.svelte';
   import { BisectState } from '../state/bisect.svelte';
   import { AvatarState } from '../state/avatars.svelte';
   import type { PlacedStash } from '../ipc/stash';
@@ -84,6 +90,10 @@
   import Terminal from './Terminal.svelte';
   import { TerminalState } from '../state/terminal.svelte';
   import { SigningState } from '../state/signing.svelte';
+  import { RepoConfigState } from '../state/repoconfig.svelte';
+  import { ToolsState } from '../state/tools.svelte';
+  import { RequestsState } from '../state/requests.svelte';
+  import { AssistState } from '../state/assist.svelte';
   import { SshState } from '../state/ssh.svelte';
   import { laneColour } from './lane';
   import { baseName, beside, elideRef } from './path';
@@ -249,6 +259,7 @@
     'panel.left', 'panel.detail', 'help', 'undo', 'redo',
     'commit', 'commit.stageAll', 'commit.focus', 'stage.file', 'unstage.file',
     'branch.create', 'fetch.all', 'toolbar', 'filter.focus', 'preferences',
+    'zoom.in', 'zoom.out', 'zoom.reset',
   ]);
 
   function move(delta: number) {
@@ -359,6 +370,9 @@
       case 'branch.create': toolbarAction('branch'); break;
       case 'fetch.all': toolbarAction('fetch'); break;
       case 'toolbar': views.set('toolbar', !views.current.toolbar); break;
+      case 'zoom.in': views.set('zoom', stepZoom(views.current.zoom, 1)); break;
+      case 'zoom.out': views.set('zoom', stepZoom(views.current.zoom, -1)); break;
+      case 'zoom.reset': views.set('zoom', 1); break;
       case 'filter.focus': filterTick += 1; break;
       case 'commit': void recordCommit(false); break;
       case 'commit.stageAll': void recordCommit(true); break;
@@ -587,9 +601,7 @@
   let proposing = $state<string | null>(null);
 
   /** What the host calls one. GitHub says pull, GitLab says merge. */
-  const requestWord = $derived(
-    hosting.view?.host?.kind === 'gitlab' ? 'Merge request' : 'Pull request',
-  );
+  const requestWord = $derived(forgeOf(hosting.view?.host?.kind).request);
 
   /**
    * Branches the host could merge into, by their bare names.
@@ -607,6 +619,10 @@
   ].sort());
   const rebase = new RebaseState();
   const signing = new SigningState();
+  const repoConfig = new RepoConfigState();
+  const tools = new ToolsState();
+  const openRequests = new RequestsState();
+  const assist = new AssistState();
   const ssh = new SshState();
   const toasts = new ToastsState();
   const updates = new UpdateState();
@@ -678,6 +694,8 @@
     lines?: number;
     /** Empty is a valid answer, so the choices are not greyed out without text. */
     optional?: boolean;
+    /** The text is code: kept as typed, in a wide box that does not wrap. */
+    code?: boolean;
     placeholder: string;
     initial: string;
     choices: Choice[];
@@ -2439,6 +2457,25 @@
         },
         {
           kind: 'item',
+          label: 'Move the commits above this onto…',
+          hint: offBranch ?? (where === 'same' ? 'none are above it' : 'it stays'),
+          disabled: where !== 'behind' || actions.busy,
+          worktree: true,
+          run: () => void moveAbove(oid, short),
+        },
+        {
+          kind: 'item',
+          label: 'Fix up with the staged changes',
+          hint: offBranch ?? (worktree.staged.length === 0
+            ? 'nothing is staged'
+            : `${worktree.staged.length} staged ${worktree.staged.length === 1 ? 'file' : 'files'}`),
+          disabled: offBranch !== null || worktree.staged.length === 0 || actions.busy,
+          worktree: true,
+          run: () => void fixupInto(oid, summary),
+        },
+        ...actionItems('commit', { commit: oid, branch: headName }),
+        {
+          kind: 'item',
           label: 'Note on this commit…',
           hint: 'kept beside it, not in it',
           run: () => void editNote(oid),
@@ -2696,6 +2733,123 @@
     );
     if (message === null || message.trim() === '') return;
     await act({ kind: 'rewrite', rev: oid, how: 'reword', message: message.trim() });
+  }
+
+  /**
+   * A branch to work on an issue in, named for it: its number and the first words of its
+   * title, read from the host, which the name can still be changed from.
+   */
+  async function branchFromIssue() {
+    const typed = await askText('Create a branch from an issue', 'The issue\'s number.', '');
+    const number = Number((typed ?? '').replace(/^\D+/u, ''));
+    if (!Number.isInteger(number) || number <= 0) return;
+    const found = await hosting.issue(number);
+    if (found === null) {
+      toasts.push('error', `Could not read issue ${number}`, 'It may not exist, or the token cannot see it.');
+      return;
+    }
+    const name = await askText(
+      `Branch for: ${found.issue.title}`,
+      'Created at HEAD and checked out.',
+      found.branch,
+    );
+    if (name === null || name.trim() === '') return;
+    await act({ kind: 'branchCreate', name: name.trim(), at: null, checkout: true });
+  }
+
+  /**
+   * Puts a drafted message in the commit box, for the user to read and change before anything
+   * is committed. A message already being written is not replaced without asking.
+   */
+  async function draftMessage() {
+    if (!info) return;
+    const path = info.path;
+    if (commitDraft.summary.trim() !== '' || commitDraft.description.trim() !== '') {
+      const replace = await confirmThat(
+        'Replace the message being written?',
+        'The draft takes the place of what is in the summary and description now.',
+      );
+      if (!replace) return;
+    }
+    const made = await assist.draft(path);
+    if (made === null) {
+      toasts.push('error', 'No draft', assist.error ?? '');
+      return;
+    }
+    if (info?.path !== path) return;
+    commitDraft.summary = made.summary;
+    commitDraft.description = made.body;
+  }
+
+  /**
+   * Asks what an unrecognised server runs and remembers the answer, then offers to sign in.
+   *
+   * A self-hosted Gitea or Forgejo can be called anything, and nothing in its name says what
+   * it is; GitHub Enterprise and GitLab can be installed under any name too.
+   */
+  async function placeHost() {
+    const server = hosting.view?.unplaced;
+    if (!server) return;
+    const { choice } = await ask({
+      title: `What runs ${server}?`,
+      detail:
+        'Coral can list its pull requests and their checks once it knows. The answer is kept for this server, and a remote on any other is still told apart by its name.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [
+        { id: 'gitea', label: 'Gitea or Forgejo', primary: true },
+        { id: 'gitlab', label: 'GitLab' },
+        { id: 'github', label: 'GitHub Enterprise' },
+      ],
+    });
+    if (choice !== 'gitea' && choice !== 'gitlab' && choice !== 'github') return;
+    await hosting.declare(choice);
+    if (hosting.error !== null) {
+      toasts.push('error', `Could not remember what ${server} is`, hosting.error);
+      return;
+    }
+    if (hosting.view?.host && hosting.view.token === 'none') showHostAccount = true;
+  }
+
+  /**
+   * Replays the current branch's commits above `oid` onto another base, leaving `oid` and what
+   * is below it behind: a branch cut from a feature branch, moved to main without the feature.
+   */
+  async function moveAbove(oid: string, short: string) {
+    const branch = headName ?? 'HEAD';
+    const onto = await askText(
+      `Move ${branch}'s commits above ${short} onto…`,
+      `A branch, tag or commit. ${short} and everything below it stay where they are; the commits above it are replayed on top of what you name, so their object ids change.`,
+      '',
+    );
+    if (onto === null || onto.trim() === '') return;
+    await act({ kind: 'rebase', onto: onto.trim(), from: oid });
+  }
+
+  /**
+   * Commits what is staged as a fixup of an older commit, then offers to fold it in.
+   *
+   * The two halves stay separate because they are: a fixup is an ordinary commit that can be
+   * pushed for review as it is, and folding it in rewrites everything above its target.
+   */
+  async function fixupInto(oid: string, summary: string) {
+    if (!info) return;
+    const path = info.path;
+    await worktree.fixup(oid);
+    if (worktree.error !== null) {
+      toasts.push('error', 'The fixup was not made', worktree.error);
+      return;
+    }
+    const { choice } = await ask({
+      title: 'Fixup recorded',
+      detail: `fixup! ${summary}\n\nFold it into that commit now? Everything above the commit is replayed, so their object ids change.`,
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'fold', label: 'Fold it in now', primary: true }],
+    });
+    if (choice === 'fold' && info?.path === path) await rebase.load(path, `${oid}~1`);
   }
 
   async function confirmDrop(oid: string, summary: string) {
@@ -3325,11 +3479,69 @@
   }
 
   /** A file in a commit's list: copy its path, or stop tracking it at the checked-out commit. */
+  /** Runs one of the user's own actions and says how it went. */
+  async function runAction(action: CustomAction, context: ActionContext) {
+    const ran = await tools.run(action.id, context);
+    if (typeof ran === 'string') {
+      toasts.push('error', `Could not run ${action.name}`, ran);
+      return;
+    }
+    toasts.push(ran.success ? 'ok' : 'error', ran.success ? `${action.name} finished` : `${action.name} failed`, ran.output);
+  }
+
+  /** A "Run" submenu of the actions about one kind of thing, or nothing when there are none. */
+  function actionItems(on: CustomAction['on'], context: ActionContext): MenuItem[] {
+    const own = tools.actionsOn(on);
+    if (own.length === 0) return [];
+    return [
+      { kind: 'separator' },
+      {
+        kind: 'submenu',
+        label: 'Run',
+        items: own.map((action) => ({
+          kind: 'item' as const,
+          label: action.name,
+          run: () => void runAction(action, context),
+        })),
+      },
+    ];
+  }
+
+  /** Says why a program outside Coral did not start, when it did not. */
+  async function launched(started: Promise<string | null>, what: string) {
+    const why = await started;
+    if (why !== null) toasts.push('error', `Could not start the ${what}`, why);
+  }
+
+  /** Open in the editor, and in git's diff tool when one is set, for a file's menus. */
+  function toolItems(file: string, of: DiffOf | null): MenuItem[] {
+    const items: MenuItem[] = [
+      {
+        kind: 'item',
+        label: 'Open in editor',
+        hint: tools.view?.settings.editor ? undefined : "the desktop's choice",
+        worktree: true,
+        run: () => void launched(tools.edit(file), 'editor'),
+      },
+    ];
+    if (of !== null) {
+      items.push({
+        kind: 'item',
+        label: 'Open in diff tool',
+        hint: tools.diff ?? 'set diff.tool in git',
+        disabled: tools.diff === null,
+        run: () => void launched(tools.diffTool(file, of), 'diff tool'),
+      });
+    }
+    return items;
+  }
+
   async function commitFileMenu(event: MouseEvent, file: string) {
     event.preventDefault();
     // Read before the await, as every other menu does: the event is recycled.
     const at = { x: event.clientX, y: event.clientY };
     const atHead = selection.detail !== null && selection.detail.commit.oid === headOid;
+    const rev = selection.detail?.commit.oid ?? null;
     const items: MenuItem[] = [
       {
         kind: 'item',
@@ -3337,6 +3549,9 @@
         hint: file,
         run: () => void copyName(file),
       },
+      { kind: 'separator' },
+      ...toolItems(file, rev === null ? null : { kind: 'commit', rev }),
+      ...actionItems('file', { file, commit: rev, branch: headName }),
     ];
     if (atHead) {
       items.push(
@@ -3408,6 +3623,11 @@
         label: 'Open the diff',
         run: () => openWorkingFile(entry.path, staged),
       },
+      ...toolItems(
+        entry.path,
+        entry.worktree === 'untracked' ? null : { kind: staged ? 'staged' : 'unstaged' },
+      ),
+      ...actionItems('file', { file: entry.path, branch: headName }),
       { kind: 'separator' },
       staged
         ? {
@@ -3514,6 +3734,35 @@
    * Discarding asks first: it is the only one of the three that throws work away, and a hunk
    * is small enough to click by accident.
    */
+  /**
+   * Stages one hunk as rewritten, not as the working tree has it: drop a debugging line, fix a
+   * typo in what is about to be recorded, keep the file on disk as it is.
+   */
+  async function editHunk(hunk: number, text: string) {
+    const file = diff.path;
+    if (!info || file === null || diff.atCommit !== null) return;
+    const lines = text.split('\n').length;
+    const { choice, text: edited } = await ask({
+      title: `Stage this hunk of ${file.split('/').at(-1) ?? file} as edited`,
+      detail:
+        'What is staged is what you leave here. The file on disk keeps its own lines, so the edit shows as an unstaged change afterwards. Ctrl+Enter stages.',
+      asksText: true,
+      lines: Math.min(24, Math.max(6, lines + 1)),
+      code: true,
+      optional: true,
+      placeholder: '',
+      initial: text,
+      choices: [{ id: 'stage', label: 'Stage as edited', primary: true }],
+    });
+    if (choice !== 'stage') return;
+    await worktree.stageEdited(file, hunk, edited, diff.reading);
+    if (worktree.error) {
+      toasts.push('error', 'Could not stage that', worktree.error);
+      return;
+    }
+    await reloadDiff(info.path);
+  }
+
   async function applyPart(
     part: 'stage' | 'unstage' | 'discard',
     hunk: number,
@@ -3736,6 +3985,18 @@
     // all, and the kernel carries five thousand of them.
     for (const r of refs.groups.tags) {
       out.push({ id: `co:${r.name}`, label: `Checkout tag ${r.short}`, group: 'Tag', run: () => void act({ kind: 'checkout', rev: r.short }) });
+    }
+    if (hosting.available) {
+      out.push({ id: 'issue-branch', label: 'Create a branch from an issue…', group: 'Branch', run: () => void branchFromIssue() });
+    }
+    for (const action of tools.actionsOn('repository')) {
+      out.push({ id: `action:${action.id}`, label: action.name, group: 'Your actions', run: () => void runAction(action, { branch: headName }) });
+    }
+    const picked = selection.detail?.commit.oid ?? null;
+    if (picked !== null) {
+      for (const action of tools.actionsOn('commit')) {
+        out.push({ id: `action:${action.id}`, label: `${action.name}: ${picked.slice(0, 8)}`, group: 'Your actions', run: () => void runAction(action, { commit: picked, branch: headName }) });
+      }
     }
     return out;
   });
@@ -4075,6 +4336,11 @@
       // Deliberately not awaited: a host that is slow or unreachable must not hold up the
       // window, and the section simply appears when the answer arrives.
       void hosting.load(info.path);
+      // For the file and commit menus, which offer the diff tool and the user's own actions
+      // only when they exist. A few config reads, and nothing waits on them.
+      void tools.load(info.path);
+      // Its tracker is what an `ABC-123` in a message links to.
+      void repoConfig.load(info.path);
     } catch (e) {
       // Nothing is open. The tab is named for the path that failed, and the last repository's
       // rows under that name are worse than an empty pane with the reason across the top:
@@ -4274,6 +4540,30 @@
     }
   }
 
+  // Whether to offer a draft is a setting of the app's, read once; the pane changes it in place.
+  $effect(() => {
+    void assist.load();
+  });
+
+  // The Start page asks every tab's host what is open each time it is shown, which is when
+  // somebody is choosing what to work on next; nothing waits on the answer.
+  $effect(() => {
+    if (showStart && tabs.session.tabs.length > 0) void openRequests.load();
+  });
+
+  // The window's language, and the document's, which is what screen readers and the
+  // spelling check in a text box go by.
+  $effect(() => {
+    locale.language = resolveLanguage(views.current.language, navigator.languages ?? []);
+    document.documentElement.lang = locale.language;
+  });
+
+  // The window's scale, applied whenever it changes and once at start, since the webview
+  // starts at its own and knows nothing of the stored one.
+  $effect(() => {
+    void setZoom(views.current.zoom);
+  });
+
   // Switching tabs loads that repository; nothing else in the shell needs to know.
   let loadedPath = $state('');
   $effect(() => {
@@ -4298,6 +4588,8 @@
     const path = loadedPath;
     void signing.load(path);
     void ssh.load(path);
+    void repoConfig.load(path);
+    void tools.load(path);
     // Read here rather than when a repository opens: it is only ever shown on this page, and
     // it is two git invocations nobody waiting for a graph should pay for.
     void repoIdentity(path)
@@ -4653,7 +4945,7 @@
       items: [
         {
           kind: 'item',
-          label: `Check out #${pr.number} locally`,
+          label: `Check out ${quoteRequest(hosting.view?.host?.kind, pr.number)} locally`,
           run: () => void act({ kind: 'checkoutProposal', number: pr.number }),
         },
         {
@@ -5003,7 +5295,7 @@
    * From the remote's URL, not from its name: a remote called `origin` says nothing about who
    * serves it, and a repository can have one on each host.
    */
-  function hostFor(short: string): 'github' | 'gitlab' | 'other' {
+  function hostFor(short: string): HostMarkKind {
     const remote = remoteOf(short);
     const url = remotes.list.find((r) => r.name === remote)?.fetchUrl ?? '';
     return url === '' ? 'other' : hostOf(url);
@@ -5115,6 +5407,9 @@
       {avatars}
       {signing}
       {ssh}
+      {repoConfig}
+      {tools}
+      {assist}
       {experimental}
       {profiles}
       {theme}
@@ -5160,6 +5455,8 @@
   {#if onStart}
     <Start
       start={startPage}
+      requests={tabs.session.tabs.length === 0 ? null : openRequests}
+      onOpenRequest={(url) => void openInBrowser(url)}
       sshKeys={ssh.keys}
       defaultSshKey={profiles.current.settings.ssh.privateKey ?? ''}
       onOpen={(path, notes) => void openFromStart(path, notes)}
@@ -5199,7 +5496,7 @@
     {#if views.current.sidebar === 'rail'}
       <Rail
         counts={railCounts}
-        host={hosting.view?.host?.kind === 'gitlab' ? 'gitlab' : hosting.view?.host?.kind === 'github' ? 'github' : 'other'}
+        host={hosting.view?.host?.kind ?? 'other'}
         onOpen={openSidebarAt}
       />
     {/if}
@@ -5227,7 +5524,8 @@
         pullRequests={hosting.pullRequests}
         checks={hosting.checks}
         onOpenChecks={(pr, found) => void openInBrowser(found.url ?? pr.webUrl)}
-        pullRequestLabel={hosting.view?.host?.kind === 'gitlab' ? 'Merge requests' : 'Pull requests'}
+        pullRequestLabel={forgeOf(hosting.view?.host?.kind).requests}
+        quote={(n) => quoteRequest(hosting.view?.host?.kind, n)}
         focusFilter={filterTick}
         reveal={revealSection}
         collapsed={views.current.collapsed}
@@ -5276,7 +5574,8 @@
         {review}
         pr={reviewing}
         label={requestWord}
-        canRequestChanges={hosting.view?.host?.kind === 'github'}
+        canRequestChanges={forgeOf(hosting.view?.host?.kind).requestsChanges}
+        quoted={quoteRequest(hosting.view?.host?.kind, reviewing.number)}
         onClose={() => (reviewing = null)}
       />
     {/if}
@@ -5303,7 +5602,7 @@
         }}
         onClose={() => (proposing = null)}
         onOpened={(made) => {
-          toasts.push('ok', `${requestWord} opened`, `#${made.number} ${made.title}`);
+          toasts.push('ok', `${requestWord} opened`, `${quoteRequest(hosting.view?.host?.kind, made.number)} ${made.title}`);
           void hosting.load(info?.path ?? '');
         }}
       />
@@ -5321,13 +5620,15 @@
            takes the main pane outright rather than sitting behind the graph. -->
       <MergeTool
         {merge}
+        mergeTool={tools.merge}
+        onMergeTool={(file) => void launched(tools.mergeTool(file), 'merge tool')}
         onDone={reloadAll}
         onRefused={async (message) => needsIdentity(message) && (await sayWhoYouAre())}
         message={() => commitDraft.edited()}
         onMessageUsed={() => commitDraft.clear()}
       />
     {:else if diff.path !== null}
-      <DiffView {diff} onClose={() => diff.close()} onPart={applyPart} />
+      <DiffView {diff} onClose={() => diff.close()} onPart={applyPart} onEdit={editHunk} />
     {/if}
     <div class="plot" class:hidden={diff.path !== null || merge.inProgress}>
       <!-- Above the list it is about, and above the column handles, which run full height. -->
@@ -5387,9 +5688,31 @@
             placeholder="Message, author, path or id — code: after: before:"
             aria-label="Find a commit"
           />
+          <!--
+            The same thing as typing code:, made findable. Its title carries the cost, because
+            reading every diff on a history this size is minutes where the other passes are
+            seconds.
+          -->
+          <button
+            class="changes"
+            class:on={find.readsChanges}
+            aria-pressed={find.readsChanges}
+            onclick={() => {
+              if (!info) return;
+              find.type(info.path, inChanges(find.query, !find.readsChanges));
+              findField?.focus();
+            }}
+            title={find.readsChanges
+              ? 'Searching what each commit changed. Click to search messages, authors and paths again'
+              : 'Search what each commit added or removed instead. Reads every diff, so on a long history it takes minutes'}
+          >
+            <Icon name="diff" size={13} /> In changes
+          </button>
           <span class="tally" aria-live="polite">
             {#if find.searching}
-              {find.readsChanges ? 'reading changes…' : 'searching…'}
+              {find.readsChanges ? 'reading changes…' : 'searching…'}{find.seconds >= 2 ? ` ${find.seconds} s` : ''}
+            {:else if find.stopped}
+              stopped
             {:else if find.query.trim() === '' || find.error !== null}
               &nbsp;
             {:else if find.matches.length === 0}
@@ -5408,6 +5731,11 @@
             disabled={find.matches.length === 0}
             title="Next match">↓</button
           >
+          {#if find.searching && find.seconds >= 2}
+            <button class="halt" onclick={() => find.stop()} title="Stop this search and keep what was typed">
+              Stop
+            </button>
+          {/if}
           <button onclick={() => find.close()} title="Close the search">
             <Icon name="close" size={13} />
           </button>
@@ -5650,6 +5978,8 @@
             onDiscard={(entries) => void discardChanges(entries)}
             onFileMenu={fileMenu}
             onCommit={() => void recordCommit(false)}
+            onDraft={assist.ready ? () => void draftMessage() : null}
+            drafting={assist.drafting}
             locks={lfs.byPath}
             {sections}
           />
@@ -5665,6 +5995,10 @@
           onFolderMenu={commitFolderMenu}
           locks={lfs.byPath}
           picture={detailPicture}
+          host={hosting.view?.host ?? null}
+          tracker={repoConfig.config?.tracker ?? null}
+          readIssue={hosting.available ? (n) => hosting.issue(n) : null}
+          onOpenUrl={(url) => void openInBrowser(url)}
           repo={info?.path ?? null}
           compare={selection.pair === null
             ? null
@@ -5718,6 +6052,7 @@
               session={terminal}
               path={repo}
               theme={theme.current}
+              fontSize={views.current.terminalFontSize}
               onClose={() => (terminal.open = false)}
             />
           </div>
@@ -5740,6 +6075,7 @@
       host={hosting.view}
       onLogs={() => openActivity()}
       onHost={() => (showHostAccount = true)}
+      onPlace={() => void placeHost()}
       update={updates.available ? (updates.result?.latest ?? null) : null}
       onUpdate={() => openPreferences('about')}
       report={actions.report}
@@ -5774,6 +6110,7 @@
     detail={question.detail}
     asksText={question.asksText}
     lines={question.lines ?? 1}
+    code={question.code ?? false}
     optional={question.optional ?? false}
     placeholder={question.placeholder}
     initial={question.initial}
@@ -5892,6 +6229,8 @@
   }
   .find button:hover:not(:disabled) { background: var(--bg-2); color: var(--fg-0); }
   .find button:disabled { color: var(--fg-2); cursor: default; }
+  .find button.changes { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .find button.changes.on { background: var(--accent-soft); color: var(--fg-0); border-color: var(--accent); }
   /* Its own line, so a long refusal never squeezes the field it is about. */
   .find .problem { flex: 1 0 100%; margin: 0; color: var(--danger); font-size: var(--text-sm); }
 

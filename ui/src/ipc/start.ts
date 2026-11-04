@@ -51,6 +51,8 @@ export interface CloneWanted {
   history: CloneHistory;
   /** How many commits to take. Only read when `history` is shallow. */
   depth: number;
+  /** Check out only the files at the top, for folders to be picked afterwards. */
+  sparse?: boolean;
 }
 
 /**
@@ -68,6 +70,7 @@ export function repoClone(wanted: CloneWanted): Promise<CloneOutcome> {
       sshKey: wanted.sshKey.trim() || null,
       depth: wanted.history === 'shallow' ? Math.max(1, Math.round(wanted.depth)) : null,
       blobless: wanted.history === 'blobless',
+      sparse: wanted.sparse ?? false,
     },
   });
 }

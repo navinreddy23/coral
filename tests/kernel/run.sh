@@ -357,6 +357,67 @@ scenario_abort() {
     [ -z "$(git -C "$REPO" status --porcelain)" ] && ok "worktree clean after abort" || bad "worktree dirty"
 }
 
+# Scenario 9 — the untracked cache, then a sparse checkout of two folders and back. The cache
+# is measured, not budgeted: what it saves depends on the disk, and the one budget that matters
+# (scenario 2) is already met without it.
+scenario_sparse_and_caches() {
+    echo "9. status caches and sparse checkout"
+    local out start elapsed
+    out="$("$CORAL" --repo "$REPO" --json status-cache --untracked on)"
+    if [ "$(jq -r .result.untrackedCache <<<"$out")" = "true" ] \
+        && [ "$(git -C "$REPO" config --get core.untrackedCache)" = "true" ]; then
+        ok "the untracked cache is on, in the repository's own config"
+    else
+        bad "untracked cache: $(jq -c . <<<"$out")"
+    fi
+    "$CORAL" --repo "$REPO" --json status >/dev/null
+    start=$(date +%s%N)
+    out="$("$CORAL" --repo "$REPO" --json status)"
+    elapsed=$(( ($(date +%s%N) - start) / 1000000 ))
+    if [ "$(jq -r '.result.entries | length' <<<"$out")" -eq 0 ]; then
+        ok "status with the cache took ${elapsed}ms and still finds the tree clean"
+    else
+        bad "status with the cache reports changes on a clean tree"
+    fi
+    "$CORAL" --repo "$REPO" --json status-cache --untracked off >/dev/null
+    if [ "$(git -C "$REPO" config --get core.untrackedCache)" != "true" ]; then
+        ok "and it turns off again"
+    else
+        bad "the untracked cache stayed on"
+    fi
+
+    start=$(date +%s%N)
+    out="$("$CORAL" --repo "$REPO" --json sparse --set kernel Documentation/process)"
+    elapsed=$(( ($(date +%s%N) - start) / 1000000 ))
+    if [ "$(jq -c .result.folders <<<"$out")" = '["Documentation/process","kernel"]' ] \
+        && [ -f "$REPO/Makefile" ] && [ -d "$REPO/kernel" ] && [ ! -e "$REPO/drivers" ]; then
+        ok "a sparse checkout of two folders holds them and the top, nothing else (${elapsed}ms)"
+    else
+        bad "sparse: $(jq -c . <<<"$out")"
+    fi
+    start=$(date +%s%N)
+    out="$("$CORAL" --repo "$REPO" --json status)"
+    elapsed=$(( ($(date +%s%N) - start) / 1000000 ))
+    if [ "$(jq -r '.result.entries | length' <<<"$out")" -eq 0 ]; then
+        ok "status in the sparse tree took ${elapsed}ms, and the missing folders are not deletions"
+    else
+        bad "status in the sparse tree reports $(jq -r '.result.entries | length' <<<"$out") changes"
+    fi
+    if [ "$("$CORAL" --repo "$REPO" --json folders drivers 2>/dev/null | jq -r '.result.folders | length')" -gt 50 ]; then
+        ok "the folders not checked out can still be listed to pick from"
+    else
+        bad "folders under drivers could not be listed in the sparse tree"
+    fi
+
+    "$CORAL" --repo "$REPO" --json sparse --off >/dev/null
+    if [ -d "$REPO/drivers" ] && [ "$(git -C "$REPO" config --get core.sparseCheckout)" != "true" ] \
+        && [ "$(git -C "$REPO" status --porcelain | wc -l)" -eq 0 ]; then
+        ok "checking out everything again brings every folder back, clean"
+    else
+        bad "the tree did not come back whole after sparse --off"
+    fi
+}
+
 # Whatever the clone was on before the scenarios ran, so they can put it back.
 ORIGINAL_HEAD=""
 
@@ -368,6 +429,11 @@ cleanup() {
     git -C "$REPO" cherry-pick --abort >/dev/null 2>&1 || true
     git -C "$REPO" revert --abort >/dev/null 2>&1 || true
     git -C "$REPO" reset -q --hard >/dev/null 2>&1 || true
+    # Scenario 9's settings, should it stop between turning them on and off.
+    if [ "$(git -C "$REPO" config --get core.sparseCheckout)" = "true" ]; then
+        git -C "$REPO" sparse-checkout disable >/dev/null 2>&1 || true
+    fi
+    git -C "$REPO" config --unset core.untrackedCache >/dev/null 2>&1 || true
 
     if [ -n "$ORIGINAL_HEAD" ]; then
         git -C "$REPO" checkout -q --force "$ORIGINAL_HEAD" >/dev/null 2>&1 || true
@@ -391,6 +457,7 @@ scenario_cherry_pick
 scenario_branching
 scenario_remotes
 scenario_abort
+scenario_sparse_and_caches
 
 # The summary's own non-zero exit is the result, not an error to report.
 trap - ERR

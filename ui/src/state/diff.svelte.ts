@@ -4,6 +4,7 @@ import {
   fileDiff,
   fileHistory,
   fileText,
+  lineHistory,
   worktreeDiff,
 } from '../ipc/commands';
 import type { ReadOptions } from '../ipc/commands';
@@ -77,6 +78,11 @@ export class DiffState {
   moreHistory = $state(false);
   /** The commit whose change to this file is being shown, when it came from the history. */
   atCommit = $state<string | null>(null);
+  /**
+   * The lines whose history the history view holds instead of the file's, numbered as the
+   * file stands at `rev`, or null for the whole file.
+   */
+  lines = $state<{ from: number; to: number; rev: string } | null>(null);
 
   /**
    * The commit the panel was opened on, null for the working tree or a comparison.
@@ -256,6 +262,29 @@ export class DiffState {
     await this.#reread(request);
   }
 
+  /**
+   * The commits that changed these lines, in the history view.
+   *
+   * Numbered as the file reads at the revision being shown, which is the one blame numbered
+   * them at; the read follows them back from there across renames.
+   */
+  async historyOfLines(a: number, b: number): Promise<void> {
+    const request = this.#request;
+    if (request === null) return;
+    this.lines = { from: Math.min(a, b), to: Math.max(a, b), rev: revisionOf(request) };
+    this.#historyLimit = HISTORY_PAGE;
+    this.#views.set('fileView', 'history');
+    await this.#loadHistory();
+  }
+
+  /** Back from some lines' history to the whole file's. */
+  async historyOfFile(): Promise<void> {
+    if (this.lines === null) return;
+    this.lines = null;
+    this.#historyLimit = HISTORY_PAGE;
+    await this.#loadHistory();
+  }
+
   /** Another page of history, oldest-ward. */
   async deeper(): Promise<void> {
     this.#historyLimit += HISTORY_PAGE;
@@ -304,8 +333,12 @@ export class DiffState {
     this.history = null;
     try {
       // From the commit being looked at, so the list holds the change on screen.
-      const rev = revisionOf(request);
-      const got = await fileHistory(request.repo, rev, request.path, this.#historyLimit);
+      const lines = this.lines;
+      const got = lines === null
+        ? await fileHistory(request.repo, revisionOf(request), request.path, this.#historyLimit)
+        : await lineHistory(
+          request.repo, lines.rev, request.path, lines.from, lines.to, this.#historyLimit,
+        );
       if (side !== this.#side) return;
       this.history = got;
       this.moreHistory = got.length >= this.#historyLimit;
@@ -403,6 +436,7 @@ export class DiffState {
     this.#historyLimit = HISTORY_PAGE;
     this.unguarded = false;
     this.atCommit = null;
+    this.lines = null;
     this.openedAt = request.source === 'commit' ? request.rev : null;
     this.blame = null;
     this.text = null;
@@ -453,6 +487,7 @@ export class DiffState {
     this.history = null;
     this.moreHistory = false;
     this.atCommit = null;
+    this.lines = null;
     this.openedAt = null;
     this.expanded = false;
     this.unguarded = false;

@@ -42,6 +42,7 @@ function conflicted(over: Partial<ConflictedFile> = {}): ConflictedFile {
     kind: "both_modified",
     whole: null,
     deleteModify: false,
+    recorded: false,
     ...over,
   };
 }
@@ -56,6 +57,56 @@ function state(files: ConflictedFile[], swapped = false) {
 const noop = () => {};
 
 describe("the merge tool", () => {
+  it("marks a file rerere resolved and keeps that answer rather than a side", async () => {
+    const merge = state([conflicted({ recorded: true })]);
+    const take = vi.spyOn(merge, "take").mockResolvedValue(true);
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+
+    expect(container.querySelector(".files .recorded")?.textContent).toBe("recorded");
+    const keep = container.querySelector(".wholesale .keep") as HTMLButtonElement;
+    await fireEvent.click(keep);
+    expect(take).toHaveBeenCalledWith("f.txt", { kind: "kept" });
+  });
+
+  it("says over the stages that the file on disk already holds the recorded answer", async () => {
+    const merge = state([conflicted({ recorded: true })]);
+    merge.active = "f.txt";
+    merge.blocks = { blocks: [], labels: { ours: "main", theirs: "side", swapped: false } } as unknown as NonNullable<typeof merge.blocks>;
+    const take = vi.spyOn(merge, "take").mockResolvedValue(true);
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+    const banner = container.querySelector(".rerere") as HTMLElement;
+    expect(banner.textContent).toContain("the way it was resolved before");
+    await fireEvent.click(banner.querySelector("button") as HTMLButtonElement);
+    expect(take).toHaveBeenCalledWith("f.txt", { kind: "kept" });
+  });
+
+  it("offers git's merge tool for a file that has lines to merge, when one is set", async () => {
+    const opened: string[] = [];
+    const { container } = render(MergeTool, {
+      props: {
+        merge: state([conflicted(), conflicted({ path: "logo.png", whole: "binary" })]),
+        onDone: noop,
+        mergeTool: "meld",
+        onMergeTool: (f: string) => opened.push(f),
+      },
+    });
+    const meld = [...container.querySelectorAll(".wholesale button")].filter(
+      (b) => b.textContent?.trim() === "meld",
+    );
+    expect(meld).toHaveLength(1);
+    // Marked as a program of its own, not a third side to take.
+    expect(meld[0]?.classList.contains("tool")).toBe(true);
+    expect(meld[0]?.querySelector("svg")).not.toBeNull();
+    await fireEvent.click(meld[0] as HTMLButtonElement);
+    expect(opened).toEqual(["f.txt"]);
+  });
+
+  it("shows no rerere marks for an ordinary conflict", () => {
+    const { container } = render(MergeTool, { props: { merge: state([conflicted()]), onDone: noop } });
+    expect(container.querySelector(".recorded")).toBeNull();
+    expect(container.querySelector(".keep")).toBeNull();
+  });
+
   it("continues with a message edited in the commit box, and lets it go once used", async () => {
     const merge = state([]);
     const step = vi.spyOn(merge, "step").mockResolvedValue(true);

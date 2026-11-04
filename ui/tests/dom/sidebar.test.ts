@@ -215,6 +215,7 @@ describe('the sidebar', () => {
     const { container } = mount({
       pullRequests,
       pullRequestLabel: 'Merge requests',
+      quote: (n: number) => `!${n}`,
       onOpenPullRequest: (pr: PullRequest) => opened.push(pr),
     });
 
@@ -223,7 +224,9 @@ describe('the sidebar', () => {
     );
     expect(section).toBeDefined();
     const row = section?.querySelector('button.pr') as HTMLButtonElement;
-    expect(row.textContent).toContain('#42');
+    // GitLab's own notation: `#42` there is an issue.
+    expect(row.textContent).toContain('!42');
+    expect(row.textContent).not.toContain('#42');
     expect(row.querySelector('.state')?.className).toContain('draft');
     await fireEvent.click(row);
     expect(opened[0]?.number).toBe(42);

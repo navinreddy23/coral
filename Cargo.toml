@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/coral-core",
+    "crates/coral-assist",
     "crates/coral-hosting",
     "crates/coral-cli",
     "crates/coral-app",
@@ -17,6 +18,7 @@ repository   = "https://github.com/navinreddy23/coral"
 [workspace.dependencies]
 coral-core    = { path = "crates/coral-core" }
 coral-hosting = { path = "crates/coral-hosting" }
+coral-assist  = { path = "crates/coral-assist" }
 
 gix       = "0.87.1"
 tokio     = { version = "1.53.1", default-features = false }

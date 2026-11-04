@@ -60,7 +60,7 @@ async fn checks_a_pull_request_out_as_its_own_branch_and_again_changes_nothing()
     let (runner, loc) = open(&local).await;
 
     let did = loc
-        .checkout_proposal(&runner, "origin", Proposal::Pull(7), |_| {})
+        .checkout_proposal(&runner, "origin", &Proposal::Pull(7), |_| {})
         .await
         .unwrap();
     assert_eq!(did, CheckedOut::Created);
@@ -69,7 +69,7 @@ async fn checks_a_pull_request_out_as_its_own_branch_and_again_changes_nothing()
     assert!(local.git(["rev-parse", "origin/pr/7"]).trim().len() >= 40);
 
     let again = loc
-        .checkout_proposal(&runner, "origin", Proposal::Pull(7), |_| {})
+        .checkout_proposal(&runner, "origin", &Proposal::Pull(7), |_| {})
         .await
         .unwrap();
     assert_eq!(again, CheckedOut::Unchanged);
@@ -80,14 +80,14 @@ async fn brings_the_branch_up_to_a_request_that_moved_on() {
     let host = host();
     let local = local(&host);
     let (runner, loc) = open(&local).await;
-    loc.checkout_proposal(&runner, "origin", Proposal::Pull(7), |_| {})
+    loc.checkout_proposal(&runner, "origin", &Proposal::Pull(7), |_| {})
         .await
         .unwrap();
 
     // Checked out: fast-forwarded where it stands.
     push_to_proposal(&host, "c.txt");
     let did = loc
-        .checkout_proposal(&runner, "origin", Proposal::Pull(7), |_| {})
+        .checkout_proposal(&runner, "origin", &Proposal::Pull(7), |_| {})
         .await
         .unwrap();
     assert_eq!(did, CheckedOut::Updated);
@@ -97,7 +97,7 @@ async fn brings_the_branch_up_to_a_request_that_moved_on() {
     local.git(["checkout", "--quiet", "main"]);
     push_to_proposal(&host, "d.txt");
     let did = loc
-        .checkout_proposal(&runner, "origin", Proposal::Pull(7), |_| {})
+        .checkout_proposal(&runner, "origin", &Proposal::Pull(7), |_| {})
         .await
         .unwrap();
     assert_eq!(did, CheckedOut::Updated);
@@ -110,7 +110,7 @@ async fn leaves_alone_a_branch_that_would_lose_commits() {
     let host = host();
     let local = local(&host);
     let (runner, loc) = open(&local).await;
-    loc.checkout_proposal(&runner, "origin", Proposal::Pull(7), |_| {})
+    loc.checkout_proposal(&runner, "origin", &Proposal::Pull(7), |_| {})
         .await
         .unwrap();
     // A commit made here, on the request's branch.
@@ -122,7 +122,7 @@ async fn leaves_alone_a_branch_that_would_lose_commits() {
     host.git(["update-ref", "refs/pull/7/head", main.trim()]);
 
     let err = loc
-        .checkout_proposal(&runner, "origin", Proposal::Pull(7), |_| {})
+        .checkout_proposal(&runner, "origin", &Proposal::Pull(7), |_| {})
         .await
         .unwrap_err();
     assert_eq!(err.code(), "refused");
@@ -139,7 +139,7 @@ async fn checks_a_gitlab_merge_request_out_by_its_own_name() {
     let host = host();
     let local = local(&host);
     let (runner, loc) = open(&local).await;
-    loc.checkout_proposal(&runner, "origin", Proposal::MergeRequest(7), |_| {})
+    loc.checkout_proposal(&runner, "origin", &Proposal::MergeRequest(7), |_| {})
         .await
         .unwrap();
     assert_eq!(head(&local), ("mr/7".into(), "the contribution".into()));
@@ -151,7 +151,7 @@ async fn a_request_the_host_does_not_have_is_an_error_and_moves_nothing() {
     let local = local(&host);
     let (runner, loc) = open(&local).await;
     assert!(
-        loc.checkout_proposal(&runner, "origin", Proposal::Pull(99), |_| {})
+        loc.checkout_proposal(&runner, "origin", &Proposal::Pull(99), |_| {})
             .await
             .is_err()
     );

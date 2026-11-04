@@ -172,19 +172,45 @@ fn unknown_fields_are_ignored_so_a_provider_can_add_them() {
 
 #[test]
 fn each_provider_is_given_its_own_auth_header() {
-    use coral_hosting::token::{auth_header, keyring_service};
+    use coral_hosting::token::{Auth, auth, keyring_service};
     use secrecy::SecretString;
 
     let token = SecretString::from("ghp_secret".to_owned());
     // GitLab refuses a bearer personal access token, and the request is well formed when it
     // does, so the failure arrives as a bare 401 with nothing pointing at the header.
     assert_eq!(
-        auth_header(HostKind::GitHub, &token),
-        ("Authorization", "Bearer ghp_secret".to_owned())
+        auth(HostKind::GitHub, &token),
+        Auth::Header("Authorization", "Bearer ghp_secret".to_owned())
     );
     assert_eq!(
-        auth_header(HostKind::GitLab, &token),
-        ("PRIVATE-TOKEN", "ghp_secret".to_owned())
+        auth(HostKind::GitLab, &token),
+        Auth::Header("PRIVATE-TOKEN", "ghp_secret".to_owned())
+    );
+    assert_eq!(
+        auth(HostKind::Gitea, &token),
+        Auth::Header("Authorization", "token ghp_secret".to_owned())
+    );
+    // An access token alone is a bearer; an API token comes with the account it belongs to.
+    assert_eq!(
+        auth(HostKind::Bitbucket, &token),
+        Auth::Header("Authorization", "Bearer ghp_secret".to_owned())
+    );
+    assert_eq!(
+        auth(
+            HostKind::Bitbucket,
+            &SecretString::from("ada@x.invalid:ATAT123".to_owned())
+        ),
+        Auth::Basic {
+            user: "ada@x.invalid".to_owned(),
+            password: "ATAT123".to_owned()
+        }
+    );
+    assert_eq!(
+        auth(HostKind::Azure, &token),
+        Auth::Basic {
+            user: String::new(),
+            password: "ghp_secret".to_owned()
+        }
     );
 
     // Keyed by origin: someone can be signed in to github.com and to a company instance at
@@ -442,4 +468,37 @@ mod review {
         let times: Vec<&str> = ordered.iter().map(|r| r.at.as_str()).collect();
         assert_eq!(times, ["2026-10-01", "2026-10-02", "2026-10-03"]);
     }
+}
+
+#[test]
+fn an_issue_is_read_the_same_whichever_host_tracks_it() {
+    use coral_hosting::issue::IssueState;
+    let github = coral_hosting::github::parse_issue(
+        br#"{"number":12,"title":"Crash on open","state":"closed","html_url":"https://github.com/o/r/issues/12"}"#,
+    )
+    .unwrap();
+    assert_eq!((github.number, github.state), (12, IssueState::Closed));
+
+    let gitlab = coral_hosting::gitlab::parse_issue(
+        br#"{"id":9001,"iid":4,"title":"Slow walk","state":"opened","web_url":"https://gitlab.com/g/p/-/issues/4"}"#,
+    )
+    .unwrap();
+    // The number people quote, not the instance-wide id.
+    assert_eq!((gitlab.number, gitlab.state), (4, IssueState::Open));
+
+    let host = Host::detect("https://dev.azure.com/acme/Platform/_git/coral").unwrap();
+    let item = coral_hosting::azure::parse_work_item(
+        &host,
+        br#"{"id":77,"fields":{"System.Title":"Tidy","System.State":"Resolved"}}"#,
+    )
+    .unwrap();
+    assert_eq!(item.state, IssueState::Closed);
+    assert_eq!(
+        item.web_url,
+        "https://dev.azure.com/acme/Platform/_workitems/edit/77"
+    );
+    assert_eq!(
+        coral_hosting::azure::work_item_url(&host, 77),
+        "https://dev.azure.com/acme/Platform/_apis/wit/workitems/77?api-version=7.1"
+    );
 }

@@ -14,7 +14,9 @@ import type {
   Verification,
   Todo,
   ConflictedFile,
+  ExternalTools,
   FileDiff,
+  FoldInto,
   GitRef,
   Operation,
   OpOutcome,
@@ -23,11 +25,13 @@ import type {
   SigningKey,
   SigningOverrides,
   SigningScopes,
+  Sparse,
   SshConfig,
   SshKey,
   SshOverrides,
   SshScopes,
   Status,
+  StatusCaches,
   Submodule,
   SubmoduleRevision,
   SubmoduleSsh,
@@ -258,6 +262,17 @@ export function applyPart(
   return invoke<Status>('apply_part', { path, file, part, hunk, lines, options });
 }
 
+/** Stages one hunk as `text` rewrites its new side, rather than as the working tree has it. */
+export function stageEdited(
+  path: string,
+  file: string,
+  hunk: number,
+  text: string,
+  options: ReadOptions,
+): Promise<Status> {
+  return invoke<Status>('stage_edited', { path, file, hunk, text, options });
+}
+
 /** Deletes files outright: gone from the working tree, and staged as removed if tracked. */
 export function deletePaths(
   path: string,
@@ -304,6 +319,18 @@ export function fileHistory(
   limit: number,
 ): Promise<Commit[]> {
   return invoke<Commit[]>('file_history', { path, rev, file, limit });
+}
+
+/** The commits that changed lines `from` to `to` of a file as it stands at `rev`. */
+export function lineHistory(
+  path: string,
+  rev: string,
+  file: string,
+  from: number,
+  to: number,
+  limit: number,
+): Promise<Commit[]> {
+  return invoke<Commit[]>('line_history', { path, rev, file, from, to, limit });
 }
 
 /**
@@ -358,7 +385,7 @@ export type Action =
   | { kind: 'branchDelete'; name: string; force: boolean }
   | { kind: 'branchRename'; from: string; to: string }
   | { kind: 'merge'; rev: string; mode: 'auto' | 'noFf' | 'ffOnly' | 'squash' }
-  | { kind: 'rebase'; onto: string }
+  | { kind: 'rebase'; onto: string; from?: string | null }
   | { kind: 'cherryPick'; revs: string[]; commit: boolean; mainline?: number }
   | { kind: 'revert'; revs: string[]; mainline?: number }
   | {
@@ -427,7 +454,48 @@ export type Choice =
   | { kind: 'ours' }
   | { kind: 'theirs' }
   | { kind: 'delete' }
-  | { kind: 'content'; text: string };
+  | { kind: 'content'; text: string }
+  /** The file as it stands: for a conflict rerere resolved, the recorded answer. */
+  | { kind: 'kept' };
+
+/** The per-repository switches that are git configuration: `repoconfig.rs`. */
+export interface RepoConfig {
+  rerere: boolean;
+  caches: StatusCaches;
+  sparse: Sparse;
+  /** Where `ABC-123` in a message links to, with `{key}` in it. */
+  tracker: string | null;
+}
+
+export function repoConfig(path: string): Promise<RepoConfig> {
+  return invoke<RepoConfig>('repo_config', { path });
+}
+
+export function repoSetRerere(path: string, on: boolean): Promise<RepoConfig> {
+  return invoke<RepoConfig>('repo_set_rerere', { path, on });
+}
+
+export function repoSetUntrackedCache(path: string, on: boolean): Promise<RepoConfig> {
+  return invoke<RepoConfig>('repo_set_untracked_cache', { path, on });
+}
+
+export function repoSetFsmonitor(path: string, on: boolean): Promise<RepoConfig> {
+  return invoke<RepoConfig>('repo_set_fsmonitor', { path, on });
+}
+
+/** Checks out these folders and the top-level files, and nothing else. */
+export function repoSetSparse(path: string, folders: string[]): Promise<RepoConfig> {
+  return invoke<RepoConfig>('repo_set_sparse', { path, folders });
+}
+
+export function repoDisableSparse(path: string): Promise<RepoConfig> {
+  return invoke<RepoConfig>('repo_disable_sparse', { path });
+}
+
+/** The folders directly inside `under` at HEAD, or at the top when it is null. */
+export function repoFolders(path: string, under: string | null): Promise<string[]> {
+  return invoke<string[]>('repo_folders', { path, under });
+}
 
 export function resolveConflict(path: string, file: string, choice: Choice): Promise<void> {
   return invoke<void>('resolve_conflict', { path, file, choice });
@@ -442,9 +510,9 @@ export function operationStep(
   return invoke<OpOutcome>('operation_step', { path, step, message });
 }
 
-/** GitHub or GitLab, as identified from the remote URL. */
+/** The provider behind a remote, as identified from its URL or declared for it. */
 export interface Host {
-  kind: 'github' | 'gitlab';
+  kind: 'github' | 'gitlab' | 'gitea' | 'bitbucket' | 'azure';
   origin: string;
   owner: string;
   repo: string;
@@ -462,6 +530,17 @@ export interface HostView {
    * one every profile falls back to, and the only one the command line writes.
    */
   token: TokenSource;
+  /** The server the remote names when its kind could not be told, for the window to ask. */
+  unplaced?: string | null;
+}
+
+/** Says what kind of host a server is, for one its name does not give away. */
+export function hostingDeclare(
+  path: string,
+  hostname: string,
+  kind: Host['kind'] | null,
+): Promise<HostView> {
+  return invoke<HostView>('hosting_declare', { path, hostname, kind });
 }
 
 export type PrState = 'open' | 'draft' | 'merged' | 'closed';
@@ -567,8 +646,8 @@ export function openInBrowser(url: string): Promise<void> {
 }
 
 /** The todo list an interactive rebase onto `onto` would start from, oldest first. */
-export function rebaseTodo(path: string, onto: string): Promise<Todo> {
-  return invoke<Todo>('rebase_todo', { path, onto });
+export function rebaseTodo(path: string, onto: string, autosquash = false): Promise<Todo> {
+  return invoke<Todo>('rebase_todo', { path, onto, autosquash });
 }
 
 /** Runs an interactive rebase against a todo the user has decided. */
@@ -728,8 +807,14 @@ export function discardPaths(
   return invoke<Status>('discard_paths', { path, restore, remove });
 }
 
-export function commitStaged(path: string, message: string, amend: boolean): Promise<Status> {
-  return invoke<Status>('commit_staged', { path, message, amend });
+/** Records what is staged; with `fold`, as a fixup or squash of an earlier commit. */
+export function commitStaged(
+  path: string,
+  message: string,
+  amend: boolean,
+  fold: FoldInto | null = null,
+): Promise<Status> {
+  return invoke<Status>('commit_staged', { path, message, amend, fold });
 }
 
 /**
@@ -880,3 +965,137 @@ export function appVersion(): Promise<AppVersion> {
   return invoke<AppVersion>('app_version');
 }
 
+
+/** What `tools.json` holds: the editor's command line, empty for the desktop's own choice. */
+export interface ToolSettings {
+  editor: string;
+  actions: CustomAction[];
+}
+
+/** A command line of the user's own; see `tool.rs`. */
+export interface CustomAction {
+  id: string;
+  name: string;
+  command: string;
+  on: 'repository' | 'commit' | 'file';
+}
+
+/** What an action is being run on. */
+export interface ActionContext {
+  commit?: string | null;
+  branch?: string | null;
+  file?: string | null;
+}
+
+export interface ActionRun {
+  success: boolean;
+  /** The last of what it printed; the whole of it is in the activity log. */
+  output: string;
+}
+
+export function toolsSetActions(actions: CustomAction[]): Promise<ToolSettings> {
+  return invoke<ToolSettings>('tools_set_actions', { actions });
+}
+
+/** Runs a saved action by its id; the window never sends a command line to run. */
+export function actionRun(path: string, id: string, context: ActionContext): Promise<ActionRun> {
+  return invoke<ActionRun>('action_run', { path, id, context });
+}
+
+export interface ToolsView {
+  settings: ToolSettings;
+  /** What git has configured in the repository asked about. */
+  external: ExternalTools;
+}
+
+export function toolsRead(path: string | null): Promise<ToolsView> {
+  return invoke<ToolsView>('tools_read', { path });
+}
+
+export function toolsSetEditor(editor: string): Promise<ToolSettings> {
+  return invoke<ToolSettings>('tools_set_editor', { editor });
+}
+
+export function openInEditor(path: string, file: string, line: number | null = null): Promise<void> {
+  return invoke<void>('open_in_editor', { path, file, line });
+}
+
+/** Which change of a file the diff tool is shown. */
+export type DiffOf = { kind: 'unstaged' } | { kind: 'staged' } | { kind: 'commit'; rev: string };
+
+export function openDifftool(path: string, file: string, of: DiffOf): Promise<void> {
+  return invoke<void>('open_difftool', { path, file, of });
+}
+
+export function openMergetool(path: string, file: string): Promise<void> {
+  return invoke<void>('open_mergetool', { path, file });
+}
+
+/** An issue on the repository's host, or a work item on Azure DevOps. */
+export interface Issue {
+  number: number;
+  title: string;
+  state: 'open' | 'closed';
+  webUrl: string;
+}
+
+export interface IssueView {
+  issue: Issue;
+  /** A branch to work on it in: its number and the first words of its title. */
+  branch: string;
+}
+
+export function hostingIssue(path: string, number: number): Promise<IssueView> {
+  return invoke<IssueView>('hosting_issue', { path, number });
+}
+
+export function repoSetTracker(path: string, url: string | null): Promise<RepoConfig> {
+  return invoke<RepoConfig>('repo_set_tracker', { path, url });
+}
+
+/** One open repository's requests still waiting on somebody, for the Start page. */
+export interface RepoRequests {
+  path: string;
+  host: Host | null;
+  requests: PullRequest[];
+  /** Why there are none to show, when that is not simply that there are none. */
+  problem: string | null;
+}
+
+/** The open requests in every repository open in a tab, each asked of its own host. */
+export function hostingEverywhere(): Promise<RepoRequests[]> {
+  return invoke<RepoRequests[]>('hosting_everywhere');
+}
+
+/** Drafting commit messages with Claude: on or off, the model, and whether a key is kept. */
+export interface AssistView {
+  enabled: boolean;
+  model: string;
+  hasKey: boolean;
+  defaultModel: string;
+}
+
+/** A drafted message, split as the commit box holds it. */
+export interface Draft {
+  summary: string;
+  body: string;
+  /** The model that wrote it, which a fallback can make different from the one asked. */
+  model: string;
+}
+
+export function assistRead(): Promise<AssistView> {
+  return invoke<AssistView>('assist_read');
+}
+
+export function assistSet(enabled: boolean, model: string): Promise<AssistView> {
+  return invoke<AssistView>('assist_set', { enabled, model });
+}
+
+/** Keeps a key in the keyring, or forgets it with null. The key is never read back. */
+export function assistSetKey(key: string | null): Promise<AssistView> {
+  return invoke<AssistView>('assist_set_key', { key });
+}
+
+export function assistDraft(path: string): Promise<Draft> {
+  return invoke<Draft>('assist_draft', { path });
+}

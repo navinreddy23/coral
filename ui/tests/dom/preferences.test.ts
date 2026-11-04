@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render } from '@testing-library/svelte';
+import { cleanup, render, waitFor } from '@testing-library/svelte';
 import { fireEvent } from '@testing-library/dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -14,6 +14,8 @@ import { ExperimentalState } from '../../src/state/experimental.svelte';
 import { ProfilesState } from '../../src/state/profiles.svelte';
 import { SigningState } from '../../src/state/signing.svelte';
 import { SshState } from '../../src/state/ssh.svelte';
+import { RepoConfigState } from '../../src/state/repoconfig.svelte';
+import { ToolsState } from '../../src/state/tools.svelte';
 import { ThemeState } from '../../src/state/theme.svelte';
 import { ViewsState } from '../../src/state/views.svelte';
 import { UpdateState } from '../../src/state/update.svelte';
@@ -29,6 +31,8 @@ function prefs(over: Record<string, unknown> = {}) {
         updates: new UpdateState(),
         signing: new SigningState(),
         ssh: new SshState(),
+    repoConfig: new RepoConfigState(),
+    tools: new ToolsState(),
         experimental: new ExperimentalState(),
         profiles: new ProfilesState(),
         theme: new ThemeState(),
@@ -99,5 +103,152 @@ describe('the way out of preferences', () => {
       .map((r) => r.cssText)
       .find((text) => /header[^{]*\{/u.test(text) && /background:/u.test(text));
     expect(rule).toBeDefined();
+  });
+});
+
+describe('the Repository pane', () => {
+  it('shows whether recorded resolutions are reused and changes it through the state', async () => {
+    const repoConfig = new RepoConfigState();
+    repoConfig.config = {
+      rerere: false,
+      caches: { untrackedCache: false, fsmonitor: false, fsmonitorSupported: false },
+      sparse: { enabled: false, cone: true, folders: [] },
+      tracker: null,
+    };
+    const set = vi.spyOn(repoConfig, 'setRerere').mockResolvedValue();
+    const { container } = prefs({ repoConfig, pane: 'repository' });
+
+    expect(container.querySelector('.page h2')?.textContent).toBe('Repository');
+    const box = [...container.querySelectorAll('label')].find((l) =>
+      l.textContent?.includes('Reuse recorded resolutions'),
+    )?.querySelector('input') as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    await fireEvent.click(box);
+    expect(set).toHaveBeenCalledWith(true);
+  });
+
+  it('is not offered without a repository', () => {
+    const { container } = prefs({ hasRepository: false });
+    const panes = [...container.querySelectorAll('nav .pane')].map((b) => b.textContent?.trim());
+    expect(panes).not.toContain('Repository');
+  });
+
+  it('switches the untracked cache, and explains a monitor this git does not have', async () => {
+    const repoConfig = new RepoConfigState();
+    repoConfig.config = {
+      rerere: false,
+      caches: { untrackedCache: false, fsmonitor: false, fsmonitorSupported: false },
+      sparse: { enabled: false, cone: true, folders: [] },
+      tracker: null,
+    };
+    const untracked = vi.spyOn(repoConfig, 'setUntrackedCache').mockResolvedValue();
+    const { container } = prefs({ repoConfig, pane: 'repository' });
+    const box = (text: string) =>
+      [...container.querySelectorAll('label')].find((l) => l.textContent?.includes(text))
+        ?.querySelector('input') as HTMLInputElement;
+
+    await fireEvent.click(box('Remember which folders hold nothing new'));
+    expect(untracked).toHaveBeenCalledWith(true);
+    expect(box('Watch the working tree for changes').disabled).toBe(true);
+    expect(container.textContent).toContain('built without its filesystem monitor');
+  });
+
+  it('lists the folders a sparse tree holds and puts everything back on request', async () => {
+    const repoConfig = new RepoConfigState();
+    repoConfig.config = {
+      rerere: false,
+      caches: { untrackedCache: false, fsmonitor: false, fsmonitorSupported: false },
+      sparse: { enabled: true, cone: true, folders: ['drivers/gpu', 'kernel'] },
+      tracker: null,
+    };
+    const off = vi.spyOn(repoConfig, 'disableSparse').mockResolvedValue();
+    const { container } = prefs({ repoConfig, pane: 'repository' });
+    expect(container.textContent).toContain('2 folders and the files at the top');
+    expect([...container.querySelectorAll('.folders code')].map((c) => c.textContent)).toEqual([
+      'drivers/gpu',
+      'kernel',
+    ]);
+    const all = [...container.querySelectorAll('.row button')].find(
+      (b) => b.textContent?.trim() === 'Check out everything',
+    ) as HTMLButtonElement;
+    await fireEvent.click(all);
+    expect(off).toHaveBeenCalledOnce();
+  });
+});
+
+describe('the Tools pane', () => {
+  it('stores the editor command and names the tools git has set', async () => {
+    const tools = new ToolsState();
+    tools.view = { settings: { editor: '', actions: [] }, external: { diff: 'meld', merge: null } };
+    const set = vi.spyOn(tools, 'setEditor').mockResolvedValue();
+    const { container } = prefs({ tools, pane: 'tools' });
+    const field = container.querySelector('#editor') as HTMLInputElement;
+    await fireEvent.change(field, { target: { value: 'code --goto {path}:{line}' } });
+    expect(set).toHaveBeenCalledWith('code --goto {path}:{line}');
+    expect(container.querySelector('dl')?.textContent).toContain('meld');
+    expect(container.querySelector('dl')?.textContent).toContain('none set in this repository');
+  });
+
+  it('adds an action once it has a name and a command, and removes one', async () => {
+    const tools = new ToolsState();
+    tools.view = {
+      settings: {
+        editor: '',
+        actions: [{ id: 'action-1', name: 'Show stat', command: 'git show --stat {commit}', on: 'commit' }],
+      },
+      external: { diff: null, merge: null },
+    };
+    const set = vi.spyOn(tools, 'setActions').mockResolvedValue();
+    const { container } = prefs({ tools, pane: 'tools' });
+
+    await fireEvent.click([...container.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Add an action') as HTMLButtonElement);
+    const draft = container.querySelector('.draft') as HTMLElement;
+    await fireEvent.input(draft.querySelector('.label') as HTMLInputElement, { target: { value: 'Lines' } });
+    await fireEvent.input(draft.querySelector('.command') as HTMLInputElement, { target: { value: 'wc -l {path}' } });
+    // The select is left at its default: happy-dom does not drive a bound select, and the real
+    // window is where choosing another target is checked.
+    await fireEvent.click(draft.querySelector('.save') as HTMLButtonElement);
+    expect(set).toHaveBeenLastCalledWith([
+      { id: 'action-1', name: 'Show stat', command: 'git show --stat {commit}', on: 'commit' },
+      { id: 'action-2', name: 'Lines', command: 'wc -l {path}', on: 'commit' },
+    ]);
+
+    await fireEvent.click(container.querySelector('.actions .remove') as HTMLButtonElement);
+    expect(set).toHaveBeenLastCalledWith([]);
+  });
+});
+
+describe('drafting with Claude, in Experimental', () => {
+  it('is off until turned on, keeps a key without showing it, and names the model', async () => {
+    const { AssistState } = await import('../../src/state/assist.svelte');
+    const assist = new AssistState();
+    assist.view = { enabled: false, model: '', hasKey: false, defaultModel: 'claude-opus-5-5' };
+    const set = vi.spyOn(assist, 'set').mockImplementation(async (enabled: boolean) => {
+      assist.view = { enabled, model: '', hasKey: false, defaultModel: 'claude-opus-5-5' };
+    });
+    const keep = vi.spyOn(assist, 'setKey').mockResolvedValue();
+    const { container } = prefs({ assist, pane: 'experimental' });
+    expect(container.querySelector('#assist-key')).toBeNull();
+    expect(container.textContent).toContain('Nothing is sent until you press it');
+
+    const box = [...container.querySelectorAll('label')].find((l) =>
+      l.textContent?.includes('Offer a Draft button'),
+    )?.querySelector('input') as HTMLInputElement;
+    await fireEvent.click(box);
+    expect(set).toHaveBeenCalledWith(true, '');
+
+    const key = await waitFor(() => {
+      const k = container.querySelector('#assist-key') as HTMLInputElement | null;
+      if (!k) throw new Error('no key field yet');
+      return k;
+    });
+    expect(key.type).toBe('password');
+    await fireEvent.change(key, { target: { value: 'sk-ant-test-not-real' } });
+    expect(keep).toHaveBeenCalledWith('sk-ant-test-not-real');
+    // Cleared once handed over, so the key does not sit in the page.
+    expect(key.value).toBe('');
+    expect((container.querySelector('#assist-model') as HTMLInputElement).placeholder).toBe(
+      'claude-opus-5-5',
+    );
   });
 });

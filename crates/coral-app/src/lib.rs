@@ -3,6 +3,7 @@
 
 pub mod actions;
 pub mod activity;
+pub mod assist;
 pub mod avatar;
 pub mod bisect;
 pub mod blob;
@@ -19,6 +20,7 @@ pub mod profile;
 pub mod recent;
 pub mod reflog;
 pub mod remotes;
+pub mod repoconfig;
 pub mod scope;
 pub mod search;
 pub mod session;
@@ -27,6 +29,7 @@ pub mod ssh;
 pub mod tabs;
 pub mod template;
 pub mod terminal;
+pub mod tool;
 pub mod transfer;
 pub mod update;
 pub mod version;

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../state/locale.svelte';
   import Icon from './Icon.svelte';
   import { openInBrowser, pickProgram } from '../ipc/commands';
   import type { SigningConfig, SigningFormat } from '../ipc/types';
@@ -70,7 +71,7 @@
 </script>
 
 <section class="pane">
-  <h2>Commit Signing</h2>
+  <h2>{t('prefs.pane.signing')}</h2>
 
   <!--
     Which level is being edited. GitKraken keeps this per profile; a key belongs to a

@@ -19,7 +19,7 @@ const STYLES = componentStyles();
 
 /** Components that float free of the page, and may therefore cast a shadow. */
 const OVERLAYS = new Set([
-  'Menu.svelte', 'Ask.svelte', 'Palette.svelte', 'Toasts.svelte', 'HostAccount.svelte',
+  'Menu.svelte', 'Ask.svelte', 'FolderPicker.svelte', 'Palette.svelte', 'Toasts.svelte', 'HostAccount.svelte',
   'RebasePicker.svelte', 'Shortcuts.svelte', 'TabBar.svelte', 'DiffView.svelte',
 ]);
 
@@ -227,5 +227,16 @@ describe('scrollbars while an overlay has the window', () => {
 describe('the token file', () => {
   it('offers a size for lettering inside a shape, outside the reading scale', () => {
     expect(tokens('light').has('text-mark')).toBe(true);
+  });
+});
+
+describe('a check box that is partly ticked', () => {
+  // Every box is drawn by base.css with `appearance: none`, so WebKitGTK draws nothing for
+  // `indeterminate` unless a rule does: the folder picker's half-chosen folder looked unticked.
+  const BASE = readFileSync(resolve(import.meta.dirname, '../src/styles/base.css'), 'utf8');
+
+  it('is drawn, filled and with a bar where the tick would be', () => {
+    expect(BASE).toMatch(/input\[type='checkbox'\]:indeterminate\s*\{[^}]*background:\s*var\(--accent\)/u);
+    expect(BASE).toMatch(/input\[type='checkbox'\]:indeterminate::before\s*\{[^}]*transform:\s*scale\(1\)/u);
   });
 });

@@ -27,6 +27,7 @@
     asksText = false,
     optional = false,
     lines = 1,
+    code = false,
     choices,
     onAnswer,
   }: {
@@ -47,6 +48,11 @@
      * line meant the body could neither be read nor kept.
      */
     lines?: number;
+    /**
+     * Whether the text is code: kept exactly as typed rather than trimmed, since a first
+     * line's indentation is part of it, in a wider box that does not wrap.
+     */
+    code?: boolean;
     /** Empty is an answer too, so the choices stay live with nothing typed. */
     optional?: boolean;
     placeholder?: string;
@@ -80,7 +86,7 @@
   });
 
   function answer(id: string | null) {
-    onAnswer(id, text.trim());
+    onAnswer(id, code ? text : text.trim());
   }
 
   function key(event: KeyboardEvent) {
@@ -105,6 +111,7 @@
   <!-- svelte-ignore a11y_interactive_supports_focus -->
   <div
     class="panel"
+    class:code
     role="dialog"
     aria-modal="true"
     aria-label={title}
@@ -120,6 +127,7 @@
         {placeholder}
         aria-label={title}
         spellcheck="false"
+        wrap={code ? 'off' : 'soft'}
       ></textarea>
     {:else if asksText}
       <input bind:this={input} bind:value={text} {placeholder} aria-label={title} />
@@ -149,6 +157,11 @@
     width: min(440px, 90vw); padding: var(--space-4);
     background: var(--bg-0); border: 1px solid var(--border-strong);
     border-radius: var(--radius-3); box-shadow: var(--elevate-2);
+  }
+  .panel.code { width: min(900px, 94vw); }
+  .panel.code textarea {
+    white-space: pre; overflow-x: auto; tab-size: 8;
+    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm);
   }
   h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); color: var(--fg-0); }
   /* `pre-line`, so a detail can put the thing being destroyed on a line of its own and the

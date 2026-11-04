@@ -194,9 +194,144 @@ pub fn parse_gitlab(pipelines: &[u8]) -> Result<Checks, HostingError> {
     Ok(summarise(&found, "pipeline"))
 }
 
+#[derive(Deserialize)]
+struct GiteaCombined {
+    #[serde(default)]
+    statuses: Vec<GiteaStatus>,
+}
+
+#[derive(Deserialize)]
+struct GiteaStatus {
+    status: String,
+    #[serde(default)]
+    target_url: Option<String>,
+}
+
+/// Gitea's and Forgejo's combined status for a commit, which their own Actions report into.
+/// <https://gitea.com/api/swagger#/repository/repoGetCombinedStatusByRef>
+///
+/// # Errors
+/// [`HostingError::Malformed`] when the body is not a combined status.
+pub fn parse_gitea(combined: &[u8]) -> Result<Checks, HostingError> {
+    let c: GiteaCombined =
+        serde_json::from_slice(combined).map_err(|e| HostingError::Malformed(e.to_string()))?;
+    let found: Vec<(Outcome, Option<String>)> = c
+        .statuses
+        .into_iter()
+        .map(|s| {
+            let outcome = match s.status.as_str() {
+                "success" => Outcome::Passed,
+                "failure" | "error" => Outcome::Failed,
+                "warning" => Outcome::Ignored,
+                _ => Outcome::Running,
+            };
+            (outcome, s.target_url)
+        })
+        .collect();
+    Ok(summarise(&found, "check"))
+}
+
+#[derive(Deserialize)]
+struct Page<T> {
+    #[serde(default = "Vec::new", alias = "value")]
+    values: Vec<T>,
+}
+
+#[derive(Deserialize)]
+struct BitbucketStatus {
+    state: String,
+    #[serde(default)]
+    url: Option<String>,
+}
+
+/// The build statuses on a Bitbucket pull request.
+/// <https://developer.atlassian.com/cloud/bitbucket/rest/api-group-pullrequests/#api-repositories-workspace-repo-slug-pullrequests-pull-request-id-statuses-get>
+///
+/// # Errors
+/// [`HostingError::Malformed`] when the body is not a page of statuses.
+pub fn parse_bitbucket(statuses: &[u8]) -> Result<Checks, HostingError> {
+    let page: Page<BitbucketStatus> =
+        serde_json::from_slice(statuses).map_err(|e| HostingError::Malformed(e.to_string()))?;
+    let found: Vec<(Outcome, Option<String>)> = page
+        .values
+        .into_iter()
+        .map(|s| {
+            let outcome = match s.state.as_str() {
+                "SUCCESSFUL" => Outcome::Passed,
+                "FAILED" | "STOPPED" => Outcome::Failed,
+                _ => Outcome::Running,
+            };
+            (outcome, s.url)
+        })
+        .collect();
+    Ok(summarise(&found, "build"))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AzureStatus {
+    state: String,
+    #[serde(default)]
+    target_url: Option<String>,
+}
+
+/// The statuses posted on an Azure DevOps pull request.
+/// <https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-statuses/list>
+///
+/// # Errors
+/// [`HostingError::Malformed`] when the body is not a list of statuses.
+pub fn parse_azure(statuses: &[u8]) -> Result<Checks, HostingError> {
+    let page: Page<AzureStatus> =
+        serde_json::from_slice(statuses).map_err(|e| HostingError::Malformed(e.to_string()))?;
+    let found: Vec<(Outcome, Option<String>)> = page
+        .values
+        .into_iter()
+        .map(|s| {
+            let outcome = match s.state.as_str() {
+                "succeeded" => Outcome::Passed,
+                "failed" | "error" => Outcome::Failed,
+                "notApplicable" | "notSet" => Outcome::Ignored,
+                _ => Outcome::Running,
+            };
+            (outcome, s.target_url)
+        })
+        .collect();
+    Ok(summarise(&found, "check"))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{CheckState, is_commit_id, parse_github, parse_gitlab};
+    use super::{
+        CheckState, is_commit_id, parse_azure, parse_bitbucket, parse_gitea, parse_github,
+        parse_gitlab,
+    };
+
+    #[test]
+    fn the_other_hosts_are_read_into_the_same_verdicts() {
+        let gitea = parse_gitea(
+            br#"{"state":"failure","statuses":[{"status":"success"},{"status":"failure","target_url":"https://g/2"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(gitea.state, CheckState::Failing);
+        assert_eq!(gitea.url.as_deref(), Some("https://g/2"));
+
+        let bitbucket = parse_bitbucket(
+            br#"{"values":[{"state":"INPROGRESS","url":"https://b/1"}],"pagelen":10}"#,
+        )
+        .unwrap();
+        assert_eq!(bitbucket.state, CheckState::Running);
+        assert_eq!(bitbucket.summary, "1 of 1 build still running");
+
+        let azure = parse_azure(
+            br#"{"count":2,"value":[{"state":"succeeded"},{"state":"notApplicable"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(azure.state, CheckState::Passing);
+        assert_eq!(
+            parse_azure(br#"{"count":0,"value":[]}"#).unwrap().state,
+            CheckState::None
+        );
+    }
 
     const NO_STATUSES: &[u8] = br#"{"state":"pending","statuses":[],"total_count":0}"#;
 

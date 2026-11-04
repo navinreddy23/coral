@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../state/locale.svelte';
   import type { ProfilesState } from '../state/profiles.svelte';
   import type { GroupColour } from '../state/tabs.svelte';
   import type { IdentityScopes } from '../ipc/types';
@@ -84,7 +85,7 @@
 </script>
 
 <section class="pane">
-  <h2>Profiles</h2>
+  <h2>{t('prefs.pane.profiles')}</h2>
   <p class="lede">
     A profile holds the repositories you have open, the ones you opened recently, and the
     identity a repository cloned under it will carry. Work and personal, on one machine,

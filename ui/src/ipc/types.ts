@@ -162,7 +162,17 @@ whole: Whole | null,
 /**
  * One side deleted the file, so keeping or deleting is the only meaningful choice.
  */
-deleteModify: boolean, };
+deleteModify: boolean, 
+/**
+ * rerere has resolved it the way it was resolved before. The file on disk holds that
+ * answer and the index still holds the conflict, so the stages are not what to show.
+ */
+recorded: boolean, };
+
+/**
+ * The tools git would start, by the names git has for them, or `None` where none is set.
+ */
+export type ExternalTools = { diff: string | null, merge: string | null, };
 
 /**
  * What happened to a file between two trees.
@@ -189,6 +199,16 @@ mode: ModeChange | null,
  * Set when the file was not read because it exceeds the size guard.
  */
 tooLarge: boolean, };
+
+/**
+ * How a commit is folded in. `git commit --fixup` and `--squash`.
+ */
+export type Fold = "fixup" | "squash";
+
+/**
+ * An earlier commit a new one is meant to be folded into.
+ */
+export type FoldInto = { how: Fold, target: string, };
 
 export type GitRef = { 
 /**
@@ -533,6 +553,19 @@ global: SigningConfig,
 local: SigningOverrides, };
 
 /**
+ * Whether the working tree is sparse, and what it holds.
+ */
+export type Sparse = { enabled: boolean, 
+/**
+ * Patterns rather than folders, which the picker cannot show or keep.
+ */
+cone: boolean, 
+/**
+ * The folders checked out, besides the top-level files every cone keeps.
+ */
+folders: Array<string>, };
+
+/**
  * How git is told to reach an ssh server.
  */
 export type SshConfig = { 
@@ -624,6 +657,17 @@ time: bigint,
 automatic: boolean, };
 
 export type Status = { branch: string | null, oid: string | null, upstream: string | null, ahead: bigint, behind: bigint, stashCount: number, entries: Array<StatusEntry>, };
+
+/**
+ * Whether each cache is on here, and whether this git can run the monitor at all.
+ */
+export type StatusCaches = { untrackedCache: boolean, fsmonitor: boolean, 
+/**
+ * Whether this git was built with its own monitor daemon. Builds for macOS and Windows
+ * are; the usual Linux ones are not, and there `core.fsmonitor = true` makes every
+ * status fail rather than run slowly.
+ */
+fsmonitorSupported: boolean, };
 
 export type StatusEntry = { path: string, 
 /**

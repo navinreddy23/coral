@@ -13,7 +13,7 @@
 # - the menu on a proposal checks it out, fetched from the host by the name it keeps it under;
 # - the sidebar is photographed into target/hosting-test for a person to look at.
 #
-# `run.sh [github|gitlab]` picks the host, GitHub when none is named. `run.sh <host> --hold
+# `run.sh [github|gitlab|gitea|bitbucket|azure]` picks the host, GitHub when none is named. `run.sh <host> --hold
 # [seconds]` sets the same up and leaves it open instead.
 #
 # Needs Xephyr, ImageMagick, dbus-run-session and gnome-keyring-daemon.
@@ -37,7 +37,7 @@ if ! "$venv/bin/python" -c "import Xlib" 2>/dev/null; then
 fi
 
 provider="${1:-github}"
-case "$provider" in github | gitlab) shift || true ;; *) provider=github ;; esac
+case "$provider" in github | gitlab | gitea | bitbucket | azure) shift || true ;; *) provider=github ;; esac
 work="$(mktemp -d)"
 pids=()
 cleanup() {
@@ -67,18 +67,29 @@ GIT_CONFIG_GLOBAL=/dev/null git init -q -b main "$repo"
 (cd "$repo" && echo x > a && git add a \
     && GIT_CONFIG_GLOBAL=/dev/null git -c user.name=Ada -c user.email=ada@fixture.invalid commit -qm start \
     && git remote add origin "http://$provider.localhost:$port/o/r.git")
+# Azure DevOps addresses a repository inside a project, and serves it there.
+hosted="$work/git/o/r.git"
+if [ "$provider" = azure ]; then
+    hosted="$work/git/o/p/_git/r"
+    git -C "$repo" remote set-url origin "http://azure.localhost:$port/o/p/_git/r"
+fi
 
 # The host's copy, with proposal 12's tip kept only where the host keeps a fork's: under its
 # own ref, on no branch, so checking it out has to fetch it by that name.
-GIT_CONFIG_GLOBAL=/dev/null git clone -q --bare "$repo" "$work/git/o/r.git"
+GIT_CONFIG_GLOBAL=/dev/null git clone -q --bare "$repo" "$hosted"
 contribution="$work/contribution"
-GIT_CONFIG_GLOBAL=/dev/null git clone -q "$work/git/o/r.git" "$contribution"
+GIT_CONFIG_GLOBAL=/dev/null git clone -q "$hosted" "$contribution"
 (cd "$contribution" && echo y > lanes && git add lanes \
     && GIT_CONFIG_GLOBAL=/dev/null git -c user.name=Grace -c user.email=grace@fixture.invalid \
         commit -qm "Speed up the lane walk")
-if [ "$provider" = github ]; then proposal=refs/pull/12/head; branch=pr/12; else
-    proposal=refs/merge-requests/12/head; branch=mr/12; fi
-GIT_CONFIG_GLOBAL=/dev/null git -C "$work/git/o/r.git" fetch -q "$contribution" "HEAD:$proposal"
+# Bitbucket and Azure DevOps publish no ref for a request's tip, so it is the source branch
+# there, on the host, that a checkout has to fetch.
+case "$provider" in
+    github | gitea) proposal=refs/pull/12/head; branch=pr/12 ;;
+    gitlab) proposal=refs/merge-requests/12/head; branch=mr/12 ;;
+    *) proposal=refs/heads/fast-lanes; branch=pr/12 ;;
+esac
+GIT_CONFIG_GLOBAL=/dev/null git -C "$hosted" fetch -q "$contribution" "HEAD:$proposal"
 # Work of our own on a branch the host has never seen, to open a request from.
 (cd "$repo" && git switch -q -c topic && echo note > NOTE.md && git add NOTE.md \
     && GIT_CONFIG_GLOBAL=/dev/null git -c user.name=Ada -c user.email=ada@fixture.invalid \
@@ -89,6 +100,9 @@ mkdir -p "$home/.config/dev.coral.app" "$home/.local/share/keyrings" "$work/bin"
 mkdir -m 700 "$work/run"
 printf '{"tabs":[{"id":1,"path":"%s","group":null}],"groups":[],"active":1,"nextId":2}' "$repo" \
     > "$home/.config/dev.coral.app/session.json"
+# Neither name says what it is, so the test declares them as a person would for their server.
+printf '{"bitbucket.localhost":"bitbucket","azure.localhost":"azure"}' \
+    > "$home/.config/dev.coral.app/hosts.json"
 printf '#!/bin/sh\nexit 255\n' > "$work/bin/ssh"
 chmod +x "$work/bin/ssh"
 
@@ -145,6 +159,37 @@ if [ "$provider" = github ]; then
     check "grep -q 'POST /api/v3/repos/o/r/issues/12/comments .*Added a test' '$log'" "a comment was left on it"
     check "grep -q 'POST /api/v3/repos/o/r/pulls/12/reviews .*APPROVE' '$log'" "and it was approved, as a review"
     check "grep -q 'POST /api/v3/repos/o/r/pulls .*\"head\": \"topic\"' '$log'" "a pull request was opened from topic"
+elif [ "$provider" = gitea ]; then
+    check "grep -q '/api/v1/repos/o/r/pulls?' '$log'" "the pull requests were asked for"
+    check "! grep -v 'auth=token dummy' '$log' | grep -q ." "every request carried the token, as Gitea wants it"
+    for sha in aaaaaaaa bbbbbbbb cccccccc dddddddd; do
+        check "grep -q 'commits/$sha.*/status' '$log'" "the status of ${sha:0:1}… was asked for"
+    done
+    check "grep -q 'issues/12/comments' '$log'" "the review of #12 was read"
+    check "grep -q 'POST /api/v1/repos/o/r/issues/12/comments .*Added a test' '$log'" "a comment was left on it"
+    check "grep -q 'POST /api/v1/repos/o/r/pulls/12/reviews .*APPROVED' '$log'" "and it was approved, as a review"
+    check "grep -q 'POST /api/v1/repos/o/r/pulls .*\"head\": \"topic\"' '$log'" "a pull request was opened from topic"
+elif [ "$provider" = bitbucket ]; then
+    check "grep -q '/2.0/repositories/o/r/pullrequests?' '$log'" "the pull requests were asked for"
+    check "! grep -v 'auth=Bearer dumm' '$log' | grep -q ." "every request carried the token as a bearer"
+    for id in 13 12 11 10; do
+        check "grep -q 'pullrequests/$id/statuses' '$log'" "the builds of #$id were asked for"
+    done
+    check "grep -q 'pullrequests/12/comments' '$log'" "the review of #12 was read"
+    check "grep -q 'POST /2.0/repositories/o/r/pullrequests/12/comments .*Added a test' '$log'" "a comment was left on it"
+    check "grep -q 'POST /2.0/repositories/o/r/pullrequests/12/approve' '$log'" "and it was approved where Bitbucket counts approvals"
+    check "grep -q 'POST /2.0/repositories/o/r/pullrequests .*\"name\": \"topic\"' '$log'" "a pull request was opened from topic"
+elif [ "$provider" = azure ]; then
+    check "grep -q '/o/p/_apis/git/repositories/r/pullrequests?' '$log'" "the pull requests were asked for"
+    check "! grep -v 'basic=:dummytoken' '$log' | grep -q ." "every request carried the token as Basic with no user"
+    for id in 13 12 11 10; do
+        check "grep -q 'pullrequests/$id/statuses' '$log'" "the statuses of !$id were asked for"
+    done
+    check "grep -q 'pullrequests/12/threads' '$log'" "the review of !12 was read"
+    check "grep -q 'POST /o/p/_apis/git/repositories/r/pullrequests/12/threads[?].*Added a test' '$log'" "a comment was left on it"
+    check "grep -q 'PUT /o/p/_apis/git/repositories/r/pullrequests/12/reviewers/you-0001[?].*\"vote\": 10' '$log'" \
+        "and it was approved as a vote, cast as whoever the token is"
+    check "grep -q 'POST /o/p/_apis/git/repositories/r/pullrequests[?].*refs/heads/topic' '$log'" "a pull request was opened from topic"
 else
     check "grep -q '/merge_requests?' '$log'" "the merge requests were asked for"
     # GitLab takes the token in a header of its own rather than as a bearer.
@@ -163,7 +208,7 @@ fi
 check "[ \"\$(git -C '$repo' symbolic-ref --short HEAD)\" = $branch ]" "#12 is checked out as $branch"
 check "[ -e '$repo/lanes' ]" "with the request's own change in it"
 check "[ \"\$(sha256sum '$keyring')\" != '$before' ]" "the token went to the test's own keyring"
-check "GIT_CONFIG_GLOBAL=/dev/null git --git-dir '$work/git/o/r.git' rev-parse -q --verify refs/heads/topic >/dev/null" \
+check "GIT_CONFIG_GLOBAL=/dev/null git --git-dir '$hosted' rev-parse -q --verify refs/heads/topic >/dev/null" \
     "topic was pushed first, with the token the window signed in with"
 
 echo "photographs in $out"

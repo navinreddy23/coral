@@ -136,6 +136,14 @@ export const BINDINGS: Binding[] = [
     context: 'global', match: (e) => primary(e) && !e.shift && is(e, ',') },
   { id: 'help', label: 'Show keyboard shortcuts', keys: 'Ctrl /', group: 'UI',
     context: 'global', match: (e) => primary(e) && is(e, '/') },
+  // `+` as well as `=`: it is the same key, and which one arrives depends on the layout and
+  // on whether Shift is down.
+  { id: 'zoom.in', label: 'Zoom in', keys: 'Ctrl =', group: 'UI',
+    context: 'global', match: (e) => primary(e) && (e.key === '=' || e.key === '+') },
+  { id: 'zoom.out', label: 'Zoom out', keys: 'Ctrl -', group: 'UI',
+    context: 'global', match: (e) => primary(e) && !e.shift && (e.key === '-' || e.key === '_') },
+  { id: 'zoom.reset', label: 'Actual size', keys: 'Ctrl 0', group: 'UI',
+    context: 'global', match: (e) => primary(e) && !e.shift && e.key === '0' },
 ];
 
 /** `Ctrl 1` to `Ctrl 9` jump to a tab; they are one binding rather than nine. */

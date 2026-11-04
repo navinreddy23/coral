@@ -1,12 +1,12 @@
 use secrecy::SecretString;
 
 use crate::checks::{self, Checks};
-use crate::github;
-use crate::gitlab;
+use crate::issue::Issue;
 use crate::provider::{Host, HostKind, HostingError};
 use crate::pull_request::{NewPullRequest, PullRequest};
 use crate::review::{self, Remark, Reply};
-use crate::token::auth_header;
+use crate::token::{Auth, auth};
+use crate::{azure, bitbucket, gitea, github, gitlab};
 
 /// How many proposals to ask for at once.
 ///
@@ -17,7 +17,7 @@ const PER_PAGE: u32 = 50;
 
 /// Talks to a host's REST API.
 ///
-/// Two providers, dispatched on the host rather than behind a trait: they are a closed set,
+/// Five providers, dispatched on the host rather than behind a trait: they are a closed set,
 /// and every difference between them — the API root, the auth header, whether a draft is a
 /// field or a title prefix — is one match arm wide.
 pub struct Client {
@@ -50,11 +50,17 @@ impl Client {
         let url = match host.kind {
             HostKind::GitHub => github::pulls_url(host, PER_PAGE),
             HostKind::GitLab => gitlab::merge_requests_url(host, PER_PAGE),
+            HostKind::Gitea => gitea::pulls_url(host, PER_PAGE),
+            HostKind::Bitbucket => bitbucket::pulls_url(host, PER_PAGE),
+            HostKind::Azure => azure::pulls_url(host, PER_PAGE),
         };
         let body = self.get(host, &url).await?;
         match host.kind {
             HostKind::GitHub => github::parse_pulls(&body),
             HostKind::GitLab => gitlab::parse_merge_requests(&body),
+            HostKind::Gitea => gitea::parse_pulls(&body),
+            HostKind::Bitbucket => bitbucket::parse_pulls(&body),
+            HostKind::Azure => azure::parse_pulls(host, &body),
         }
     }
 
@@ -78,19 +84,21 @@ impl Client {
         }
     }
 
-    /// Whether a proposal's tip commit passes its checks: GitHub's by the commit, GitLab's by
-    /// the merge request, whose pipelines are not always run on the tip itself.
+    /// Whether a proposal's tip commit passes its checks: GitHub's and Gitea's by the commit,
+    /// the rest by the request — GitLab's pipelines are not always run on the tip itself, and
+    /// Bitbucket and Azure DevOps keep their statuses on the request.
     ///
     /// # Errors
-    /// [`HostingError::Malformed`] for a `sha` that is not a commit id, which is never put in
-    /// a URL; otherwise as [`Client::pull_requests`].
+    /// [`HostingError::Malformed`] for a `sha` that is not a commit id where it would go in a
+    /// URL; otherwise as [`Client::pull_requests`].
     pub async fn checks(
         &self,
         host: &Host,
         number: u64,
         sha: &str,
     ) -> Result<Checks, HostingError> {
-        if !checks::is_commit_id(sha) {
+        let by_commit = matches!(host.kind, HostKind::GitHub | HostKind::Gitea);
+        if by_commit && !checks::is_commit_id(sha) {
             return Err(HostingError::Malformed(format!("{sha} is not a commit id")));
         }
         match host.kind {
@@ -102,6 +110,17 @@ impl Client {
             HostKind::GitLab => {
                 let body = self.get(host, &gitlab::pipelines_url(host, number)).await?;
                 checks::parse_gitlab(&body)
+            }
+            HostKind::Gitea => {
+                checks::parse_gitea(&self.get(host, &gitea::status_url(host, sha)).await?)
+            }
+            HostKind::Bitbucket => checks::parse_bitbucket(
+                &self
+                    .get(host, &bitbucket::statuses_url(host, number))
+                    .await?,
+            ),
+            HostKind::Azure => {
+                checks::parse_azure(&self.get(host, &azure::statuses_url(host, number)).await?)
             }
         }
     }
@@ -118,11 +137,38 @@ impl Client {
         let (url, payload) = match host.kind {
             HostKind::GitHub => (github::create_url(host), github::create_body(new)),
             HostKind::GitLab => (gitlab::create_url(host), gitlab::create_body(new)),
+            HostKind::Gitea => (gitea::create_url(host), gitea::create_body(new)),
+            HostKind::Bitbucket => (bitbucket::create_url(host), bitbucket::create_body(new)),
+            HostKind::Azure => (azure::create_url(host), azure::create_body(new)),
         };
         let body = self.post(host, &url, &payload).await?;
         match host.kind {
             HostKind::GitHub => github::parse_one(&body),
             HostKind::GitLab => gitlab::parse_one(&body),
+            HostKind::Gitea => gitea::parse_one(&body),
+            HostKind::Bitbucket => bitbucket::parse_one(&body),
+            HostKind::Azure => azure::parse_one(host, &body),
+        }
+    }
+
+    /// One issue, or work item on Azure DevOps.
+    ///
+    /// # Errors
+    /// As [`Client::pull_requests`]; a repository with its tracker switched off answers 404.
+    pub async fn issue(&self, host: &Host, number: u64) -> Result<Issue, HostingError> {
+        let url = match host.kind {
+            HostKind::GitHub => github::issue_url(host, number),
+            HostKind::GitLab => gitlab::issue_url(host, number),
+            HostKind::Gitea => gitea::issue_url(host, number),
+            HostKind::Bitbucket => bitbucket::issue_url(host, number),
+            HostKind::Azure => azure::work_item_url(host, number),
+        };
+        let body = self.get(host, &url).await?;
+        match host.kind {
+            HostKind::GitHub | HostKind::Gitea => github::parse_issue(&body),
+            HostKind::GitLab => gitlab::parse_issue(&body),
+            HostKind::Bitbucket => bitbucket::parse_issue(&body),
+            HostKind::Azure => azure::parse_work_item(host, &body),
         }
     }
 
@@ -149,6 +195,29 @@ impl Client {
                 let notes = self.get(host, &gitlab::notes_url(host, number)).await?;
                 gitlab::parse_notes(&notes)?
             }
+            HostKind::Gitea => {
+                let talk = self.get(host, &gitea::comments_url(host, number)).await?;
+                let reviews = self.get(host, &gitea::reviews_url(host, number)).await?;
+                let mut all = gitea::parse_comments(&talk)?;
+                all.extend(gitea::parse_reviews(&reviews)?);
+                all
+            }
+            HostKind::Bitbucket => {
+                let talk = self
+                    .get(host, &bitbucket::comments_url(host, number))
+                    .await?;
+                let one = self.get(host, &bitbucket::one_url(host, number)).await?;
+                let mut all = bitbucket::parse_comments(&talk)?;
+                all.extend(bitbucket::parse_verdicts(&one)?);
+                all
+            }
+            HostKind::Azure => {
+                let threads = self.get(host, &azure::threads_url(host, number)).await?;
+                let one = self.get(host, &azure::one_url(host, number)).await?;
+                let mut all = azure::parse_threads(&threads)?;
+                all.extend(azure::parse_votes(&one)?);
+                all
+            }
         };
         Ok(review::in_order(remarks))
     }
@@ -162,6 +231,9 @@ impl Client {
         let requests = match host.kind {
             HostKind::GitHub => vec![github::reply_request(host, number, reply)],
             HostKind::GitLab => gitlab::reply_requests(host, number, reply)?,
+            HostKind::Gitea => vec![gitea::reply_request(host, number, reply)],
+            HostKind::Bitbucket => bitbucket::reply_requests(host, number, reply),
+            HostKind::Azure => return self.reply_on_azure(host, number, reply).await,
         };
         for (url, payload) in requests {
             self.post(host, &url, &payload).await?;
@@ -169,12 +241,38 @@ impl Client {
         Ok(())
     }
 
+    /// A vote, cast as whoever the token belongs to, and the words in a thread of their own,
+    /// since a vote on Azure DevOps carries none.
+    async fn reply_on_azure(
+        &self,
+        host: &Host,
+        number: u64,
+        reply: &Reply,
+    ) -> Result<(), HostingError> {
+        if let Some(vote) = azure::vote_of(reply) {
+            let me = azure::parse_connection(&self.get(host, &azure::connection_url(host)).await?)?;
+            self.put(
+                host,
+                &azure::vote_url(host, number, &me),
+                &serde_json::json!({ "vote": vote }),
+            )
+            .await?;
+        }
+        let (Reply::Comment { body } | Reply::Approve { body } | Reply::RequestChanges { body }) =
+            reply;
+        if matches!(reply, Reply::Comment { .. }) || !body.trim().is_empty() {
+            self.post(
+                host,
+                &azure::threads_url(host, number),
+                &azure::comment_body(body),
+            )
+            .await?;
+        }
+        Ok(())
+    }
+
     async fn get(&self, host: &Host, url: &str) -> Result<Vec<u8>, HostingError> {
-        let (header, value) = auth_header(host.kind, &self.token);
-        let response = self
-            .http
-            .get(url)
-            .header(header, value)
+        let response = signed(self.http.get(url), host, &self.token)
             .header("Accept", "application/json")
             .send()
             .await
@@ -188,11 +286,36 @@ impl Client {
         url: &str,
         payload: &serde_json::Value,
     ) -> Result<Vec<u8>, HostingError> {
-        let (header, value) = auth_header(host.kind, &self.token);
-        let response = self
-            .http
-            .post(url)
-            .header(header, value)
+        let response = signed(self.http.post(url), host, &self.token)
+            .header("Accept", "application/json")
+            .json(payload)
+            .send()
+            .await
+            .map_err(|e| HostingError::Transport(e.to_string()))?;
+        read(response).await
+    }
+}
+
+/// A request carrying the token the way the host wants it.
+fn signed(
+    request: reqwest::RequestBuilder,
+    host: &Host,
+    token: &SecretString,
+) -> reqwest::RequestBuilder {
+    match auth(host.kind, token) {
+        Auth::Header(name, value) => request.header(name, value),
+        Auth::Basic { user, password } => request.basic_auth(user, Some(password)),
+    }
+}
+
+impl Client {
+    async fn put(
+        &self,
+        host: &Host,
+        url: &str,
+        payload: &serde_json::Value,
+    ) -> Result<Vec<u8>, HostingError> {
+        let response = signed(self.http.put(url), host, &self.token)
             .header("Accept", "application/json")
             .json(payload)
             .send()
@@ -223,10 +346,12 @@ async fn read(response: reqwest::Response) -> Result<Vec<u8>, HostingError> {
 /// status code for what is nearly always an expired or under-scoped token.
 #[must_use]
 pub fn describe_failure(status: u16, body: &[u8]) -> String {
+    // `message` on GitHub, GitLab, Gitea and Azure DevOps; Bitbucket nests it under `error`.
     let message = serde_json::from_slice::<serde_json::Value>(body)
         .ok()
         .and_then(|v| {
             v.get("message")
+                .or_else(|| v.pointer("/error/message"))
                 .or_else(|| v.get("error"))
                 .and_then(|m| m.as_str().map(str::to_owned))
         });

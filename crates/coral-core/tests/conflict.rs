@@ -1042,3 +1042,49 @@ async fn a_rebase_past_its_first_commit_says_its_target_has_moved_on() {
         .await
         .unwrap();
 }
+
+/// The same conflict a second time, with rerere on: git resolves it as it was resolved before
+/// and leaves the index unmerged. The list says so, and keeping that answer stages it as it
+/// stands rather than rebuilding anything from the stages.
+#[tokio::test]
+async fn a_conflict_rerere_has_seen_before_is_marked_and_kept_as_resolved() {
+    let repo = TestRepo::new().write("f.txt", "base\n").commit("base");
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo.write("f.txt", "side\n").commit("side");
+    repo.git(["checkout", "--quiet", "main"]);
+    let repo = repo.write("f.txt", "main\n").commit("main");
+
+    let (runner, loc) = open(&repo).await;
+    assert!(!loc.rerere_enabled(&runner).await.unwrap());
+    loc.set_rerere(&runner, true).await.unwrap();
+    assert!(loc.rerere_enabled(&runner).await.unwrap());
+
+    let _ = repo.command(["merge", "side"]).output().unwrap();
+    let first = loc.conflicts(&runner).await.unwrap();
+    assert!(!first[0].recorded, "nothing is recorded the first time");
+    std::fs::write(repo.path().join("f.txt"), "both\n").unwrap();
+    loc.resolve(&runner, "f.txt", &Resolution::Content("both\n".into()))
+        .await
+        .unwrap();
+    repo.git(["commit", "--quiet", "--no-edit"]);
+    repo.git(["reset", "--quiet", "--hard", "HEAD~1"]);
+
+    let _ = repo.command(["merge", "side"]).output().unwrap();
+    let again = loc.conflicts(&runner).await.unwrap();
+    assert_eq!(again.len(), 1);
+    assert!(again[0].recorded, "resolved from the recording");
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("f.txt")).unwrap(),
+        "both\n"
+    );
+
+    loc.resolve(&runner, "f.txt", &Resolution::Kept)
+        .await
+        .unwrap();
+    assert_eq!(loc.conflicts(&runner).await.unwrap(), []);
+    assert_eq!(repo.git(["show", ":f.txt"]), "both");
+
+    // Off is written as false, so the rr-cache left behind does not keep it on.
+    loc.set_rerere(&runner, false).await.unwrap();
+    assert!(!loc.rerere_enabled(&runner).await.unwrap());
+}

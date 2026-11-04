@@ -2,7 +2,7 @@
 a branch the host does not have yet, reads and answers #12's review, and checks #12 out from
 its menu.
 
-    drive.py <display> <shots-dir> <github|gitlab>
+    drive.py <display> <shots-dir> <github|gitlab|gitea|bitbucket|azure>
 """
 
 import sys
@@ -58,7 +58,8 @@ x.settle()
 x.click(205, 424)
 time.sleep(2)
 x.settle(quiet=2.0)
-box = 373 if PROVIDER == "github" else 281
+# 46 pixels a remark: three on the fake GitHub, two on Gitea, one on the rest.
+box = {"github": 373, "gitea": 327}.get(PROVIDER, 281)
 x.click(345, box)
 x.type_text("Added a test")
 x.click(70, box + 65)

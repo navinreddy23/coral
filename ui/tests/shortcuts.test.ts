@@ -94,4 +94,14 @@ describe('shortcuts', () => {
       }
     }
   });
+
+  it('zooms with Ctrl = (or +), Ctrl - and Ctrl 0, leaving Ctrl 1 to 9 for the tabs', () => {
+    expect(resolve(key('=', { ctrl: true }), 'global')?.id).toBe('zoom.in');
+    expect(resolve(key('+', { ctrl: true, shift: true }), 'global')?.id).toBe('zoom.in');
+    expect(resolve(key('-', { ctrl: true }), 'global')?.id).toBe('zoom.out');
+    expect(resolve(key('0', { ctrl: true }), 'global')?.id).toBe('zoom.reset');
+    expect(tabJump(key('0', { ctrl: true }))).toBeNull();
+    expect(tabJump(key('1', { ctrl: true }))).toBe(1);
+    expect(resolve(key('='), 'global')).toBeNull();
+  });
 });

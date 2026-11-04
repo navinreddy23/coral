@@ -73,6 +73,9 @@ pub enum Action {
     },
     Rebase {
         onto: String,
+        /// Only the commits after this one are replayed: `git rebase --onto <onto> <from>`.
+        #[serde(default)]
+        from: Option<String>,
     },
     CherryPick {
         revs: Vec<String>,
@@ -325,11 +328,9 @@ fn shortened(revs: &[String]) -> String {
 }
 
 impl Action {
-    /// What the journal should call this, and the label a failure is reported under.
-    fn label(&self) -> String {
+    /// [`Self::label`] for a push, which has the most ways to be one.
+    fn push_label(&self) -> String {
         match self {
-            Self::Fetch { .. } => "fetch".to_owned(),
-            Self::Pull { .. } => "pull".to_owned(),
             // Before the arm below it, which matches any push naming a ref and would
             // otherwise swallow this one and journal a deletion as a push.
             Self::Push {
@@ -346,7 +347,16 @@ impl Action {
                 force_with_lease: true,
                 ..
             } => "force push".to_owned(),
-            Self::Push { .. } => "push".to_owned(),
+            _ => "push".to_owned(),
+        }
+    }
+
+    /// What the journal should call this, and the label a failure is reported under.
+    fn label(&self) -> String {
+        match self {
+            Self::Fetch { .. } => "fetch".to_owned(),
+            Self::Pull { .. } => "pull".to_owned(),
+            Self::Push { .. } => self.push_label(),
             Self::Checkout { rev } => format!("checkout {}", named(rev)),
             Self::BranchCreate { name, .. } => format!("create branch {name}"),
             Self::BranchDelete { name, .. } => format!("delete branch {name}"),
@@ -355,7 +365,15 @@ impl Action {
                 MergeMode::FfOnly => format!("fast-forward to {}", named(rev)),
                 _ => format!("merge {}", named(rev)),
             },
-            Self::Rebase { onto } => format!("rebase onto {}", named(onto)),
+            Self::Rebase { onto, from: None } => format!("rebase onto {}", named(onto)),
+            Self::Rebase {
+                onto,
+                from: Some(from),
+            } => format!(
+                "move the commits after {} onto {}",
+                named(from),
+                named(onto)
+            ),
             Self::CherryPick { revs, commit, .. } => {
                 let what = shortened(revs);
                 if *commit {
@@ -425,7 +443,7 @@ impl Action {
                 }
             }
             Self::BisectReset => "end the bisect".to_owned(),
-            Self::CheckoutProposal { number } => format!("check out #{number}"),
+            Self::CheckoutProposal { number } => format!("check out request {number}"),
             Self::Undo => "undo".to_owned(),
             Self::Redo => "redo".to_owned(),
         }
@@ -755,15 +773,16 @@ async fn run_remote(
         Action::CheckoutProposal { number } => {
             let (remote, proposal) = crate::hosting::proposal(loc, runner, number).await?;
             let did = loc
-                .checkout_proposal(runner, &remote, proposal, |p| report(&p))
+                .checkout_proposal(runner, &remote, &proposal, |p| report(&p))
                 .await?;
             let branch = proposal.branch();
+            let quoted = proposal.quoted();
             Ok(Done {
                 conflicted: false,
                 message: match did {
-                    CheckedOut::Created => format!("#{number} is checked out as {branch}"),
-                    CheckedOut::Updated => format!("{branch} is brought up to #{number}"),
-                    CheckedOut::Unchanged => format!("{branch} already has all of #{number}"),
+                    CheckedOut::Created => format!("{quoted} is checked out as {branch}"),
+                    CheckedOut::Updated => format!("{branch} is brought up to {quoted}"),
+                    CheckedOut::Unchanged => format!("{branch} already has all of {quoted}"),
                 },
             })
         }
@@ -789,10 +808,13 @@ async fn run_refs(
             let out = loc.merge(runner, &rev, mode, None).await?;
             return Ok(Done::from(&out));
         }
-        Action::Rebase { onto } => {
+        Action::Rebase { onto, from } => {
             // --update-refs carries any branches pointing inside the rebased range along with
             // it, which is what stops a stack of review branches being left behind.
-            let out = loc.rebase(runner, &onto, true).await?;
+            let out = match from {
+                None => loc.rebase(runner, &onto, true).await?,
+                Some(from) => loc.rebase_onto(runner, &onto, &from, true).await?,
+            };
             return Ok(Done::from(&out));
         }
         Action::CherryPick {
@@ -934,10 +956,15 @@ async fn run_tree(
 pub async fn rebase_todo(
     path: String,
     onto: String,
+    autosquash: bool,
 ) -> Result<coral_core::sequence::Todo, IpcError> {
     let runner = GitRunner::discover().await?;
     let loc = RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
-    Ok(loc.rebase_todo(&runner, &onto).await?)
+    let mut todo = loc.rebase_todo(&runner, &onto).await?;
+    if autosquash {
+        todo.autosquash();
+    }
+    Ok(todo)
 }
 
 /// Runs an interactive rebase against a todo the user has decided.

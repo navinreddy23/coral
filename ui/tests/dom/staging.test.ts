@@ -523,3 +523,44 @@ describe('the staging panel sections', () => {
     }
   });
 });
+
+describe('drafting a message', () => {
+  it('offers Draft only when drafting is on, and only with something staged', async () => {
+    const asked = vi.fn();
+    const { container } = await panel({ onDraft: asked });
+    const button = container.querySelector('button.draft') as HTMLButtonElement;
+    expect(button.textContent).toBe('Draft');
+    expect(button.disabled).toBe(false);
+    await fireEvent.click(button);
+    expect(asked).toHaveBeenCalledOnce();
+
+    const off = await panel();
+    expect(off.container.querySelector('button.draft')).toBeNull();
+  });
+
+  it('says it is drafting while the answer is on its way', async () => {
+    const { container } = await panel({ onDraft: vi.fn(), drafting: true });
+    const button = container.querySelector('button.draft') as HTMLButtonElement;
+    expect(button.textContent).toBe('Drafting…');
+    expect(button.disabled).toBe(true);
+  });
+});
+
+describe('in another language', () => {
+  it('names the lists and the commit button in German, with the plural German uses', async () => {
+    const { locale } = await import('../../src/state/locale.svelte');
+    locale.language = 'de';
+    try {
+      const { container, commit } = await panel();
+      expect(container.textContent).toContain('Vorgemerkt');
+      // The count above the lists is German too, not an English "file change" beside "auf".
+      expect(container.querySelector('header .count')?.textContent).toMatch(/\d+ Änderung/u);
+      commit.summary = 'ui: etwas';
+      await tick();
+      const button = container.querySelector('button.commit') as HTMLButtonElement;
+      expect(button.textContent?.trim()).toBe('1 Datei committen');
+    } finally {
+      locale.language = 'en';
+    }
+  });
+});
