@@ -1,6 +1,8 @@
 import {
   repoConfig,
+  repoDisableSparse,
   repoSetFsmonitor,
+  repoSetSparse,
   repoSetRerere,
   repoSetUntrackedCache,
   type RepoConfig,
@@ -40,6 +42,19 @@ export class RepoConfigState {
 
   async setFsmonitor(on: boolean): Promise<void> {
     await this.#change(() => repoSetFsmonitor(this.#path, on));
+  }
+
+  async setSparse(folders: string[]): Promise<void> {
+    await this.#change(() => repoSetSparse(this.#path, folders));
+  }
+
+  async disableSparse(): Promise<void> {
+    await this.#change(() => repoDisableSparse(this.#path));
+  }
+
+  /** The repository this describes, for the picker to read folders from. */
+  get path(): string {
+    return this.#path;
   }
 
   async #change(write: () => Promise<RepoConfig>): Promise<void> {

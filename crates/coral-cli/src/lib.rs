@@ -60,6 +60,9 @@ pub enum Command {
         /// Leave file contents on the server until something reads one. History stays whole.
         #[arg(long)]
         blobless: bool,
+        /// Check out only the files at the top; pick folders afterwards with `coral sparse`.
+        #[arg(long)]
+        sparse: bool,
         /// Do not draw progress on stderr.
         #[arg(long)]
         quiet: bool,
@@ -353,6 +356,21 @@ pub enum Command {
         #[arg(long)]
         off: bool,
     },
+    /// Show which folders a sparse working tree holds, or change them.
+    Sparse {
+        /// Check out only these folders, and the files at the top. None leaves just those.
+        #[arg(long, num_args = 0.., value_name = "FOLDER", conflicts_with = "off")]
+        set: Option<Vec<String>>,
+        /// Check out everything again.
+        #[arg(long)]
+        off: bool,
+    },
+    /// List the folders directly inside one, as the sparse picker does.
+    Folders {
+        under: Option<String>,
+        #[arg(long, default_value = "HEAD")]
+        rev: String,
+    },
     /// Show the caches git keeps to answer a status quickly, or switch them here.
     StatusCache {
         /// The untracked cache: `on` or `off`.
@@ -580,14 +598,19 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
             ssh_key,
             depth,
             blobless,
+            sparse,
             quiet,
         } => {
-            let into = into.map_or_else(|| repo.to_path_buf(), |dir| repo.join(dir));
-            let name = name.filter(|n| !n.trim().is_empty());
-            let key = ssh_key.filter(|k| !k.trim().is_empty());
-            output::render(
-                &commands::create::clone(url, &into, name, key, depth, blobless, quiet).await,
-            )
+            let what = coral_core::create::Cloned {
+                url,
+                parent: into.map_or_else(|| repo.to_path_buf(), |dir| repo.join(dir)),
+                name: name.filter(|n| !n.trim().is_empty()),
+                ssh_key: ssh_key.filter(|k| !k.trim().is_empty()),
+                depth,
+                blobless,
+                sparse,
+            };
+            output::render(&commands::create::clone(&what, quiet).await)
         }
         Command::Status => output::render(&commands::status::run(repo).await),
         Command::Diff { staged, paths } => {
@@ -603,27 +626,10 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
         Command::Refs { kind } => output::render(&commands::refs::run(repo, kind).await),
         Command::Submodules => output::render(&commands::submodule::run(repo).await),
         Command::Worktrees => output::render(&commands::worktree::list(repo).await),
-        Command::Rerere { on, off } => {
-            let set = if on {
-                Some(true)
-            } else if off {
-                Some(false)
-            } else {
-                None
-            };
-            output::render(&commands::conflicts::rerere(repo, set).await)
-        }
-        Command::StatusCache {
-            untracked,
-            fsmonitor,
-        } => output::render(
-            &commands::status::caches(
-                repo,
-                untracked.map(|v| v == "on"),
-                fsmonitor.map(|v| v == "on"),
-            )
-            .await,
-        ),
+        command @ (Command::Rerere { .. }
+        | Command::Sparse { .. }
+        | Command::Folders { .. }
+        | Command::StatusCache { .. }) => dispatch_config(command, repo).await,
         Command::Signing => output::render(&commands::signing::show(repo).await),
         Command::SigningKeys => output::render(&commands::signing::keys(repo).await),
         Command::SigningSet {
@@ -668,6 +674,40 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
 }
 
 /// Remote-facing commands, split out so each dispatcher stays readable.
+/// The repository's own git switches: rerere, the status caches, the sparse checkout.
+async fn dispatch_config(command: Command, repo: &std::path::Path) -> output::Rendered {
+    match command {
+        Command::Rerere { on, off } => {
+            let set = if on {
+                Some(true)
+            } else if off {
+                Some(false)
+            } else {
+                None
+            };
+            output::render(&commands::conflicts::rerere(repo, set).await)
+        }
+        Command::Sparse { set, off } => {
+            output::render(&commands::status::sparse(repo, set, off).await)
+        }
+        Command::Folders { under, rev } => {
+            output::render(&commands::status::folders(repo, &rev, under.as_deref()).await)
+        }
+        Command::StatusCache {
+            untracked,
+            fsmonitor,
+        } => output::render(
+            &commands::status::caches(
+                repo,
+                untracked.map(|v| v == "on"),
+                fsmonitor.map(|v| v == "on"),
+            )
+            .await,
+        ),
+        _ => unreachable!("routed by `dispatch`"),
+    }
+}
+
 async fn dispatch_log(command: Command, repo: &std::path::Path) -> output::Rendered {
     let Command::Log {
         rev,

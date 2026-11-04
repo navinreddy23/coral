@@ -68,6 +68,11 @@ pub struct Cloned {
     /// server until something asks for one. History stays complete, which is what separates
     /// it from a shallow clone, and the price is that reading an old file needs the network.
     pub blobless: bool,
+    /// Check out only the files at the top, for folders to be picked afterwards.
+    ///
+    /// `--sparse`: cone mode with no folders in it. With `blobless` it is the cheapest way
+    /// into a repository the size of the kernel's — every commit, and only the files read.
+    pub sparse: bool,
 }
 
 impl Cloned {
@@ -169,6 +174,9 @@ where
     }
     if what.blobless {
         cmd = cmd.arg("--filter=blob:none");
+    }
+    if what.sparse {
+        cmd = cmd.arg("--sparse");
     }
     cmd = cmd.arg(&what.url).arg(&into);
     // The environment rather than `-c core.sshCommand=`, because a `-c` is not inherited by

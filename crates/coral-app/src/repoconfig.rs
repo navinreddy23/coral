@@ -14,12 +14,15 @@ pub struct RepoConfig {
     pub rerere: bool,
     /// The two caches git keeps in the index to answer a status quickly.
     pub caches: coral_core::statuscache::StatusCaches,
+    /// Which folders the working tree holds, when it does not hold them all.
+    pub sparse: coral_core::sparse::Sparse,
 }
 
 async fn read(runner: &GitRunner, loc: &RepoLocation) -> Result<RepoConfig, IpcError> {
     Ok(RepoConfig {
         rerere: loc.rerere_enabled(runner).await?,
         caches: loc.status_caches(runner).await?,
+        sparse: loc.sparse(runner).await?,
     })
 }
 
@@ -68,4 +71,53 @@ pub async fn repo_set_fsmonitor(path: String, on: bool) -> Result<RepoConfig, Ip
     let loc = RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
     loc.set_fsmonitor(&runner, on).await?;
     read(&runner, &loc).await
+}
+
+/// Checks out these folders and the top-level files, and nothing else.
+///
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn repo_set_sparse(path: String, folders: Vec<String>) -> Result<RepoConfig, IpcError> {
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    let logged = crate::activity::started(&path, "check out only some folders");
+    match loc.set_sparse(&runner, &folders).await {
+        Ok(()) => logged.finished(),
+        Err(e) => {
+            logged.failed(&e.to_string());
+            return Err(e.into());
+        }
+    }
+    read(&runner, &loc).await
+}
+
+/// Checks out everything again.
+///
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn repo_disable_sparse(path: String) -> Result<RepoConfig, IpcError> {
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    let logged = crate::activity::started(&path, "check out every folder");
+    match loc.disable_sparse(&runner).await {
+        Ok(()) => logged.finished(),
+        Err(e) => {
+            logged.failed(&e.to_string());
+            return Err(e.into());
+        }
+    }
+    read(&runner, &loc).await
+}
+
+/// The folders directly inside `under` at HEAD, for the sparse picker.
+///
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn repo_folders(path: String, under: Option<String>) -> Result<Vec<String>, IpcError> {
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc.folders(&runner, "HEAD", under.as_deref()).await?)
 }

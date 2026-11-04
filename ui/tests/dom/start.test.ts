@@ -253,7 +253,29 @@ describe('the start page', () => {
         sshKey: null,
         depth: null,
         blobless: false,
+        sparse: false,
       },
+    });
+  });
+
+  it('asks for a sparse clone when the files at the top are all that is wanted', async () => {
+    const { view, opened } = await page();
+    await fireEvent.click(view.getByText('Clone'));
+    await fireEvent.input(view.getByPlaceholderText('https://host/team/thing.git'), {
+      target: { value: 'git@gitlab.com:open-source-23/coral.git' },
+    });
+    await fireEvent.click(view.getByText('Choose…'));
+    await fireEvent.click(view.getByText('Only the files at the top, to pick folders from afterwards'));
+    expect(view.container.textContent).toContain('Choose the folders in Preferences, Repository');
+    await waitFor(() => {
+      if (!view.container.textContent?.includes('/home/someone/Work/coral')) throw new Error('not yet');
+    });
+    await fireEvent.click(view.getByText('Clone', { selector: '.primary' }));
+    await waitFor(() => {
+      if (opened.length === 0) throw new Error('not yet');
+    });
+    expect(invoke).toHaveBeenCalledWith('repo_clone', {
+      request: expect.objectContaining({ sparse: true }),
     });
   });
 
@@ -364,6 +386,7 @@ describe('choosing which ssh key clones', () => {
         sshKey: '/home/someone/.ssh/id_work',
         depth: null,
         blobless: false,
+        sparse: false,
       },
     });
   });

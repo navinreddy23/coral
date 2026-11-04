@@ -548,6 +548,19 @@ global: SigningConfig,
 local: SigningOverrides, };
 
 /**
+ * Whether the working tree is sparse, and what it holds.
+ */
+export type Sparse = { enabled: boolean, 
+/**
+ * Patterns rather than folders, which the picker cannot show or keep.
+ */
+cone: boolean, 
+/**
+ * The folders checked out, besides the top-level files every cone keeps.
+ */
+folders: Array<string>, };
+
+/**
  * How git is told to reach an ssh server.
  */
 export type SshConfig = { 

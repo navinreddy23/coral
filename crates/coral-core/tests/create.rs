@@ -42,6 +42,7 @@ async fn a_clone_that_checked_nothing_out_says_so() {
         ssh_key: None,
         depth: None,
         blobless: false,
+        sparse: false,
     };
     let made = clone(&runner, &what, |_| {}).await.unwrap();
 
@@ -140,6 +141,7 @@ async fn clones_into_the_directory_git_would_have_chosen() {
         ssh_key: None,
         depth: None,
         blobless: false,
+        sparse: false,
     };
     // The caller is told where it will land before it lands, so it can say so.
     assert_eq!(what.destination(), dir.path().join(name_from_url(&url)));
@@ -164,6 +166,7 @@ async fn clones_under_the_name_it_was_given() {
             ssh_key: None,
             depth: None,
             blobless: false,
+            sparse: false,
         },
         |_| {},
     )
@@ -197,6 +200,7 @@ async fn refuses_to_clone_over_a_repository_that_is_already_there() {
             ssh_key: None,
             depth: None,
             blobless: false,
+            sparse: false,
         },
         |_| {},
     )
@@ -228,6 +232,7 @@ async fn a_clone_given_a_key_keeps_using_it_afterwards() {
             ssh_key: Some("/home/someone/.ssh/id_work".to_owned()),
             depth: None,
             blobless: false,
+            sparse: false,
         },
         |_| {},
     )
@@ -268,6 +273,7 @@ async fn a_clone_given_no_key_writes_no_command() {
             ssh_key: None,
             depth: None,
             blobless: false,
+            sparse: false,
         },
         |_| {},
     )
@@ -306,6 +312,7 @@ async fn a_clone_reports_progress_rather_than_going_quiet() {
             ssh_key: None,
             depth: None,
             blobless: false,
+            sparse: false,
         },
         move |p| collect.lock().unwrap().push(p),
     )
@@ -342,6 +349,7 @@ async fn a_cancelled_clone_leaves_nothing_behind() {
         ssh_key: None,
         depth: None,
         blobless: false,
+        sparse: false,
     };
     let work = clone(&runner, &what, |_| {});
     // Dropped without ever being polled to completion, which is what an abort does.
@@ -374,6 +382,7 @@ async fn a_clone_into_a_directory_that_is_already_there_does_not_delete_it() {
             ssh_key: None,
             depth: None,
             blobless: false,
+            sparse: false,
         },
         |_| {},
     )
@@ -417,6 +426,7 @@ async fn a_clone_abandoned_part_way_through_leaves_nothing_behind() {
         ssh_key: None,
         depth: None,
         blobless: false,
+        sparse: false,
     };
 
     let cut = tokio::time::timeout(
@@ -469,6 +479,7 @@ async fn a_shallow_clone_takes_the_tip_and_grafts_the_rest() {
             ssh_key: None,
             depth: Some(1),
             blobless: false,
+            sparse: false,
         },
         |_| {},
     )
@@ -508,6 +519,7 @@ async fn a_blobless_clone_keeps_the_whole_history() {
             ssh_key: None,
             depth: None,
             blobless: true,
+            sparse: false,
         },
         |_| {},
     )

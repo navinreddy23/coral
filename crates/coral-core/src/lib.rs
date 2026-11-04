@@ -31,6 +31,7 @@ pub mod rerere;
 pub mod search;
 pub mod sequence;
 pub mod signing;
+pub mod sparse;
 pub mod ssh;
 pub mod stash;
 pub mod status;

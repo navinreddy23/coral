@@ -24,6 +24,7 @@ import type {
   SigningKey,
   SigningOverrides,
   SigningScopes,
+  Sparse,
   SshConfig,
   SshKey,
   SshOverrides,
@@ -460,6 +461,7 @@ export type Choice =
 export interface RepoConfig {
   rerere: boolean;
   caches: StatusCaches;
+  sparse: Sparse;
 }
 
 export function repoConfig(path: string): Promise<RepoConfig> {
@@ -476,6 +478,20 @@ export function repoSetUntrackedCache(path: string, on: boolean): Promise<RepoCo
 
 export function repoSetFsmonitor(path: string, on: boolean): Promise<RepoConfig> {
   return invoke<RepoConfig>('repo_set_fsmonitor', { path, on });
+}
+
+/** Checks out these folders and the top-level files, and nothing else. */
+export function repoSetSparse(path: string, folders: string[]): Promise<RepoConfig> {
+  return invoke<RepoConfig>('repo_set_sparse', { path, folders });
+}
+
+export function repoDisableSparse(path: string): Promise<RepoConfig> {
+  return invoke<RepoConfig>('repo_disable_sparse', { path });
+}
+
+/** The folders directly inside `under` at HEAD, or at the top when it is null. */
+export function repoFolders(path: string, under: string | null): Promise<string[]> {
+  return invoke<string[]>('repo_folders', { path, under });
 }
 
 export function resolveConflict(path: string, file: string, choice: Choice): Promise<void> {

@@ -110,6 +110,7 @@ describe('the Repository pane', () => {
     repoConfig.config = {
       rerere: false,
       caches: { untrackedCache: false, fsmonitor: false, fsmonitorSupported: false },
+      sparse: { enabled: false, cone: true, folders: [] },
     };
     const set = vi.spyOn(repoConfig, 'setRerere').mockResolvedValue();
     const { container } = prefs({ repoConfig, pane: 'repository' });
@@ -134,6 +135,7 @@ describe('the Repository pane', () => {
     repoConfig.config = {
       rerere: false,
       caches: { untrackedCache: false, fsmonitor: false, fsmonitorSupported: false },
+      sparse: { enabled: false, cone: true, folders: [] },
     };
     const untracked = vi.spyOn(repoConfig, 'setUntrackedCache').mockResolvedValue();
     const { container } = prefs({ repoConfig, pane: 'repository' });
@@ -145,5 +147,26 @@ describe('the Repository pane', () => {
     expect(untracked).toHaveBeenCalledWith(true);
     expect(box('Watch the working tree for changes').disabled).toBe(true);
     expect(container.textContent).toContain('built without its filesystem monitor');
+  });
+
+  it('lists the folders a sparse tree holds and puts everything back on request', async () => {
+    const repoConfig = new RepoConfigState();
+    repoConfig.config = {
+      rerere: false,
+      caches: { untrackedCache: false, fsmonitor: false, fsmonitorSupported: false },
+      sparse: { enabled: true, cone: true, folders: ['drivers/gpu', 'kernel'] },
+    };
+    const off = vi.spyOn(repoConfig, 'disableSparse').mockResolvedValue();
+    const { container } = prefs({ repoConfig, pane: 'repository' });
+    expect(container.textContent).toContain('2 folders and the files at the top');
+    expect([...container.querySelectorAll('.folders code')].map((c) => c.textContent)).toEqual([
+      'drivers/gpu',
+      'kernel',
+    ]);
+    const all = [...container.querySelectorAll('.row button')].find(
+      (b) => b.textContent?.trim() === 'Check out everything',
+    ) as HTMLButtonElement;
+    await fireEvent.click(all);
+    expect(off).toHaveBeenCalledOnce();
   });
 });

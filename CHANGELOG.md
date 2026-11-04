@@ -39,6 +39,12 @@
   built with one; the usual Linux builds are not, and the pane says so rather than offering a
   switch that would make every status fail. `coral status-cache --untracked on` from the
   command line.
+- **Sparse checkout.** The Repository pane shows which folders a sparse working tree holds and
+  picks them from the repository's own tree, read a level at a time; a ticked folder brings
+  everything inside it, as git's cone mode does. "Check out everything" undoes it. The clone
+  form can start with only the files at the top, which with file contents on demand is the
+  cheapest way into a repository the size of the kernel's. `coral sparse --set …`,
+  `coral sparse --off`, `coral folders` and `coral clone --sparse` from the command line.
 - `.mailmap` is honoured in the graph, the commit details and file history, as it already was
   in blame: someone who committed under several names and addresses reads as one person, with
   one picture. On the kernel that is the 989-line map its maintainers keep.

@@ -1,9 +1,11 @@
 <script lang="ts">
+  import FolderPicker from './FolderPicker.svelte';
   import type { RepoConfigState } from '../state/repoconfig.svelte';
 
-  /** The repository's own git switches: how it merges and, later, how fast its status is. */
+  /** The repository's own git switches: how it merges, how fast its status is, what it holds. */
   const { repoConfig }: { repoConfig: RepoConfigState } = $props();
   const config = $derived(repoConfig.config);
+  let picking = $state(false);
 </script>
 
 <section class="pane">
@@ -70,7 +72,56 @@
       git which paths changed since it last asked.
     </p>
   {/if}
+
+  <h3>Sparse checkout</h3>
+  {#if config === null}
+    <p class="muted">Reading…</p>
+  {:else if !config.sparse.enabled}
+    <p class="muted">
+      Every folder is checked out. A sparse checkout holds only the folders you choose and the
+      files at the top, which on a very large repository is most of the disk and most of every
+      status.
+    </p>
+  {:else if !config.sparse.cone}
+    <p class="muted">
+      This working tree is sparse by patterns rather than folders, set up outside Coral. It can
+      be put back to everything here; choosing folders would replace the patterns.
+    </p>
+  {:else}
+    <p>
+      {config.sparse.folders.length === 0
+        ? 'Only the files at the top are checked out.'
+        : `${config.sparse.folders.length} folder${config.sparse.folders.length === 1 ? '' : 's'} and the files at the top:`}
+    </p>
+    {#if config.sparse.folders.length > 0}
+      <ul class="folders">
+        {#each config.sparse.folders as folder (folder)}<li><code>{folder}</code></li>{/each}
+      </ul>
+    {/if}
+  {/if}
+  {#if config !== null}
+    <div class="row">
+      <button disabled={repoConfig.busy} onclick={() => (picking = true)}>Choose folders…</button>
+      {#if config.sparse.enabled}
+        <button disabled={repoConfig.busy} onclick={() => void repoConfig.disableSparse()}>
+          Check out everything
+        </button>
+      {/if}
+    </div>
+  {/if}
 </section>
+
+{#if picking && config !== null}
+  <FolderPicker
+    repo={repoConfig.path}
+    initial={config.sparse.cone ? config.sparse.folders : []}
+    onClose={() => (picking = false)}
+    onApply={(folders) => {
+      picking = false;
+      void repoConfig.setSparse(folders);
+    }}
+  />
+{/if}
 
 <style>
   .pane {
@@ -91,6 +142,13 @@
   .error { color: var(--danger); }
   code { font-family: var(--font-mono); font-variant-ligatures: none; }
   .check.off { color: var(--fg-2); }
+  .folders { margin: 0 0 var(--space-3); padding-left: var(--space-4); max-height: 12em; overflow-y: auto; }
+  .row { display: flex; gap: var(--space-2); }
+  .row button {
+    font: inherit; font-size: var(--text-base); cursor: pointer; padding: var(--space-1) var(--space-3);
+    background: var(--bg-1); border: 1px solid var(--border-strong); border-radius: var(--radius-1); color: var(--fg-1);
+  }
+  .row button:hover:not(:disabled) { background: var(--bg-2); color: var(--fg-0); }
   .check {
     display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2);
     color: var(--fg-0); background: var(--bg-0);

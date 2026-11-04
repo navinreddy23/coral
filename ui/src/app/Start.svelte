@@ -47,6 +47,7 @@
   // svelte-ignore state_referenced_locally
   let cloneKey = $state(defaultSshKey);
   let cloneHistory = $state<CloneHistory>('full');
+  let cloneSparse = $state(false);
   let cloneDepth = $state(1);
 
   /**
@@ -102,6 +103,7 @@
       sshKey: overSsh ? cloneKey : '',
       history: cloneHistory,
       depth: cloneDepth,
+      sparse: cloneSparse,
     });
     // The notice goes with it: opening the repository takes this screen away, and a clone
     // that checked nothing out is exactly the one worth saying something about.
@@ -280,6 +282,16 @@
           <p class="note">
             Every commit, no file contents until something reads one. The graph is complete and
             opening an old file needs the network. The host has to support it.
+          </p>
+        {/if}
+        <label class="tick">
+          <input type="checkbox" bind:checked={cloneSparse} />
+          <span>Only the files at the top, to pick folders from afterwards</span>
+        </label>
+        {#if cloneSparse}
+          <p class="note">
+            A sparse checkout. Choose the folders in Preferences, Repository, once it is open;
+            with file contents on demand it is the cheapest way into a very large repository.
           </p>
         {/if}
         {#if cloneParent && clonedAs}

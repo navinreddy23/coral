@@ -171,6 +171,9 @@ pub struct CloneRequest {
     /// Leave file contents on the server until something reads one.
     #[serde(default)]
     pub blobless: bool,
+    /// Check out only the top-level files, for folders to be picked afterwards.
+    #[serde(default)]
+    pub sparse: bool,
 }
 
 /// Clones a repository and answers with where it landed.
@@ -191,6 +194,7 @@ pub async fn repo_clone(
         ssh_key,
         depth,
         blobless,
+        sparse,
     } = request;
     let mut settings = profiles.read().current().settings.clone();
     let runner = coral_core::process::GitRunner::discover().await?;
@@ -208,6 +212,7 @@ pub async fn repo_clone(
         ssh_key: key,
         depth: depth.filter(|d| *d > 0),
         blobless,
+        sparse,
     };
     let logged = crate::activity::started(&parent, &format!("Clone {}", what.url));
     // Keyed by where it will land, since there is no repository to name yet and that is the

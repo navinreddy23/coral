@@ -87,3 +87,73 @@ impl crate::output::Human for Caches {
         )
     }
 }
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SparseView {
+    #[serde(flatten)]
+    pub sparse: coral_core::sparse::Sparse,
+}
+
+/// The sparse checkout here, after changing it when asked.
+///
+/// # Errors
+/// [`CoralError::NotARepository`], or any git failure.
+pub async fn sparse(
+    path: &Path,
+    set: Option<Vec<String>>,
+    off: bool,
+) -> Result<SparseView, CoralError> {
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, path).await?;
+    if off {
+        loc.disable_sparse(&runner).await?;
+    } else if let Some(folders) = set {
+        loc.set_sparse(&runner, &folders).await?;
+    }
+    Ok(SparseView {
+        sparse: loc.sparse(&runner).await?,
+    })
+}
+
+impl crate::output::Human for SparseView {
+    fn human(&self) -> String {
+        if !self.sparse.enabled {
+            return "every folder is checked out".to_owned();
+        }
+        if !self.sparse.cone {
+            return "sparse, by patterns rather than folders".to_owned();
+        }
+        if self.sparse.folders.is_empty() {
+            return "sparse: only the files at the top".to_owned();
+        }
+        format!(
+            "sparse: the files at the top, and\n  {}",
+            self.sparse.folders.join("\n  ")
+        )
+    }
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Folders {
+    pub folders: Vec<String>,
+}
+
+/// The folders directly inside `under` at `rev`.
+///
+/// # Errors
+/// [`CoralError::NotARepository`], or any git failure.
+pub async fn folders(path: &Path, rev: &str, under: Option<&str>) -> Result<Folders, CoralError> {
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, path).await?;
+    Ok(Folders {
+        folders: loc.folders(&runner, rev, under).await?,
+    })
+}
+
+impl crate::output::Human for Folders {
+    fn human(&self) -> String {
+        self.folders.join("\n")
+    }
+}
