@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- A line picked in a diff to stage on its own was drawn as a short box over the line numbers.
+  The bar for picking lines in Blame, new in 1.4.0, had the same class name as a picked line, so
+  its layout applied to the line as well.
+
 ## 1.4.0
 
 ### Added

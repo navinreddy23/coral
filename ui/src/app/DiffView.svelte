@@ -533,7 +533,7 @@
         <!-- Always there, so picking a line moves nothing: a bar that appeared on the first
              pick pushed every row down by its height, and the second click landed on the line
              just picked and let it go. Sticky, so the way on is in view wherever it was made. -->
-        <div class="picked" role="status">
+        <div class="line-range" role="status">
           {#if range === null}
             <span class="muted">Pick a line number for the history of that line; Shift-click another for the lines between.</span>
           {:else}
@@ -880,23 +880,23 @@
     padding: var(--space-1) var(--space-2) var(--space-2); color: var(--fg-1); font-size: var(--text-sm);
     border-bottom: 1px solid var(--border); margin-bottom: var(--space-1);
   }
-  .scope button, .picked button {
+  .scope button, .line-range button {
     font: inherit; font-size: var(--text-sm); cursor: pointer; white-space: nowrap;
     background: var(--bg-0); color: var(--fg-1); border: 1px solid var(--border);
     border-radius: var(--radius-0); padding: 0 var(--space-2); line-height: 18px;
   }
-  .scope button:hover, .picked button:hover { background: var(--bg-2); color: var(--fg-0); }
-  .picked {
+  .scope button:hover, .line-range button:hover { background: var(--bg-2); color: var(--fg-0); }
+  .line-range {
     position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: var(--space-2);
     padding: var(--space-1) var(--space-2); background: var(--bg-1);
     border-bottom: 1px solid var(--border); color: var(--fg-1); font-size: var(--text-sm);
   }
-  .picked .go { color: var(--fg-0); border-color: var(--accent); }
+  .line-range .go { color: var(--fg-0); border-color: var(--accent); }
   /* One height whatever it says, and the hint kept to one line: the bar is there so that
      picking a line moves nothing, which a hint taller than the picked state undid. */
-  .picked { box-sizing: border-box; height: 30px; flex-wrap: nowrap; }
-  .picked > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .picked .muted { color: var(--fg-2); margin: 0; padding: 0; }
+  .line-range { box-sizing: border-box; height: 30px; flex-wrap: nowrap; }
+  .line-range > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .line-range .muted { color: var(--fg-2); margin: 0; padding: 0; }
   td.no.line-pick { cursor: pointer; }
   td.no.line-pick:hover { color: var(--fg-0); }
   tr.ranged td.no { background: var(--accent-soft); color: var(--fg-0); box-shadow: inset 2px 0 0 var(--accent-line); }
