@@ -2,6 +2,7 @@
   import { t } from '../state/locale.svelte';
   import { copyText } from './clipboard';
   import type { SshState } from '../state/ssh.svelte';
+  import { baseName } from './path';
 
   const { ssh, onCopied }: {
     ssh: SshState;
@@ -48,7 +49,44 @@
     }
   });
 
+  /** Why the key in the field cannot be used, or that ssh will refuse it, or null. */
+  let problem = $state<string | null>(null);
+
+  /**
+   * Checks a key typed by hand before git is pointed at it.
+   *
+   * A path with a typo is otherwise written into the config without complaint and only shows
+   * up later, as a push that fails with ssh's "no such identity".
+   */
+  async function checked(): Promise<boolean> {
+    problem = null;
+    const typed = privateKey.trim();
+    if (useAgent || typed === '') return true;
+    const got = await ssh.adopt(typed);
+    if ('error' in got) {
+      problem = got.error;
+      return false;
+    }
+    if (got.key.tooOpen) problem = refusedBySsh(got.key.path);
+    return true;
+  }
+
+  function refusedBySsh(path: string): string {
+    return `Other users can read ${path}, so ssh will refuse it. Run chmod 600 on it.`;
+  }
+
+  async function browse() {
+    const got = await ssh.chooseFile();
+    if (got === null) return;
+    if ('error' in got) {
+      problem = got.error;
+      return;
+    }
+    choose(got.key.path);
+  }
+
   async function save() {
+    if (!(await checked())) return;
     if (ssh.level === 'app') {
       await ssh.saveApp({
         useAgent,
@@ -73,8 +111,9 @@
     const found = ssh.keys.find((k) => k.path === path);
     if (!found) return;
     privateKey = found.path;
-    publicKey = found.publicPath;
+    publicKey = found.publicPath ?? '';
     useAgent = false;
+    problem = found.tooOpen ? refusedBySsh(found.path) : null;
   }
 
   async function copyPublic() {
@@ -154,12 +193,14 @@
         <select disabled={useAgent} onchange={(e) => choose(e.currentTarget.value)}>
           <option value="">Choose…</option>
           {#each ssh.keys as key (key.path)}
-            <option value={key.path}>{key.path.split('/').pop()} · {key.kind}</option>
+            <option value={key.path}>{baseName(key.path)} · {key.kind}</option>
           {/each}
         </select>
       {/if}
+      <button disabled={useAgent} onclick={() => void browse()}>Browse…</button>
     </span>
   </label>
+  {#if problem !== null}<p class="error" role="alert">{problem}</p>{/if}
 
   <label>
     SSH public key

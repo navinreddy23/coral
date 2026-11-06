@@ -944,6 +944,32 @@ export function sshGenerate(
   return invoke<SshKey>('ssh_generate', { name, comment, passphrase });
 }
 
+/** Describes a file chosen as a private key, or refuses it with the reason. */
+export function sshKeyAt(path: string): Promise<SshKey> {
+  return invoke<SshKey>('ssh_key_at', { path });
+}
+
+/** The folder ssh keys are kept in, which is where the key picker opens. */
+export function sshDirectory(): Promise<string> {
+  return invoke<string>('ssh_directory');
+}
+
+/**
+ * Asks for a private key file, anywhere on disk.
+ *
+ * No extension filter: private keys usually have none, and on Windows they are kept wherever
+ * their owner put them, which is the reason this picker exists.
+ */
+export async function pickSshKey(startIn?: string): Promise<string | null> {
+  const chosen = await openDialog({
+    directory: false,
+    multiple: false,
+    title: 'Choose a private key',
+    ...(startIn === undefined ? {} : { defaultPath: startIn }),
+  });
+  return typeof chosen === 'string' ? chosen : null;
+}
+
 /** A public key's own text, which is what a host asks to be pasted in. */
 export function sshPublicKey(path: string): Promise<string> {
   return invoke<string>('ssh_public_key', { path });

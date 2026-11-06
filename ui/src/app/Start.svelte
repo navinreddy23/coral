@@ -6,6 +6,8 @@
   import Mark from './Mark.svelte';
   import type { StartState } from '../state/start.svelte';
   import type { SshKey } from '../ipc/types';
+  import type { KeyChoice } from '../state/ssh.svelte';
+  import SshKeyField from './SshKeyField.svelte';
   import type { CloneHistory } from '../ipc/start';
   import { elidePath } from './path';
 
@@ -15,6 +17,7 @@
     onOpenRequest = () => undefined,
     sshKeys,
     defaultSshKey,
+    onChooseSshKey,
     onOpen,
     onPickDirectory,
     onClose,
@@ -29,6 +32,8 @@
     sshKeys: SshKey[];
     /** The current profile's key, which is what the form starts on. */
     defaultSshKey: string;
+    /** Asks for a key file anywhere on disk, since keys are not always in `~/.ssh`. */
+    onChooseSshKey: () => Promise<KeyChoice | null>;
     /** Asks before something that cannot be undone. Returns whether to go ahead. */
     onConfirm: (title: string, detail: string) => Promise<boolean>;
     /** Opens a repository at a path, in a tab. */
@@ -236,18 +241,14 @@
             git with no terminal and no askpass, deliberately, so a key with a passphrase and
             no agent holding it fails instead of asking.
           -->
-          <label class="sshkey">
-            <span class="name">SSH key</span>
-            <!-- An explicit handler rather than `bind:value`, as the ssh pane does it: the
-                 options arrive with the answer and a binding re-selects from state after they
-                 render, which is how a picker ends up showing a choice nobody made. -->
-            <select value={cloneKey} onchange={(e) => (cloneKey = e.currentTarget.value)}>
-              <option value="">Whatever the agent offers</option>
-              {#each sshKeys as key (key.path)}
-                <option value={key.path}>{key.path.split('/').pop()} · {key.comment}</option>
-              {/each}
-            </select>
-          </label>
+          <div class="sshkey">
+            <SshKeyField
+              keys={sshKeys}
+              value={cloneKey}
+              onChange={(path) => (cloneKey = path)}
+              onChooseFile={onChooseSshKey}
+            />
+          </div>
           <p class="note">
             The chosen key is the only one offered: <code>~/.ssh/config</code> is ignored for
             this repository, since a key named there for the same host would otherwise win. A
@@ -518,6 +519,7 @@
   .says { margin: 0; color: var(--fg-2); background: var(--bg-1); }
   /* Beneath the picker it qualifies, and quieter than the form it sits in. */
   .note { margin: -2px 0 0; font-size: var(--text-sm); color: var(--fg-2); background: var(--bg-1); }
+  .sshkey { background: var(--bg-1); }
   .history select {
     flex: 0 1 auto; min-width: 0; font: inherit; font-size: var(--text-base);
     padding: 5px var(--space-2); border-radius: var(--radius-1);
@@ -529,11 +531,6 @@
     border: 1px solid var(--border); background: var(--bg-0); color: var(--fg-0);
   }
   .units { flex: 0 0 auto; color: var(--fg-2); }
-  .sshkey select {
-    flex: 1 1 auto; min-width: 0; font: inherit; font-size: var(--text-base);
-    padding: 5px var(--space-2); border-radius: var(--radius-1);
-    border: 1px solid var(--border); background: var(--bg-0); color: var(--fg-0);
-  }
   .mono { font-family: var(--font-mono); font-variant-ligatures: none; }
   .error { color: var(--danger); margin: 0 0 var(--space-3); background: var(--bg-0); }
   .notice {

@@ -119,3 +119,13 @@ describe('the directory something sits in', () => {
     expect(beside(undefined)).toBeUndefined();
   });
 });
+
+describe('the name at the end of a path', () => {
+  it('reads a Windows path as well as a Unix one', async () => {
+    const { baseName } = await import('../src/app/path');
+    expect(baseName('/home/dev/.ssh/id_work')).toBe('id_work');
+    // What a Windows file dialog returns; splitting on `/` alone showed the whole path.
+    expect(baseName('C:\\Users\\Dev\\Documents\\keys\\work')).toBe('work');
+    expect(baseName('C:/Users/Dev/keys/')).toBe('keys');
+  });
+});
