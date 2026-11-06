@@ -205,7 +205,8 @@ hosting-test: app
     bash tests/hosting/run.sh gitlab
 
 ssh-test:
-    bash tests/ssh/run.sh
+    cargo build -q -p coral-cli
+    CORAL_BIN=target/debug/coral bash tests/ssh/run.sh
 
 # Photographs every surface of the window in both themes, in a real browser. Needs Chrome,
 # which is why it is not part of `check`.

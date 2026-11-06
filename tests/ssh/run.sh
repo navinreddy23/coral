@@ -247,4 +247,55 @@ git -C "$DIR/super/vendor/tools" fetch -q origin \
     || fail "a fetch from inside the submodule did not use the key recorded there"
 say "ok   a fetch from inside the submodule uses the key its own clone records"
 
+# ------------------------------------------------------------------ coral's own command
+# Everything above spells the command by hand. This runs the one Coral writes, for a key chosen
+# from outside ~/.ssh: in a folder with a space in its name, and with no `.pub` beside it, which
+# is how a key copied onto a Windows machine usually arrives.
+if [ -n "${CORAL_BIN:-}" ]; then
+    CORAL=$(cd "$(dirname "$CORAL_BIN")" && pwd)/$(basename "$CORAL_BIN")
+    mkdir -p "$DIR/keys with space"
+    cp "$DIR/keys/bob" "$DIR/keys with space/bob's key"
+    chmod 600 "$DIR/keys with space/bob's key"
+
+    # Coral's command is `ssh -F none ...`, which would read and write the real known_hosts. An
+    # `ssh` earlier on PATH adds the throwaway host options first, where ssh lets them win, and
+    # leaves every word of Coral's own command as it was.
+    mkdir -p "$DIR/bin"
+    printf '#!/usr/bin/env bash\nexec %s %s "$@"\n' "$(command -v ssh)" "$throwaway" > "$DIR/bin/ssh"
+    chmod +x "$DIR/bin/ssh"
+
+    # 10. A clone with the chosen key reaches bob, and the key is recorded as Coral spelled it.
+    rm -rf "$DIR/into"
+    mkdir -p "$DIR/into"
+    PATH="$DIR/bin:$PATH" "$CORAL" clone "$direct_url" --into "$DIR/into" \
+        --ssh-key "$DIR/keys with space/bob's key" --quiet >"$DIR/coral.out" 2>&1 \
+        || { cat "$DIR/coral.out" >&2; fail "coral did not clone with a key from outside ~/.ssh"; }
+    [ -f "$DIR/into/project/readme.md" ] || fail "coral cloned, but not bob's project"
+    recorded=$(git -C "$DIR/into/project" config core.sshCommand)
+    case "$recorded" in
+        *"keys with space/bob'\''s key"*) ;;
+        *) fail "the recorded command does not name the chosen key: $recorded" ;;
+    esac
+    say "ok   coral clones with a key from a folder with a space, with no .pub beside it"
+
+    # 11. And a later fetch runs that recorded command, quoting and all, through git's own sh.
+    PATH="$DIR/bin:$PATH" git -C "$DIR/into/project" fetch -q origin \
+        || fail "a fetch with coral's recorded command did not reach bob"
+    say "ok   a later fetch uses the command coral recorded"
+
+    # 12. The same clone pinned to alice is refused by the host, although the agent holds bob
+    # too. So it was the chosen key that reached bob above, not the agent's.
+    rm -rf "$DIR/into"
+    mkdir -p "$DIR/into"
+    if PATH="$DIR/bin:$PATH" "$CORAL" clone "$direct_url" --into "$DIR/into" \
+        --ssh-key "$DIR/keys/alice" --quiet >"$DIR/coral.out" 2>&1; then
+        fail "coral cloned bob's project with alice's key"
+    fi
+    grep -q "could not be found" "$DIR/coral.out" \
+        || { cat "$DIR/coral.out" >&2; fail "expected the host's own refusal"; }
+    say "ok   the same command with alice's key is refused, so the chosen key is the one used"
+else
+    say "skipped: coral's own command (CORAL_BIN is not set; run it through just ssh-test)"
+fi
+
 say "passed"
