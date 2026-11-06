@@ -96,8 +96,9 @@ see exactly what Coral does. Switching restores the other side as it was left.
 
 **Around the edges.** Repository tabs with Chrome-style groups, an embedded terminal, commit
 signing configured per repository with each commit's signature checked, notes on commits,
-commit templates, SSH key selection for a clone and for an open repository,
-worktrees, patches, a command palette, GitKraken's keyboard shortcuts, and light and dark themes.
+commit templates, SSH key selection for a clone, a profile and an open repository, from any
+folder on disk, worktrees, patches, a command palette, GitKraken's keyboard shortcuts, and light
+and dark themes.
 
 ## Two front ends, one engine
 
