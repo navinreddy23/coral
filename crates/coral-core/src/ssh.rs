@@ -214,8 +214,9 @@ fn described_by(public: &Path) -> (String, String) {
 /// [`CoralError::Refused`] saying what is wrong with the file: missing, the public half with no
 /// private one beside it, a `PuTTY` key, or not a private key at all.
 pub fn key_at(chosen: &Path) -> Result<SshKey, CoralError> {
+    // Reads as "cannot use that key: <why>".
     let refuse = |detail: String| CoralError::Refused {
-        label: "ssh",
+        label: "use that key",
         detail,
     };
     // A typed `~/.ssh/...` means what it would at a shell, and what `command_for` will write.
