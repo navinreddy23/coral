@@ -22,6 +22,7 @@ tracing   = { workspace = true }
 gix       = { workspace = true, features = ["max-performance"] }
 notify    = { workspace = true }
 tempfile  = { workspace = true }
+dirs      = { workspace = true }
 ts-rs     = { workspace = true, optional = true }
 
 # One keyring backend per platform, rather than every backend on every platform.

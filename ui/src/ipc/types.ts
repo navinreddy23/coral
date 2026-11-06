@@ -591,7 +591,7 @@ command: string,
 credentialHelper: string, };
 
 /**
- * One key pair found on disk.
+ * One private key on disk, found in `~/.ssh` or chosen from anywhere.
  */
 export type SshKey = { 
 /**
@@ -601,7 +601,7 @@ path: string,
 /**
  * The public half, when it is beside the private one.
  */
-publicPath: string, 
+publicPath: string | null, 
 /**
  * The comment at the end of the public key, usually `user@host`.
  */
@@ -609,7 +609,11 @@ comment: string,
 /**
  * `ssh-ed25519`, `ssh-rsa`, and so on.
  */
-kind: string, };
+kind: string, 
+/**
+ * Readable by others, which OpenSSH refuses to use ("UNPROTECTED PRIVATE KEY FILE").
+ */
+tooOpen: boolean, };
 
 /**
  * What this repository sets for itself. `None` means it inherits.
