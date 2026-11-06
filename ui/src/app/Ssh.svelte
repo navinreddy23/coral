@@ -21,6 +21,8 @@
   let publicKey = $state('');
   let helper = $state('');
   let seeded = $state('');
+  /** Why the key in the field cannot be used, or that ssh will refuse it, or null. */
+  let problem = $state<string | null>(null);
 
   /**
    * Reseeds when the level or the loaded settings change, and not otherwise.
@@ -34,6 +36,8 @@
     const key = `${ssh.level}:${JSON.stringify(scopes)}`;
     if (key === seeded) return;
     seeded = key;
+    // What was wrong with the other level's key says nothing about this one.
+    problem = null;
 
     if (ssh.level === 'app') {
       useAgent = scopes.global.useAgent;
@@ -48,9 +52,6 @@
       helper = local.credentialHelper ?? '';
     }
   });
-
-  /** Why the key in the field cannot be used, or that ssh will refuse it, or null. */
-  let problem = $state<string | null>(null);
 
   /**
    * Checks a key typed by hand before git is pointed at it.
@@ -72,7 +73,7 @@
   }
 
   function refusedBySsh(path: string): string {
-    return `Other users can read ${path}, so ssh will refuse it. Run chmod 600 on it.`;
+    return `Other users can read ${baseName(path)}, so ssh will refuse it. Run chmod 600 on it first.`;
   }
 
   async function browse() {
@@ -187,8 +188,12 @@
 
   <label>
     SSH private key
+    <!-- The path on a line of its own: a key kept outside ~/.ssh has a long one, and it is the
+         one thing on this screen that has to be read in full. -->
     <span class="row">
       <input bind:value={privateKey} disabled={useAgent} spellcheck="false" placeholder="~/.ssh/id_ed25519" />
+    </span>
+    <span class="row">
       {#if ssh.keys.length > 0}
         <select disabled={useAgent} onchange={(e) => choose(e.currentTarget.value)}>
           <option value="">Choose…</option>

@@ -37,7 +37,9 @@ describe('the ssh key field', () => {
     const { view } = field([COPIED], COPIED.path);
     const alert = view.getByRole('alert');
     expect(alert.textContent).toContain('ssh will refuse it');
-    expect(alert.textContent).toContain('chmod 600 "/media/stick/id_copied"');
+    expect(alert.textContent).toContain('chmod 600');
+    // The path is said once, beneath, rather than again inside the warning.
+    expect(view.container.querySelector('.where')?.textContent).toBe('/media/stick/id_copied');
   });
 
   it('names a Windows key by its file, and says the whole path beneath', () => {

@@ -65,17 +65,21 @@
     </select>
     <button type="button" class="pick" onclick={() => void browse()}>Choose a key file…</button>
   </label>
-  {#if problem !== null}
-    <p class="problem" role="alert">{problem}</p>
-  {:else if chosen?.tooOpen}
-    <p class="problem" role="alert">
-      Other users can read this file, so ssh will refuse it. Run
-      <code>chmod 600 "{chosen.path}"</code> first.
-    </p>
-  {/if}
-  {#if chosen !== undefined}
-    <p class="where mono" title={chosen.path}>{chosen.path}</p>
-  {/if}
+  <!-- Indented by a box of its own, at the field's font size: an indent in em on the smaller
+       text itself would not line up with the select. -->
+  <div class="under">
+    {#if problem !== null}
+      <p class="problem" role="alert">{problem}</p>
+    {:else if chosen?.tooOpen}
+      <p class="problem" role="alert">
+        Other users can read this file, so ssh will refuse it. Run <code>chmod 600</code> on
+        it first.
+      </p>
+    {/if}
+    {#if chosen !== undefined}
+      <p class="where mono" title={chosen.path}>{chosen.path}</p>
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -93,10 +97,11 @@
     background: var(--bg-2); border: 1px solid var(--border); color: var(--fg-1);
   }
   .pick:hover { background: var(--bg-3); color: var(--fg-0); }
-  .where, .problem {
-    margin: 0 0 0 calc(var(--key-name-width, 7em) + var(--space-3)); font-size: var(--text-sm); background: inherit;
-    overflow-wrap: anywhere;
+  .under {
+    display: flex; flex-direction: column; gap: var(--space-1); background: inherit;
+    margin-left: calc(var(--key-name-width, 7em) + var(--space-3));
   }
+  .where, .problem { margin: 0; font-size: var(--text-sm); background: inherit; overflow-wrap: anywhere; }
   .where { color: var(--fg-2); }
   .problem { color: var(--danger); }
   .mono { font-family: var(--font-mono); font-variant-ligatures: none; }
