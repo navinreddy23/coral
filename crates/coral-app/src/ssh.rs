@@ -57,6 +57,26 @@ pub async fn ssh_keys() -> Result<Vec<SshKey>, IpcError> {
     ))
 }
 
+/// Describes one file the user chose as a private key, wherever it lives.
+///
+/// # Errors
+/// [`coral_core::CoralError::Refused`] saying why the file cannot be used as one.
+#[tauri::command]
+#[allow(clippy::unused_async)]
+pub async fn ssh_key_at(path: String) -> Result<SshKey, IpcError> {
+    Ok(coral_core::ssh::key_at(std::path::Path::new(&path))?)
+}
+
+/// The folder a key picker opens in.
+///
+/// # Errors
+/// Never.
+#[tauri::command]
+#[allow(clippy::unused_async)]
+pub async fn ssh_directory() -> Result<String, IpcError> {
+    Ok(coral_core::ssh::default_directory().display().to_string())
+}
+
 /// Creates an ed25519 key pair.
 ///
 /// # Errors

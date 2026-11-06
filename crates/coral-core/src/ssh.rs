@@ -58,7 +58,7 @@ pub struct SshScopes {
     pub local: SshOverrides,
 }
 
-/// One key pair found on disk.
+/// One private key on disk, found in `~/.ssh` or chosen from anywhere.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "types.ts"))]
 #[serde(rename_all = "camelCase")]
@@ -66,11 +66,13 @@ pub struct SshKey {
     /// The private key's path, which is what `core.sshCommand` names.
     pub path: String,
     /// The public half, when it is beside the private one.
-    pub public_path: String,
+    pub public_path: Option<String>,
     /// The comment at the end of the public key, usually `user@host`.
     pub comment: String,
     /// `ssh-ed25519`, `ssh-rsa`, and so on.
     pub kind: String,
+    /// Readable by others, which OpenSSH refuses to use ("UNPROTECTED PRIVATE KEY FILE").
+    pub too_open: bool,
 }
 
 /// Builds the `core.sshCommand` that pins git to one key.
@@ -92,10 +94,32 @@ pub struct SshKey {
 /// `/dev/null` because there is no such device on Windows; OpenSSH has understood it since 8.4.
 #[must_use]
 pub fn command_for(private_key: &str) -> String {
+    let home = dirs::home_dir();
+    let path = expanded(private_key, home.as_deref());
     format!(
         "ssh -F none -i {} -o IdentitiesOnly=yes",
-        crate::process::shell_word(private_key)
+        crate::process::shell_word(&path)
     )
+}
+
+/// A key path with a leading `~` made absolute against `home`.
+///
+/// Expanded here because the single quotes `shell_word` adds stop the shell doing it. Nothing
+/// else is rewritten: the path read back out of the command has to be the one the user chose,
+/// or every list would show it as a second, different key.
+#[must_use]
+pub fn expanded(key: &str, home: Option<&Path>) -> String {
+    match (key.strip_prefix('~'), home) {
+        (Some(rest), Some(home)) if rest.is_empty() || rest.starts_with(['/', '\\']) => {
+            let rest = rest.trim_start_matches(['/', '\\']);
+            if rest.is_empty() {
+                home.display().to_string()
+            } else {
+                home.join(rest).display().to_string()
+            }
+        }
+        _ => key.to_owned(),
+    }
 }
 
 /// Reads the key back out of a `core.sshCommand`, or `None` when it names none.
@@ -157,29 +181,145 @@ pub fn keys_in(dir: &Path) -> Vec<SshKey> {
         if !private.is_file() {
             continue;
         }
-        let text = std::fs::read_to_string(&path).unwrap_or_default();
-        let mut parts = text.split_whitespace();
-        let kind = parts.next().unwrap_or_default().to_owned();
-        // The body is skipped; the comment is whatever follows it, and may be absent.
-        let comment = parts.nth(1).unwrap_or_default().to_owned();
+        let (kind, comment) = described_by(&path);
         keys.push(SshKey {
             path: private.display().to_string(),
-            public_path: path.display().to_string(),
+            public_path: Some(path.display().to_string()),
             comment,
             kind,
+            too_open: too_open(&private),
         });
     }
     keys.sort_by(|a, b| a.path.cmp(&b.path));
     keys
 }
 
-/// Where ssh keys live for this user.
+/// The kind and comment a public key file states. The body between them is skipped.
+fn described_by(public: &Path) -> (String, String) {
+    let text = std::fs::read_to_string(public).unwrap_or_default();
+    let mut parts = text.split_whitespace();
+    let kind = parts.next().unwrap_or_default().to_owned();
+    let comment = parts.nth(1).unwrap_or_default().to_owned();
+    (kind, comment)
+}
+
+/// Describes one file the user chose as their private key, wherever it is.
+///
+/// Only the first line of the private file is read, to tell a key from anything else; the
+/// kind and comment come from the `.pub` beside it when there is one. Nothing runs
+/// `ssh-keygen -y`, which would stop to ask for the passphrase of an encrypted key.
+///
+/// # Errors
+/// [`CoralError::Refused`] saying what is wrong with the file: missing, the public half with no
+/// private one beside it, a `PuTTY` key, or not a private key at all.
+pub fn key_at(chosen: &Path) -> Result<SshKey, CoralError> {
+    // Reads as "cannot use that key: <why>".
+    let refuse = |detail: String| CoralError::Refused {
+        label: "use that key",
+        detail,
+    };
+    // A typed `~/.ssh/...` means what it would at a shell, and what `command_for` will write.
+    let home = dirs::home_dir();
+    let chosen = PathBuf::from(expanded(&chosen.to_string_lossy(), home.as_deref()));
+    let private = private_half(&chosen).map_err(refuse)?;
+    let head = first_line(&private).map_err(refuse)?;
+    let kind_from_header = header_kind(&head).ok_or_else(|| {
+        refuse(if head.starts_with("PuTTY-User-Key-File") {
+            format!(
+                "{} is a PuTTY key. Open it in PuTTYgen and use Conversions → Export OpenSSH key, \
+                 then choose the exported file",
+                private.display()
+            )
+        } else {
+            format!("{} is not a private key", private.display())
+        })
+    })?;
+
+    let public = sibling_pub(&private);
+    let (kind, comment) = match public.as_deref() {
+        Some(public) => described_by(public),
+        None => (kind_from_header.to_owned(), String::new()),
+    };
+    Ok(SshKey {
+        path: private.display().to_string(),
+        public_path: public.map(|p| p.display().to_string()),
+        comment,
+        kind,
+        too_open: too_open(&private),
+    })
+}
+
+/// The private file for a choice, forgiving the common slip of picking `key.pub`.
+fn private_half(chosen: &Path) -> Result<PathBuf, String> {
+    if !chosen.is_file() {
+        return Err(format!("{} does not exist", chosen.display()));
+    }
+    if chosen.extension().and_then(|e| e.to_str()) != Some("pub") {
+        return Ok(chosen.to_path_buf());
+    }
+    let private = chosen.with_extension("");
+    if private.is_file() {
+        Ok(private)
+    } else {
+        Err(format!(
+            "{} is the public half of a key; choose the private file it was made with",
+            chosen.display()
+        ))
+    }
+}
+
+fn first_line(path: &Path) -> Result<String, String> {
+    use std::io::Read;
+    let mut head = Vec::with_capacity(256);
+    std::fs::File::open(path)
+        .and_then(|f| f.take(4096).read_to_end(&mut head))
+        .map_err(|e| format!("{} could not be read: {e}", path.display()))?;
+    let text = String::from_utf8_lossy(&head);
+    Ok(text
+        .trim_start_matches('\u{feff}')
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_owned())
+}
+
+/// The kind a PEM header names, or `None` when the line is not a private key's header.
+fn header_kind(line: &str) -> Option<&'static str> {
+    let label = line.strip_prefix("-----BEGIN ")?.strip_suffix("-----")?;
+    match label {
+        "OPENSSH PRIVATE KEY" | "PRIVATE KEY" | "ENCRYPTED PRIVATE KEY" => Some("private key"),
+        "RSA PRIVATE KEY" => Some("ssh-rsa"),
+        "EC PRIVATE KEY" => Some("ecdsa"),
+        "DSA PRIVATE KEY" => Some("ssh-dss"),
+        _ => None,
+    }
+}
+
+fn sibling_pub(private: &Path) -> Option<PathBuf> {
+    let mut name = private.file_name()?.to_os_string();
+    name.push(".pub");
+    let public = private.with_file_name(name);
+    public.is_file().then_some(public)
+}
+
+#[cfg(unix)]
+fn too_open(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(path).is_ok_and(|m| m.permissions().mode() & 0o077 != 0)
+}
+
+/// Windows has no mode bits; Git for Windows' ssh does not check the file's ACL either.
+#[cfg(not(unix))]
+fn too_open(_: &Path) -> bool {
+    false
+}
+
+/// Where ssh keys live for this user: `~/.ssh`, or `%USERPROFILE%\.ssh` on Windows, where
+/// `HOME` is usually not set at all.
 #[must_use]
 pub fn default_directory() -> PathBuf {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default()
-        .join(".ssh")
+    dirs::home_dir().unwrap_or_default().join(".ssh")
 }
 
 /// Creates an ed25519 key pair at `path`.
@@ -230,9 +370,10 @@ pub async fn generate(path: &Path, comment: &str, passphrase: &str) -> Result<Ss
     let mut parts = text.split_whitespace();
     Ok(SshKey {
         path: path.display().to_string(),
-        public_path: public.display().to_string(),
+        public_path: Some(public.display().to_string()),
         kind: parts.next().unwrap_or("ssh-ed25519").to_owned(),
         comment: parts.nth(1).unwrap_or(comment).to_owned(),
+        too_open: false,
     })
 }
 

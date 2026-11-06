@@ -8,22 +8,26 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 vi.mock('../../src/ipc/invoke', () => ({ invoke, isPreview: () => false }));
 
 import Start from '../../src/app/Start.svelte';
+import type { SshKey } from '../../src/ipc/types';
+import type { KeyChoice } from '../../src/state/ssh.svelte';
 import { StartState } from '../../src/state/start.svelte';
 
 afterEach(cleanup);
 
-const KEYS = [
+const KEYS: SshKey[] = [
   {
     path: '/home/someone/.ssh/id_ed25519',
     publicPath: '/home/someone/.ssh/id_ed25519.pub',
     comment: 'someone@home',
     kind: 'ssh-ed25519',
+    tooOpen: false,
   },
   {
     path: '/home/someone/.ssh/id_work',
     publicPath: '/home/someone/.ssh/id_work.pub',
     comment: 'someone@work',
     kind: 'ssh-ed25519',
+    tooOpen: false,
   },
 ];
 
@@ -50,7 +54,12 @@ function wire(over: Record<string, unknown> = {}) {
 }
 
 /** Renders the page with its state already loaded, as the window shows it. */
-async function page(over: Record<string, unknown> = {}, directory = '/home/someone/Work') {
+async function page(
+  over: Record<string, unknown> = {},
+  directory = '/home/someone/Work',
+  chooseKey: () => Promise<KeyChoice | null> = async () => null,
+  defaultSshKey = '',
+) {
   wire(over);
   const start = new StartState();
   const opened: string[] = [];
@@ -61,7 +70,8 @@ async function page(over: Record<string, unknown> = {}, directory = '/home/someo
       onPickDirectory: async () => directory,
       onClose: null,
       sshKeys: KEYS,
-      defaultSshKey: '',
+      defaultSshKey,
+      onChooseSshKey: chooseKey,
       onConfirm: async () => true,
     },
   });
@@ -391,6 +401,73 @@ describe('choosing which ssh key clones', () => {
     });
   });
 
+  it('clones with a key file chosen from anywhere', async () => {
+    // Windows keeps keys wherever their owner put them; the list only knows `~/.ssh`.
+    const far: SshKey = {
+      path: 'D:\\keys\\work',
+      publicPath: null,
+      comment: '',
+      kind: 'private key',
+      tooOpen: false,
+    };
+    let asked = 0;
+    const { view, opened } = await page({}, '/home/someone/Work', async () => {
+      asked += 1;
+      return { key: far };
+    });
+    await fireEvent.click(view.getByText('Clone'));
+    await fireEvent.input(view.getByPlaceholderText('https://host/team/thing.git'), {
+      target: { value: 'git@host:team/thing.git' },
+    });
+    await fireEvent.click(view.getByText('Choose…'));
+    await fireEvent.click(await view.findByText('Choose a key file…'));
+    await waitFor(() => {
+      const picker = view.container.querySelector('.sshkey select') as HTMLSelectElement;
+      if (picker.value !== far.path) throw new Error(`still ${picker.value}`);
+    });
+    expect(asked).toBe(1);
+    // The whole path is said beneath it, so a key from a stick is not mistaken for another.
+    expect(view.container.querySelector('.sshkey')?.textContent).toContain('D:\\keys\\work');
+
+    await fireEvent.click(view.getByText('Clone', { selector: '.primary' }));
+    await waitFor(() => {
+      if (opened.length === 0) throw new Error('not yet');
+    });
+    expect(invoke).toHaveBeenCalledWith('repo_clone', {
+      request: expect.objectContaining({ sshKey: 'D:\\keys\\work' }),
+    });
+  });
+
+  it('says why a chosen file cannot be used, and keeps the key it had', async () => {
+    const { view } = await page(
+      {},
+      '/home/someone/Work',
+      async () => ({ error: 'C:\\keys\\work.ppk is a PuTTY key. Open it in PuTTYgen' }),
+      '/home/someone/.ssh/id_work',
+    );
+    await fireEvent.click(view.getByText('Clone'));
+    await fireEvent.input(view.getByPlaceholderText('https://host/team/thing.git'), {
+      target: { value: 'git@host:team/thing.git' },
+    });
+    await fireEvent.click(await view.findByText('Choose a key file…'));
+    const alert = await view.findByRole('alert');
+    expect(alert.textContent).toContain('PuTTYgen');
+    const picker = view.container.querySelector('.sshkey select') as HTMLSelectElement;
+    expect(picker.value).toBe('/home/someone/.ssh/id_work');
+  });
+
+  it('changes nothing when the picker is closed', async () => {
+    const { view } = await page({}, '/home/someone/Work', async () => null, '/home/someone/.ssh/id_work');
+    await fireEvent.click(view.getByText('Clone'));
+    await fireEvent.input(view.getByPlaceholderText('https://host/team/thing.git'), {
+      target: { value: 'git@host:team/thing.git' },
+    });
+    await fireEvent.click(await view.findByText('Choose a key file…'));
+    const picker = view.container.querySelector('.sshkey select') as HTMLSelectElement;
+    expect(picker.value).toBe('/home/someone/.ssh/id_work');
+    expect(view.queryByRole('alert')).toBeNull();
+  });
+
   it('says that a passphrase cannot be asked for', async () => {
     // The engine pins GIT_TERMINAL_PROMPT=0 and SSH_ASKPASS_REQUIRE=never, so a key with a
     // passphrase and no agent fails rather than prompting. Silently is the worst way to learn
@@ -557,6 +634,7 @@ describe('the open requests across the tabs', () => {
         onClose: null,
         sshKeys: KEYS,
         defaultSshKey: '',
+        onChooseSshKey: async () => null,
         onConfirm: async () => true,
       },
     });

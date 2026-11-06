@@ -522,12 +522,7 @@ pub async fn list_keys(
     };
 
     match format {
-        SigningFormat::Ssh => {
-            let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
-            Ok(home
-                .map(|h| ssh_keys_in(&h.join(".ssh")))
-                .unwrap_or_default())
-        }
+        SigningFormat::Ssh => Ok(ssh_keys_in(&crate::ssh::default_directory())),
         SigningFormat::OpenPgp | SigningFormat::X509 => {
             let out = run(program, &["--list-secret-keys", "--with-colons"], None).await?;
             Ok(parse_secret_keys(&out))

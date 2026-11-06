@@ -3,8 +3,12 @@
 use coral_core::config::AppConfig;
 use coral_core::process::GitRunner;
 use coral_core::repo::RepoLocation;
-use coral_core::ssh::{SshConfig, SshOverrides, command_for, key_in_command, keys_in};
+use coral_core::ssh::{
+    SshConfig, SshOverrides, command_for, default_directory, expanded, key_at, key_in_command,
+    keys_in,
+};
 use coral_core::testutil::TestRepo;
+use std::path::Path;
 
 fn run<F, T>(f: F) -> T
 where
@@ -120,7 +124,175 @@ fn a_key_pair_is_the_private_file_whose_public_half_sits_beside_it() {
     assert_eq!(keys[0].kind, "ssh-ed25519");
     assert_eq!(keys[0].comment, "dev@workstation");
     assert!(keys[0].path.ends_with("id_ed25519"));
-    assert!(keys[0].public_path.ends_with("id_ed25519.pub"));
+    assert!(
+        keys[0]
+            .public_path
+            .as_deref()
+            .is_some_and(|p| p.ends_with("id_ed25519.pub"))
+    );
+}
+
+const OPENSSH: &str = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----\n";
+
+fn private_key(at: &Path) {
+    std::fs::write(at, OPENSSH).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(at, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+}
+
+#[test]
+fn a_key_chosen_from_anywhere_is_described_by_the_public_half_beside_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let key = dir.path().join("work key");
+    private_key(&key);
+    std::fs::write(
+        dir.path().join("work key.pub"),
+        "ssh-ed25519 AAAAC3Nza me@laptop\n",
+    )
+    .unwrap();
+
+    let found = key_at(&key).unwrap();
+    assert_eq!(found.path, key.display().to_string());
+    assert_eq!(found.kind, "ssh-ed25519");
+    assert_eq!(found.comment, "me@laptop");
+    assert!(
+        found
+            .public_path
+            .is_some_and(|p| p.ends_with("work key.pub"))
+    );
+    assert!(!found.too_open);
+}
+
+#[test]
+fn a_key_with_no_public_half_is_still_a_key() {
+    // The case the picker exists for: a key copied somewhere on its own.
+    let dir = tempfile::tempdir().unwrap();
+    let key = dir.path().join("deploy");
+    private_key(&key);
+    let found = key_at(&key).unwrap();
+    assert_eq!(found.public_path, None);
+    assert_eq!(found.comment, "");
+    assert_eq!(found.kind, "private key");
+
+    let rsa = dir.path().join("old_rsa");
+    std::fs::write(&rsa, "-----BEGIN RSA PRIVATE KEY-----\nMIIE\n").unwrap();
+    assert_eq!(key_at(&rsa).unwrap().kind, "ssh-rsa");
+
+    // Windows editors save with a byte order mark and CRLF; neither hides the header.
+    let crlf = dir.path().join("crlf");
+    std::fs::write(
+        &crlf,
+        "\u{feff}-----BEGIN OPENSSH PRIVATE KEY-----\r\nb3Bl\r\n",
+    )
+    .unwrap();
+    assert!(key_at(&crlf).is_ok());
+}
+
+#[test]
+fn choosing_the_public_half_means_the_private_one_beside_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let key = dir.path().join("id_work");
+    private_key(&key);
+    std::fs::write(dir.path().join("id_work.pub"), "ssh-ed25519 AAAA w@h\n").unwrap();
+    let found = key_at(&dir.path().join("id_work.pub")).unwrap();
+    assert_eq!(found.path, key.display().to_string());
+
+    let lonely = dir.path().join("theirs.pub");
+    std::fs::write(&lonely, "ssh-rsa AAAA them@host\n").unwrap();
+    let refused = key_at(&lonely).unwrap_err().to_string();
+    assert!(refused.contains("public half"), "{refused}");
+}
+
+#[test]
+fn what_is_not_a_private_key_is_refused_and_says_why() {
+    let dir = tempfile::tempdir().unwrap();
+    let missing = key_at(&dir.path().join("nope")).unwrap_err().to_string();
+    assert!(missing.contains("does not exist"), "{missing}");
+
+    let ppk = dir.path().join("work.ppk");
+    std::fs::write(
+        &ppk,
+        "PuTTY-User-Key-File-3: ssh-ed25519\nEncryption: none\n",
+    )
+    .unwrap();
+    let putty = key_at(&ppk).unwrap_err().to_string();
+    assert!(putty.contains("PuTTYgen"), "{putty}");
+
+    let hosts = dir.path().join("known_hosts");
+    std::fs::write(&hosts, "github.com ssh-ed25519 AAAA\n").unwrap();
+    let other = key_at(&hosts).unwrap_err().to_string();
+    assert!(other.contains("not a private key"), "{other}");
+
+    // A public key's PEM form is not a private key either.
+    let pem = dir.path().join("pub.pem");
+    std::fs::write(&pem, "-----BEGIN PUBLIC KEY-----\nMIIB\n").unwrap();
+    assert!(key_at(&pem).is_err());
+
+    assert!(key_at(dir.path()).is_err(), "a directory is not a key");
+}
+
+#[test]
+fn a_typed_tilde_path_is_found_in_the_home_folder() {
+    let home = dirs::home_dir().unwrap();
+    let missing = key_at(Path::new("~/.coral-no-such-key"))
+        .unwrap_err()
+        .to_string();
+    assert!(
+        missing.contains(&home.join(".coral-no-such-key").display().to_string()),
+        "{missing}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_key_others_can_read_is_flagged_because_ssh_will_refuse_it() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let key = dir.path().join("copied");
+    private_key(&key);
+    std::fs::set_permissions(&key, std::fs::Permissions::from_mode(0o644)).unwrap();
+    assert!(key_at(&key).unwrap().too_open);
+}
+
+#[test]
+fn a_leading_tilde_is_expanded_because_quoting_stops_the_shell_doing_it() {
+    let home = Path::new("/home/dev");
+    let at = |rest: &str| home.join(rest).display().to_string();
+    assert_eq!(expanded("~/.ssh/id", Some(home)), at(".ssh/id"));
+    assert_eq!(expanded("~", Some(home)), home.display().to_string());
+    // `~other` is another user's home, which is not ours to guess.
+    assert_eq!(expanded("~other/k", Some(home)), "~other/k");
+    assert_eq!(expanded("~/k", None), "~/k");
+    assert_eq!(expanded("/abs/k", Some(home)), "/abs/k");
+}
+
+#[test]
+fn a_windows_key_path_is_written_as_it_was_chosen() {
+    // Rewriting the separators made the path read back from the command a different string
+    // from the one the file dialog gave, so the lists showed one key twice. git's own sh reads
+    // backslashes inside single quotes as they are.
+    let chosen = r"C:\Users\O'Brien\my keys\id";
+    assert_eq!(
+        key_in_command(&command_for(chosen)).as_deref(),
+        Some(chosen)
+    );
+    assert_eq!(
+        expanded(r"~\.ssh\id", Some(Path::new(r"C:\Users\me"))),
+        Path::new(r"C:\Users\me")
+            .join(r".ssh\id")
+            .display()
+            .to_string()
+    );
+}
+
+#[test]
+fn keys_live_in_the_home_folder_even_where_home_is_not_set() {
+    let home = dirs::home_dir().unwrap();
+    assert_eq!(default_directory(), home.join(".ssh"));
+    assert!(default_directory().is_absolute());
 }
 
 #[test]

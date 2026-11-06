@@ -71,8 +71,12 @@ export function beside(path: string | undefined): string | undefined {
   return at > 0 ? path.slice(0, at) : undefined;
 }
 
-/** The last part of a path: the folder or file's own name. */
+/**
+ * The last part of a path: the folder or file's own name.
+ *
+ * Either separator ends a part, since a path chosen in a Windows file dialog uses a backslash.
+ */
 export function baseName(path: string): string {
   const trimmed = path.replace(/[/\\]+$/u, '');
-  return trimmed.slice(trimmed.lastIndexOf('/') + 1);
+  return trimmed.slice(Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\')) + 1);
 }

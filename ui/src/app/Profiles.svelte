@@ -2,11 +2,15 @@
   import { t } from '../state/locale.svelte';
   import type { ProfilesState } from '../state/profiles.svelte';
   import type { GroupColour } from '../state/tabs.svelte';
-  import type { IdentityScopes } from '../ipc/types';
+  import type { IdentityScopes, SshOverrides } from '../ipc/types';
+  import type { SshState } from '../state/ssh.svelte';
   import { laneColour } from './lane';
+  import SshKeyField from './SshKeyField.svelte';
 
-  const { profiles, repository, identity, onSwitch, onDelete, onApplyHere }: {
+  const { profiles, ssh, repository, identity, onSwitch, onDelete, onApplyHere }: {
     profiles: ProfilesState;
+    /** The keys on this machine, and the picker for one kept anywhere else. */
+    ssh: SshState;
     /** The repository open in the active tab, or null when there is none. */
     repository: string | null;
     /** Who that repository commits as, so the pane can say whether it matches. */
@@ -33,6 +37,7 @@
    */
   let name = $state('');
   let email = $state('');
+  let sshKey = $state('');
   let editedId = $state('');
 
   $effect(() => {
@@ -41,11 +46,18 @@
     editedId = profile.id;
     name = profile.settings.user.name ?? '';
     email = profile.settings.user.email ?? '';
+    sshKey = profile.settings.ssh.privateKey ?? '';
+  });
+
+  // The pane can be the first thing opened, before anything else has asked for the keys.
+  $effect(() => {
+    void ssh.loadKeys();
   });
 
   const dirty = $derived(
     name !== (profiles.current.settings.user.name ?? '') ||
-      email !== (profiles.current.settings.user.email ?? ''),
+      email !== (profiles.current.settings.user.email ?? '') ||
+      sshKey !== (profiles.current.settings.ssh.privateKey ?? ''),
   );
 
   /** What the repository would commit as, against what this profile says it should. */
@@ -65,7 +77,25 @@
     void profiles.setSettings(current.id, {
       ...current.settings,
       user: { name: name.trim() || null, email: email.trim() || null },
+      ssh: sshFor(current.settings.ssh),
     });
+  }
+
+  /**
+   * The profile's ssh settings with the chosen key.
+   *
+   * Both halves go together, as they do for a clone: the public one is what the settings pane
+   * offers for pasting into a host, and the old one would name a different key. The
+   * credential helper is about the host rather than the key, so it stays.
+   */
+  function sshFor(was: SshOverrides): SshOverrides {
+    if (sshKey === (was.privateKey ?? '')) return was;
+    const key = ssh.keys.find((k) => k.path === sshKey);
+    return {
+      privateKey: sshKey === '' ? null : sshKey,
+      publicKey: key?.publicPath ?? null,
+      credentialHelper: was.credentialHelper,
+    };
   }
 
   function add() {
@@ -172,6 +202,14 @@
     <span class="name"><label for="who-email">Email</label></span>
     <input id="who-email" bind:value={email} placeholder="leave empty to inherit" />
   </div>
+  <div class="field key">
+    <SshKeyField
+      keys={ssh.keys}
+      value={sshKey}
+      onChange={(path) => (sshKey = path)}
+      onChooseFile={() => ssh.chooseFile()}
+    />
+  </div>
   <div class="field">
     <span class="name"></span>
     <button class="save" disabled={!dirty} onclick={save}>Save</button>
@@ -251,6 +289,8 @@
 
   .field { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
   .name { flex: 0 0 auto; width: 9em; color: var(--fg-2); }
+  /* The key row lines up with the name and email rows above it. */
+  .key { display: block; max-width: calc(9em + 26em + 12em); --key-name-width: 9em; }
   input {
     font: inherit; font-size: var(--text-base); padding: 3px var(--space-2); min-width: 0; max-width: 26em;
     background: var(--bg-0); color: var(--fg-0);

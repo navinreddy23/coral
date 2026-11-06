@@ -167,6 +167,7 @@
   {:else if active === 'profiles'}
     <Profiles
       {profiles}
+      {ssh}
       {identity}
       {repository}
       onSwitch={onSwitchProfile}

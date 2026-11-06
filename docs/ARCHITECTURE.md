@@ -232,6 +232,12 @@ reads no `~/.ssh/config` at all, so no `ProxyJump`, no per-host `Port` and no `H
 that is why nothing is written unless a key was actually chosen, and why both screens that
 offer the choice say so.
 
+A key can live anywhere, which on Windows is the usual case. `ssh::key_at` reads only a chosen
+file's first line, to refuse a public half or a PuTTY key before git sees it, and never runs
+`ssh-keygen`, which would stop to ask an encrypted key's passphrase. The path is written with a
+leading `~` expanded, since the quoting stops a shell doing it, and otherwise exactly as chosen:
+a path read back out of the command that differed from the dialog's would list as a second key.
+
 **A submodule inherits none of it.** git clones and fetches one in a child process running in
 that submodule's own configuration, so the pinned `core.sshCommand` is not read and a `-c` does
 not survive the way in. The key is passed in the environment, as a clone passes it, and then

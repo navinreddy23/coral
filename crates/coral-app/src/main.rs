@@ -242,6 +242,8 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         ssh::ssh_set_app,
         ssh::ssh_set_repo,
         ssh::ssh_keys,
+        ssh::ssh_key_at,
+        ssh::ssh_directory,
         ssh::ssh_generate,
         ssh::ssh_public_key,
         terminal::terminal_open,

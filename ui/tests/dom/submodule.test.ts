@@ -29,12 +29,14 @@ const KEYS: SshKey[] = [
     publicPath: '/home/someone/.ssh/id_ed25519.pub',
     comment: 'someone@workstation',
     kind: 'ssh-ed25519',
+    tooOpen: false,
   },
   {
     path: '/home/someone/.ssh/id_work',
     publicPath: '/home/someone/.ssh/id_work.pub',
     comment: 'someone@company',
     kind: 'ssh-ed25519',
+    tooOpen: false,
   },
 ];
 

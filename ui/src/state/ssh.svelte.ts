@@ -1,5 +1,8 @@
 import {
+  pickSshKey,
+  sshDirectory,
   sshGenerate,
+  sshKeyAt,
   sshKeys,
   sshPublicKey,
   sshRead,
@@ -11,6 +14,29 @@ import { messageOf } from '../ipc/error';
 
 /** Which level the settings screen is editing. */
 export type Level = 'app' | 'repo';
+
+/** What choosing a key file came to: the key, or why that file cannot be one. */
+export type KeyChoice = { key: SshKey } | { error: string };
+
+/** Keys chosen from outside `~/.ssh`, so every list offers them again after a restart. */
+const CHOSEN = 'coral.ssh.chosen';
+
+function remembered(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(CHOSEN) ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter((p): p is string => typeof p === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function remember(paths: string[]): void {
+  try {
+    localStorage.setItem(CHOSEN, JSON.stringify(paths));
+  } catch {
+    // Storage refused: the key still works, it is only not offered again after a restart.
+  }
+}
 
 /**
  * How git reaches an ssh server, for the open repository.
@@ -63,10 +89,65 @@ export class SshState {
    */
   async loadKeys(): Promise<void> {
     try {
-      this.keys = await sshKeys();
+      this.keys = await this.#withChosen(await sshKeys());
     } catch (e) {
       this.error = messageOf(e);
     }
+  }
+
+  /**
+   * The keys in `~/.ssh` and then the ones chosen from elsewhere that are still there.
+   *
+   * A chosen key that has gone, a USB stick unplugged or a file deleted, is quietly forgotten
+   * rather than listed as a choice that would fail.
+   */
+  async #withChosen(found: SshKey[]): Promise<SshKey[]> {
+    const listed = new Set(found.map((k) => k.path));
+    const kept: string[] = [];
+    const extra: SshKey[] = [];
+    for (const path of remembered()) {
+      if (listed.has(path)) continue;
+      try {
+        extra.push(await sshKeyAt(path));
+        kept.push(path);
+        listed.add(path);
+      } catch {
+        // Gone or no longer a key; dropped from the list below.
+      }
+    }
+    remember(kept);
+    return [...found, ...extra];
+  }
+
+  /**
+   * Asks for a private key file anywhere on disk and lists it.
+   *
+   * Null when the picker was closed without a choice.
+   */
+  async chooseFile(): Promise<KeyChoice | null> {
+    let startIn: string | undefined;
+    try {
+      startIn = await sshDirectory();
+    } catch {
+      startIn = undefined;
+    }
+    const path = await pickSshKey(startIn);
+    return path === null ? null : this.adopt(path);
+  }
+
+  /** Lists a key chosen by path, and remembers it when it lives outside `~/.ssh`. */
+  async adopt(path: string): Promise<KeyChoice> {
+    let key: SshKey;
+    try {
+      key = await sshKeyAt(path);
+    } catch (e) {
+      return { error: messageOf(e) };
+    }
+    if (!this.keys.some((k) => k.path === key.path)) {
+      this.keys = [...this.keys, key];
+      remember([...remembered().filter((p) => p !== key.path), key.path]);
+    }
+    return { key };
   }
 
   async saveApp(config: SshConfig): Promise<void> {
@@ -92,7 +173,7 @@ export class SshState {
     this.done = null;
     try {
       const key = await sshGenerate(name, comment, passphrase);
-      this.keys = await sshKeys();
+      this.keys = await this.#withChosen(await sshKeys());
       this.done = `Created ${key.path}`;
       return key;
     } catch (e) {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
+  import { baseName } from './path';
   import type { SshKey, Submodule, SubmoduleRevision, SubmoduleSsh } from '../ipc/types';
 
   const {
@@ -40,7 +41,7 @@
 
   /** What a key is called, which is its file name; the whole path is too long to read. */
   function named(path: string): string {
-    return path.split('/').pop() ?? path;
+    return baseName(path) || path;
   }
 
   const inherits = $derived(

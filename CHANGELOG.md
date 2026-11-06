@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Choose an SSH key from anywhere.** The clone form, Settings → SSH and a profile each have a
+  button that opens a file picker for the private key, for a key kept outside `~/.ssh`: in
+  Documents, on a USB stick, wherever Windows put it. A key chosen this way is offered in every
+  key list afterwards, across restarts, until its file is gone. A profile's SSH key can now be
+  set in the profile itself; until now nothing on screen could change it.
+- A chosen file is checked before git is pointed at it. The public half, a PuTTY `.ppk` (with
+  how to export it from PuTTYgen), a missing file or anything that is not a private key is
+  refused with the reason, and a key other users can read is flagged, since ssh refuses those.
+  A path typed into Settings → SSH is checked the same way when it is saved.
+
+### Fixed
+
+- On Windows the key list was empty: it looked in `$HOME/.ssh`, and Windows does not set `HOME`.
+  It now reads `%USERPROFILE%\.ssh`. The same went for SSH signing keys.
+- A key path typed as `~/.ssh/...` in Settings → SSH was written into the command with the `~`
+  inside quotes, where no shell expands it. It is expanded when the command is written.
+- An editor or a custom action opened from a file on Windows was handed `C:\repo\src/a.rs`, half
+  in each separator. It now gets the platform's own.
+- A line picked in a diff to stage on its own was drawn as a short box over the line numbers.
+  The bar for picking lines in Blame, new in 1.4.0, had the same class name as a picked line, so
+  its layout applied to the line as well.
+
 ## 1.4.0
 
 ### Added

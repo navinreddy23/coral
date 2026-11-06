@@ -5459,6 +5459,7 @@
       onOpenRequest={(url) => void openInBrowser(url)}
       sshKeys={ssh.keys}
       defaultSshKey={profiles.current.settings.ssh.privateKey ?? ''}
+      onChooseSshKey={() => ssh.chooseFile()}
       onOpen={(path, notes) => void openFromStart(path, notes)}
       onPickDirectory={pickDirectory}
       onConfirm={confirmThat}

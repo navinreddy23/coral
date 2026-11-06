@@ -222,21 +222,21 @@ describe('the diff viewer', () => {
     await fireEvent.click(numbers[2] as HTMLElement);
     await fireEvent.click(numbers[0] as HTMLElement, { shiftKey: true });
     expect(view.container.querySelectorAll('tr.ranged')).toHaveLength(3);
-    expect(view.container.querySelector('.picked')?.textContent).toContain('lines 1–3 picked');
+    expect(view.container.querySelector('.line-range')?.textContent).toContain('lines 1–3 picked');
 
-    const go = view.container.querySelector('.picked .go') as HTMLButtonElement;
+    const go = view.container.querySelector('.line-range .go') as HTMLButtonElement;
     expect(go.textContent).toContain('History of these lines');
     await fireEvent.click(go);
     expect(asked).toEqual([[1, 3]]);
 
     // A second click on a single picked line lets it go.
-    await fireEvent.click(view.container.querySelector('.picked button[aria-label]') as HTMLElement);
+    await fireEvent.click(view.container.querySelector('.line-range button[aria-label]') as HTMLElement);
     await fireEvent.click(numbers[1] as HTMLElement);
-    expect(view.container.querySelector('.picked .go')?.textContent).toContain('this line');
+    expect(view.container.querySelector('.line-range .go')?.textContent).toContain('this line');
     await fireEvent.click(numbers[1] as HTMLElement);
     // The bar stays, saying how to pick, so nothing below it moves.
-    expect(view.container.querySelector('.picked .go')).toBeNull();
-    expect(view.container.querySelector('.picked')?.textContent).toContain('Pick a line number');
+    expect(view.container.querySelector('.line-range .go')).toBeNull();
+    expect(view.container.querySelector('.line-range')?.textContent).toContain('Pick a line number');
   });
 
   it('keeps the picked-lines bar one height, hint or pick', () => {
@@ -245,8 +245,20 @@ describe('the diff viewer', () => {
     const rules = [...document.styleSheets]
       .flatMap((sheet) => [...(sheet.cssRules ?? [])])
       .map((r) => r.cssText);
-    expect(rules.find((t) => /\.picked[^{ ]*\s*\{[^}]*\bheight:\s*30px/u.test(t))).toBeDefined();
-    expect(rules.find((t) => /\.picked[^{]*>\s*span[^{]*\{[^}]*white-space:\s*nowrap/u.test(t))).toBeDefined();
+    expect(rules.find((t) => /\.line-range[^{ ]*\s*\{[^}]*\bheight:\s*30px/u.test(t))).toBeDefined();
+    expect(rules.find((t) => /\.line-range[^{]*>\s*span[^{]*\{[^}]*white-space:\s*nowrap/u.test(t))).toBeDefined();
+  });
+
+  it('styles a line picked for staging as a row, not as the line-range bar', () => {
+    // 1.4.0 gave the bar the class the picked rows already had, so its flex, sticky, 30px
+    // rule turned a picked line into a short box drawn over the line numbers.
+    const selectors = [...document.styleSheets]
+      .flatMap((sheet) => [...(sheet.cssRules ?? [])])
+      .map((r) => (r as CSSStyleRule).selectorText ?? '')
+      .flatMap((s) => s.split(','))
+      .filter((s) => /\.picked\b/u.test(s));
+    expect(selectors.length).toBeGreaterThan(0);
+    for (const s of selectors) expect(s.trim()).toMatch(/^tr\.picked/u);
   });
 
   it('shows a blame that failed rather than waiting on it for ever', () => {
