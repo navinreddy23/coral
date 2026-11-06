@@ -4,8 +4,8 @@ use coral_core::config::AppConfig;
 use coral_core::process::GitRunner;
 use coral_core::repo::RepoLocation;
 use coral_core::ssh::{
-    SshConfig, SshOverrides, command_for, default_directory, key_at, key_in_command, keys_in,
-    written_path,
+    SshConfig, SshOverrides, command_for, default_directory, expanded, key_at, key_in_command,
+    keys_in,
 };
 use coral_core::testutil::TestRepo;
 use std::path::Path;
@@ -260,38 +260,31 @@ fn a_key_others_can_read_is_flagged_because_ssh_will_refuse_it() {
 #[test]
 fn a_leading_tilde_is_expanded_because_quoting_stops_the_shell_doing_it() {
     let home = Path::new("/home/dev");
-    assert_eq!(
-        written_path("~/.ssh/id", Some(home), false),
-        "/home/dev/.ssh/id"
-    );
-    assert_eq!(written_path("~", Some(home), false), "/home/dev");
+    let at = |rest: &str| home.join(rest).display().to_string();
+    assert_eq!(expanded("~/.ssh/id", Some(home)), at(".ssh/id"));
+    assert_eq!(expanded("~", Some(home)), home.display().to_string());
     // `~other` is another user's home, which is not ours to guess.
-    assert_eq!(written_path("~other/k", Some(home), false), "~other/k");
-    assert_eq!(written_path("~/k", None, false), "~/k");
-    assert_eq!(written_path("/abs/k", Some(home), false), "/abs/k");
+    assert_eq!(expanded("~other/k", Some(home)), "~other/k");
+    assert_eq!(expanded("~/k", None), "~/k");
+    assert_eq!(expanded("/abs/k", Some(home)), "/abs/k");
 }
 
 #[test]
-fn a_windows_path_is_written_with_forward_slashes() {
+fn a_windows_key_path_is_written_as_it_was_chosen() {
+    // Rewriting the separators made the path read back from the command a different string
+    // from the one the file dialog gave, so the lists showed one key twice. git's own sh reads
+    // backslashes inside single quotes as they are.
+    let chosen = r"C:\Users\O'Brien\my keys\id";
     assert_eq!(
-        written_path(r"C:\Users\A B\keys\work", None, true),
-        "C:/Users/A B/keys/work"
+        key_in_command(&command_for(chosen)).as_deref(),
+        Some(chosen)
     );
     assert_eq!(
-        written_path(r"~\.ssh\id", Some(Path::new(r"C:\Users\me")), true),
-        "C:/Users/me/.ssh/id"
-    );
-    // Elsewhere a backslash is part of a file name and is left alone.
-    assert_eq!(written_path(r"/k\x", None, false), r"/k\x");
-}
-
-#[test]
-fn a_chosen_windows_key_reads_back_from_the_command_it_wrote() {
-    let written = written_path(r"C:\Users\O'Brien\my keys\id", None, true);
-    let command = command_for(&written);
-    assert_eq!(
-        key_in_command(&command).as_deref(),
-        Some("C:/Users/O'Brien/my keys/id")
+        expanded(r"~\.ssh\id", Some(Path::new(r"C:\Users\me"))),
+        Path::new(r"C:\Users\me")
+            .join(r".ssh\id")
+            .display()
+            .to_string()
     );
 }
 

@@ -95,31 +95,30 @@ pub struct SshKey {
 #[must_use]
 pub fn command_for(private_key: &str) -> String {
     let home = dirs::home_dir();
-    let path = written_path(private_key, home.as_deref(), cfg!(windows));
+    let path = expanded(private_key, home.as_deref());
     format!(
         "ssh -F none -i {} -o IdentitiesOnly=yes",
         crate::process::shell_word(&path)
     )
 }
 
-/// The key's path as `core.sshCommand` should spell it.
+/// A key path with a leading `~` made absolute against `home`.
 ///
-/// A leading `~` is expanded here because the single quotes `shell_word` adds stop the shell
-/// doing it. On Windows the separators become `/`: git runs the command through its own `sh`,
-/// and both that and the ssh it bundles read `C:/Users/...`, while a backslash is one more
-/// thing for a hand-edited command to get wrong.
+/// Expanded here because the single quotes `shell_word` adds stop the shell doing it. Nothing
+/// else is rewritten: the path read back out of the command has to be the one the user chose,
+/// or every list would show it as a second, different key.
 #[must_use]
-pub fn written_path(key: &str, home: Option<&Path>, windows: bool) -> String {
-    let expanded = match (key.strip_prefix('~'), home) {
+pub fn expanded(key: &str, home: Option<&Path>) -> String {
+    match (key.strip_prefix('~'), home) {
         (Some(rest), Some(home)) if rest.is_empty() || rest.starts_with(['/', '\\']) => {
-            format!("{}{rest}", home.display())
+            let rest = rest.trim_start_matches(['/', '\\']);
+            if rest.is_empty() {
+                home.display().to_string()
+            } else {
+                home.join(rest).display().to_string()
+            }
         }
         _ => key.to_owned(),
-    };
-    if windows {
-        expanded.replace('\\', "/")
-    } else {
-        expanded
     }
 }
 
@@ -221,11 +220,7 @@ pub fn key_at(chosen: &Path) -> Result<SshKey, CoralError> {
     };
     // A typed `~/.ssh/...` means what it would at a shell, and what `command_for` will write.
     let home = dirs::home_dir();
-    let chosen = PathBuf::from(written_path(
-        &chosen.to_string_lossy(),
-        home.as_deref(),
-        false,
-    ));
+    let chosen = PathBuf::from(expanded(&chosen.to_string_lossy(), home.as_deref()));
     let private = private_half(&chosen).map_err(refuse)?;
     let head = first_line(&private).map_err(refuse)?;
     let kind_from_header = header_kind(&head).ok_or_else(|| {
