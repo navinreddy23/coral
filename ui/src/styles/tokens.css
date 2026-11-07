@@ -335,12 +335,12 @@
    */
   --text-mark: 9px;
 
-  --text-xs: 10px;
-  --text-sm: 11px;
-  --text-base: 12px;
-  --text-md: 13px;
-  --text-lg: 15px;
-  --text-xl: 19px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
 
   /* Tight for a single line in a row, open for a paragraph somebody reads. */
   --leading-tight: 1.2;
@@ -419,6 +419,18 @@
    * numbers.
    */
   --row-h: 28px;
+
+  /*
+   * The page left between two commit rows, so each reads as its own strip rather than a run
+   * of one lane reading as a single block. A line along the head of every band and one along
+   * its foot, two between neighbours: one alone was too faint to part them, and two at the
+   * foot would sit the band a pixel above the node and the text centred on the row.
+   *
+   * Painted rather than taken out of the row's height: the rows and the lanes beside them
+   * share one grid. An inset shadow with no blur is a solid rectangle, not the soft fill
+   * ruled out above.
+   */
+  --row-hairline: inset 0 1px 0 var(--bg-0), inset 0 -1px 0 var(--bg-0);
 }
 
 :root[data-density='compact'] { --row-h: 24px; }

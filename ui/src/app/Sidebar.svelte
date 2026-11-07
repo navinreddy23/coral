@@ -7,6 +7,7 @@
   import type { PlacedStash } from '../ipc/stash';
   import HostMark, { hostOf } from './HostMark.svelte';
   import Icon from './Icon.svelte';
+  import RefMark from './RefMark.svelte';
   import { elideRef } from './path';
 
   const {
@@ -388,8 +389,12 @@
       ondblclick={() => onCheckoutRef(r)}
       title={refTitle(r, outside, hidden)}
     >
-      <span class="tick">
-        {#if r.short === head}<Icon name="check" size={12} />{/if}
+      <span class="tick" class:kind={r.short !== head}>
+        {#if r.short === head}
+          <Icon name="check" size={12} />
+        {:else}
+          <RefMark kind={r.kind.kind} size={12} />
+        {/if}
       </span>
       <span class="text">{elideRef(label, 28)}</span>
       {#if r.ahead > 0 || r.behind > 0}
@@ -589,14 +594,11 @@
       <span class="caret">
           <Icon name={collapsed['stashes'] ? 'chevronRight' : 'chevronDown'} size={13} />
         </span>
-      <span class="icon"><Icon name="stash" size={12} /></span>
+      <span class="icon"><Icon name="stash" size={13} /></span>
       Stashes
       <span class="count">{stashRows.length}</span>
     </button>
     {#if !collapsed['stashes']}
-      {#if stashRows.length === 0}
-        <p class="none">Nothing stashed.</p>
-      {/if}
       <ul>
         {#each stashRows as stash (stash.oid)}
           <li>
@@ -610,7 +612,7 @@
                   : `${stash.name}\n${stash.message}`}
               >
                 <!-- The same gutter every other row keeps, so the four sections line up. -->
-                <span class="tick"></span>
+                <span class="tick kind"><RefMark kind="stash" size={12} /></span>
                 <span class="text">{label(stash)}</span>
               </button>
               <button
@@ -819,8 +821,10 @@
   }
   .search:focus-within { border-color: var(--accent); }
   .lens { display: flex; color: var(--fg-2); flex: 0 0 auto; }
+  /* A step under the rows it filters, so the placeholder naming all three kinds still fits
+     the panel at its default width. */
   .filter {
-    flex: 1; min-width: 0; font: inherit; font-size: var(--text-base);
+    flex: 1; min-width: 0; font: inherit; font-size: var(--text-sm);
     padding: 4px 0; border: 0; background: var(--bg-0); color: var(--fg-0);
   }
   .filter:focus { outline: none; }
@@ -833,8 +837,12 @@
   }
   .clear:hover { color: var(--fg-0); background: var(--bg-2); }
 
-  /* Sections are told apart by their labels and the air between them, not by rules. */
-  section + section { margin-top: var(--space-2); }
+  /* A rule between sections, as the reference panel draws them: with a label and air alone
+     the end of a long list of branches and the next section's heading ran together. */
+  section + section {
+    margin-top: var(--space-1); padding-top: var(--space-1);
+    border-top: var(--hairline) solid var(--border);
+  }
   /*
    * Every row that carries text paints its own opaque background.
    *
@@ -846,7 +854,8 @@
    */
   .head {
     display: flex; align-items: center; gap: var(--space-2);
-    width: 100%; font: inherit; font-size: var(--text-xs); font-weight: var(--weight-semibold);
+    min-height: calc(var(--row-h) - 4px);
+    width: 100%; font: inherit; font-size: var(--text-sm); font-weight: var(--weight-semibold);
     text-transform: uppercase; letter-spacing: var(--tracking-label); color: var(--fg-2);
     background: var(--bg-1); border: 0; padding: var(--space-1) var(--space-1); cursor: pointer;
     border-radius: var(--radius-1);
@@ -860,24 +869,25 @@
     font-size: var(--text-base); text-transform: none; letter-spacing: normal;
   }
   .head.remote:hover { color: var(--fg-0); background: var(--bg-2); }
-  /* A pill rather than a bare number: a count is a different kind of thing from the name
-     beside it, and at this size only shape says so. */
+  /* A bare number in the accent, as the reference sets it. A count is a different kind of
+     thing from the name beside it, and the colour says so without a grey pill on every
+     heading. */
   .count {
-    margin-left: auto; color: var(--fg-2); font-size: var(--text-xs); font-weight: var(--weight-semibold);
-    background: var(--bg-2); border-radius: var(--radius-pill); padding: 1px 6px; min-width: 18px;
-    text-align: center; flex: 0 0 auto; font-variant-numeric: tabular-nums;
+    margin-left: auto; color: var(--accent); font-size: var(--text-sm); font-weight: var(--weight-semibold);
+    text-align: right; flex: 0 0 auto; font-variant-numeric: tabular-nums;
+    letter-spacing: normal;
   }
-  .head:hover .count { background: var(--bg-3); }
   .caret { display: flex; color: var(--fg-2); flex: 0 0 auto; }
   .icon { display: flex; color: var(--fg-2); flex: 0 0 auto; }
   ul { list-style: none; margin: 0 0 var(--space-2); padding: 0; }
   ul.nested { margin-left: var(--space-3); }
   .ref {
     display: flex; align-items: center; gap: var(--space-2);
-    flex: 1; min-width: 0; text-align: left; font: inherit; font-size: var(--text-base);
-    padding: 3px var(--space-2) 3px var(--space-1);
+    flex: 1; min-width: 0; min-height: calc(var(--row-h) - 4px);
+    text-align: left; font: inherit; font-size: var(--text-base);
+    padding: 0 var(--space-2) 0 var(--space-1);
     background: var(--bg-1); border: 0; border-radius: var(--radius-1); cursor: pointer;
-    color: var(--fg-1); overflow: hidden;
+    color: var(--fg-0); overflow: hidden;
     transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
   }
   /*
@@ -885,12 +895,14 @@
    *
    * Without it the branch you are on started fourteen pixels further right than the ones you
    * are not, so a column of names was ragged and the one fact this panel exists to show was
-   * the reason for it.
+   * the reason for it. Every other branch and tag carries its kind in the same place, dimmed,
+   * so the tick is the one mark in the column in colour.
    */
   .tick {
     flex: 0 0 auto; width: 14px; display: flex; justify-content: center;
     color: var(--accent);
   }
+  .tick.kind { color: var(--fg-2); }
   .text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
           white-space: nowrap; }
   .ref:hover:not(:disabled) { background: var(--bg-2); color: var(--fg-0); }

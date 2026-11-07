@@ -10,7 +10,7 @@ import { apart, contrast, token, type Theme } from './stylesheet';
  * lightens a grey by two points.
  *
  * The thresholds: 7:1 is the enhanced bar for body text, which this window uses because it
- * sets almost everything between 10 and 13px. 4.5:1 is the ordinary bar, used for text that
+ * sets almost everything between 11 and 14px. 4.5:1 is the ordinary bar, used for text that
  * is already large or already coloured to mean something. 3:1 is the bar for a control's
  * edge or a graphic, which is all a lane stroke or the brand mark ever is.
  */
@@ -97,7 +97,7 @@ describe.each(THEMES)('the %s palette', (theme) => {
   });
 
   it('keeps a label on a lane tint readable', () => {
-    // Branch pills and the strip beside a row are lane-tinted and carry 10px text.
+    // Branch pills and the strip beside a row are lane-tinted and carry 12px text.
     for (let lane = 1; lane <= 8; lane++) {
       expect(on('fg-0', `lane-${lane}-soft`), `fg-0 on lane-${lane}-soft`).toBeGreaterThanOrEqual(7);
     }

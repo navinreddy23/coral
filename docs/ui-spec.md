@@ -118,23 +118,24 @@ them and a Stop button lets the walk go without clearing the query.
 
 ## Sidebar
 
-Sections are named in sentence case with a drawn icon and a count, collapse, and remember their
-state; a search field at the top filters all of them, with the magnifier inside the box rather
-than beside it — a field labelled only by its placeholder loses that label the moment somebody
-types in it. Every row keeps a gutter for the tick that marks the branch you are on, whether it
-is ticked or not, so four sections share one left edge. Rows have
-hover actions. The current branch is bold with a check mark. Remote rows show a host icon and
-the signed-in avatar when a hosting provider matches, with branches nested beneath. Pull
-requests group by remote showing number, title, author avatar and state, and an open one carries
-a mark for its tip commit's checks (tick, cross or clock, the count on hover, the failing check a
-click away), asked for after the list so a slow host never holds it back; a local branch's
-menu offers to open one on a form naming the branch it would land on, with a title, a
-description and a draft switch. That entry appears only where a host is signed in to talk to,
-and the branches it offers are the remote's: a branch this machine has never pushed is not one
-the host can be asked to merge into. Tags sort by version.
-Stashes show message and age. A submodule's dots open a panel: where it is cloned from, the
-commit the repository records, and which ssh key reaches it — its own, or whatever this
-repository uses, since a submodule inherits none of that.
+Sections are named with a drawn icon and a count in the accent, collapse, remember their state,
+and are parted by a rule; a search field at the top filters all of them, with the magnifier
+inside the box rather than beside it — a field labelled only by its placeholder loses that label
+the moment somebody types in it. Every row keeps a gutter for the tick that marks the branch you
+are on, whether it is ticked or not, so four sections share one left edge; on every other
+branch, tag and stash the gutter holds its kind, dimmed. An empty section says so with its count
+of 0, not a sentence. Rows have hover actions. The current branch is bold with a check mark.
+Remote rows show a host icon and the signed-in avatar when a hosting provider matches, with
+branches nested beneath. Pull requests group by remote showing number, title, author avatar and
+state, and an open one carries a mark for its tip commit's checks (tick, cross or clock, the
+count on hover, the failing check a click away), asked for after the list so a slow host never
+holds it back; a local branch's menu offers to open one on a form naming the branch it would
+land on, with a title, a description and a draft switch. That entry appears only where a host is
+signed in to talk to, and the branches it offers are the remote's: a branch this machine has
+never pushed is not one the host can be asked to merge into. Tags sort by version. Stashes show
+message and age. A submodule's dots open a panel: where it is cloned from, the commit the
+repository records, and which ssh key reaches it — its own, or whatever this repository uses,
+since a submodule inherits none of that.
 
 The panel has three states rather than two, and one control cycles them: open, minimised to a
 thirty-six pixel rail of its section icons, and gone. The rail is a way back rather than a
@@ -179,9 +180,16 @@ the branch and the patch rather than "ours" and "theirs", and is continued or ab
 
 ## Graph
 
-Columns: branch and tag pills, lanes (canvas), then the message with the relative date and
-short object id at its trailing edge. No column headers — they named three columns whose
-contents are a pill, a drawing and a sentence, and cost twenty-six pixels of every screen.
+Columns: branch and tag pills, lanes (canvas), then the summary with the relative date and
+short object id at its trailing edge. The body is not shown on the row: run on after the summary
+as a dimmed line it turned a screen of commits into a wall of text, and it is a click away in
+the right panel. No column headers — they named three columns whose contents are a pill, a
+drawing and a sentence, and cost twenty-six pixels of every screen.
+
+Each row's band, from its node across its message, is parted from the next by two pixels of
+page, as GitKraken draws it, so a run of commits on one lane reads as a stack of rows rather
+than one block of colour. The gap is painted at the head and foot of the band rather than taken
+out of the row, so the band stays centred on its node and the lane lines run through it.
 
 Row height follows the density chosen in Preferences: 24, 28 or 32 pixels, with 28 shipped. The
 same three numbers reach the stylesheet and the canvas metrics, which cannot read each other, so
@@ -201,8 +209,8 @@ same three numbers reach the stylesheet and the canvas metrics, which cannot rea
   Click selects, double-click on a branch pill checks out, hover highlights the lane, and
   pills are draggable.
 - A subject's Conventional Commits type or kernel-style subsystem (`ui:`, `fix(parser)!:`,
-  `smb/client:`) is set back in dim mono so the sentence after it leads. One word with no
-  spaces, then a colon and a space, is the test; `ui/src/app/subject.ts` holds it.
+  `smb/client:`) is set back, dimmed in the same face, so the sentence after it leads. One word
+  with no spaces, then a colon and a space, is the test; `ui/src/app/subject.ts` holds it.
 - The WIP row appears at the top when the worktree is dirty, showing `+added ~modified
   -deleted` and a diff-stat sparkline. Selecting it opens the staging panel.
 - Drag and drop: local pill onto local pill opens merge / rebase / create PR; local onto remote
@@ -215,10 +223,12 @@ same three numbers reach the stylesheet and the canvas metrics, which cannot rea
 
 ## Right panel
 
-**Commit details** — avatar, author, committer when different, relative and absolute dates,
-full SHA with copy, parents as links, message with description, file list with tree/flat toggle
-and a path filter, and `+ - ~` counts. Clicking a file opens the diff in the centre with a
-breadcrumb back to the graph.
+**Commit details** — the summary and body together in one bordered box, the body set in the
+interface face with its line breaks kept; a long body scrolls inside the box while the panel is
+at its own split, and grows with it once the divider is dragged. Under it the avatar, author and
+"authored" date, committer when different, full SHA with copy, parents as links, file list with
+tree/flat toggle and a path filter, and `+ - ~` counts. Clicking a file opens the diff in the
+centre with a breadcrumb back to the graph.
 
 **Staging panel** (WIP selected) — "Unstaged Files" with "Stage all files", "Staged Files" with
 "Unstage all files", each row with hover buttons to stage/unstage and to discard with

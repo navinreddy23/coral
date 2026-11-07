@@ -177,8 +177,13 @@ export class PanesState {
   }
 }
 
+/**
+ * The shipped widths. The right panel is as wide as it is for the staging panel's headings:
+ * "Unstaged files", its count and both of its buttons on one line at the shipped type size.
+ * At 340 the heading was cut to "Unstaged fil…" once the type grew a pixel.
+ */
 function defaults(): PaneWidths {
-  return { sidebar: 240, details: 340, refs: REFS_COLUMN_PX, graph: GRAPH_COLUMN_PX };
+  return { sidebar: 240, details: 360, refs: REFS_COLUMN_PX, graph: GRAPH_COLUMN_PX };
 }
 
 /**

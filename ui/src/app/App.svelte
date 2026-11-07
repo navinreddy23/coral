@@ -5111,15 +5111,6 @@
     ),
   );
 
-  /**
-   * Whether there is room for the dimmed body preview after the summary.
-   *
-   * Decided here rather than with a container query: `container-type` collapses the message
-   * cell of the WIP row, which is a button, and the row loses its text entirely. Three
-   * characters of a continuation is noise anyway — below this the summary takes the width.
-   */
-  const showBody = $derived(paneWidth - columns.refs - columns.graph > 560);
-
   /** Rows currently worth putting in the DOM. Never the whole graph. */
   function windowRows(frame: Frame | null): number[] {
     if (!frame) return [];
@@ -5154,7 +5145,7 @@
    * in hand, which is the only frame those rows mean anything in.
    *
    * Derived rather than looked up per use, so a row's object id is built once per repaint
-   * instead of once for its initials, once for its summary and once for its body.
+   * instead of once for its initials and again for its summary.
    */
   /**
    * The lanes canvas's height: a pane's worth, or the whole history when that is shorter.
@@ -5299,18 +5290,6 @@
     const remote = remoteOf(short);
     const url = remotes.list.find((r) => r.name === remote)?.fetchUrl ?? '';
     return url === '' ? 'other' : hostOf(url);
-  }
-
-  /**
-   * The body as one dimmed line after the summary, as the reference shows it. Newlines become
-   * a separator rather than being dropped, so a bullet list still reads as several points.
-   */
-  function flatten(body: string): string {
-    return body
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0)
-      .join(' | ');
   }
 
 </script>
@@ -5942,9 +5921,6 @@
                 <span class="summary"
                   >{#if split}<span class="prefix">{split.prefix}</span> {split.rest}{:else}{subject}{/if}</span
                 >
-                {#if showBody}
-                  <span class="detail">{flatten(visibleMeta.get(row)?.body ?? '')}</span>
-                {/if}
                 {#if local !== null}
                   <span class="age">{shortAge(graph.frame.times[local] ?? 0)}</span>
                   <span class="sha mono">{oidOf(graph.frame, local).slice(0, 8)}</span>
@@ -6308,7 +6284,7 @@
        bar is sticky at zero as well and paints over this one, which is what its z-index is
        for. */
     position: sticky; top: 0; z-index: 1; cursor: pointer;
-    background: var(--warn-soft); box-shadow: inset 2px 0 0 var(--warn);
+    background: var(--warn-soft); box-shadow: var(--row-hairline), inset 2px 0 0 var(--warn);
     /* It is a button, and a button is shrink-to-fit even as a grid container. Every other row
        is a list item and stretches on its own, which is why the difference only showed once
        this row had a colour of its own to stop halfway across. */
@@ -6326,14 +6302,18 @@
    * named on them too or the row stops halfway across.
    */
   .wip .cell.refs, .wip .cell.message { background: var(--bg-1); }
-  .wip .cell.message { box-shadow: inset 2px 0 0 var(--brand); }
+  .wip .cell.message { box-shadow: var(--row-hairline), inset 2px 0 0 var(--brand); }
   .wip .summary { color: var(--fg-0); font-weight: var(--weight-semibold); }
   .wip .wip-node { border-color: var(--brand); }
 
   /*
-   * The lane's colour runs from the commit's node across its message, one ribbon per row, as
+   * The lane's colour runs from the commit's node across its message, one band per row, as
    * the reference client draws it. A band that stopped at a white message cell read as cut off,
    * all the more so beside the next row's, which began somewhere else.
+   *
+   * Each band is parted from the next by a gap of page, so a run of commits on one lane reads
+   * as a stack of rows rather than one block of colour. The lane canvas is drawn over the
+   * rows, so the lines themselves run on through the gap unbroken.
    *
    * The selected row is told apart by strength rather than by being the one plain row: its own
    * lane colour, a good deal deeper, across both the band and the text.
@@ -6341,8 +6321,8 @@
   .row .cell.message {
     background: var(--row-tint, var(--bg-0));
     /* The leading bar hands the eye from the lane to the text. State replaces the colour,
-       never the bar. */
-    box-shadow: inset 2px 0 0 var(--row-line, transparent);
+       never the bar. The gap is listed first so it is painted over the bar too. */
+    box-shadow: var(--row-hairline), inset 2px 0 0 var(--row-line, transparent);
   }
   .row:hover .cell.message, .row:hover .lane-strip { background: var(--row-hover); }
   /*
@@ -6350,32 +6330,36 @@
    * the row: it is drawn entirely leftwards into the lane column and stops exactly where the
    * message cell begins, which carries the same colour on.
    *
-   * Square, and deliberately: consecutive commits in one lane then run into a single ribbon,
-   * which is the point — a branch reads as one colour from its label to its last commit.
+   * Square, so it meets the message cell without a seam, and a pixel short of the row's head
+   * and foot, where the message cell leaves its gap.
    */
   .lane-strip {
     /* Positioned rather than laid out, so it takes no part in the row's flow and no negative
        margin has to cancel it. `right: 100%` puts its right edge exactly on the message cell's
        leading edge, which leaves that cell's own inset bar — the one that marks the selected
        row — visible instead of painted over. */
-    position: absolute; right: 100%; top: 0; bottom: 0;
+    position: absolute; right: 100%; top: 1px; bottom: 1px;
     width: var(--lane-gap, 0px);
     background: var(--row-tint, transparent);
   }
   /* Every match tinted, the one being stood on ruled as well: a screen of identical tints
      says how many matched and nothing about which one the buttons are pointing at. */
   .row.found .cell.message { background: var(--warn-soft); }
-  .row.here .cell.message { box-shadow: inset 2px 0 0 var(--warn); }
+  .row.here .cell.message { box-shadow: var(--row-hairline), inset 2px 0 0 var(--warn); }
   /*
    * The selected commit, tinted and given a bar down its leading edge. On a screen of rows
    * that all look alike a tint alone is easy to lose, and the bar survives a hover passing
    * over a neighbour.
    */
   .row.selected .cell.message, .row.selected .lane-strip { background: var(--row-strong); }
-  .row.selected .cell.message { box-shadow: inset 3px 0 0 var(--row-line); }
+  /* The fallback is not decoration. The WIP row carries `.row` and sets no lane colour, and a
+     `var()` with nothing to resolve to voids the whole declaration, hairline included. */
+  .row.selected .cell.message {
+    box-shadow: var(--row-hairline), inset 3px 0 0 var(--row-line, transparent);
+  }
   .wip.selected {
     background: var(--accent-soft);
-    box-shadow: inset 2px 0 0 var(--accent-line);
+    box-shadow: var(--row-hairline), inset 2px 0 0 var(--accent-line);
   }
   /* Selected beats dirty: whichever row the panel on the right is showing has to be the one
      that looks picked, and the working copy is still the only amber-noded row on the list. */
@@ -6400,7 +6384,10 @@
   .cell.message {
     /* The containing block for the lane band, which is drawn outside it to the left. */
     position: relative;
-    border-radius: var(--radius-1); padding: 0 var(--space-2);
+    /* Square where the band from the lanes runs into it, so the leading bar is a straight edge
+       and the join has no notch; a row rounded on that side read as a bracket once the rows
+       were parted by a gap. */
+    border-radius: 0 var(--radius-1) var(--radius-1) 0; padding: 0 var(--space-2);
     /* The row's own height, so the highlight is a band rather than a floating pill. */
     height: 100%;
   }
@@ -6499,35 +6486,28 @@
     display: inline-flex; align-items: center; gap: 3px;
     color: var(--fg-2); background: none; padding: 1px 4px;
     border: 1px dashed var(--border); border-radius: var(--radius-1);
-    flex: 0 0 auto; font: inherit; font-size: var(--text-xs); line-height: 13px; cursor: pointer;
+    flex: 0 0 auto; font: inherit; font-size: var(--text-xs); line-height: 14px; cursor: pointer;
     position: relative; z-index: 1;
   }
   .more:hover { color: var(--fg-0); border-color: var(--border-strong); }
 
-  /* The summary takes its natural width and the dimmed body absorbs what is left. Letting
-     both shrink equally gave the body most of the row, so summaries were cut to a few
-     characters while their continuation ran on — the wrong half was being kept. */
   /*
-   * The summary takes its natural width and the body absorbs what is left. No percentage cap:
-   * a percentage resolves against a containing block whose width is not obvious inside a grid
-   * cell inside a button, and it cost the WIP row most of its text.
+   * The summary alone, and none of the body after it. The body ran on as a dimmed line of
+   * `a | b | c` to the edge of every row, and a screen of commits read as a wall of text in
+   * which the one line per commit worth reading had to be found. It is in the details panel.
    *
-   * The body has a zero basis, so it can never be the reason the summary has to shrink; it
-   * only ever grows into space nothing else wanted. That is what stops the continuation
-   * winning the row from the summary it continues.
+   * No percentage cap on the width: a percentage resolves against a containing block whose
+   * width is not obvious inside a grid cell inside a button, and it cost the WIP row most of
+   * its text.
    */
   .summary {
     flex: 0 1 auto; min-width: 0; color: var(--fg-0);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  /* The `ui:` or `smb/client:` a subject leads with, set back so the sentence leads instead. */
-  .prefix { color: var(--fg-2); font-family: var(--font-mono); font-size: var(--text-base); }
-  /* Dimmer than the summary it continues, but not the dimmest thing on the row: at `fg-2` the
-     half of the line that carries the body read as grey filler beside the date and the id. */
-  .detail {
-    flex: 1 1 0; min-width: 0; color: var(--fg-1);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
+  /* The `ui:` or `smb/client:` a subject leads with, set back so the sentence leads instead.
+     Dimmed only, in the face the rest of the line is in: a second typeface on every row was
+     one more thing the list asked to be read. */
+  .prefix { color: var(--fg-2); }
   /* Pushed to the trailing edge, so the two columns line up down the list whatever the
      summary before them happens to be. */
   .age {
@@ -6559,7 +6539,7 @@
   }
 
   .wip-panel {
-    width: var(--details-w, 340px); flex: 0 0 auto; min-height: 0;
+    width: var(--details-w, 360px); flex: 0 0 auto; min-height: 0;
     border: var(--hairline) solid var(--border); border-radius: var(--radius-3); background: var(--bg-0);
     padding: var(--space-3);
     /* The panel itself does not scroll: the two file lists inside it do, each with half the

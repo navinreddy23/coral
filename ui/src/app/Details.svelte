@@ -354,28 +354,43 @@
       {/if}
     </p>
   {:else}
-    <!-- The summary is the heading that folds the rest away: folded, it is still the line that
-         says which commit the files below belong to. -->
-    <h2>
-      <button
-        class="fold"
-        aria-expanded={!closed.message}
-        aria-controls="detail-message"
-        onclick={() => sections.toggle('message')}
-      >
-        <span class="caret">
-          <Icon name={closed.message ? 'chevronRight' : 'chevronDown'} size={14} />
-        </span>
-        <span>{detail.commit.summary}</span>
-      </button>
-    </h2>
+    <!--
+      The message as one piece, summary over body, in a box of its own: the reference sets it
+      this way, and it is what makes the panel read as a commit and then the facts about it,
+      rather than as one column of lines in five sizes.
+
+      The summary is the heading that folds the rest away: folded, it is still the line that
+      says which commit the files below belong to.
+    -->
+    <div class="message" class:bare={closed.message || !detail.commit.body}>
+      <h2>
+        <button
+          class="fold"
+          aria-expanded={!closed.message}
+          aria-controls={detail.commit.body ? 'detail-body detail-message' : 'detail-message'}
+          onclick={() => sections.toggle('message')}
+        >
+          <span class="caret">
+            <Icon name={closed.message ? 'chevronRight' : 'chevronDown'} size={14} />
+          </span>
+          <span>{detail.commit.summary}</span>
+        </button>
+      </h2>
+      {#if !closed.message && detail.commit.body}
+        <pre class="body" id="detail-body">{#each segments(detail.commit.body, host?.kind ?? null, tracker) as part, i (i)}{#if part.kind === 'text'}{part.text}{:else}{@const url = linkOf(part, host, tracker)}<button
+              class="ref"
+              title={url ?? ''}
+              onclick={() => url && onOpenUrl(url)}>{part.text}</button
+            >{/if}{/each}</pre>
+      {/if}
+    </div>
 
     {#if !closed.message}
     <div id="detail-message">
 
     <!--
-      Who wrote it, on one line, with the same initials disc the graph draws its nodes with —
-      so the row you clicked and the panel that answers wear the same mark.
+      Who wrote it and when, under what they wrote, with the same initials disc the graph draws
+      its nodes with — so the row you clicked and the panel that answers wear the same mark.
     -->
     <div class="who">
       <span class="face" style:background={faceOf(detail.commit.author)}>
@@ -386,21 +401,13 @@
         {/if}
       </span>
       <span class="names">
-        <span class="name">{detail.commit.author.name}</span>
-        <span class="mail">{detail.commit.author.email}</span>
+        <span class="name" title={detail.commit.author.email}>{detail.commit.author.name}</span>
+        <span class="authored">authored {absolute(detail.commit.author.time)}</span>
       </span>
       <span class="when" title={absolute(detail.commit.author.time)}>
         {shortAge(detail.commit.author.time)}
       </span>
     </div>
-
-    {#if detail.commit.body}
-      <pre class="body">{#each segments(detail.commit.body, host?.kind ?? null, tracker) as part, i (i)}{#if part.kind === 'text'}{part.text}{:else}{@const url = linkOf(part, host, tracker)}<button
-            class="ref"
-            title={url ?? ''}
-            onclick={() => url && onOpenUrl(url)}>{part.text}</button
-          >{/if}{/each}</pre>
-    {/if}
 
     {#if mentions.length > 0 || summaryLinks.length > 0}
       <ul class="mentions" aria-label="Issues this commit names">
@@ -570,7 +577,7 @@
    * seventeen-thousand-file list scrolled the message away for good.
    */
   aside {
-    width: var(--details-w, 340px); flex: 0 0 auto; min-height: 0; overflow: hidden;
+    width: var(--details-w, 360px); flex: 0 0 auto; min-height: 0; overflow: hidden;
     display: flex; flex-direction: column;
     border: var(--hairline) solid var(--border); border-radius: var(--radius-3); background: var(--bg-0);
     padding: var(--space-3); font-size: var(--text-base);
@@ -605,13 +612,25 @@
    * transparent, so text on it drops from subpixel to grayscale antialiasing and the whole
    * column reads soft. Naming the colour on the text elements themselves is what fixes it.
    */
-  h2, h3, dt, dd, .muted, .error, .all, .name, .mail, .when { background: var(--bg-0); }
+  h2, h3, dt, dd, .muted, .error, .all, .name, .authored, .when { background: var(--bg-0); }
   h2 {
     font-size: var(--text-lg); font-weight: var(--weight-semibold); line-height: 1.3;
     margin: 0 0 var(--space-3); color: var(--fg-0);
     /* Balanced, so a two-line summary does not leave one word alone on the second line. */
     text-wrap: balance;
   }
+  /*
+   * Summary and body in one box on the panel's own ground, edged by a hairline. The box is the
+   * frame, so the summary inside it is set a step down from a free-standing heading, and the
+   * body needs no plate or rule of its own.
+   */
+  .message {
+    margin-bottom: var(--space-3); padding: var(--space-2) var(--space-3);
+    border: var(--hairline) solid var(--border); border-radius: var(--radius-1);
+    background: var(--bg-0);
+  }
+  .message h2 { font-size: var(--text-md); margin-bottom: var(--space-2); }
+  .message.bare h2 { margin-bottom: 0; }
 
   /*
    * Who wrote it, as a line rather than as a row of a table.
@@ -621,7 +640,7 @@
    */
   .who {
     display: flex; align-items: center; gap: var(--space-2);
-    margin-bottom: var(--space-4); min-width: 0;
+    margin-bottom: var(--space-3); min-width: 0;
   }
   /* The same disc the canvas fills a node with, at the same size, so the row that was clicked
      and the panel that answers wear one mark between them. */
@@ -638,7 +657,7 @@
     font-size: var(--text-md); font-weight: var(--weight-semibold); color: var(--fg-0);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .mail {
+  .authored {
     font-size: var(--text-sm); color: var(--fg-2);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
@@ -686,15 +705,27 @@
   .mentions .state.open { color: var(--accent); border-color: var(--accent-line); }
   .mentions .num { flex: 0 0 auto; color: var(--fg-2); font-family: var(--font-mono); }
   .mentions .title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /*
+   * In the interface face, as prose. Set in the code face it read as a terminal dump, and a
+   * message is written to be read; `pre-wrap` keeps its line breaks and indentation, which is
+   * what a pasted log or a list of points needs from it.
+   */
   .body {
-    margin: 0 0 var(--space-4); padding: var(--space-3);
-    /* A plate one step off the panel, holding the strongest text on it. */
-    background: var(--bg-1); border-radius: var(--radius-1);
-    /* A rule down the leading edge, as a quoted message is set everywhere else. */
-    box-shadow: inset 2px 0 0 var(--border-strong);
-    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm);
+    margin: 0; font-family: var(--font-ui); font-size: var(--text-base);
     line-height: var(--leading-body);
-    white-space: pre-wrap; word-break: break-word; color: var(--fg-0);
+    white-space: pre-wrap; word-break: break-word; color: var(--fg-1);
+    background: var(--bg-0);
+  }
+  /*
+   * At the panel's own split, a long message scrolls inside its box, as the reference does,
+   * so who wrote it and the facts under it stay in view. Dragging the divider is asking for
+   * more message, so a head that has been sized lets the box grow with it.
+   */
+  .head.shared:not(.sized) .message .body { max-height: 16em; overflow-y: auto; }
+  /* A note stands outside the message box, so it keeps a plate to be told apart by. */
+  .note .body {
+    margin-bottom: var(--space-4); padding: var(--space-2) var(--space-3);
+    background: var(--bg-1); border-radius: var(--radius-1);
   }
   dl {
     display: grid;
