@@ -276,6 +276,25 @@ describe('the commit panel sections', () => {
     expect(container.querySelectorAll('.files li')).toHaveLength(2);
   });
 
+  it('sets the body in the interface face, in one box with the summary, the author under it', () => {
+    const { container } = render(Details, { props: { ...props, detail: withBody() } });
+    const box = container.querySelector('.message');
+    expect(box?.querySelector('h2')).not.toBeNull();
+    expect(box?.querySelector('.body')).not.toBeNull();
+    expect(box?.querySelector('.who')).toBeNull();
+    const who = container.querySelector('.who');
+    expect(who?.textContent).toContain('authored');
+    // The address is on the name's tooltip rather than on a line of its own.
+    expect(who?.querySelector('.name')?.getAttribute('title')).toBe('torvalds@linux-foundation.org');
+
+    const rules = [...document.styleSheets]
+      .flatMap((sheet) => [...(sheet.cssRules ?? [])])
+      .map((r) => r.cssText);
+    const body = rules.find((text) => /^\.body[^{,]*\{/u.test(text));
+    expect(body, 'a rule for the body').toBeDefined();
+    expect(body).toMatch(/font-family:\s*var\(--font-ui\)/u);
+  });
+
   it('folds the files to their count and gives the message the panel', async () => {
     const { container } = render(Details, { props: { ...props, detail: withBody() } });
     const heading = fold(container, /2 files/u);
