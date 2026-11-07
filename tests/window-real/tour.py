@@ -75,28 +75,82 @@ def same(a, b):
 move(700, 893)
 settle()
 shipped = region(*LISTS)
-click(1180, 154)
+click(1160, 149)
 move(700, 893)
 settle()
 check(not same(region(*LISTS), shipped), "the unstaged list folds to its heading")
 shot("sections-folded")
-click(1180, 154)
+click(1160, 149)
 move(700, 893)
 settle()
 check(same(region(*LISTS), shipped), "and unfolds to the panel it was")
-x.drag(1260, 372, 1260, 280)
+x.drag(1252, 368, 1252, 280)
 move(700, 893)
 settle()
 check(not same(region(*LISTS), shipped), "the divider between the lists follows a drag")
 shot("sections-dragged")
-click(1260, 280, times=2)
+click(1252, 280, times=2)
 move(700, 893)
 settle()
 check(same(region(*LISTS), shipped), "and a double-click puts it back")
-click(1160, 256)
-click(823, 99)
+
+# A file in the list opens its diff in place of the graph, and the diff goes side by side.
+# Checked rather than assumed: a click a few pixels below the file row used to photograph the
+# graph under this name, and the tour passed.
+HEADER = (270, 86, 780, 24)
+graph_top = region(*HEADER)
+click(1150, 246)
+move(700, 893)
+settle()
+inline = region(*HEADER)
+check(inline != graph_top, "a file in the list opens its diff")
+click(798, 99)
+move(700, 893)
+settle()
+check(region(*HEADER) != inline, "the diff goes side by side")
 shot("diff-split")
-click(1062, 98)
+click(1042, 98)
+move(700, 893)
+settle()
+
+
+def colour(px, py):
+    b, g, r = region(px, py, 1, 1)[:3]
+    return (r, g, b)
+
+
+WHITE = (255, 255, 255)
+
+# Two lines of page part each commit row from the next, the foot of one band and the head of
+# the one under it, and the lane lines run on through the gap rather than stopping at it.
+# Rows are 28 pixels from the list's top at 81, the working copy's row first; ten commits
+# follow it on this fixture.
+feet = [108 + 28 * i for i in range(1, 11)]
+check(all(colour(600, y) == WHITE and colour(600, y + 1) == WHITE for y in feet),
+      "every commit row is parted from the next by a gap")
+check(all(colour(600, y - 2) != WHITE and colour(600, y + 3) != WHITE for y in feet),
+      "with the bands right up to it on either side")
+check(all(colour(525, y) != WHITE and colour(525, y + 1) != WHITE for y in feet),
+      "and the first lane runs through every one")
+
+# A commit's own panel: the message boxed in the interface face, its author under it.
+click(700, 152)
+shot("commit-details")
+
+# The branch panel, its tags opened and folded again.
+move(700, 893)
+settle()
+TAGS = (16, 375, 220, 40)
+folded = region(*TAGS)
+click(80, 363)
+move(700, 893)
+settle()
+check(region(*TAGS) != folded, "the tags open under their heading")
+shot("sidebar")
+click(80, 363)
+move(700, 893)
+settle()
+check(region(*TAGS) == folded, "and fold away again")
 
 # The find box searching what commits changed, then refusing a date it cannot read. NO_LANE
 # was added by one commit and appears in no message.
