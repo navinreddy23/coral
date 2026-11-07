@@ -5111,15 +5111,6 @@
     ),
   );
 
-  /**
-   * Whether there is room for the dimmed body preview after the summary.
-   *
-   * Decided here rather than with a container query: `container-type` collapses the message
-   * cell of the WIP row, which is a button, and the row loses its text entirely. Three
-   * characters of a continuation is noise anyway — below this the summary takes the width.
-   */
-  const showBody = $derived(paneWidth - columns.refs - columns.graph > 560);
-
   /** Rows currently worth putting in the DOM. Never the whole graph. */
   function windowRows(frame: Frame | null): number[] {
     if (!frame) return [];
@@ -5154,7 +5145,7 @@
    * in hand, which is the only frame those rows mean anything in.
    *
    * Derived rather than looked up per use, so a row's object id is built once per repaint
-   * instead of once for its initials, once for its summary and once for its body.
+   * instead of once for its initials and again for its summary.
    */
   /**
    * The lanes canvas's height: a pane's worth, or the whole history when that is shorter.
@@ -5299,18 +5290,6 @@
     const remote = remoteOf(short);
     const url = remotes.list.find((r) => r.name === remote)?.fetchUrl ?? '';
     return url === '' ? 'other' : hostOf(url);
-  }
-
-  /**
-   * The body as one dimmed line after the summary, as the reference shows it. Newlines become
-   * a separator rather than being dropped, so a bullet list still reads as several points.
-   */
-  function flatten(body: string): string {
-    return body
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0)
-      .join(' | ');
   }
 
 </script>
@@ -5942,9 +5921,6 @@
                 <span class="summary"
                   >{#if split}<span class="prefix">{split.prefix}</span> {split.rest}{:else}{subject}{/if}</span
                 >
-                {#if showBody}
-                  <span class="detail">{flatten(visibleMeta.get(row)?.body ?? '')}</span>
-                {/if}
                 {#if local !== null}
                   <span class="age">{shortAge(graph.frame.times[local] ?? 0)}</span>
                   <span class="sha mono">{oidOf(graph.frame, local).slice(0, 8)}</span>
@@ -6504,17 +6480,14 @@
   }
   .more:hover { color: var(--fg-0); border-color: var(--border-strong); }
 
-  /* The summary takes its natural width and the dimmed body absorbs what is left. Letting
-     both shrink equally gave the body most of the row, so summaries were cut to a few
-     characters while their continuation ran on — the wrong half was being kept. */
   /*
-   * The summary takes its natural width and the body absorbs what is left. No percentage cap:
-   * a percentage resolves against a containing block whose width is not obvious inside a grid
-   * cell inside a button, and it cost the WIP row most of its text.
+   * The summary alone, and none of the body after it. The body ran on as a dimmed line of
+   * `a | b | c` to the edge of every row, and a screen of commits read as a wall of text in
+   * which the one line per commit worth reading had to be found. It is in the details panel.
    *
-   * The body has a zero basis, so it can never be the reason the summary has to shrink; it
-   * only ever grows into space nothing else wanted. That is what stops the continuation
-   * winning the row from the summary it continues.
+   * No percentage cap on the width: a percentage resolves against a containing block whose
+   * width is not obvious inside a grid cell inside a button, and it cost the WIP row most of
+   * its text.
    */
   .summary {
     flex: 0 1 auto; min-width: 0; color: var(--fg-0);
@@ -6522,12 +6495,6 @@
   }
   /* The `ui:` or `smb/client:` a subject leads with, set back so the sentence leads instead. */
   .prefix { color: var(--fg-2); font-family: var(--font-mono); font-size: var(--text-base); }
-  /* Dimmer than the summary it continues, but not the dimmest thing on the row: at `fg-2` the
-     half of the line that carries the body read as grey filler beside the date and the id. */
-  .detail {
-    flex: 1 1 0; min-width: 0; color: var(--fg-1);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
   /* Pushed to the trailing edge, so the two columns line up down the list whatever the
      summary before them happens to be. */
   .age {
