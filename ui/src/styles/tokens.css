@@ -419,6 +419,18 @@
    * numbers.
    */
   --row-h: 28px;
+
+  /*
+   * The page left between two commit rows, so each reads as its own strip rather than a run
+   * of one lane reading as a single block. A line along the head of every band and one along
+   * its foot, two between neighbours: one alone was too faint to part them, and two at the
+   * foot would sit the band a pixel above the node and the text centred on the row.
+   *
+   * Painted rather than taken out of the row's height: the rows and the lanes beside them
+   * share one grid. An inset shadow with no blur is a solid rectangle, not the soft fill
+   * ruled out above.
+   */
+  --row-hairline: inset 0 1px 0 var(--bg-0), inset 0 -1px 0 var(--bg-0);
 }
 
 :root[data-density='compact'] { --row-h: 24px; }

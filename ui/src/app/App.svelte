@@ -6284,7 +6284,7 @@
        bar is sticky at zero as well and paints over this one, which is what its z-index is
        for. */
     position: sticky; top: 0; z-index: 1; cursor: pointer;
-    background: var(--warn-soft); box-shadow: inset 2px 0 0 var(--warn);
+    background: var(--warn-soft); box-shadow: var(--row-hairline), inset 2px 0 0 var(--warn);
     /* It is a button, and a button is shrink-to-fit even as a grid container. Every other row
        is a list item and stretches on its own, which is why the difference only showed once
        this row had a colour of its own to stop halfway across. */
@@ -6302,14 +6302,18 @@
    * named on them too or the row stops halfway across.
    */
   .wip .cell.refs, .wip .cell.message { background: var(--bg-1); }
-  .wip .cell.message { box-shadow: inset 2px 0 0 var(--brand); }
+  .wip .cell.message { box-shadow: var(--row-hairline), inset 2px 0 0 var(--brand); }
   .wip .summary { color: var(--fg-0); font-weight: var(--weight-semibold); }
   .wip .wip-node { border-color: var(--brand); }
 
   /*
-   * The lane's colour runs from the commit's node across its message, one ribbon per row, as
+   * The lane's colour runs from the commit's node across its message, one band per row, as
    * the reference client draws it. A band that stopped at a white message cell read as cut off,
    * all the more so beside the next row's, which began somewhere else.
+   *
+   * Each band is parted from the next by a gap of page, so a run of commits on one lane reads
+   * as a stack of rows rather than one block of colour. The lane canvas is drawn over the
+   * rows, so the lines themselves run on through the gap unbroken.
    *
    * The selected row is told apart by strength rather than by being the one plain row: its own
    * lane colour, a good deal deeper, across both the band and the text.
@@ -6317,8 +6321,8 @@
   .row .cell.message {
     background: var(--row-tint, var(--bg-0));
     /* The leading bar hands the eye from the lane to the text. State replaces the colour,
-       never the bar. */
-    box-shadow: inset 2px 0 0 var(--row-line, transparent);
+       never the bar. The gap is listed first so it is painted over the bar too. */
+    box-shadow: var(--row-hairline), inset 2px 0 0 var(--row-line, transparent);
   }
   .row:hover .cell.message, .row:hover .lane-strip { background: var(--row-hover); }
   /*
@@ -6326,32 +6330,36 @@
    * the row: it is drawn entirely leftwards into the lane column and stops exactly where the
    * message cell begins, which carries the same colour on.
    *
-   * Square, and deliberately: consecutive commits in one lane then run into a single ribbon,
-   * which is the point — a branch reads as one colour from its label to its last commit.
+   * Square, so it meets the message cell without a seam, and a pixel short of the row's head
+   * and foot, where the message cell leaves its gap.
    */
   .lane-strip {
     /* Positioned rather than laid out, so it takes no part in the row's flow and no negative
        margin has to cancel it. `right: 100%` puts its right edge exactly on the message cell's
        leading edge, which leaves that cell's own inset bar — the one that marks the selected
        row — visible instead of painted over. */
-    position: absolute; right: 100%; top: 0; bottom: 0;
+    position: absolute; right: 100%; top: 1px; bottom: 1px;
     width: var(--lane-gap, 0px);
     background: var(--row-tint, transparent);
   }
   /* Every match tinted, the one being stood on ruled as well: a screen of identical tints
      says how many matched and nothing about which one the buttons are pointing at. */
   .row.found .cell.message { background: var(--warn-soft); }
-  .row.here .cell.message { box-shadow: inset 2px 0 0 var(--warn); }
+  .row.here .cell.message { box-shadow: var(--row-hairline), inset 2px 0 0 var(--warn); }
   /*
    * The selected commit, tinted and given a bar down its leading edge. On a screen of rows
    * that all look alike a tint alone is easy to lose, and the bar survives a hover passing
    * over a neighbour.
    */
   .row.selected .cell.message, .row.selected .lane-strip { background: var(--row-strong); }
-  .row.selected .cell.message { box-shadow: inset 3px 0 0 var(--row-line); }
+  /* The fallback is not decoration. The WIP row carries `.row` and sets no lane colour, and a
+     `var()` with nothing to resolve to voids the whole declaration, hairline included. */
+  .row.selected .cell.message {
+    box-shadow: var(--row-hairline), inset 3px 0 0 var(--row-line, transparent);
+  }
   .wip.selected {
     background: var(--accent-soft);
-    box-shadow: inset 2px 0 0 var(--accent-line);
+    box-shadow: var(--row-hairline), inset 2px 0 0 var(--accent-line);
   }
   /* Selected beats dirty: whichever row the panel on the right is showing has to be the one
      that looks picked, and the working copy is still the only amber-noded row on the list. */
@@ -6376,7 +6384,10 @@
   .cell.message {
     /* The containing block for the lane band, which is drawn outside it to the left. */
     position: relative;
-    border-radius: var(--radius-1); padding: 0 var(--space-2);
+    /* Square where the band from the lanes runs into it, so the leading bar is a straight edge
+       and the join has no notch; a row rounded on that side read as a bracket once the rows
+       were parted by a gap. */
+    border-radius: 0 var(--radius-1) var(--radius-1) 0; padding: 0 var(--space-2);
     /* The row's own height, so the highlight is a band rather than a floating pill. */
     height: 100%;
   }

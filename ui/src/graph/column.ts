@@ -34,7 +34,7 @@ export function columnWidth(
  * the commit message.
  *
  * The band runs behind every lane line to the right of the node, which the canvas draws over
- * it, so a branch reads as one ribbon of colour from its node to its text.
+ * it, so a commit reads as one strip of colour from its node to its text.
  */
 export function bandWidth(
   frame: Frame | null,
