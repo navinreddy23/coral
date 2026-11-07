@@ -323,7 +323,8 @@ composited layer with subpixel precision only where it knows what is behind it; 
 none` leaves it guessing and it drops to grayscale, which reads as soft. The giveaway is that
 hovering a row sharpens it — the hover colour is the only thing telling WebKit what the
 backdrop is. The lane column is the deliberate exception, left transparent so the canvas shows
-through.
+through. The gap between two commit rows is the same rule kept: it is an inset shadow in the
+page colour painted inside each band, not a margin, so no text ever sits over nothing.
 
 Compositing itself stays **on**, and turning it off is not an option however good the text
 looks. WebKitGTK delivers wheel events through the compositing path: with
