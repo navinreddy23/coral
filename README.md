@@ -18,8 +18,8 @@ run against a real clone.
 
 ## What it looks like
 
-The graph, the palette, the terminal and the dark theme below are the Linux kernel: 1,481,528
-commits and 944 tags. The rest are a small repository, because a diff, a conflict and a rebase
+The graph, the palette, the terminal and the dark theme below are the Linux kernel: 1,506,079
+commits and 952 tags. The rest are a small repository, because a diff, a conflict and a rebase
 are easier to read when the file in them is ten lines rather than ten thousand.
 
 ![The graph on the Linux kernel](docs/screenshots/01-graph.png)
