@@ -6504,8 +6504,10 @@
     flex: 0 1 auto; min-width: 0; color: var(--fg-0);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  /* The `ui:` or `smb/client:` a subject leads with, set back so the sentence leads instead. */
-  .prefix { color: var(--fg-2); font-family: var(--font-mono); font-size: var(--text-base); }
+  /* The `ui:` or `smb/client:` a subject leads with, set back so the sentence leads instead.
+     Dimmed only, in the face the rest of the line is in: a second typeface on every row was
+     one more thing the list asked to be read. */
+  .prefix { color: var(--fg-2); }
   /* Pushed to the trailing edge, so the two columns line up down the list whatever the
      summary before them happens to be. */
   .age {
