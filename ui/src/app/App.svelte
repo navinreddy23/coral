@@ -6486,7 +6486,7 @@
     display: inline-flex; align-items: center; gap: 3px;
     color: var(--fg-2); background: none; padding: 1px 4px;
     border: 1px dashed var(--border); border-radius: var(--radius-1);
-    flex: 0 0 auto; font: inherit; font-size: var(--text-xs); line-height: 13px; cursor: pointer;
+    flex: 0 0 auto; font: inherit; font-size: var(--text-xs); line-height: 14px; cursor: pointer;
     position: relative; z-index: 1;
   }
   .more:hover { color: var(--fg-0); border-color: var(--border-strong); }
@@ -6539,7 +6539,7 @@
   }
 
   .wip-panel {
-    width: var(--details-w, 340px); flex: 0 0 auto; min-height: 0;
+    width: var(--details-w, 360px); flex: 0 0 auto; min-height: 0;
     border: var(--hairline) solid var(--border); border-radius: var(--radius-3); background: var(--bg-0);
     padding: var(--space-3);
     /* The panel itself does not scroll: the two file lists inside it do, each with half the

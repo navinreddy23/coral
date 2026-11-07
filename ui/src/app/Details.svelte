@@ -577,7 +577,7 @@
    * seventeen-thousand-file list scrolled the message away for good.
    */
   aside {
-    width: var(--details-w, 340px); flex: 0 0 auto; min-height: 0; overflow: hidden;
+    width: var(--details-w, 360px); flex: 0 0 auto; min-height: 0; overflow: hidden;
     display: flex; flex-direction: column;
     border: var(--hairline) solid var(--border); border-radius: var(--radius-3); background: var(--bg-0);
     padding: var(--space-3); font-size: var(--text-base);

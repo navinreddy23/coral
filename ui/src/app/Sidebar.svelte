@@ -821,8 +821,10 @@
   }
   .search:focus-within { border-color: var(--accent); }
   .lens { display: flex; color: var(--fg-2); flex: 0 0 auto; }
+  /* A step under the rows it filters, so the placeholder naming all three kinds still fits
+     the panel at its default width. */
   .filter {
-    flex: 1; min-width: 0; font: inherit; font-size: var(--text-base);
+    flex: 1; min-width: 0; font: inherit; font-size: var(--text-sm);
     padding: 4px 0; border: 0; background: var(--bg-0); color: var(--fg-0);
   }
   .filter:focus { outline: none; }

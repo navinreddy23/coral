@@ -335,12 +335,12 @@
    */
   --text-mark: 9px;
 
-  --text-xs: 10px;
-  --text-sm: 11px;
-  --text-base: 12px;
-  --text-md: 13px;
-  --text-lg: 15px;
-  --text-xl: 19px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
 
   /* Tight for a single line in a row, open for a paragraph somebody reads. */
   --leading-tight: 1.2;
