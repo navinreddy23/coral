@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.5.0
+
+### A quieter window
+
+The window showed more than anyone reads at a glance. This release takes things out of the
+commit list and the side panels rather than adding to them. Nothing behaves differently: every
+click, key, menu and drag does what it did.
+
+- **One line per commit.** A row in the commit list shows the commit's summary, its age and its
+  id. The body used to run on after the summary as a dimmed `a | b | c` to the edge of the row;
+  it is one click away in the details panel.
+- **Commits stand apart.** Two pixels of page part each commit's row from the next, so a run of
+  commits on one branch reads as a stack of rows rather than one block of colour. The branch
+  lines run on through the gaps, and every row keeps its height.
+- **One typeface per row.** The `smb/client:` or `ui:` a summary leads with is dimmed in the
+  row's own face, no longer set in the code face.
+- **Larger type.** Every text size is a pixel larger. The right panel now opens at 360 pixels
+  rather than 340, so the staging panel's heading still fits on one line; a width you dragged
+  is kept.
+- **The branch panel.** A rule divides each section from the next. The count beside each
+  heading is a plain number, no longer in a grey pill. Every branch, tag and stash is marked
+  with its kind, and the branch checked out keeps its tick. An empty stash list shows its 0
+  rather than "Nothing stashed."
+- **The commit details.** The summary and the message share one bordered box. The message is
+  set in the interface face, with its line breaks kept, instead of the code face. Below the box
+  are who wrote the commit and when, "authored" and the date; the address is in the name's
+  tooltip. A long message scrolls inside the box, so the author and the file list stay in view,
+  and the box grows when the divider under it is dragged.
+
 ## 1.4.1
 
 ### Added
