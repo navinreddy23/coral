@@ -480,8 +480,29 @@ describe('the stash list', () => {
     expect(picked).toEqual([]);
   });
 
-  it('says so when there is nothing stashed', () => {
-    expect(mount().getByText('Nothing stashed.')).toBeTruthy();
+  it('says so when there is nothing stashed, with the count rather than a sentence', () => {
+    const section = mount().container.querySelector('[data-section="stashes"]');
+    expect(section?.querySelector('.head .count')?.textContent?.trim()).toBe('0');
+    expect(section?.querySelectorAll('button.ref')).toHaveLength(0);
+    expect(section?.textContent).not.toContain('Nothing stashed');
+  });
+
+  it('marks each branch and tag with its kind, and the branch checked out with the tick', () => {
+    const view = mount({
+      head: 'master',
+      groups: {
+        local: [ref('master'), ref('spike')],
+        remote: [],
+        tags: [tag('v1.0')],
+        stashes: [],
+      },
+    });
+    const tick = (name: string) => view.getByText(name).closest('button')?.querySelector('.tick');
+    expect(tick('master')?.classList.contains('kind')).toBe(false);
+    expect(tick('master')?.querySelector('.ref-mark')).toBeNull();
+    expect(tick('spike')?.classList.contains('kind')).toBe(true);
+    expect(tick('spike')?.querySelector('.ref-mark')).not.toBeNull();
+    expect(tick('v1.0')?.querySelector('.ref-mark')).not.toBeNull();
   });
 
   it('offers to hide a branch, and keeps saying so once it is hidden', async () => {
