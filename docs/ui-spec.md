@@ -269,8 +269,12 @@ link.
 
 Inline and side-by-side toggle, word-level marking inside a replaced line, hunk headers with stage/unstage/discard
 hunk, line selection to stage/unstage/discard lines, whitespace toggle, file history and blame
-tabs, and next/previous change in both layouts. The unified view can be widened from the hunks
-to the whole file; side by side always shows the whole of it. Large and binary files render as a placeholder
+tabs, and next/previous change in both layouts, a change being a run of added and removed
+lines. The unified view can be widened from the hunks to the whole file; side by side always
+shows the whole of it. Between hunks, and before the first and after the last, the unchanged
+lines are a bar that opens them twenty at a time from either end or all at once, numbered on
+both sides and coloured like the rest; they are rows of their own, so staging part of a hunk
+names the same lines whatever is open around it. Large and binary files render as a placeholder
 with an explicit load action.
 
 Beside Diff, Blame and History, **File** shows the whole file as the change leaves it: as the

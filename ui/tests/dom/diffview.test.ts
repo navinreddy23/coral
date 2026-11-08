@@ -330,6 +330,71 @@ describe('the diff viewer', () => {
     await vi.waitFor(() => expect(scroller.scrollTop).toBeGreaterThan(200 * 17));
   });
 
+  it('opens the unchanged lines between hunks a step at a time, numbered on both sides', async () => {
+    // Fifty lines; three changed at 10 and two lines added at 40.
+    const text = Array.from({ length: 52 }, (_, i) => `line ${i + 1}`).join('\n') + '\n';
+    const file: FileDiff = {
+      ...fileDiff(),
+      hunks: [
+        {
+          header: '@@ -10,1 +10,1 @@', oldStart: 10, oldLines: 1, newStart: 10, newLines: 1,
+          lines: [line('remove', 'old 10', 10, null), line('add', 'line 10', null, 10)],
+        },
+        {
+          header: '@@ -39,0 +40,2 @@', oldStart: 39, oldLines: 0, newStart: 40, newLines: 2,
+          lines: [line('add', 'line 40', null, 40), line('add', 'line 41', null, 41)],
+        },
+      ],
+    };
+    const parts: [string, number, number[]][] = [];
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'a.c';
+    diff.source = 'unstaged';
+    diff.file = file;
+    diff.setMode('inline');
+    diff.readSides = async () => {};
+    const view = render(DiffView, {
+      props: { diff, onClose: () => {}, onPart: (p: string, h: number, l: number[]) => parts.push([p, h, l]) },
+    });
+    // Nothing to open until the new side is read, and only the new side of this answer.
+    expect(view.container.querySelector('tr.gap')).toBeNull();
+    diff.sideTexts = { file: { ...file }, before: null, after: text };
+    await Promise.resolve();
+    expect(view.container.querySelector('tr.gap')).toBeNull();
+    diff.sideTexts = { file: diff.file as FileDiff, before: null, after: text };
+    await vi.waitFor(() => expect(view.container.querySelectorAll('tr.gap')).toHaveLength(3));
+
+    const bars = () => [...view.container.querySelectorAll('tr.gap')];
+    const named = (bar: Element | undefined, words: string) =>
+      [...(bar?.querySelectorAll('button') ?? [])].find((b) => b.textContent?.includes(words)) as HTMLElement;
+    // Before the first hunk, nine lines: one button for all of them.
+    expect(bars()[0]?.textContent).toContain('All 9 unchanged lines');
+    // Between the two, 11 to 39: twenty under the first change, then the other nine.
+    await fireEvent.click(named(bars()[1], '20 more'));
+    const opened = () => [...view.container.querySelectorAll('tr.opened')];
+    expect(opened()).toHaveLength(20);
+    expect([...(opened()[0]?.querySelectorAll('td.no') ?? [])].map((n) => n.textContent)).toEqual(['11', '11']);
+    expect(bars()[1]?.textContent).toContain('All 9 unchanged lines');
+    await fireEvent.click(named(bars()[1], 'All 9'));
+    expect(opened()).toHaveLength(29);
+    // After the last: 42 to 52 on the new side are 40 to 50 on the old, two lines having been added.
+    await fireEvent.click(named(bars().at(-1), 'All 11'));
+    const last = opened().at(-1);
+    expect([...(last?.querySelectorAll('td.no') ?? [])].map((n) => n.textContent)).toEqual(['50', '52']);
+    expect(last?.textContent).toContain('line 52');
+
+    // Opened lines are not part of any hunk, so staging still names the hunk's own lines.
+    const added = [...view.container.querySelectorAll('tr.add button.pick')];
+    await fireEvent.click(added[1] as HTMLElement);
+    const stage = [...view.container.querySelectorAll('.hunk-acts button')].find((b) =>
+      b.textContent?.includes('Stage 1 line'),
+    ) as HTMLElement;
+    await fireEvent.click(stage);
+    expect(parts).toEqual([['stage', 1, [0]]]);
+    // A later test finds its "Stage 1 line" anywhere on the page.
+    view.unmount();
+  });
+
   it('steps inline from one change to the next, a change that only removes lines included', async () => {
     // It looked for `tr.delete`, which no row is, and centred each row it found below the line
     // it measured from, so the next press found the same row again.

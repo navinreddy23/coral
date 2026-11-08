@@ -190,7 +190,8 @@ describe('the file panel', () => {
     await diff.openWorking('/repo', false, 'a.c');
     await diff.readSides();
     await diff.readSides();
-    expect(diff.sideTexts).toEqual({ before: 'old\n', after: 'new\n' });
+    expect(diff.sideTexts).toMatchObject({ before: 'old\n', after: 'new\n' });
+    expect(diff.sideTexts?.file).toBe(diff.file);
     expect(called('file_blob').map((c) => (c[1] as { side: { kind: string } }).side.kind)).toEqual([
       'index', 'worktree',
     ]);

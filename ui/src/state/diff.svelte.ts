@@ -85,12 +85,15 @@ export class DiffState {
   /** The file as the change leaves it, once the file view has asked for it. */
   contents = $state<Contents | null>(null);
   /**
-   * Both sides of the change in full, once colouring has asked for them.
+   * Both sides of the change in full, and the answer from git they were read beside.
    *
-   * A diff is coloured from the whole files, not from the lines its hunks show: three lines
-   * from the middle of a block comment look like code on their own.
+   * For colouring, which is done from the whole files rather than from the lines the hunks
+   * show — three lines from the middle of a block comment look like code on their own — and
+   * for the unchanged lines between hunks, which a reader can open. `file` says which answer
+   * they belong to: after a reload the old texts stay up until the new ones land, and gaps
+   * measured against the old file would open onto the wrong lines.
    */
-  sideTexts = $state<{ before: string | null; after: string | null } | null>(null);
+  sideTexts = $state.raw<{ file: FileDiff; before: string | null; after: string | null } | null>(null);
   /** The diff `sideTexts` were read for, so a reload reads them again. */
   #sidesFor: FileDiff | null = null;
   /**
@@ -360,7 +363,7 @@ export class DiffState {
         fileBlob(sides.repo, sides.after.side, sides.after.file),
       ]);
       if (this.file !== file) return;
-      this.sideTexts = { before: textOf(before), after: textOf(after) };
+      this.sideTexts = { file, before: textOf(before), after: textOf(after) };
     } catch {
       // Too large to read, most likely: drawn plain, as it was before there were colours.
     }

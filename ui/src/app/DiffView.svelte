@@ -2,6 +2,7 @@
   import ImageDiff, { isImage } from './ImageDiff.svelte';
   import Icon from './Icon.svelte';
   import { firstChangedRow, marksOf, onScreen, splitRows, windowAround } from '../diff/split';
+  import { gapsOf, type Gap } from '../diff/gap';
   import { wordMarks } from '../diff/word';
   import CodeLine from './CodeLine.svelte';
   import { elidePath } from './path';
@@ -106,12 +107,15 @@
    * side under ignored whitespace — is left plain rather than coloured from the wrong text.
    */
   const grammar = $derived(diff.path === null ? null : grammarOf(diff.path));
+  // Both whole sides, for the colours and for the lines between hunks, whichever is wanted.
+  $effect(() => {
+    if (diff.view === 'diff' || diff.view === 'history') void diff.readSides();
+  });
   $effect(() => {
     if (syntax === null || !syntax.on || grammar === null) return;
     if (diff.view === 'blame') syntax.want(grammar, diff.text);
     else if (diff.view === 'file') syntax.want(grammar, diff.contents?.kind === 'text' ? diff.contents.text : null);
     else {
-      void diff.readSides();
       syntax.want(grammar, diff.sideTexts?.before ?? null);
       syntax.want(grammar, diff.sideTexts?.after ?? null);
     }
@@ -212,8 +216,64 @@
       pickedOn = file;
       picked = new Set();
       anchor = null;
+      opened = {};
     }
   });
+
+  /** Lines a gap opens by, from either end. */
+  const STEP = 20;
+
+  /**
+   * How much of each gap between hunks has been opened, from its top and from its bottom,
+   * keyed by the hunk it sits above.
+   *
+   * Drawn as rows of their own between the hunks, never put into a hunk's lines: staging part
+   * of a hunk names its lines by their place in it, and a line opened above them would move
+   * every one.
+   */
+  let opened = $state<Record<number, { top: number; bottom: number }>>({});
+
+  /**
+   * The gaps the inline view can open, by the hunk each sits above.
+   *
+   * Measured against the new side as it stood for this answer from git, and only once that has
+   * been read: the old one after a reload would open onto the wrong lines. None when the whole
+   * file is already on screen, or the hunks were cut short at the line budget.
+   */
+  const gaps = $derived.by(() => {
+    const sides = diff.sideTexts;
+    const none = new Map<number, Gap>();
+    if (diff.mode !== 'inline' || diff.expanded || total > LIMIT) return none;
+    if (sides === null || sides.file !== diff.file || sides.after === null) return none;
+    const lines = linesOf(sides.after);
+    return new Map(gapsOf(hunks, lines.length).map((gap) => [gap.below, gap]));
+  });
+  const trailingGap = $derived(gaps.get(hunks.length));
+  const afterText = $derived(
+    diff.sideTexts !== null && diff.sideTexts.after !== null ? linesOf(diff.sideTexts.after) : [],
+  );
+
+  function openGap(gap: Gap, how: 'top' | 'bottom' | 'all') {
+    const now = opened[gap.below] ?? { top: 0, bottom: 0 };
+    const size = gap.last - gap.first + 1;
+    const next =
+      how === 'all'
+        ? { top: size, bottom: 0 }
+        : how === 'top'
+          ? { ...now, top: now.top + STEP }
+          : { ...now, bottom: now.bottom + STEP };
+    opened = { ...opened, [gap.below]: next };
+  }
+
+  /** The new-side numbers from `from` to `to`, both included; none when `to` is before `from`. */
+  function numbers(from: number, to: number): number[] {
+    return Array.from({ length: Math.max(0, to - from + 1) }, (_, i) => from + i);
+  }
+
+  /** An opened line of a gap, as the line it is on both sides. */
+  function gapLine(no: number, shift: number): Line {
+    return { kind: 'context', text: afterText[no - 1] ?? '', oldNo: no + shift, newNo: no, noNewline: false };
+  }
 
   /** The line last clicked, which a Shift-click picks from. */
   let anchor: { hunk: number; line: number } | null = null;
@@ -489,6 +549,48 @@
   }
 
 </script>
+
+{#snippet gapLineRow(line: Line)}
+  <tr class="context opened">
+    <td class="no">{line.oldNo}</td>
+    <td class="no">{line.newNo}</td>
+    <td class="text"
+      ><span class="sign"> </span><CodeLine text={line.text} spans={null} tokens={coloursOf(line, 'after')} /></td
+    >
+  </tr>
+{/snippet}
+
+{#snippet gapRows(gap: Gap)}
+  {@const now = opened[gap.below] ?? { top: 0, bottom: 0 }}
+  {@const hidden = Math.max(0, gap.last - gap.first + 1 - now.top - now.bottom)}
+  {#each numbers(gap.first, hidden === 0 ? gap.last : gap.first + now.top - 1) as no (no)}
+    {@render gapLineRow(gapLine(no, gap.shift))}
+  {/each}
+  {#if hidden > 0}
+    <tr class="gap">
+      <td colspan="3">
+        <div class="gap-bar">
+          {#if gap.below > 0 && hidden > STEP}
+            <button onclick={() => openGap(gap, 'top')} title="Show {STEP} more lines under the change above"
+              ><Icon name="chevronDown" size={12} /> {STEP} more</button
+            >
+          {/if}
+          <button onclick={() => openGap(gap, 'all')} title="Show every unchanged line here"
+            >{hidden === 1 ? 'The 1 unchanged line' : `All ${hidden.toLocaleString()} unchanged lines`}</button
+          >
+          {#if gap.below < hunks.length && hidden > STEP}
+            <button onclick={() => openGap(gap, 'bottom')} title="Show {STEP} more lines over the change below"
+              ><Icon name="chevronUp" size={12} /> {STEP} more</button
+            >
+          {/if}
+        </div>
+      </td>
+    </tr>
+    {#each numbers(gap.last - now.bottom + 1, gap.last) as no (no)}
+      {@render gapLineRow(gapLine(no, gap.shift))}
+    {/each}
+  {/if}
+{/snippet}
 
 {#snippet sheet(blaming: boolean)}
   <div
@@ -784,6 +886,8 @@
       <table class="lines" bind:this={table}>
         <tbody>
           {#each hunks as hunk, h (hunk.header + hunk.newStart)}
+            {@const gap = gaps.get(h)}
+            {#if gap !== undefined}{@render gapRows(gap)}{/if}
             <tr class="hunk">
               <td colspan="3">
                 <div class="hunk-bar">
@@ -843,6 +947,7 @@
               </tr>
             {/each}
           {/each}
+          {#if trailingGap !== undefined}{@render gapRows(trailingGap)}{/if}
         </tbody>
       </table>
     {:else}
@@ -1265,6 +1370,17 @@
     box-shadow: inset 4px 0 0 var(--accent);
   }
   tr.picked .sign { font-weight: var(--weight-bold); }
+
+  /* The way into a gap: quieter than a hunk's header, since it is not a change. */
+  tr.gap td { padding: 2px var(--space-2); background: var(--bg-1); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .gap-bar { display: flex; gap: var(--space-2); align-items: center; font-family: var(--font-ui); }
+  .gap-bar button {
+    display: inline-flex; align-items: center; gap: 4px;
+    font: inherit; font-size: var(--text-sm); cursor: pointer; line-height: 17px;
+    background: var(--bg-0); border: 1px solid var(--border); border-radius: var(--radius-0);
+    color: var(--fg-1); padding: 0 6px;
+  }
+  .gap-bar button:hover { background: var(--bg-3); color: var(--fg-0); }
 
   tr.hunk td {
     background: var(--bg-2); color: var(--fg-2); padding: 3px var(--space-2);

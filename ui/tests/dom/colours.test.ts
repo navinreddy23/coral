@@ -65,7 +65,7 @@ function mounted(mode: 'inline' | 'split', view: 'diff' | 'blame' | 'file' = 'di
   diff.file = fileDiff();
   diff.setMode(mode);
   diff.setView(view);
-  diff.sideTexts = { before: BEFORE, after: AFTER };
+  diff.sideTexts = { file: diff.file, before: BEFORE, after: AFTER };
   // Read already: the test is about drawing what came back, not about reading it.
   diff.readSides = async () => {};
   return { views, diff, ...render(DiffView, { props: { diff, syntax, onClose: () => {}, onPart: () => {} } }) };
