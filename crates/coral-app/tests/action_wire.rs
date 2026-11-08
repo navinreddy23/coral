@@ -21,6 +21,8 @@ fn every_action_the_window_can_send_is_understood() {
     for json in [
         r#"{"kind":"fetch","remote":null}"#,
         r#"{"kind":"fetch","remote":null,"background":true}"#,
+        r#"{"kind":"deepen","remote":null,"how":{"kind":"by","commits":100}}"#,
+        r#"{"kind":"deepen","remote":"origin","how":{"kind":"all"}}"#,
         r#"{"kind":"pull","remote":null,"mode":"ffOnly"}"#,
         r#"{"kind":"pull","remote":"origin","mode":"rebase"}"#,
         r#"{"kind":"push","remote":null,"setUpstream":true}"#,

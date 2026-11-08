@@ -263,6 +263,46 @@ describe('the commit menu', () => {
     expect(asked?.[1]).toMatchObject({ oid: frameOids[0] });
   });
 
+  it('fetches more of a shallow clone’s history from the status bar, then walks again', async () => {
+    const shallow = {
+      path: REPO,
+      gitDir: `${REPO}/.git`,
+      gitVersion: '2.43.0',
+      head: { kind: 'branch', name: 'master' },
+      state: 'clean',
+      commitGraph: true,
+      shallow: true,
+    };
+    const { container } = await shell({ open_repo: shallow });
+    const chip = await waitFor(() => {
+      const found = [...container.querySelectorAll('footer button')].find(
+        (b) => b.textContent?.trim() === 'shallow clone',
+      );
+      if (!found) throw new Error('no chip');
+      return found as HTMLElement;
+    });
+    const walksBefore = invoke.mock.calls.filter(([cmd]) => cmd === 'graph_frame').length;
+    await fireEvent.click(chip);
+    await fireEvent.click(itemNamed(container, 'Fetch 100 more commits of history'));
+    await waitFor(() => {
+      expect(lastAction()).toEqual({
+        kind: 'deepen',
+        remote: null,
+        how: { kind: 'by', commits: 100 },
+      });
+    });
+    // No ref moved, and the walk is longer: it has to be done again all the same.
+    await waitFor(() => {
+      const walks = invoke.mock.calls.filter(([cmd]) => cmd === 'graph_frame').length;
+      expect(walks).toBeGreaterThan(walksBefore);
+    });
+  });
+
+  it('says nothing about history for a clone that has all of it', async () => {
+    const { container } = await shell();
+    expect(container.querySelector('footer')?.textContent).not.toContain('shallow clone');
+  });
+
   it('compares a commit with the working tree and reads its files against it', async () => {
     const { container } = await shell({
       changed_since: [{ path: 'a.c', oldPath: null, change: 'modified' }],

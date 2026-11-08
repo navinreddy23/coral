@@ -1404,7 +1404,9 @@
       await worktrees.load(path);
     }
     const after = refSignature();
-    if (before !== after) {
+    // Fetching more of a shallow clone's history moves no ref and makes the walk longer.
+    if (action.kind === 'deepen') info = await open(path).catch(() => info);
+    if (before !== after || action.kind === 'deepen') {
       // `forget` first, as the scope rewalk does and for the same reason: a ref moved, so the
       // rows on screen are a different set of commits rather than a stale copy of this one.
       // Kept, the graph took the reloading path, which skips the fast first paint and repaints
@@ -2693,6 +2695,9 @@
   /** Past this many, exporting a range is worth confirming rather than just doing. */
   const MANY_PATCHES = 50;
 
+  /** How much more history one press fetches into a shallow clone. */
+  const DEEPEN_BY = 100;
+
   async function patchButton() {
     if (!info) return;
     const pair = selection.pair;
@@ -3899,6 +3904,34 @@
     void selection.select(info.path, pair.to.row, pair.to.oid, listingFor(pair.to.oid));
   }
 
+  /** What a shallow clone can fetch more of, as a menu over the chip that says it is one. */
+  function deepenMenu(event: MouseEvent) {
+    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    menu = {
+      x: box.left,
+      y: box.top - 4,
+      items: deepenItems(),
+    };
+  }
+
+  function deepenItems(): MenuItem[] {
+    return [
+      {
+        kind: 'item',
+        label: `Fetch ${DEEPEN_BY} more commits of history`,
+        disabled: actions.busy,
+        run: () => void act({ kind: 'deepen', remote: null, how: { kind: 'by', commits: DEEPEN_BY } }),
+      },
+      {
+        kind: 'item',
+        label: 'Fetch all history',
+        hint: 'no longer shallow',
+        disabled: actions.busy,
+        run: () => void act({ kind: 'deepen', remote: null, how: { kind: 'all' } }),
+      },
+    ];
+  }
+
   /** The palette, opened to choose one thing rather than to run any command. */
   let choosing = $state<{ placeholder: string; commands: Command[] } | null>(null);
 
@@ -3986,6 +4019,22 @@
           ] satisfies Command[])
         : []),
       { id: 'fetch', label: 'Fetch', group: 'Remote', run: () => void act({ kind: 'fetch', remote: null }) },
+      ...(info?.shallow
+        ? [
+            {
+              id: 'deepen',
+              label: `Fetch ${DEEPEN_BY} more commits of history`,
+              group: 'Remote',
+              run: () => void act({ kind: 'deepen', remote: null, how: { kind: 'by', commits: DEEPEN_BY } }),
+            },
+            {
+              id: 'unshallow',
+              label: 'Fetch all history',
+              group: 'Remote',
+              run: () => void act({ kind: 'deepen', remote: null, how: { kind: 'all' } }),
+            },
+          ]
+        : []),
       { id: 'pull', label: 'Pull (fast-forward only)', group: 'Remote', run: () => void act({ kind: 'pull', remote: null, mode: 'ffOnly' }) },
       { id: 'pull-rebase', label: 'Pull, rebasing', group: 'Remote', run: () => void act({ kind: 'pull', remote: null, mode: 'rebase' }) },
       { id: 'push', label: 'Push', group: 'Remote', run: () => void act({ kind: 'push', remote: null, setUpstream: true, refspec: null, tags: false, forceWithLease: false, delete: false }) },
@@ -6207,6 +6256,8 @@
       onPlace={() => void placeHost()}
       update={updates.available ? (updates.result?.latest ?? null) : null}
       onUpdate={() => openPreferences('about')}
+      shallow={info.shallow}
+      onShallow={(event) => deepenMenu(event)}
       report={actions.report}
       busy={actions.busy || worktree.busy || merge.busy}
       onDismiss={() => actions.clear()}

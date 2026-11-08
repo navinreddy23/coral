@@ -28,6 +28,11 @@ pub enum Action {
         #[serde(default)]
         background: bool,
     },
+    /// Fetch more of a shallow clone's history.
+    Deepen {
+        remote: Option<String>,
+        how: coral_core::remote::Deepen,
+    },
     Pull {
         remote: Option<String>,
         mode: PullKind,
@@ -355,13 +360,25 @@ impl Action {
         }
     }
 
-    /// What the journal should call this, and the label a failure is reported under.
-    fn label(&self) -> String {
+    fn fetch_label(&self) -> String {
         match self {
             Self::Fetch {
                 background: true, ..
-            } => "fetch in the background".to_owned(),
-            Self::Fetch { .. } => "fetch".to_owned(),
+            } => "fetch in the background",
+            Self::Deepen {
+                how: coral_core::remote::Deepen::All,
+                ..
+            } => "fetch all history",
+            Self::Deepen { .. } => "fetch more history",
+            _ => "fetch",
+        }
+        .to_owned()
+    }
+
+    /// What the journal should call this, and the label a failure is reported under.
+    fn label(&self) -> String {
+        match self {
+            Self::Fetch { .. } | Self::Deepen { .. } => self.fetch_label(),
             Self::Pull { .. } => "pull".to_owned(),
             Self::Push { .. } => self.push_label(),
             Self::Checkout { rev } => format!("checkout {}", named(rev)),
@@ -485,6 +502,7 @@ impl Action {
         matches!(
             self,
             Self::Fetch { .. }
+                | Self::Deepen { .. }
                 | Self::Pull { .. }
                 | Self::Push { .. }
                 | Self::CheckoutProposal { .. }
@@ -708,6 +726,7 @@ async fn run(
 ) -> Result<Done, coral_core::CoralError> {
     match action {
         Action::Fetch { .. }
+        | Action::Deepen { .. }
         | Action::Pull { .. }
         | Action::Push { .. }
         | Action::CheckoutProposal { .. } => run_remote(loc, runner, action, report).await,
@@ -742,6 +761,11 @@ async fn run_remote(
             // Prune: a fetch that leaves deleted remote branches in the sidebar is a fetch
             // that makes the sidebar wrong, which is the thing it was run to correct.
             loc.fetch(runner, remote.as_deref(), true, |p| report(&p))
+                .await?;
+            Ok(Done::quiet())
+        }
+        Action::Deepen { remote, how } => {
+            loc.deepen(runner, remote.as_deref(), how, |p| report(&p))
                 .await?;
             Ok(Done::quiet())
         }

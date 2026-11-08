@@ -285,8 +285,8 @@
         </label>
         {#if cloneHistory === 'shallow'}
           <p class="note">
-            One branch, cut off at that many commits. Coral draws it and git can deepen it
-            later with <span class="mono">git fetch --deepen</span>.
+            One branch, cut off at that many commits. Coral draws it, and "shallow clone" in
+            the status bar fetches more of it whenever it is wanted.
           </p>
         {:else if cloneHistory === 'blobless'}
           <p class="note">

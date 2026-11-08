@@ -158,6 +158,32 @@ pub async fn fetch(
     })
 }
 
+/// Fetches more of a shallow clone's history.
+///
+/// # Errors
+/// Propagates git failures, including unshallowing a clone that is not shallow.
+pub async fn deepen(
+    path: &Path,
+    remote: Option<String>,
+    how: coral_core::remote::Deepen,
+) -> Result<Transfer, CoralError> {
+    let (runner, loc) = open(path).await?;
+    let mut phases = Phases::default();
+    loc.deepen(&runner, remote.as_deref(), how, |p| phases.record(&p))
+        .await?;
+    let what = match how {
+        coral_core::remote::Deepen::By { commits } => {
+            format!("fetched {commits} more commits of history")
+        }
+        coral_core::remote::Deepen::All => "fetched the rest of the history".to_owned(),
+    };
+    Ok(Transfer {
+        what,
+        phases: phases.0,
+        results: Vec::new(),
+    })
+}
+
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AutoFetchSetting {

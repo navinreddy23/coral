@@ -63,6 +63,8 @@ pub struct RepoInfo {
     /// Whether a commit-graph is present. Its absence is the single biggest predictor of a
     /// slow first paint on a large repository.
     pub commit_graph: bool,
+    /// A shallow clone: some commits' parents were never fetched, so history stops short.
+    pub shallow: bool,
 }
 
 /// Whether a repository is still at `at`.
@@ -1165,6 +1167,7 @@ impl RepoLocation {
             head: self.head(runner).await?,
             state: self.op_state(),
             commit_graph: self.has_commit_graph(),
+            shallow: self.common_dir.join("shallow").exists(),
         })
     }
 }

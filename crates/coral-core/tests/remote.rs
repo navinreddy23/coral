@@ -854,3 +854,54 @@ async fn a_failed_transfer_says_why_rather_than_reciting_its_progress() {
         "the reason survives: {message}"
     );
 }
+
+#[tokio::test]
+async fn a_shallow_clone_gets_deeper_and_then_whole() {
+    use coral_core::remote::Deepen;
+
+    let upstream = TestRepo::new().write("a.txt", "0\n").commit("first");
+    let upstream = (1..5).fold(upstream, |r, i| {
+        r.write("a.txt", &format!("{i}\n"))
+            .commit(&format!("commit {i}"))
+    });
+    let home = tempfile::tempdir().unwrap();
+    let shallow = home.path().join("shallow");
+    let status = std::process::Command::new("git")
+        .args(["clone", "--quiet", "--depth", "1"])
+        .arg(format!("file://{}", upstream.path().display()))
+        .arg(&shallow)
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .status()
+        .unwrap();
+    assert!(status.success());
+
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, &shallow).await.unwrap();
+    let count = || {
+        let out = std::process::Command::new("git")
+            .args(["rev-list", "--count", "HEAD"])
+            .current_dir(&shallow)
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).trim().to_owned()
+    };
+    assert!(loc.info(&runner).await.unwrap().shallow);
+    assert_eq!(count(), "1");
+    let before = loc.refs_fingerprint(&runner).await.unwrap();
+
+    loc.deepen(&runner, Some("origin"), Deepen::By { commits: 2 }, |_| {})
+        .await
+        .unwrap();
+    assert_eq!(count(), "3");
+    assert_ne!(
+        loc.refs_fingerprint(&runner).await.unwrap(),
+        before,
+        "no ref moved, but the walk is longer, so the cached one must go"
+    );
+
+    loc.deepen(&runner, Some("origin"), Deepen::All, |_| {})
+        .await
+        .unwrap();
+    assert_eq!(count(), "5");
+    assert!(!loc.info(&runner).await.unwrap().shallow);
+}

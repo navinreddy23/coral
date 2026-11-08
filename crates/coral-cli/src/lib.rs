@@ -199,8 +199,14 @@ pub enum Command {
     Fetch {
         remote: Option<String>,
         /// Drop tracking branches whose remote counterparts are gone.
-        #[arg(long)]
+        #[arg(long, conflicts_with_all = ["deepen", "unshallow"])]
         prune: bool,
+        /// In a shallow clone, fetch this many more commits behind where history stops.
+        #[arg(long, value_name = "COMMITS", conflicts_with = "unshallow")]
+        deepen: Option<u32>,
+        /// In a shallow clone, fetch the rest of the history.
+        #[arg(long)]
+        unshallow: bool,
     },
     /// Push to a remote.
     Push {
@@ -853,8 +859,22 @@ async fn dispatch_remote(command: Command, repo: &std::path::Path) -> output::Re
         } => {
             output::render(&commands::remote::manage(repo, &action, &name, value.as_deref()).await)
         }
-        Command::Fetch { remote, prune } => {
-            output::render(&commands::remote::fetch(repo, remote, prune).await)
+        Command::Fetch {
+            remote,
+            prune,
+            deepen,
+            unshallow,
+        } => {
+            use coral_core::remote::Deepen;
+            let how = match (deepen, unshallow) {
+                (Some(commits), _) => Some(Deepen::By { commits }),
+                (None, true) => Some(Deepen::All),
+                (None, false) => None,
+            };
+            match how {
+                Some(how) => output::render(&commands::remote::deepen(repo, remote, how).await),
+                None => output::render(&commands::remote::fetch(repo, remote, prune).await),
+            }
         }
         Command::Push {
             remote,

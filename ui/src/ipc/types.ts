@@ -175,6 +175,11 @@ deleteModify: boolean,
 recorded: boolean, };
 
 /**
+ * How much more of a shallow clone's history to fetch.
+ */
+export type Deepen = { "kind": "by", commits: number, } | { "kind": "all" };
+
+/**
  * The tools git would start, by the names git has for them, or `None` where none is set.
  */
 export type ExternalTools = { diff: string | null, merge: string | null, };
@@ -453,7 +458,11 @@ export type RepoInfo = { path: string, gitDir: string, commonDir: string, isBare
  * Whether a commit-graph is present. Its absence is the single biggest predictor of a
  * slow first paint on a large repository.
  */
-commitGraph: boolean, };
+commitGraph: boolean, 
+/**
+ * A shallow clone: some commits' parents were never fetched, so history stops short.
+ */
+shallow: boolean, };
 
 /**
  * What the two sides of a conflict should be called in the interface.

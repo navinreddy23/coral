@@ -7,6 +7,7 @@ import type {
   Ancestry,
   AutoFetch,
   Blame,
+  Deepen,
   Blocks,
   ChangedFile,
   Commit,
@@ -381,6 +382,8 @@ export function worktreeDiff(
 export type Action =
   /** `background` is the window's own timer: never journaled, so undo is left alone. */
   | { kind: 'fetch'; remote: string | null; background?: boolean }
+  /** More of a shallow clone's history; moves no ref, so the window rewalks for it. */
+  | { kind: 'deepen'; remote: string | null; how: Deepen }
   | {
       kind: 'pull';
       remote: string | null;
