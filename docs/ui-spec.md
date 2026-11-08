@@ -186,7 +186,7 @@ as a dimmed line it turned a screen of commits into a wall of text, and it is a 
 the right panel. No column headers — they named three columns whose contents are a pill, a
 drawing and a sentence, and cost twenty-six pixels of every screen.
 
-Each row's band, from its node across its message, is parted from the next by two pixels of
+Each row's band, from its node across its message, is parted from the next by four pixels of
 page, as GitKraken draws it, so a run of commits on one lane reads as a stack of rows rather
 than one block of colour. The gap is painted at the head and foot of the band rather than taken
 out of the row, so the band stays centred on its node and the lane lines run through it.

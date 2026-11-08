@@ -121,12 +121,13 @@ def colour(px, py):
 
 WHITE = (255, 255, 255)
 
-# Two lines of page part each commit row from the next, the foot of one band and the head of
-# the one under it, and the lane lines run on through the gap rather than stopping at it.
+# Four lines of page part each commit row from the next, two at the foot of one band and two at
+# the head of the one under it, and the lane lines run on through the gap rather than stopping
+# at it.
 # Rows are 28 pixels from the list's top at 81, the working copy's row first; ten commits
 # follow it on this fixture.
 feet = [108 + 28 * i for i in range(1, 11)]
-check(all(colour(600, y) == WHITE and colour(600, y + 1) == WHITE for y in feet),
+check(all(colour(600, y + d) == WHITE for y in feet for d in (-1, 0, 1, 2)),
       "every commit row is parted from the next by a gap")
 check(all(colour(600, y - 2) != WHITE and colour(600, y + 3) != WHITE for y in feet),
       "with the bands right up to it on either side")

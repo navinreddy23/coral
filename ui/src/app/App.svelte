@@ -6732,15 +6732,15 @@
    * the row: it is drawn entirely leftwards into the lane column and stops exactly where the
    * message cell begins, which carries the same colour on.
    *
-   * Square, so it meets the message cell without a seam, and a pixel short of the row's head
-   * and foot, where the message cell leaves its gap.
+   * Square, so it meets the message cell without a seam, and two pixels short of the row's
+   * head and foot, where the message cell leaves its gap.
    */
   .lane-strip {
     /* Positioned rather than laid out, so it takes no part in the row's flow and no negative
        margin has to cancel it. `right: 100%` puts its right edge exactly on the message cell's
        leading edge, which leaves that cell's own inset bar — the one that marks the selected
        row — visible instead of painted over. */
-    position: absolute; right: 100%; top: 1px; bottom: 1px;
+    position: absolute; right: 100%; top: 2px; bottom: 2px;
     width: var(--lane-gap, 0px);
     background: var(--row-tint, transparent);
   }
