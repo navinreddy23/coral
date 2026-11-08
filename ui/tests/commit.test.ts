@@ -187,3 +187,42 @@ describe('a prepared message edited while an operation waits', () => {
     expect(draft.edited()).toBeNull();
   });
 });
+
+describe('co-authors', () => {
+  const people = [
+    { name: 'Grace Hopper', email: 'grace@fixture.invalid', commits: 4 },
+    { name: 'Alan Turing', email: 'alan@fixture.invalid', commits: 1 },
+  ];
+
+  it('takes a full name and address, or the name or address of somebody known', () => {
+    const draft = new CommitState();
+    draft.people = people;
+    expect(draft.addCoAuthor('Ada Lovelace <ada@fixture.invalid>')).toBe(true);
+    expect(draft.addCoAuthor('grace@fixture.invalid')).toBe(true);
+    expect(draft.addCoAuthor('alan turing')).toBe(true);
+    expect(draft.coAuthors).toEqual([
+      'Ada Lovelace <ada@fixture.invalid>',
+      'Grace Hopper <grace@fixture.invalid>',
+      'Alan Turing <alan@fixture.invalid>',
+    ]);
+  });
+
+  it('refuses what is not somebody, and nobody twice', () => {
+    const draft = new CommitState();
+    draft.people = people;
+    expect(draft.addCoAuthor('someone')).toBe(false);
+    expect(draft.addCoAuthor('<no-name@fixture.invalid>')).toBe(false);
+    expect(draft.addCoAuthor('Grace Hopper')).toBe(true);
+    expect(draft.addCoAuthor('grace@fixture.invalid')).toBe(false);
+    expect(draft.coAuthors).toHaveLength(1);
+  });
+
+  it('goes with the message once it is committed', () => {
+    const draft = new CommitState();
+    draft.addCoAuthor('Ada Lovelace <ada@fixture.invalid>');
+    draft.removeCoAuthor('nobody');
+    expect(draft.coAuthors).toHaveLength(1);
+    draft.clear();
+    expect(draft.coAuthors).toEqual([]);
+  });
+});

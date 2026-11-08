@@ -5,6 +5,7 @@ import {
   repoSetSparse,
   repoSetTracker,
   repoSetAutoFetch,
+  repoSetSignsOff,
   repoSetRerere,
   repoSetUntrackedCache,
   type RepoConfig,
@@ -53,6 +54,10 @@ export class RepoConfigState {
 
   async setTracker(url: string): Promise<void> {
     await this.#change(() => repoSetTracker(this.#path, url.trim() === '' ? null : url.trim()));
+  }
+
+  async setSignsOff(on: boolean): Promise<void> {
+    await this.#change(() => repoSetSignsOff(this.#path, on));
   }
 
   async setAutoFetch(to: AutoFetch | null): Promise<void> {

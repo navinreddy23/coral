@@ -1,4 +1,5 @@
 pub mod attributes;
+pub mod authors;
 pub mod autofetch;
 pub mod bisect;
 pub mod blame;
@@ -32,6 +33,7 @@ pub mod rerere;
 pub mod search;
 pub mod sequence;
 pub mod signing;
+pub mod signoff;
 pub mod sparse;
 pub mod ssh;
 pub mod stash;

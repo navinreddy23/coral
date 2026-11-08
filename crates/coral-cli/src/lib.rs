@@ -92,7 +92,20 @@ pub enum Command {
         /// Record it as a squash into this commit; --message becomes the extra text.
         #[arg(long, value_name = "REV", conflicts_with = "amend")]
         squash: Option<String>,
+        /// Someone else who wrote it, as "Name <email>". Give it once for each.
+        #[arg(long = "co-author", value_name = "WHO")]
+        co_authors: Vec<String>,
     },
+    /// List who wrote the repository's recent commits, most active first.
+    Authors,
+    /// List the local branches a revision already has every commit of.
+    Merged {
+        /// The branch they are merged into.
+        #[arg(default_value = "HEAD")]
+        into: String,
+    },
+    /// Stop a branch following an upstream.
+    UnsetUpstream { branch: String },
     /// Merge a revision into the current branch.
     Merge {
         rev: String,
@@ -184,6 +197,9 @@ pub enum Command {
         /// Include untracked files when pushing.
         #[arg(long)]
         include_untracked: bool,
+        /// The branch to make, for `branch`.
+        #[arg(long, required_if_eq("action", "branch"))]
+        name: Option<String>,
     },
     /// List configured remotes.
     Remotes,
@@ -285,6 +301,17 @@ pub enum Command {
         lines: Option<Vec<usize>>,
     },
     /// Throw away worktree changes. This cannot be undone from the index.
+    /// Write files into the working tree as a commit or a stash has them, staging nothing.
+    Take {
+        /// The commit to take them from.
+        #[arg(required_unless_present = "stash", conflicts_with = "stash")]
+        rev: Option<String>,
+        /// A stash entry to take them from instead.
+        #[arg(long)]
+        stash: Option<usize>,
+        #[arg(long = "path", value_name = "PATH", required = true)]
+        paths: Vec<String>,
+    },
     Discard {
         #[arg(value_name = "PATH", required_unless_present = "file")]
         paths: Vec<String>,
@@ -687,6 +714,8 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
         Command::Refs { kind } => output::render(&commands::refs::run(repo, kind).await),
         Command::Submodules => output::render(&commands::submodule::run(repo).await),
         Command::Worktrees => output::render(&commands::worktree::list(repo).await),
+        Command::Authors => output::render(&commands::log::authors(repo).await),
+        Command::Merged { into } => output::render(&commands::refs::merged(repo, &into).await),
         command @ (Command::Rerere { .. }
         | Command::AutoFetch { .. }
         | Command::Tools
@@ -912,6 +941,7 @@ async fn dispatch_write(command: Command, repo: &std::path::Path) -> output::Ren
             allow_empty,
             fixup,
             squash,
+            co_authors,
         } => {
             let fold = match (fixup, squash) {
                 (Some(target), _) => Some(coral_core::ops::FoldInto {
@@ -931,6 +961,7 @@ async fn dispatch_write(command: Command, repo: &std::path::Path) -> output::Ren
                 author,
                 allow_empty,
                 fold,
+                co_authors,
             };
             output::render(&commands::write::commit(repo, opts).await)
         }
@@ -965,6 +996,9 @@ async fn dispatch_write(command: Command, repo: &std::path::Path) -> output::Ren
         Command::TagCreate { name, at, message } => {
             output::render(&commands::write::tag_create(repo, name, at, message).await)
         }
+        Command::UnsetUpstream { branch } => {
+            output::render(&commands::write::unset_upstream(repo, &branch).await)
+        }
         Command::TagDelete { name } => {
             output::render(&commands::write::tag_delete(repo, name).await)
         }
@@ -973,8 +1007,9 @@ async fn dispatch_write(command: Command, repo: &std::path::Path) -> output::Ren
             index,
             message,
             include_untracked,
+            name,
         } => output::render(
-            &commands::write::stash(repo, action, index, message, include_untracked).await,
+            &commands::write::stash(repo, action, index, message, include_untracked, name).await,
         ),
         Command::Conflicts => output::render(&commands::conflicts::list(repo).await),
         Command::ConflictShow { file } => {
@@ -1031,6 +1066,9 @@ async fn dispatch_tree(command: Command, repo: &std::path::Path) -> output::Rend
             file,
             lines,
         } => output::render(&stage_or_unstage(repo, paths, hunk, file, lines, D::Unstage).await),
+        Command::Take { rev, stash, paths } => {
+            output::render(&commands::stage::take(repo, rev.as_deref(), stash, &paths).await)
+        }
         Command::Discard {
             paths,
             hunk,

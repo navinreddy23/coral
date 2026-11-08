@@ -1,4 +1,9 @@
 import type { WorktreeState } from './worktree.svelte';
+import { recentAuthors } from '../ipc/commands';
+import type { Person } from '../ipc/types';
+
+/** `Name <email>`, which is the shape a `Co-authored-by` trailer takes. */
+const NAMED = /^[^<>]+ <[^<>\s@]+@[^<>\s]+>$/u;
 
 /**
  * The commit being written.
@@ -14,6 +19,44 @@ export class CommitState {
   description = $state('');
   /** Whether this replaces the last commit rather than adding one. */
   amend = $state(false);
+  /** Others who wrote it, each as `Name <email>`. Cleared with the message, once committed. */
+  coAuthors = $state<string[]>([]);
+  /** Who has written here lately, offered as co-authors; read the first time it is wanted. */
+  people = $state<Person[]>([]);
+  #peopleOf: string | null = null;
+
+  /** Reads who has written in `path` lately, once per repository. */
+  async loadPeople(path: string): Promise<void> {
+    if (this.#peopleOf === path) return;
+    this.#peopleOf = path;
+    try {
+      this.people = await recentAuthors(path);
+    } catch {
+      // Nothing to offer is not a failure worth a word: a name can still be typed in full.
+      this.people = [];
+    }
+  }
+
+  /**
+   * Adds a co-author from what was typed: `Name <email>` as it stands, or the name or address
+   * of somebody who has written here lately. Answers whether anybody was added.
+   */
+  addCoAuthor(typed: string): boolean {
+    const text = typed.trim();
+    if (text === '') return false;
+    const lower = text.toLowerCase();
+    const known = this.people.find(
+      (p) => p.email.toLowerCase() === lower || p.name.toLowerCase() === lower,
+    );
+    const who = NAMED.test(text) ? text : known ? `${known.name} <${known.email}>` : null;
+    if (who === null || this.coAuthors.includes(who)) return false;
+    this.coAuthors = [...this.coAuthors, who];
+    return true;
+  }
+
+  removeCoAuthor(who: string): void {
+    this.coAuthors = this.coAuthors.filter((w) => w !== who);
+  }
 
   /**
    * Bumped to ask the panel to put the caret in the summary field.
@@ -140,6 +183,7 @@ export class CommitState {
   clear(): void {
     this.#blank();
     this.amend = false;
+    this.coAuthors = [];
     this.#seeded = null;
     this.#prepared = null;
   }

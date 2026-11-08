@@ -65,6 +65,12 @@ pub enum Action {
         at: Option<String>,
         checkout: bool,
     },
+    /// Deletes several branches as one step, so one undo brings them all back. `merged` ones
+    /// go with `-d`, which git refuses for anything not merged; `unmerged` ones need `-D`.
+    BranchDeleteMany {
+        merged: Vec<String>,
+        unmerged: Vec<String>,
+    },
     BranchDelete {
         name: String,
         force: bool,
@@ -116,6 +122,11 @@ pub enum Action {
     StashApply {
         index: usize,
         pop: bool,
+    },
+    /// Make a branch where the stash was taken and apply it there.
+    StashBranch {
+        name: String,
+        index: usize,
     },
     StashDrop {
         index: usize,
@@ -384,6 +395,9 @@ impl Action {
             Self::Checkout { rev } => format!("checkout {}", named(rev)),
             Self::BranchCreate { name, .. } => format!("create branch {name}"),
             Self::BranchDelete { name, .. } => format!("delete branch {name}"),
+            Self::BranchDeleteMany { merged, unmerged } => {
+                format!("delete {} branches", merged.len() + unmerged.len())
+            }
             Self::BranchRename { from, to } => format!("rename {from} to {to}"),
             Self::Merge { rev, mode } => match mode {
                 MergeMode::FfOnly => format!("fast-forward to {}", named(rev)),
@@ -418,6 +432,7 @@ impl Action {
             Self::StashApply { pop: true, .. } => "stash pop".to_owned(),
             Self::StashApply { .. } => "stash apply".to_owned(),
             Self::StashDrop { .. } => "stash drop".to_owned(),
+            Self::StashBranch { name, .. } => format!("branch {name} from a stash"),
             Self::TagCreate { name, .. } => format!("tag {name}"),
             Self::TagDelete { name } => format!("delete tag {name}"),
             Self::TagMove { name, at } => {
@@ -733,6 +748,7 @@ async fn run(
         Action::Checkout { .. }
         | Action::BranchCreate { .. }
         | Action::BranchDelete { .. }
+        | Action::BranchDeleteMany { .. }
         | Action::BranchRename { .. }
         | Action::Merge { .. }
         | Action::Rebase { .. }
@@ -843,6 +859,14 @@ async fn run_refs(
                 .await?;
         }
         Action::BranchDelete { name, force } => loc.branch_delete(runner, &name, force).await?,
+        Action::BranchDeleteMany { merged, unmerged } => {
+            for name in &merged {
+                loc.branch_delete(runner, name, false).await?;
+            }
+            for name in &unmerged {
+                loc.branch_delete(runner, name, true).await?;
+            }
+        }
         Action::BranchRename { from, to } => loc.branch_rename(runner, &from, &to).await?,
         Action::Merge { rev, mode } => {
             let out = loc.merge(runner, &rev, mode, None).await?;
@@ -946,6 +970,9 @@ async fn run_tree(
             return Ok(Done::from(&loc.stash_apply(runner, index, pop).await?));
         }
         Action::StashDrop { index } => loc.stash_drop(runner, index).await?,
+        Action::StashBranch { name, index } => {
+            return Ok(Done::from(&loc.stash_branch(runner, &name, index).await?));
+        }
         Action::WorktreeAdd { path, rev, branch } => {
             loc.worktree_add(runner, std::path::Path::new(&path), &rev, branch.as_deref())
                 .await?;

@@ -236,7 +236,12 @@ target: string,
 /**
  * The commit an annotated tag ultimately points at. `None` for everything else.
  */
-peeled: string | null, upstream: string | null, ahead: number, behind: number, };
+peeled: string | null, upstream: string | null, ahead: number, behind: number, 
+/**
+ * Its upstream was deleted on the remote and pruned here: `[gone]` to git. The branch
+ * follows nothing any more, which is what makes it worth asking about.
+ */
+gone: boolean, };
 
 /**
  * Where HEAD points.
@@ -368,6 +373,15 @@ applying: boolean,
  * the subject that git had already written had to be typed out again from the row above.
  */
 prepared: string | null, };
+
+/**
+ * Somebody who wrote commits here, as `.mailmap` names them.
+ */
+export type Person = { name: string, email: string, 
+/**
+ * How many of the recent commits are theirs, which is the order they are offered in.
+ */
+commits: number, };
 
 /**
  * How far through a multi-step operation git has got.

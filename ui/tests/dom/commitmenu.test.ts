@@ -200,6 +200,7 @@ function on(
     upstream: null,
     ahead: 0,
     behind: 0,
+    gone: false,
     row: 0,
     ...over,
   };
@@ -728,6 +729,7 @@ describe('the branch and tag menu', () => {
       upstream: null,
       ahead: 0,
       behind: 0,
+      gone: false,
       row: 0,
     };
   }
@@ -771,6 +773,62 @@ describe('the branch and tag menu', () => {
 
     await fireEvent.click(itemNamed(container, 'Checkout v1.2.0'));
     expect(lastAction()).toEqual({ kind: 'checkout', rev: 'v1.2.0' });
+  });
+
+  it('stops a branch tracking its upstream, and says when that upstream is gone', async () => {
+    const { container } = await shell(
+      {
+        repo_refs: [{ ...on('topic', { kind: 'local_branch' }), upstream: 'origin/topic', gone: true }],
+        branch_unset_upstream: null,
+      },
+      true,
+    );
+    const labels = await refMenu(container, 'topic');
+    expect(labels).toContain('Stop tracking origin/topic');
+    await fireEvent.click(itemNamed(container, 'Stop tracking origin/topic'));
+    await waitFor(() => {
+      expect(invoke.mock.calls.find(([cmd]) => cmd === 'branch_unset_upstream')?.[1]).toMatchObject({
+        branch: 'topic',
+      });
+    });
+  });
+
+  it('cleans up merged branches at once, leaving a gone but unmerged one for the user to tick', async () => {
+    const { container } = await shell(
+      {
+        repo_refs: [
+          on('old-one', { kind: 'local_branch' }),
+          { ...on('spike', { kind: 'local_branch' }), upstream: 'origin/spike', gone: true },
+        ],
+        branches_merged: ['old-one'],
+      },
+      true,
+    );
+    await refMenu(container, 'old-one');
+    await fireEvent.click(itemNamed(container, 'Clean up branches…'));
+    const sheet = await waitFor(() => {
+      const found = container.querySelector('[aria-labelledby="cleanup-title"]');
+      if (!found) throw new Error('no sheet');
+      return found as HTMLElement;
+    });
+    expect(invoke.mock.calls.find(([cmd]) => cmd === 'branches_merged')?.[1]).toMatchObject({
+      into: 'master',
+    });
+    const box = (name: string) =>
+      [...sheet.querySelectorAll('label')].find((l) => l.textContent?.includes(name))
+        ?.querySelector('input') as HTMLInputElement;
+    expect(box('old-one').checked).toBe(true);
+    expect(box('spike').checked).toBe(false);
+    const go = () =>
+      [...sheet.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Delete')) as HTMLButtonElement;
+    expect(go().textContent?.trim()).toBe('Delete 1 branch');
+
+    await fireEvent.click(box('spike'));
+    expect(go().textContent?.trim()).toBe('Delete 2 branches');
+    await fireEvent.click(go());
+    await waitFor(() => {
+      expect(lastAction()).toEqual({ kind: 'branchDeleteMany', merged: ['old-one'], unmerged: ['spike'] });
+    });
   });
 
   it('compares a branch with another chosen in the palette, from where they parted', async () => {
@@ -1449,6 +1507,7 @@ describe('double-clicking a pill', () => {
       upstream: null,
       ahead: 0,
       behind: 0,
+      gone: false,
       row: 0,
     };
   }
@@ -1558,6 +1617,7 @@ describe('what undo and redo say they will do', () => {
       upstream: null,
       ahead: 0,
       behind: 0,
+      gone: false,
       row: 0,
     };
   }
@@ -1619,6 +1679,25 @@ describe('the menu on a stash row', () => {
     }
   });
 
+  it('makes a branch from a stash, by the name asked for', async () => {
+    const { container } = await shell({ repo_stashes: [stash] });
+    await waitFor(() => {
+      if (!container.textContent?.includes('WIP on main')) throw new Error('no stash yet');
+    });
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Make a branch from it…'));
+    const field = await waitFor(() => {
+      const found = container.querySelector('[role="dialog"] input');
+      if (!found) throw new Error('no name box yet');
+      return found as HTMLInputElement;
+    });
+    await fireEvent.input(field, { target: { value: 'half-done' } });
+    await confirm(container, true);
+    await waitFor(() => {
+      expect(lastAction()).toEqual({ kind: 'stashBranch', name: 'half-done', index: 0 });
+    });
+  });
+
   it('still gives an ordinary commit its own menu', async () => {
     // The row the stash is on is the only one that changes.
     const { container } = await shell({ repo_stashes: [{ ...stash, oid: 'f'.repeat(40), row: 5 }] });
@@ -1628,6 +1707,88 @@ describe('the menu on a stash row', () => {
     const labels = await openMenu(container);
     expect(labels).toContain('Drop commit');
     expect(labels).not.toContain('Pop it');
+  });
+});
+
+describe('taking a file back from a commit', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  const detail = (change: string) => ({
+    commit: {
+      oid: frameOids[0],
+      parents: ['p'.repeat(40)],
+      author: { name: 'Ada', email: 'ada@example.com', time: 0, offset: 0 },
+      committer: { name: 'Ada', email: 'ada@example.com', time: 0, offset: 0 },
+      summary: 'core: the summary',
+      body: '',
+    },
+    files: [{ path: 'a.c', oldPath: null, change }],
+  });
+
+  async function fileMenu(container: HTMLElement): Promise<string[]> {
+    await fireEvent.click(container.querySelector('li.row button.hit') as HTMLElement);
+    const file = await waitFor(() => {
+      const found = [...container.querySelectorAll('.files .file')].find((e) =>
+        e.textContent?.includes('a.c'),
+      );
+      if (!found) throw new Error('no file yet');
+      return found as HTMLElement;
+    });
+    await fireEvent.contextMenu(file);
+    await waitFor(() => {
+      if (!container.querySelector('.menu')) throw new Error('no menu');
+    });
+    return [...container.querySelectorAll('.menu .label')].map((e) => e.textContent?.trim() ?? '');
+  }
+
+  const took = () => invoke.mock.calls.filter(([cmd]) => cmd === 'take_paths').map(([, a]) => a);
+
+  it('offers both versions of a changed file and takes the one asked for, staging nothing', async () => {
+    const { container } = await shell({
+      commit_detail: detail('modified'),
+      take_paths: { entries: [], conflicted: [] },
+    });
+    const labels = await fileMenu(container);
+    expect(labels).toContain('Take this version');
+    expect(labels).toContain('Take the version before this commit');
+
+    await fireEvent.click(itemNamed(container, 'Take the version before this commit'));
+    await waitFor(() => expect(took()).toHaveLength(1));
+    expect(took()[0]).toMatchObject({
+      from: { kind: 'commit', rev: `${frameOids[0]}^` },
+      files: ['a.c'],
+    });
+  });
+
+  it('offers no version a commit does not have', async () => {
+    const { container } = await shell({ commit_detail: detail('added') });
+    const labels = await fileMenu(container);
+    expect(labels).toContain('Take this version');
+    expect(labels).not.toContain('Take the version before this commit');
+  });
+
+  it('asks before replacing changes of the user’s own, and takes nothing when told no', async () => {
+    const mine = {
+      path: 'a.c', origPath: null, index: 'unmodified', worktree: 'modified', conflict: null,
+      score: null, submodule: false, modeChanged: false,
+    };
+    const { container } = await shell({
+      commit_detail: detail('modified'),
+      repo_status: { entries: [mine], conflicted: [] },
+      take_paths: { entries: [], conflicted: [] },
+    });
+    await fileMenu(container);
+    await fireEvent.click(itemNamed(container, 'Take this version'));
+    await waitFor(() => {
+      expect(container.querySelector('[role="dialog"]')?.textContent).toContain(
+        'Replace your changes to a.c?',
+      );
+    });
+    await confirm(container, false);
+    expect(took()).toHaveLength(0);
   });
 });
 

@@ -1089,6 +1089,63 @@ impl RepoLocation {
         runner.output(cmd).await.map(|_| ())
     }
 
+    /// Writes `paths` into the working tree as they are at `rev`, leaving the index alone.
+    ///
+    /// Only the working copy: what is taken reads as an ordinary change, to look at and stage
+    /// or not, rather than as something already decided. A path `rev` does not have is removed.
+    ///
+    /// # Errors
+    /// Propagates git failures, including an unknown revision.
+    pub async fn restore_from(
+        &self,
+        runner: &GitRunner,
+        rev: &str,
+        paths: &[&str],
+    ) -> Result<(), CoralError> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+        let cmd = GitCommand::write("restore", self.display_path())
+            .arg("restore")
+            .arg(format!("--source={rev}"))
+            .args(["--worktree", "--"])
+            .args(paths);
+        runner.output(cmd).await.map(|_| ())
+    }
+
+    /// Where a stash keeps `path`: the entry itself for a tracked file, its third parent for
+    /// one that was untracked when it was stashed.
+    ///
+    /// `git stash -u` records untracked files in a commit of their own, so a file that was new
+    /// is nowhere in the entry's tree and restoring it from there would delete it instead.
+    ///
+    /// # Errors
+    /// Propagates git failures.
+    pub async fn stash_source(
+        &self,
+        runner: &GitRunner,
+        index: usize,
+        path: &str,
+    ) -> Result<String, CoralError> {
+        let entry = format!("stash@{{{index}}}");
+        let has = |rev: String| {
+            GitCommand::read("cat-file", self.display_path())
+                .args(["cat-file", "-e"])
+                .arg(format!("{rev}:{path}"))
+        };
+        let tracked = runner
+            .output_allowing(has(entry.clone()), &[1, 128])
+            .await?;
+        if tracked.code == 0 {
+            return Ok(entry);
+        }
+        let untracked = format!("{entry}^3");
+        let found = runner
+            .output_allowing(has(untracked.clone()), &[1, 128])
+            .await?;
+        Ok(if found.code == 0 { untracked } else { entry })
+    }
+
     /// Removes tracked `paths` from the working tree, staging the deletion.
     ///
     /// `git rm -f`, so the file goes and the index is told: anything less leaves a deletion

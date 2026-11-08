@@ -7,6 +7,7 @@ import type {
   Ancestry,
   AutoFetch,
   Blame,
+  Person,
   Deepen,
   Blocks,
   ChangedFile,
@@ -410,6 +411,8 @@ export type Action =
   | { kind: 'checkout'; rev: string }
   | { kind: 'branchCreate'; name: string; at: string | null; checkout: boolean }
   | { kind: 'branchDelete'; name: string; force: boolean }
+  /** Several branches as one undoable step: `merged` with `-d`, `unmerged` with `-D`. */
+  | { kind: 'branchDeleteMany'; merged: string[]; unmerged: string[] }
   | { kind: 'branchRename'; from: string; to: string }
   | { kind: 'merge'; rev: string; mode: 'auto' | 'noFf' | 'ffOnly' | 'squash' }
   | { kind: 'rebase'; onto: string; from?: string | null }
@@ -425,6 +428,8 @@ export type Action =
     }
   | { kind: 'stashApply'; index: number; pop: boolean }
   | { kind: 'stashDrop'; index: number }
+  /** A branch where the stash was taken, with the stash applied on it and then dropped. */
+  | { kind: 'stashBranch'; name: string; index: number }
   | { kind: 'tagCreate'; name: string; at: string | null; message: string | null }
   | { kind: 'tagDelete'; name: string }
   | { kind: 'tagMove'; name: string; at: string }
@@ -494,6 +499,8 @@ export interface RepoConfig {
   tracker: string | null;
   /** How often this repository is fetched, when it is not the window's own interval. */
   autoFetch: AutoFetch | null;
+  /** Commits made here are signed off unless the box is cleared: `coral.signOff`. */
+  signsOff: boolean;
 }
 
 export function repoConfig(path: string): Promise<RepoConfig> {
@@ -757,6 +764,16 @@ export function branchSetUpstream(path: string, branch: string, upstream: string
   return invoke<void>('branch_set_upstream', { path, branch, upstream });
 }
 
+/** Stops a branch following anything. */
+export function branchUnsetUpstream(path: string, branch: string): Promise<void> {
+  return invoke<void>('branch_unset_upstream', { path, branch });
+}
+
+/** The local branches `into` has every commit of, bar itself and the one checked out. */
+export function branchesMerged(path: string, into: string): Promise<string[]> {
+  return invoke<string[]>('branches_merged', { path, into });
+}
+
 export function remoteEdit(path: string, edit: RemoteEdit): Promise<Remote[]> {
   return invoke<Remote[]>('remote_edit', { path, edit });
 }
@@ -836,14 +853,30 @@ export function discardPaths(
   return invoke<Status>('discard_paths', { path, restore, remove });
 }
 
+/** Where taken files come from: a commit, or a stash entry. */
+export type TakeFrom = { kind: 'commit'; rev: string } | { kind: 'stash'; index: number };
+
+/** Writes files into the working tree as `from` has them, staging nothing. */
+export function takePaths(path: string, from: TakeFrom, files: string[]): Promise<Status> {
+  return invoke<Status>('take_paths', { path, from, files });
+}
+
 /** Records what is staged; with `fold`, as a fixup or squash of an earlier commit. */
 export function commitStaged(
   path: string,
   message: string,
   amend: boolean,
   fold: FoldInto | null = null,
+  signoff = false,
+  /** Others who wrote it, each as `Name <email>`, recorded as `Co-authored-by` trailers. */
+  coAuthors: string[] = [],
 ): Promise<Status> {
-  return invoke<Status>('commit_staged', { path, message, amend, fold });
+  return invoke<Status>('commit_staged', { path, message, amend, fold, signoff, coAuthors });
+}
+
+/** Who wrote the repository's recent commits, most active first, as `.mailmap` names them. */
+export function recentAuthors(path: string): Promise<Person[]> {
+  return invoke<Person[]>('recent_authors', { path });
 }
 
 /**
@@ -1110,6 +1143,10 @@ export function repoSetTracker(path: string, url: string | null): Promise<RepoCo
 
 export function repoSetAutoFetch(path: string, to: AutoFetch | null): Promise<RepoConfig> {
   return invoke<RepoConfig>('repo_set_auto_fetch', { path, to });
+}
+
+export function repoSetSignsOff(path: string, on: boolean): Promise<RepoConfig> {
+  return invoke<RepoConfig>('repo_set_signs_off', { path, on });
 }
 
 /** One open repository's requests still waiting on somebody, for the Start page. */

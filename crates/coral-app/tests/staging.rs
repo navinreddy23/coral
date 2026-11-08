@@ -58,7 +58,7 @@ async fn committing_clears_the_staged_changes() {
     app::stage_paths(path.clone(), vec!["a.txt".into()], true)
         .await
         .unwrap();
-    let after = app::commit_staged(path, "the message".into(), false, None)
+    let after = app::commit_staged(path, "the message".into(), false, None, false, Vec::new())
         .await
         .unwrap();
 
@@ -75,7 +75,7 @@ async fn amending_replaces_the_previous_commit() {
     app::stage_paths(path.clone(), vec!["a.txt".into()], true)
         .await
         .unwrap();
-    app::commit_staged(path, "reworded".into(), true, None)
+    app::commit_staged(path, "reworded".into(), true, None, false, Vec::new())
         .await
         .unwrap();
 

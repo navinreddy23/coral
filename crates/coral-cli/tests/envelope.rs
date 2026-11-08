@@ -475,3 +475,89 @@ async fn compare_and_diff_since_answer_like_the_window() {
     );
     drop(fixture);
 }
+
+#[tokio::test]
+async fn take_writes_a_file_as_a_commit_or_a_stash_has_it_and_stages_nothing() {
+    let fixture = TestRepo::new().write("a.txt", "first\n").commit("first");
+    let fixture = fixture.write("a.txt", "second\n").commit("second");
+    let path = fixture.path().to_str().unwrap().to_owned();
+    let repo = path.as_str();
+
+    let out = coral_cli::run(argv(&[
+        "--json", "--repo", repo, "take", "HEAD~1", "--path", "a.txt",
+    ]))
+    .await;
+    assert_eq!(out.json["ok"], true, "{}", out.json);
+    assert_eq!(
+        std::fs::read_to_string(fixture.path().join("a.txt")).unwrap(),
+        "first\n"
+    );
+    assert_eq!(fixture.git(["diff", "--cached", "--name-only"]).trim(), "");
+
+    fixture.git(["stash", "push", "--quiet"]);
+    let out = coral_cli::run(argv(&[
+        "--json", "--repo", repo, "take", "--stash", "0", "--path", "a.txt",
+    ]))
+    .await;
+    assert_eq!(out.json["ok"], true, "{}", out.json);
+    assert_eq!(
+        std::fs::read_to_string(fixture.path().join("a.txt")).unwrap(),
+        "first\n"
+    );
+}
+
+#[tokio::test]
+async fn a_stash_becomes_a_branch_from_the_command_line() {
+    let fixture = TestRepo::new().write("a.txt", "base\n").commit("base");
+    let fixture = fixture.write("a.txt", "half\n");
+    fixture.git(["stash", "push", "--quiet"]);
+    let path = fixture.path().to_str().unwrap().to_owned();
+
+    let refused = coral_cli::run(argv(&["--json", "--repo", &path, "stash", "branch"])).await;
+    assert_ne!(
+        refused.json["ok"], true,
+        "a branch needs a name: {}",
+        refused.json
+    );
+
+    let out = coral_cli::run(argv(&[
+        "--json", "--repo", &path, "stash", "branch", "--name", "half",
+    ]))
+    .await;
+    assert_eq!(out.json["ok"], true, "{}", out.json);
+    assert_eq!(fixture.git(["branch", "--show-current"]).trim(), "half");
+}
+
+#[tokio::test]
+async fn merged_lists_what_can_go_and_unset_upstream_stops_tracking() {
+    let fixture = TestRepo::new().write("a.txt", "1\n").commit("base");
+    fixture.git(["branch", "done"]);
+    fixture.git(["branch", "--track", "follower", "main"]);
+    let path = fixture.path().to_str().unwrap().to_owned();
+
+    let merged = coral_cli::run(argv(&["--json", "--repo", &path, "merged"])).await;
+    let mut names: Vec<String> = merged.json["result"]["branches"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|b| b.as_str().unwrap().to_owned())
+        .collect();
+    names.sort();
+    assert_eq!(names, ["done", "follower"], "{}", merged.json);
+
+    let out = coral_cli::run(argv(&[
+        "--json",
+        "--repo",
+        &path,
+        "unset-upstream",
+        "follower",
+    ]))
+    .await;
+    assert_eq!(out.json["ok"], true, "{}", out.json);
+    assert!(
+        !fixture
+            .git(["config", "--list"])
+            .contains("branch.follower.merge"),
+        "follower follows nothing now"
+    );
+}

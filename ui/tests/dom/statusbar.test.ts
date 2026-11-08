@@ -24,6 +24,7 @@ function head(ahead: number, behind: number): PlacedRef {
     upstream: 'origin/master',
     ahead,
     behind,
+    gone: false,
     row: 0,
   };
 }

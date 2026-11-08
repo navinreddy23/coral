@@ -117,6 +117,7 @@ describe('the Repository pane', () => {
       sparse: { enabled: false, cone: true, folders: [] },
       tracker: null,
       autoFetch: null,
+      signsOff: false,
     };
     const set = vi.spyOn(repoConfig, 'setRerere').mockResolvedValue();
     const { container } = prefs({ repoConfig, pane: 'repository' });
@@ -144,6 +145,7 @@ describe('the Repository pane', () => {
       sparse: { enabled: false, cone: true, folders: [] },
       tracker: null,
       autoFetch: null,
+      signsOff: false,
     };
     const untracked = vi.spyOn(repoConfig, 'setUntrackedCache').mockResolvedValue();
     const { container } = prefs({ repoConfig, pane: 'repository' });
@@ -165,6 +167,7 @@ describe('the Repository pane', () => {
       sparse: { enabled: true, cone: true, folders: ['drivers/gpu', 'kernel'] },
       tracker: null,
       autoFetch: null,
+      signsOff: false,
     };
     const off = vi.spyOn(repoConfig, 'disableSparse').mockResolvedValue();
     const { container } = prefs({ repoConfig, pane: 'repository' });
@@ -286,6 +289,7 @@ describe('fetching on a timer', () => {
       sparse: { enabled: false, cone: true, folders: [] },
       tracker: null,
       autoFetch: { kind: 'every', minutes: 1 },
+      signsOff: false,
     };
     const set = vi.spyOn(repoConfig, 'setAutoFetch').mockResolvedValue();
     const { container } = prefs({ repoConfig, pane: 'repository' });

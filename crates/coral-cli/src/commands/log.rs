@@ -70,3 +70,31 @@ impl crate::output::Human for Log {
         out
     }
 }
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Authors {
+    pub authors: Vec<coral_core::authors::Person>,
+}
+
+/// Who wrote the repository's recent commits, most active first.
+///
+/// # Errors
+/// [`CoralError::NotARepository`], or any git failure.
+pub async fn authors(path: &std::path::Path) -> Result<Authors, CoralError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc = coral_core::repo::RepoLocation::discover(&runner, path).await?;
+    Ok(Authors {
+        authors: loc.recent_authors(&runner).await?,
+    })
+}
+
+impl crate::output::Human for Authors {
+    fn human(&self) -> String {
+        self.authors
+            .iter()
+            .map(|p| format!("{:>5}  {} <{}>", p.commits, p.name, p.email))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}

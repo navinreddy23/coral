@@ -20,6 +20,8 @@ pub struct RepoConfig {
     pub tracker: Option<String>,
     /// How often the window fetches this repository, when it is not the window's own interval.
     pub auto_fetch: Option<coral_core::autofetch::AutoFetch>,
+    /// Commits made here carry a `Signed-off-by` line unless the box is cleared.
+    pub signs_off: bool,
 }
 
 async fn read(runner: &GitRunner, loc: &RepoLocation) -> Result<RepoConfig, IpcError> {
@@ -29,6 +31,7 @@ async fn read(runner: &GitRunner, loc: &RepoLocation) -> Result<RepoConfig, IpcE
         sparse: loc.sparse(runner).await?,
         tracker: loc.tracker(runner).await?,
         auto_fetch: loc.auto_fetch(runner).await?,
+        signs_off: loc.signs_off(runner).await?,
     })
 }
 
@@ -153,5 +156,17 @@ pub async fn repo_set_auto_fetch(
     let runner = GitRunner::discover().await?;
     let loc = RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
     loc.set_auto_fetch(&runner, to).await?;
+    read(&runner, &loc).await
+}
+
+/// Sets whether commits made in this repository are signed off unless the box is cleared.
+///
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn repo_set_signs_off(path: String, on: bool) -> Result<RepoConfig, IpcError> {
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    loc.set_signs_off(&runner, on).await?;
     read(&runner, &loc).await
 }

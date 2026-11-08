@@ -89,6 +89,26 @@ pub async fn branch_set_upstream(
     Ok(loc.set_upstream(&runner, &branch, &upstream).await?)
 }
 
+/// Stops a branch following anything. Configuration, not history, so not journaled.
+///
+/// # Errors
+/// Propagates git failures, including a branch with no upstream to stop.
+#[tauri::command]
+pub async fn branch_unset_upstream(path: String, branch: String) -> Result<(), IpcError> {
+    let (runner, loc) = located(&path).await?;
+    Ok(loc.unset_upstream(&runner, &branch).await?)
+}
+
+/// The local branches `into` already has every commit of, bar itself and the one checked out.
+///
+/// # Errors
+/// Propagates git failures, including an unknown `into`.
+#[tauri::command]
+pub async fn branches_merged(path: String, into: String) -> Result<Vec<String>, IpcError> {
+    let (runner, loc) = located(&path).await?;
+    Ok(loc.merged_into(&runner, &into).await?)
+}
+
 /// Where a commit is served on the web, for the remote the repository was cloned from.
 ///
 /// Returns `None` rather than failing when the remote is not a host we recognise: an internal

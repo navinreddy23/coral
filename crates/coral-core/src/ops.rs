@@ -19,6 +19,8 @@ pub struct CommitOpts {
     pub allow_empty: bool,
     /// Record the commit as one to be folded into an earlier one by the next autosquash.
     pub fold: Option<FoldInto>,
+    /// Others who wrote it, each as `Name <email>`, recorded as `Co-authored-by` trailers.
+    pub co_authors: Vec<String>,
 }
 
 /// An earlier commit a new one is meant to be folded into.
@@ -123,6 +125,11 @@ impl RepoLocation {
         if o.signoff {
             cmd = cmd.arg("--signoff");
         }
+        // `--trailer` rather than lines appended to the message, so git puts them in the
+        // trailer block, after a blank line and beside any sign-off, where hosts read them.
+        for who in &o.co_authors {
+            cmd = cmd.arg("--trailer").arg(format!("Co-authored-by: {who}"));
+        }
         if o.allow_empty {
             cmd = cmd.arg("--allow-empty");
         }
@@ -221,6 +228,21 @@ impl RepoLocation {
                 &format!("--set-upstream-to={upstream}"),
                 branch,
             ]))
+            .await
+            .map(|_| ())
+    }
+
+    /// Stops `branch` following anything, so pull and push no longer have a default.
+    ///
+    /// # Errors
+    /// Propagates git failures, including a branch with no upstream to stop.
+    pub async fn unset_upstream(&self, runner: &GitRunner, branch: &str) -> Result<(), CoralError> {
+        runner
+            .output(
+                GitCommand::write("branch", self.display_path())
+                    .args(["branch", "--unset-upstream"])
+                    .arg(branch),
+            )
             .await
             .map(|_| ())
     }
@@ -395,6 +417,32 @@ impl RepoLocation {
                 "stash",
                 verb,
                 "--quiet",
+                &format!("stash@{{{index}}}"),
+            ]),
+        )
+        .await
+    }
+
+    /// Makes a branch where a stash was taken, checks it out and applies the stash there.
+    ///
+    /// The way back for a stash that no longer applies where you are: on the commit it was
+    /// made from, it applies as it was made. git drops the entry once it has applied cleanly.
+    ///
+    /// # Errors
+    /// Propagates git failures, including a name already taken and local changes in the way of
+    /// the checkout.
+    pub async fn stash_branch(
+        &self,
+        runner: &GitRunner,
+        name: &str,
+        index: usize,
+    ) -> Result<OpOutcome, CoralError> {
+        self.run_stoppable(
+            runner,
+            GitCommand::write("stash", self.display_path()).args([
+                "stash",
+                "branch",
+                name,
                 &format!("stash@{{{index}}}"),
             ]),
         )

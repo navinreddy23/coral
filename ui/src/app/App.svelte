@@ -25,6 +25,8 @@
     patchRangeSize,
     remoteHasTag,
     branchSetUpstream,
+    branchUnsetUpstream,
+    branchesMerged,
     ignore,
     stopTracking,
     lfsKept,
@@ -53,6 +55,7 @@
   import RebasePicker from './RebasePicker.svelte';
   import { RebaseState } from '../state/rebase.svelte';
   import Palette, { type Command } from './Palette.svelte';
+  import Cleanup from './Cleanup.svelte';
   import StatusBar from './StatusBar.svelte';
   import HostAccount from './HostAccount.svelte';
   import Ask, { type Choice } from './Ask.svelte';
@@ -113,7 +116,7 @@
   import { bandWidth, columnWidth, laneToken } from '../graph/column';
   import { shortAge } from './age';
   import { initialsOf } from '../graph/initials';
-  import type { Action, JournalView, Listing } from '../ipc/commands';
+  import type { Action, JournalView, Listing, TakeFrom } from '../ipc/commands';
   import {
     DEFAULT_METRICS,
     metricsFor,
@@ -1077,7 +1080,12 @@
       await worktree.stage(worktree.unstaged.map((f) => f.path), true);
     }
     if (!commitDraft.ready(worktree)) return;
-    await worktree.commit(commitDraft.message, commitDraft.amend);
+    await worktree.commit(
+      commitDraft.message,
+      commitDraft.amend,
+      repoConfig.config?.signsOff ?? false,
+      commitDraft.coAuthors,
+    );
     if (worktree.error) {
       if (needsIdentity(worktree.error)) await offerToSayWhoYouAre();
       return;
@@ -1794,6 +1802,25 @@
       ref.kind.kind === 'remote_branch'
         ? refs.groups.local.find((r) => r.short === withoutRemote(ref.short))
         : undefined;
+    if (ref.kind.kind === 'local_branch' && ref.upstream !== null) {
+      items.push({
+        kind: 'item',
+        label: `Stop tracking ${ref.upstream}`,
+        hint: ref.gone ? 'it is gone from the remote' : undefined,
+        disabled: busy,
+        run: () => void stopFollowing(ref.short, ref.upstream ?? ''),
+      });
+    }
+    if (ref.kind.kind === 'local_branch') {
+      items.push({
+        kind: 'item',
+        label: 'Clean up branches…',
+        hint: 'merged and gone',
+        disabled: busy,
+        run: () => void openCleanup(),
+      });
+    }
+
     if (follower && follower.upstream !== ref.short) {
       items.push({
         kind: 'item',
@@ -2187,6 +2214,52 @@
     const branch = label.kind.kind === 'local_branch' || label.kind.kind === 'remote_branch';
     if (!branch || label.short === headName) return;
     void goTo(label);
+  }
+
+  async function stopFollowing(branch: string, upstream: string) {
+    if (!info) return;
+    const path = info.path;
+    try {
+      await branchUnsetUpstream(path, branch);
+    } catch (e) {
+      toasts.push('error', `Could not stop ${branch} tracking ${upstream}`, messageOf(e));
+      return;
+    }
+    toasts.push('ok', `${branch} follows nothing now.`);
+    await Promise.all([refs.load(path), worktree.load(path)]);
+  }
+
+  /** Never offered by the cleanup sheet, however merged they are. */
+  const LONG_LIVED = ['main', 'master', 'develop', 'development', 'trunk'];
+
+  /** The branches the cleanup sheet offers, once asked for. */
+  let cleanup = $state<{ into: string; merged: string[]; gone: string[] } | null>(null);
+
+  /**
+   * Finds what can go: branches merged into the one checked out, and branches whose upstream
+   * was deleted on the remote. The second are offered but not ticked, since they hold commits.
+   */
+  async function openCleanup() {
+    if (!info || headName === null) return;
+    let merged: string[];
+    try {
+      merged = await branchesMerged(info.path, headName);
+    } catch (e) {
+      toasts.push('error', 'Could not tell which branches are merged', messageOf(e));
+      return;
+    }
+    // The branches a repository lives on are merged into whatever grew from them, which makes
+    // deleting them lossless and still nothing anybody means by cleaning up.
+    const kept = (name: string) => LONG_LIVED.includes(name);
+    const gone = refs.groups.local
+      .filter((r) => r.gone && r.short !== headName && !merged.includes(r.short) && !kept(r.short))
+      .map((r) => r.short);
+    cleanup = { into: headName, merged: merged.filter((b) => !kept(b)), gone };
+  }
+
+  async function deleteBranches(merged: string[], unmerged: string[]) {
+    cleanup = null;
+    await act({ kind: 'branchDeleteMany', merged, unmerged });
   }
 
   async function track(branch: string, upstream: string) {
@@ -3045,6 +3118,14 @@
           disabled: worktree.busy || actions.busy,
           run: () => void act({ kind: 'stashApply', index: stash.index, pop: true }),
         },
+        {
+          kind: 'item',
+          label: 'Make a branch from it…',
+          hint: 'where it was taken',
+          disabled: worktree.busy || actions.busy,
+          worktree: true,
+          run: () => void branchFromStash(stash),
+        },
         { kind: 'separator' },
         {
           kind: 'item',
@@ -3055,6 +3136,99 @@
         },
       ],
     };
+  }
+
+  /**
+   * A branch where the stash was taken, with the stash applied on it.
+   *
+   * The way back for a stash that no longer applies where you are: on the commit it was made
+   * from, it applies as it was made. git drops it once it has.
+   */
+  async function branchFromStash(stash: PlacedStash) {
+    await askUntilAccepted(
+      '',
+      (initial, refused) =>
+        askText(
+          'Make a branch from this stash',
+          withRefusal(
+            `${stash.message}\n\nThe branch starts where the stash was taken, is checked out, and ` +
+              'has the stash applied on it. The stash is dropped once it applies.',
+            refused,
+          ),
+          initial,
+        ),
+      async (name) => settled(await act({ kind: 'stashBranch', name, index: stash.index })),
+      refusal,
+    );
+  }
+
+  /**
+   * Writes one file into the working copy as a commit or a stash has it, staging nothing.
+   *
+   * Like discarding, it replaces what is on disk and leaves nothing to undo it with, so when
+   * the file holds changes of the user's own it says so and asks first.
+   */
+  async function takeFile(from: TakeFrom, file: string, what: string) {
+    if (!info) return;
+    const changed = [...worktree.staged, ...worktree.unstaged].some((e) => e.path === file);
+    if (changed) {
+      const { choice } = await ask({
+        title: `Replace your changes to ${file}?`,
+        detail:
+          `${what} goes into the working copy in place of what is there now. Your changes to ` +
+          'it are not kept anywhere, and this cannot be undone.',
+        asksText: false,
+        placeholder: '',
+        initial: '',
+        choices: [{ id: 'replace', label: 'Replace them', danger: true }],
+      });
+      if (choice === null) return;
+    }
+    await worktree.take(from, [file]);
+    if (worktree.error) toasts.push('error', `Could not take ${file}`, worktree.error);
+    else toasts.push('ok', `Took ${file}`, `${what}, as a change to stage or not.`);
+  }
+
+  /** What one file in a commit or a stash can be taken back as, for its menu. */
+  function takeItems(file: string): MenuItem[] {
+    const detail = selection.detail;
+    if (detail === null) return [];
+    const rev = detail.commit.oid;
+    const stash = stashes.list.find((s) => s.oid === rev);
+    if (stash !== undefined) {
+      return [
+        {
+          kind: 'item',
+          label: 'Take this file from the stash',
+          hint: 'into the working copy',
+          disabled: worktree.busy,
+          run: () => void takeFile({ kind: 'stash', index: stash.index }, file, `${file} from ${stash.name}`),
+        },
+      ];
+    }
+    const change = detail.files.find((f) => f.path === file)?.change;
+    const short = rev.slice(0, 8);
+    const items: MenuItem[] = [];
+    if (change !== 'deleted') {
+      items.push({
+        kind: 'item',
+        label: 'Take this version',
+        hint: `as of ${short}`,
+        disabled: worktree.busy,
+        run: () => void takeFile({ kind: 'commit', rev }, file, `${file} as of ${short}`),
+      });
+    }
+    if (change !== 'added' && detail.commit.parents.length > 0) {
+      items.push({
+        kind: 'item',
+        label: 'Take the version before this commit',
+        hint: `as of ${short}^`,
+        disabled: worktree.busy,
+        run: () =>
+          void takeFile({ kind: 'commit', rev: `${rev}^` }, file, `${file} as it was before ${short}`),
+      });
+    }
+    return items;
   }
 
   async function dropStash(stash: PlacedStash) {
@@ -3592,6 +3766,8 @@
         run: () => void copyName(file),
       },
       { kind: 'separator' },
+      ...takeItems(file),
+      { kind: 'separator' },
       ...toolItems(file, rev === null ? null : { kind: 'commit', rev }),
       ...actionItems('file', { file, commit: rev, branch: headName }),
     ];
@@ -4019,6 +4195,7 @@
           ] satisfies Command[])
         : []),
       { id: 'fetch', label: 'Fetch', group: 'Remote', run: () => void act({ kind: 'fetch', remote: null }) },
+      { id: 'cleanup', label: 'Clean up branches…', group: 'Branch', run: () => void openCleanup() },
       ...(info?.shallow
         ? [
             {
@@ -6161,6 +6338,9 @@
             onCommit={() => void recordCommit(false)}
             onDraft={assist.ready ? () => void draftMessage() : null}
             drafting={assist.drafting}
+            signsOff={repoConfig.config?.signsOff ?? false}
+            onSignOff={(on) => void repoConfig.setSignsOff(on)}
+            onWantPeople={() => info && void commitDraft.loadPeople(info.path)}
             locks={lfs.byPath}
             {sections}
           />
@@ -6306,6 +6486,16 @@
 
 {#if showPalette}
   <Palette {commands} onClose={() => (showPalette = false)} />
+{/if}
+
+{#if cleanup}
+  <Cleanup
+    into={cleanup.into}
+    merged={cleanup.merged}
+    gone={cleanup.gone}
+    onDelete={(merged, unmerged) => void deleteBranches(merged, unmerged)}
+    onClose={() => (cleanup = null)}
+  />
 {/if}
 
 {#if choosing}
