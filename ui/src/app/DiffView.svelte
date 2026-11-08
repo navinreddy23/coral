@@ -227,7 +227,7 @@
     const key = `${diff.path ?? ''}\u0000${diff.mode}\u0000${diff.atCommit ?? ''}`;
     const rows = split.rows;
     const el = scroller;
-    if (diff.mode !== 'split' || el === null || rows.length === 0 || placed === key) return;
+    if (diff.mode !== 'split' || !diff.readWhole || el === null || rows.length === 0 || placed === key) return;
     placed = key;
     const at = firstChangedRow(rows);
     if (at < 0) return;

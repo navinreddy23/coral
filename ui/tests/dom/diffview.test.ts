@@ -311,6 +311,25 @@ describe('the diff viewer', () => {
     expect(diff.view).toBe('file');
   });
 
+  it('opens side by side on the first change only once the whole file is on screen', async () => {
+    // Switching layout keeps the inline answer up while the whole file is read. Placed on that,
+    // the view stayed where its few rows put it once the real answer came.
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'a.c';
+    diff.file = fileDiff();
+    diff.setMode('split');
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+    const scroller = view.container.querySelector('.scroll') as HTMLElement;
+    await Promise.resolve();
+    expect(scroller.scrollTop).toBe(0);
+
+    const long = Array.from({ length: 400 }, (_, i) => line('context', `l${i + 1}`, i + 1, i + 1));
+    long.splice(300, 0, line('add', 'new', null, 301));
+    diff.file = { ...fileDiff(), hunks: [{ header: '@@', oldStart: 1, oldLines: 400, newStart: 1, newLines: 401, lines: long }] };
+    diff.readWhole = true;
+    await vi.waitFor(() => expect(scroller.scrollTop).toBeGreaterThan(200 * 17));
+  });
+
   it('keeps the picked-lines bar one height, hint or pick', () => {
     // happy-dom lays nothing out, so the rule is what is checked: a height set, not a minimum
     // its contents can grow past, and a hint that cannot wrap onto a second line.

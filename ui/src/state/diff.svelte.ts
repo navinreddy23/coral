@@ -221,6 +221,16 @@ export class DiffState {
    */
   expanded = $state(false);
 
+  /**
+   * Whether the answer on screen was asked for end to end.
+   *
+   * Changing the layout keeps the old answer up while the new one is read, so for a moment side
+   * by side is drawing an inline answer's few rows. Placing the view on its first change then
+   * placed it on those, and once placed it stays put: switching to side by side opened a file
+   * at line 4,500 with its only change at 6,000.
+   */
+  readWhole = $state(false);
+
   /** Shows the whole file in the unified view, or goes back to the hunks. */
   setExpanded(expanded: boolean): void {
     const before = this.wholeFile;
@@ -473,10 +483,12 @@ export class DiffState {
     if (request === null) return;
     this.#request = request;
     const token = ++this.#token;
+    const reading = this.reading;
     try {
-      const got = await read(request, this.reading);
+      const got = await read(request, reading);
       if (token !== this.#token) return;
       this.file = got;
+      this.readWhole = reading.wholeFile;
       this.empty = got === null ? absentFor(request.source) : null;
       this.error = null;
     } catch (e) {
@@ -506,11 +518,13 @@ export class DiffState {
     this.error = null;
     this.empty = null;
     this.loading = true;
+    const reading = this.reading;
     try {
-      const got = await read(request, this.reading);
+      const got = await read(request, reading);
       // Clicking down a long file list must not let an earlier, slower read win.
       if (token !== this.#token) return;
       this.file = got;
+      this.readWhole = reading.wholeFile;
       if (got === null) {
         this.empty = absent;
       } else if (got.change === 'unmerged') {
@@ -550,6 +564,7 @@ export class DiffState {
     this.openedAt = null;
     this.expanded = false;
     this.unguarded = false;
+    this.readWhole = false;
   }
 }
 
