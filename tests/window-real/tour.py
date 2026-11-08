@@ -104,6 +104,22 @@ move(700, 893)
 settle()
 inline = region(*HEADER)
 check(inline != graph_top, "a file in the list opens its diff")
+
+
+def coloured(px, py, w, h):
+    """Whether any of the region is in the keyword colour's purple, which nothing else on a
+    diff is: the tints are green and red, and the rest is greys."""
+    data = region(px, py, w, h)
+    return any(
+        data[i + 2] > data[i + 1] + 40 and data[i] > data[i + 1] + 60
+        for i in range(0, len(data) - 3, 4)
+    )
+
+
+# The code is coloured by what it is, from the whole file, a moment after the text: the
+# fixture's TypeScript has `const`, `function` and `return` on screen.
+check(coloured(330, 140, 700, 400), "the code in a diff is coloured by what it is")
+shot("diff-coloured")
 click(798, 99)
 move(700, 893)
 settle()
@@ -157,11 +173,14 @@ click(700, 152)
 shot("commit-details")
 
 # The same panel comparing a commit with the working copy, asked for from its menu.
+# The header is read once the menu is open: right-clicking selects the commit, which changes
+# the panel by itself, and read before that the check passed whatever the item did — it did
+# when a new item moved this one and the click landed on its neighbour.
 DETAILS_HEAD = (1085, 95, 330, 30)
-own = region(*DETAILS_HEAD)
 click(700, 263, button=3)
 settle()
-click(820, 696)
+own = region(*DETAILS_HEAD)
+click(820, 668)
 move(700, 893)
 settle()
 check(region(*DETAILS_HEAD) != own, "a commit compares with the working tree from its menu")
@@ -196,6 +215,19 @@ keys("Control_L", "a")
 type_text("after:soon")
 settle(quiet=2.0)
 shot("find-refused")
+keys("Escape")
+settle()
+
+# The code search takes the main pane on Ctrl+Shift+F, finds a name in the fixture's
+# TypeScript as it is typed, and goes on Escape.
+keys("Control_L", "Shift_L", "f")
+settle()
+HITS = (270, 185, 700, 120)
+empty = region(*HITS)
+type_text("laneX")
+settle(quiet=2.0)
+check(region(*HITS) != empty, "the code search lists the lines it found")
+shot("code-search")
 keys("Escape")
 settle()
 
