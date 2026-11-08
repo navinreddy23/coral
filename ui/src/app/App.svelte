@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { messageOf } from '../ipc/error';
+  import { codeOf, messageOf } from '../ipc/error';
   import {
     covers,
     hasFlag,
@@ -166,6 +166,7 @@
   import { TabsState, type Session } from '../state/tabs.svelte';
   import { ViewsState, type PanelState } from '../state/views.svelte';
   import { UpdateState } from '../state/update.svelte';
+  import { AutoFetchState } from '../state/autofetch.svelte';
   import { isTextTarget, resolve, tabJump } from '../state/shortcuts';
   import Shortcuts from './Shortcuts.svelte';
   import TabBar from './TabBar.svelte';
@@ -626,6 +627,7 @@
   const ssh = new SshState();
   const toasts = new ToastsState();
   const updates = new UpdateState();
+  const autoFetch = new AutoFetchState();
 
   /*
    * The check at launch, which runs only if it has been turned on in About. Once, untracked:
@@ -1360,6 +1362,9 @@
       }
       return false;
     }
+
+    // The user's own fetch is as fresh as one on the timer, so the timer counts from it.
+    if (action.kind === 'fetch' || action.kind === 'pull') autoFetch.fetched(path);
 
     const said = outcomeToast(action.kind, outcome.what, outcome.message, outcome.conflicted);
     const announced = toasts.push(said.kind, said.title, said.detail);
@@ -4682,6 +4687,41 @@
    */
   let watchIsPartial = $state(false);
 
+  /**
+   * Fetches the repository in front of you because the timer said so.
+   *
+   * Nothing a reload needs is done here: the fetch writes under `refs/remotes`, the watcher
+   * sees that, and `repoChanged` reloads what it always reloads for a fetch run from a
+   * terminal. A repository with no remote has nothing to fetch, and one already talking to
+   * its server is left to finish.
+   */
+  async function fetchInBackground(path: string): Promise<void> {
+    if (info?.path !== path || remotes.list.length === 0) return;
+    if (transfer.running.some((t) => t.key === path)) return;
+    try {
+      const done = await actions.quietly(path, { kind: 'fetch', remote: null, background: true });
+      if (done !== null) autoFetch.settled(null);
+    } catch (e) {
+      // Stopped from the bar is somebody's decision, not a failure to report back to them.
+      if (codeOf(e) === 'cancelled') return;
+      const why = messageOf(e);
+      if (autoFetch.settled(why) && !actions.busy) {
+        actions.report = { text: `Could not fetch in the background: ${why}`, tone: 'warn', what: null };
+      }
+    }
+  }
+
+  // The timer follows the tab in front of you, and that repository's own interval with it.
+  $effect(() => {
+    const path = loadedPath;
+    autoFetch.follow(path === '' ? null : path, fetchInBackground);
+  });
+  $effect(() => {
+    const own = repoConfig.config?.autoFetch ?? null;
+    autoFetch.override = repoConfig.path === loadedPath ? own : null;
+  });
+  $effect(() => () => autoFetch.stop());
+
   // One watch, following whichever repository the active tab is showing.
   $effect(() => {
     const path = loadedPath;
@@ -5383,6 +5423,7 @@
     <div class="screen">
     <Preferences
       {updates}
+      {autoFetch}
       {avatars}
       {signing}
       {ssh}

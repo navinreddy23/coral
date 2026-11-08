@@ -5,6 +5,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import type { GroupColour, Session, TabIcon } from '../state/tabs.svelte';
 import type {
   Ancestry,
+  AutoFetch,
   Blame,
   Blocks,
   ChangedFile,
@@ -356,7 +357,8 @@ export function worktreeDiff(
  * follows the same snapshot-run-journal path in the engine.
  */
 export type Action =
-  | { kind: 'fetch'; remote: string | null }
+  /** `background` is the window's own timer: never journaled, so undo is left alone. */
+  | { kind: 'fetch'; remote: string | null; background?: boolean }
   | {
       kind: 'pull';
       remote: string | null;
@@ -465,6 +467,8 @@ export interface RepoConfig {
   sparse: Sparse;
   /** Where `ABC-123` in a message links to, with `{key}` in it. */
   tracker: string | null;
+  /** How often this repository is fetched, when it is not the window's own interval. */
+  autoFetch: AutoFetch | null;
 }
 
 export function repoConfig(path: string): Promise<RepoConfig> {
@@ -1077,6 +1081,10 @@ export function hostingIssue(path: string, number: number): Promise<IssueView> {
 
 export function repoSetTracker(path: string, url: string | null): Promise<RepoConfig> {
   return invoke<RepoConfig>('repo_set_tracker', { path, url });
+}
+
+export function repoSetAutoFetch(path: string, to: AutoFetch | null): Promise<RepoConfig> {
+  return invoke<RepoConfig>('repo_set_auto_fetch', { path, to });
 }
 
 /** One open repository's requests still waiting on somebody, for the Start page. */

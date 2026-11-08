@@ -28,6 +28,7 @@ export const en = {
   'prefs.title': 'Preferences',
   'prefs.close': 'Close',
   'prefs.closeHint': 'Close preferences (Esc)',
+  'prefs.pane.general': 'General',
   'prefs.pane.appearance': 'Appearance',
   'prefs.pane.profiles': 'Profiles',
   'prefs.pane.ssh': 'SSH',

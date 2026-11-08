@@ -30,6 +30,7 @@ export const de: Partial<Record<MessageKey, Message>> = {
   'prefs.title': 'Einstellungen',
   'prefs.close': 'Schließen',
   'prefs.closeHint': 'Einstellungen schließen (Esc)',
+  'prefs.pane.general': 'Allgemein',
   'prefs.pane.appearance': 'Darstellung',
   'prefs.pane.profiles': 'Profile',
   'prefs.pane.ssh': 'SSH',

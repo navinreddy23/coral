@@ -11,6 +11,11 @@
 export type Ancestry = "same" | "behind" | "ahead" | "diverged";
 
 /**
+ * What this repository asks for instead of the window's own interval.
+ */
+export type AutoFetch = { "kind": "off" } | { "kind": "every", minutes: number, };
+
+/**
  * Where a bisection has got to.
  */
 export type Bisection = { terms: Terms, 

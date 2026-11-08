@@ -183,6 +183,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         repoconfig::repo_disable_sparse,
         repoconfig::repo_folders,
         repoconfig::repo_set_tracker,
+        repoconfig::repo_set_auto_fetch,
         commands::window_zoom,
         tool::tools_read,
         tool::tools_set_editor,

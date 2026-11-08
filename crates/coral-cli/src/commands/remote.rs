@@ -158,6 +158,48 @@ pub async fn fetch(
     })
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoFetchSetting {
+    /// `None` when the window's own interval applies.
+    pub setting: Option<coral_core::autofetch::AutoFetch>,
+}
+
+impl crate::output::Human for AutoFetchSetting {
+    fn human(&self) -> String {
+        use coral_core::autofetch::AutoFetch;
+        match self.setting {
+            None => "fetched on the window's own interval".to_owned(),
+            Some(AutoFetch::Off) => "never fetched automatically".to_owned(),
+            Some(AutoFetch::Every { minutes: 1 }) => "fetched every minute".to_owned(),
+            Some(AutoFetch::Every { minutes }) => format!("fetched every {minutes} minutes"),
+        }
+    }
+}
+
+/// What to do with this repository's fetch interval.
+pub enum AutoFetchChange {
+    Show,
+    Set(Option<coral_core::autofetch::AutoFetch>),
+}
+
+/// How often the window fetches this repository, after changing it when asked to.
+///
+/// # Errors
+/// An interval out of range, or any git failure.
+pub async fn auto_fetch(
+    path: &Path,
+    change: AutoFetchChange,
+) -> Result<AutoFetchSetting, CoralError> {
+    let (runner, loc) = open(path).await?;
+    if let AutoFetchChange::Set(to) = change {
+        loc.set_auto_fetch(&runner, to).await?;
+    }
+    Ok(AutoFetchSetting {
+        setting: loc.auto_fetch(&runner).await?,
+    })
+}
+
 /// Pushes to a remote.
 ///
 /// # Errors

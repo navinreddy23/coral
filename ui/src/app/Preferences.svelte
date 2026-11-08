@@ -7,6 +7,7 @@
   import Appearance from './Appearance.svelte';
   import CommitSigning from './CommitSigning.svelte';
   import Experimental from './Experimental.svelte';
+  import General from './General.svelte';
   import Profiles from './Profiles.svelte';
   import RepoConfig from './RepoConfig.svelte';
   import Ssh from './Ssh.svelte';
@@ -22,10 +23,12 @@
   import type { ThemeState } from '../state/theme.svelte';
   import type { ViewsState } from '../state/views.svelte';
   import type { UpdateState } from '../state/update.svelte';
+  import type { AutoFetchState } from '../state/autofetch.svelte';
   import type { IdentityScopes } from '../ipc/types';
 
   const {
     updates,
+    autoFetch,
     avatars = null,
     signing,
     ssh,
@@ -48,6 +51,7 @@
     onApplyProfileHere,
   }: {
     updates: UpdateState;
+    autoFetch: AutoFetchState;
     avatars?: AvatarState | null;
     signing: SigningState;
     ssh: SshState;
@@ -94,6 +98,7 @@
    * them, so the rest arrive with the settings they hold.
    */
   const panes = $derived(([
+    { id: 'general', label: t('prefs.pane.general'), icon: 'settings', needsRepository: false },
     { id: 'appearance', label: t('prefs.pane.appearance'), icon: 'sun', needsRepository: false },
     { id: 'profiles', label: t('prefs.pane.profiles'), icon: 'blame', needsRepository: false },
     { id: 'ssh', label: t('prefs.pane.ssh'), icon: 'shield', needsRepository: true },
@@ -162,7 +167,9 @@
   </nav>
 
   <div class="page">
-  {#if active === 'appearance'}
+  {#if active === 'general'}
+    <General {autoFetch} />
+  {:else if active === 'appearance'}
     <Appearance {theme} {views} {avatars} />
   {:else if active === 'profiles'}
     <Profiles
@@ -177,7 +184,7 @@
   {:else if active === 'signing'}
     <CommitSigning {signing} />
   {:else if active === 'repository'}
-    <RepoConfig {repoConfig} />
+    <RepoConfig {repoConfig} windowMinutes={autoFetch.minutes} />
   {:else if active === 'ssh'}
     <Ssh {ssh} {onCopied} />
   {:else if active === 'terminal'}

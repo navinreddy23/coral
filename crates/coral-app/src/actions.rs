@@ -23,6 +23,10 @@ use crate::commands::IpcError;
 pub enum Action {
     Fetch {
         remote: Option<String>,
+        /// The window's own timer rather than the user. Not journaled: a fetch nobody asked
+        /// for would otherwise fill the undo list and clear redo every few minutes.
+        #[serde(default)]
+        background: bool,
     },
     Pull {
         remote: Option<String>,
@@ -354,6 +358,9 @@ impl Action {
     /// What the journal should call this, and the label a failure is reported under.
     fn label(&self) -> String {
         match self {
+            Self::Fetch {
+                background: true, ..
+            } => "fetch in the background".to_owned(),
             Self::Fetch { .. } => "fetch".to_owned(),
             Self::Pull { .. } => "pull".to_owned(),
             Self::Push { .. } => self.push_label(),
@@ -451,9 +458,18 @@ impl Action {
 
     /// False for the bisect steps, whose state is git's own log rather than refs alone:
     /// undoing one by putting the refs back would leave `BISECT_LOG` saying otherwise, and the
-    /// way back from a bisection is ending it.
+    /// way back from a bisection is ending it. False for a background fetch too, which nobody
+    /// asked for and so nobody would think to undo.
     const fn journaled(&self) -> bool {
-        !matches!(self, Self::BisectMark { .. } | Self::BisectReset)
+        !matches!(
+            self,
+            Self::BisectMark { .. }
+                | Self::BisectReset
+                | Self::Fetch {
+                    background: true,
+                    ..
+                }
+        )
     }
 
     /// True for the two that move through the journal rather than adding to it.
@@ -722,7 +738,7 @@ async fn run_remote(
     report: &(dyn Fn(&coral_core::remote::Progress) + Sync),
 ) -> Result<Done, coral_core::CoralError> {
     match action {
-        Action::Fetch { remote } => {
+        Action::Fetch { remote, .. } => {
             // Prune: a fetch that leaves deleted remote branches in the sidebar is a fetch
             // that makes the sidebar wrong, which is the thing it was run to correct.
             loc.fetch(runner, remote.as_deref(), true, |p| report(&p))

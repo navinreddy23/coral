@@ -363,6 +363,18 @@ pub enum Command {
     },
     /// Open a conflicted file in git's configured merge tool.
     Mergetool { file: String },
+    /// Show how often the window fetches this repository on its own, or change it.
+    AutoFetch {
+        /// Fetch every this many minutes, between 1 and 1440.
+        #[arg(long, value_name = "MINUTES", conflicts_with_all = ["off", "default"])]
+        every: Option<u16>,
+        /// Never fetch this repository automatically.
+        #[arg(long, conflicts_with = "default")]
+        off: bool,
+        /// Use the window's own interval again.
+        #[arg(long)]
+        default: bool,
+    },
     /// Show whether git reuses recorded conflict resolutions here, or turn it on or off.
     Rerere {
         #[arg(long, conflicts_with = "off")]
@@ -659,6 +671,7 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
         Command::Submodules => output::render(&commands::submodule::run(repo).await),
         Command::Worktrees => output::render(&commands::worktree::list(repo).await),
         command @ (Command::Rerere { .. }
+        | Command::AutoFetch { .. }
         | Command::Tools
         | Command::Difftool { .. }
         | Command::Mergetool { .. }
@@ -725,6 +738,21 @@ async fn dispatch_config(command: Command, repo: &std::path::Path) -> output::Re
         }
         Command::Mergetool { file } => {
             output::render(&commands::tool::mergetool(repo, &file).await)
+        }
+        Command::AutoFetch {
+            every,
+            off,
+            default,
+        } => {
+            use commands::remote::AutoFetchChange;
+            use coral_core::autofetch::AutoFetch;
+            let change = match (every, off, default) {
+                (Some(minutes), _, _) => AutoFetchChange::Set(Some(AutoFetch::Every { minutes })),
+                (None, true, _) => AutoFetchChange::Set(Some(AutoFetch::Off)),
+                (None, false, true) => AutoFetchChange::Set(None),
+                (None, false, false) => AutoFetchChange::Show,
+            };
+            output::render(&commands::remote::auto_fetch(repo, change).await)
         }
         Command::Rerere { on, off } => {
             let set = if on {

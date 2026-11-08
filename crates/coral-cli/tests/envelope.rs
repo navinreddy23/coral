@@ -390,3 +390,39 @@ async fn a_rewrite_of_a_commit_off_the_branch_is_refused_with_a_code() {
     assert_eq!(out.json["ok"], false, "{}", out.json);
     assert_eq!(out.json["error"]["code"], "refused");
 }
+
+#[tokio::test]
+async fn auto_fetch_shows_sets_and_hands_back_the_interval() {
+    let fixture = TestRepo::new().write("a.txt", "1\n").commit("first");
+    let repo = fixture.path().to_str().unwrap();
+    let run = |extra: &'static [&'static str]| {
+        let mut args = vec!["--json", "--repo", repo, "auto-fetch"];
+        args.extend_from_slice(extra);
+        coral_cli::run(argv(&args))
+    };
+
+    let shown = run(&[]).await;
+    assert_eq!(
+        shown.json["result"]["setting"],
+        serde_json::Value::Null,
+        "{}",
+        shown.json
+    );
+
+    let every = run(&["--every", "3"]).await;
+    assert_eq!(
+        every.json["result"]["setting"]["kind"], "every",
+        "{}",
+        every.json
+    );
+    assert_eq!(every.json["result"]["setting"]["minutes"], 3);
+
+    let off = run(&["--off"]).await;
+    assert_eq!(off.json["result"]["setting"]["kind"], "off");
+
+    let refused = run(&["--every", "0"]).await;
+    assert_eq!(refused.json["error"]["code"], "refused", "{}", refused.json);
+
+    let back = run(&["--default"]).await;
+    assert_eq!(back.json["result"]["setting"], serde_json::Value::Null);
+}

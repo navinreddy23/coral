@@ -18,6 +18,8 @@ pub struct RepoConfig {
     pub sparse: coral_core::sparse::Sparse,
     /// Where `ABC-123` in a message links to, with `{key}` in it.
     pub tracker: Option<String>,
+    /// How often the window fetches this repository, when it is not the window's own interval.
+    pub auto_fetch: Option<coral_core::autofetch::AutoFetch>,
 }
 
 async fn read(runner: &GitRunner, loc: &RepoLocation) -> Result<RepoConfig, IpcError> {
@@ -26,6 +28,7 @@ async fn read(runner: &GitRunner, loc: &RepoLocation) -> Result<RepoConfig, IpcE
         caches: loc.status_caches(runner).await?,
         sparse: loc.sparse(runner).await?,
         tracker: loc.tracker(runner).await?,
+        auto_fetch: loc.auto_fetch(runner).await?,
     })
 }
 
@@ -134,5 +137,21 @@ pub async fn repo_set_tracker(path: String, url: Option<String>) -> Result<RepoC
     let runner = GitRunner::discover().await?;
     let loc = RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
     loc.set_tracker(&runner, url.as_deref()).await?;
+    read(&runner, &loc).await
+}
+
+/// Sets how often the window fetches this repository, or gives it back to the window's own
+/// interval with `None`.
+///
+/// # Errors
+/// An interval of no minutes or more than a day, or git failures.
+#[tauri::command]
+pub async fn repo_set_auto_fetch(
+    path: String,
+    to: Option<coral_core::autofetch::AutoFetch>,
+) -> Result<RepoConfig, IpcError> {
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    loc.set_auto_fetch(&runner, to).await?;
     read(&runner, &loc).await
 }
