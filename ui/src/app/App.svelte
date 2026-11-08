@@ -2513,6 +2513,13 @@
         { kind: 'separator' },
         { kind: 'item', label: 'Copy commit sha', hint: short, run: () => void copySha(oid) },
         { kind: 'item', label: 'Copy link to this commit', run: () => void copyLink(oid) },
+        ...(hosting.view?.host
+          ? [{
+              kind: 'item' as const,
+              label: `Open on ${forgeOf(hosting.view.host.kind).label}`,
+              run: () => void openOnHost(oid),
+            }]
+          : []),
         { kind: 'item', label: 'Create patch from commit', run: () => void patchOf(oid) },
         {
           kind: 'item',
@@ -2906,6 +2913,19 @@
   async function copySha(oid: string) {
     if (await copyText(oid)) toasts.push('ok', 'Copied', oid);
     else toasts.push('error', 'Could not reach the clipboard');
+  }
+
+  /** The commit's page on the repository's host, in the browser. */
+  async function openOnHost(oid: string) {
+    if (!info) return;
+    const url = await commitUrl(info.path, oid, null).catch(() => null);
+    if (url === null) {
+      toasts.push('info', 'No web address for this commit', 'The remote is not a host Coral knows.');
+      return;
+    }
+    await openInBrowser(url).catch((e: unknown) =>
+      toasts.push('error', 'Could not open the browser', messageOf(e)),
+    );
   }
 
   async function copyLink(oid: string) {
@@ -6017,6 +6037,7 @@
           tracker={repoConfig.config?.tracker ?? null}
           readIssue={hosting.available ? (n) => hosting.issue(n) : null}
           onOpenUrl={(url) => void openInBrowser(url)}
+          onOpenOnHost={(oid) => void openOnHost(oid)}
           repo={info?.path ?? null}
           compare={selection.pair === null
             ? null

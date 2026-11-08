@@ -26,6 +26,8 @@ const frameOids = (() => {
 })();
 
 const invoke = vi.hoisted(() => vi.fn());
+const openUrl = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 vi.mock('../../src/ipc/invoke', () => ({ invoke, isPreview: () => false }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => undefined }));
@@ -233,6 +235,32 @@ describe('the commit menu', () => {
     }
     // The reset submenu names the branch it would move.
     expect(labels.some((l) => l.startsWith('Reset master to'))).toBe(true);
+  });
+
+  it('opens the commit on its host only when there is a host to open it on', async () => {
+    const { container } = await shell();
+    expect(await openMenu(container)).not.toContain('Open on GitHub');
+  });
+
+  it('opens the commit’s own page on the host', async () => {
+    const url = `https://github.com/ada/notes/commit/${frameOids[0]}`;
+    const { container } = await shell({
+      hosting_status: {
+        host: { kind: 'github', origin: 'https://github.com', owner: 'ada', repo: 'notes' },
+        detail: null,
+        token: 'shared',
+      },
+      commit_url: url,
+    });
+    await waitFor(async () => {
+      const labels = await openMenu(container);
+      if (!labels.includes('Open on GitHub')) throw new Error('no host yet');
+    });
+    openUrl.mockClear();
+    await fireEvent.click(itemNamed(container, 'Open on GitHub'));
+    await waitFor(() => expect(openUrl).toHaveBeenCalledWith(url));
+    const asked = invoke.mock.calls.find(([cmd]) => cmd === 'commit_url');
+    expect(asked?.[1]).toMatchObject({ oid: frameOids[0] });
   });
 
   it('fixes a commit up with what is staged, and offers to fold it in', async () => {

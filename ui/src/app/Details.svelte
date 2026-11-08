@@ -6,6 +6,7 @@
   import LockMark from './LockMark.svelte';
   import Splitter from './Splitter.svelte';
   import { copyText } from './clipboard';
+  import { forgeOf } from './forge';
   import { authorColourIndex, initialsOf } from '../graph/initials';
   import { buildTree } from '../diff/tree';
   import { commitTree, type Host, type IssueView } from '../ipc/commands';
@@ -47,6 +48,7 @@
     tracker = null,
     readIssue = null,
     onOpenUrl = () => undefined,
+    onOpenOnHost = () => undefined,
   }: {
     detail: CommitDetail | null;
     /** The commit's note, from `refs/notes/commits`; null for none or not yet read. */
@@ -94,6 +96,8 @@
     /** Reads one issue, or null where there is no host to ask or nothing to ask it with. */
     readIssue?: ((number: number) => Promise<IssueView | null>) | null;
     onOpenUrl?: (url: string) => void;
+    /** Shows a commit on the host's own site. Offered only where there is a `host`. */
+    onOpenOnHost?: (oid: string) => void;
   } = $props();
 
   const closed = $derived(sections.collapsed);
@@ -458,6 +462,15 @@
         <button class="copy" title="Copy the object id" onclick={() => onCopyOid(detail.commit.oid)}>
           <Icon name="copy" size={12} />
         </button>
+        {#if host !== null}
+          <button
+            class="copy"
+            title={`Open on ${forgeOf(host.kind).label}`}
+            onclick={() => onOpenOnHost(detail.commit.oid)}
+          >
+            <Icon name="external" size={12} />
+          </button>
+        {/if}
       </dd>
       {#if detail.commit.parents.length > 0}
         <dt>{detail.commit.parents.length > 1 ? 'Parents' : 'Parent'}</dt>
