@@ -387,6 +387,38 @@ async fn blame_reaches_a_file_by_the_name_it_had_then() {
     assert_eq!(String::from_utf8_lossy(&now), "one\n");
 }
 
+#[tokio::test]
+async fn a_file_too_large_to_draw_is_refused_rather_than_read_whole() {
+    // Blame and the file view both read the file at a revision whole into the window, and `git
+    // show` reads whatever it is asked for: a generated dump of a few hundred megabytes was all
+    // of it held in memory twice, once here and once as a string, before anything was drawn.
+    let limit = usize::try_from(coral_core::blob::LIMIT).unwrap();
+    let repo = TestRepo::new()
+        .write("big.txt", &"x".repeat(limit + 1))
+        .write("small.txt", "one\n")
+        .commit("base");
+
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+    let Err(err) = loc.file_at(&runner, "HEAD", "big.txt", None).await else {
+        panic!("a file past the limit was read whole");
+    };
+    assert_eq!(err.code(), "refused");
+    assert!(err.to_string().contains("only files up to 32 MB"), "{err}");
+    let small = loc
+        .file_at(&runner, "HEAD", "small.txt", None)
+        .await
+        .unwrap();
+    assert_eq!(small, b"one\n");
+    // A path the revision does not have is still git's own answer, not a size.
+    let gone = loc
+        .file_at(&runner, "HEAD", "nothing.txt", None)
+        .await
+        .unwrap_err();
+    assert_ne!(gone.code(), "refused");
+}
+
 /// A commit made in the fixture at `date`, rather than at the fixture's one fixed instant.
 fn commit_dated(repo: &TestRepo, file: &str, contents: &str, message: &str, date: &str) {
     std::fs::write(repo.path().join(file), contents).unwrap();

@@ -917,7 +917,8 @@ impl RepoLocation {
     /// or the two would not line up.
     ///
     /// # Errors
-    /// Propagates git failures, including an unknown path at that revision.
+    /// [`CoralError::Refused`] for a file over [`crate::blob::LIMIT`], and git failures,
+    /// including an unknown path at that revision.
     pub async fn file_at(
         &self,
         runner: &GitRunner,
@@ -926,6 +927,11 @@ impl RepoLocation {
         was: Option<&str>,
     ) -> Result<Vec<u8>, CoralError> {
         let named = self.named_at(runner, rev, path, was).await?;
+        // Measured first, because `show` reads whatever it is asked for into memory. A path the
+        // revision lacks fails here too, and is left to `show` to name in git's own words.
+        if let Ok(size) = self.measure(runner, &format!("{rev}:{named}")).await {
+            crate::blob::too_large(size)?;
+        }
         let out = runner
             .output(
                 GitCommand::read("show", self.display_path())

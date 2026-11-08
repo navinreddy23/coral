@@ -59,18 +59,7 @@ impl RepoLocation {
         if exists.code != 0 {
             return Ok(None);
         }
-        let measured = runner
-            .output(
-                GitCommand::read("cat-file", self.display_path())
-                    .args(["cat-file", "-s"])
-                    .arg(&spec),
-            )
-            .await?;
-        let length: u64 = String::from_utf8_lossy(&measured.stdout)
-            .trim()
-            .parse()
-            .unwrap_or(0);
-        too_large(length)?;
+        too_large(self.measure(runner, &spec).await?)?;
         let out = runner
             .output(
                 GitCommand::read("cat-file", self.display_path())
@@ -79,6 +68,21 @@ impl RepoLocation {
             )
             .await?;
         Ok(Some(out.stdout))
+    }
+
+    /// How many bytes the object `spec` names hold, without reading them.
+    pub(crate) async fn measure(&self, runner: &GitRunner, spec: &str) -> Result<u64, CoralError> {
+        let measured = runner
+            .output(
+                GitCommand::read("cat-file", self.display_path())
+                    .args(["cat-file", "-s"])
+                    .arg(spec),
+            )
+            .await?;
+        Ok(String::from_utf8_lossy(&measured.stdout)
+            .trim()
+            .parse()
+            .unwrap_or(0))
     }
 
     fn worktree_blob(&self, path: &str) -> Result<Option<Vec<u8>>, CoralError> {
@@ -110,7 +114,7 @@ fn stays_inside(path: &Path) -> bool {
         .all(|c| matches!(c, Component::Normal(_) | Component::CurDir))
 }
 
-fn too_large(size: u64) -> Result<(), CoralError> {
+pub(crate) fn too_large(size: u64) -> Result<(), CoralError> {
     if size > LIMIT {
         return Err(CoralError::Refused {
             label: "show the file",
