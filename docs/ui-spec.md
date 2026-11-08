@@ -300,6 +300,13 @@ middle of a block comment is a comment, and colours arrive after the text rather
 it up. A file over a megabyte or twenty thousand lines stays plain, and Appearance turns colours
 off.
 
+**Search the code** (Ctrl+Shift+F, the palette, or "Search code at this commit…" on a commit's
+menu) takes the main pane: what to find, as text or as an expression and with case or without,
+and the paths to look under. It searches every file as that revision has it, binary ones left
+out, a moment after the typing stops, and lists the lines found under their files with the
+match marked — up to five thousand, then saying to narrow it. A line opens the file view there,
+with the line marked, and closing that returns to the list.
+
 A binary file that is an image is drawn instead: before and after side by side, each captioned
 with its dimensions and size, on a checkerboard so transparency shows. A side the file is
 missing from says so. The bytes come over the binary IPC path, as the graph frames do.

@@ -18,6 +18,8 @@
   import { inTheWay } from './overwrite';
   import { DiffState } from '../state/diff.svelte';
   import { SyntaxState } from '../state/syntax.svelte';
+  import { GrepState } from '../state/grep.svelte';
+  import Grep from './Grep.svelte';
   import { HostingState } from '../state/hosting.svelte';
   import {
     commitDetail,
@@ -260,7 +262,7 @@
   const LIVE = new Set([
     'select.next', 'select.previous', 'select.first', 'select.last', 'select.menu',
     'stage.all', 'unstage.all', 'tab.new', 'tab.close', 'tab.next', 'tab.previous',
-    'palette', 'repo.open', 'terminal', 'search.commits',
+    'palette', 'repo.open', 'terminal', 'search.commits', 'search.code',
     'panel.left', 'panel.detail', 'help', 'undo', 'redo',
     'commit', 'commit.stageAll', 'commit.focus', 'stage.file', 'unstage.file',
     'branch.create', 'fetch.all', 'toolbar', 'filter.focus', 'preferences',
@@ -366,6 +368,7 @@
       case 'preferences': openPreferences(); break;
       case 'palette': showPalette = !showPalette; break;
       case 'search.commits': openFind(); break;
+      case 'search.code': searchCode('HEAD', headName ?? 'HEAD'); break;
       // The same two the toolbar runs. They were listed and rebindable but did nothing, which
       // for Ctrl+Z of all keys is worse than not offering it: the journal is what makes an
       // action on somebody's history safe to try, and the key everyone reaches for to undo one
@@ -473,6 +476,7 @@
   const sections = new SectionsState();
   const diff = new DiffState(views);
   const syntax = new SyntaxState(views);
+  const grep = new GrepState();
   const actions = new ActionsState();
   const commitDraft = new CommitState();
   /**
@@ -2507,6 +2511,16 @@
   }
 
   /**
+   * Opens the code search on a revision: HEAD from the keyboard and the palette, any commit
+   * from its menu. A diff that was open goes, since the search takes the same pane.
+   */
+  function searchCode(rev: string, label: string) {
+    if (!info) return;
+    diff.close();
+    grep.open({ repo: info.path, rev, label });
+  }
+
+  /**
    * Goes to a commit a blame names, closing the diff to show the graph it is in.
    *
    * A branch hidden or soloed away can leave it outside the walk, with no row to go to.
@@ -2677,6 +2691,7 @@
           label: 'Compare with working tree',
           run: () => info && void selection.compareWithWorktree(info.path, { oid, name: short }),
         },
+        { kind: 'item', label: 'Search code at this commit…', run: () => searchCode(oid, short) },
         { kind: 'item', label: 'Copy commit sha', hint: short, run: () => void copySha(oid) },
         { kind: 'item', label: 'Copy link to this commit', run: () => void copyLink(oid) },
         ...(hosting.view?.host
@@ -4293,6 +4308,7 @@
         : []),
       { id: 'fetch', label: 'Fetch', group: 'Remote', run: () => void act({ kind: 'fetch', remote: null }) },
       { id: 'cleanup', label: 'Clean up branches…', group: 'Branch', run: () => void openCleanup() },
+      { id: 'grep', label: 'Search the code…', group: 'Repository', run: () => searchCode('HEAD', headName ?? 'HEAD') },
       ...(info?.shallow
         ? [
             {
@@ -4811,6 +4827,7 @@
   function forgetTheLastRepository() {
     selection.clear();
     diff.close();
+    grep.close();
     rebase.close();
     merge.close();
     actions.clear();
@@ -6097,8 +6114,14 @@
         onEdit={editHunk}
         onShowCommit={(oid) => void showBlamed(oid)}
       />
+    {:else if grep.at !== null}
+      <Grep
+        {grep}
+        onOpen={(match) => grep.at !== null && void diff.openLine(grep.at.repo, grep.at.rev, match.path, match.line)}
+        onClose={() => grep.close()}
+      />
     {/if}
-    <div class="plot" class:hidden={diff.path !== null || merge.inProgress}>
+    <div class="plot" class:hidden={diff.path !== null || merge.inProgress || grep.at !== null}>
       <!-- Above the list it is about, and above the column handles, which run full height. -->
       <BisectBar
         {bisect}

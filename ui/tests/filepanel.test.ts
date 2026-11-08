@@ -213,7 +213,7 @@ describe('the file panel', () => {
     // The name git gave is the name at that revision, so there is no older one to try.
     expect(called('file_blame').at(-1)?.[1]).toMatchObject({ rev: 'c0ffee', file: 'old.c', oldFile: null });
     expect(called('file_text').at(-1)?.[1]).toMatchObject({ rev: 'c0ffee', file: 'old.c' });
-    expect(diff.blameLine).toBe(7);
+    expect(diff.sheetLine).toBe(7);
 
     // Lines picked there are numbered there.
     answering({ line_history: [] });
@@ -224,7 +224,7 @@ describe('the file panel', () => {
     diff.setView('blame');
     await diff.blameBack();
     expect(diff.blameTrail).toEqual([]);
-    expect(diff.blameLine).toBe(30);
+    expect(diff.sheetLine).toBe(30);
     expect(called('file_blame').at(-1)?.[1]).toMatchObject({ rev: 'deadbeef', file: 'new.c' });
 
     // Another file starts from its own blame.
@@ -243,6 +243,20 @@ describe('the file panel', () => {
 
     await diff.setSkipListed(false);
     expect(called('file_blame').at(-1)?.[1]).toMatchObject({ listed: 'blame' });
+  });
+
+  it('opens a file at a line, in the file view, where a code search found it', async () => {
+    answering({ file_blob: new TextEncoder().encode('a\nb\nc\n') });
+    const diff = new DiffState(new ViewsState());
+    await diff.openLine('/repo', 'abc123', 'src/a.c', 2);
+    expect(diff.view).toBe('file');
+    expect(diff.sheetLine).toBe(2);
+    await vi.waitFor(() => expect(diff.contents).not.toBeNull());
+    expect(called('file_blob').at(-1)?.[1]).toMatchObject({ side: { kind: 'commit', rev: 'abc123' }, file: 'src/a.c' });
+
+    // Another file opened the ordinary way brings no line with it.
+    await diff.open('/repo', 'abc123', 'src/b.c');
+    expect(diff.sheetLine).toBeNull();
   });
 
   it('reads the file again when whitespace stops counting', async () => {

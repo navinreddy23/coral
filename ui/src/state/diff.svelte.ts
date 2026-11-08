@@ -140,8 +140,11 @@ export class DiffState {
   /** Blames reached by going back past a commit, the latest last; empty for the file as opened. */
   blameTrail = $state<BlameStep[]>([]);
 
-  /** The line to bring into view once the blame on its way lands, or null to leave the view. */
-  blameLine = $state<number | null>(null);
+  /**
+   * The line to bring into view once the blame or the file on its way lands, or null to leave
+   * the view where it is.
+   */
+  sheetLine = $state<number | null>(null);
 
   /**
    * The commit the panel was opened on, null for the working tree or a comparison.
@@ -459,7 +462,7 @@ export class DiffState {
   /** Blames the file as it was before a commit, keeping the way back. */
   async blameBefore(step: BlameStep): Promise<void> {
     this.blameTrail = [...this.blameTrail, step];
-    this.blameLine = step.line;
+    this.sheetLine = step.line;
     await this.#loadBlame();
   }
 
@@ -468,7 +471,7 @@ export class DiffState {
     const left = this.blameTrail.at(-1);
     if (left === undefined) return;
     this.blameTrail = this.blameTrail.slice(0, -1);
-    this.blameLine = left.back;
+    this.sheetLine = left.back;
     await this.#loadBlame();
   }
 
@@ -521,6 +524,19 @@ export class DiffState {
     await this.#load(
       { repo, source: 'commit', rev, to: '', path, oldPath },
       'This commit did not change that file.',
+    );
+  }
+
+  /**
+   * Opens a file as a revision has it, in the file view, with one line brought into view: where
+   * a code search found something.
+   */
+  async openLine(repo: string, rev: string, path: string, line: number): Promise<void> {
+    this.#views.set('fileView', 'file');
+    await this.#load(
+      { repo, source: 'commit', rev, to: '', path, oldPath: null },
+      'This commit did not change that file.',
+      line,
     );
   }
 
@@ -593,7 +609,7 @@ export class DiffState {
     }
   }
 
-  async #load(request: Request, absent: string): Promise<void> {
+  async #load(request: Request, absent: string, line: number | null = null): Promise<void> {
     const token = ++this.#token;
     this.#request = request;
     this.#opened = request;
@@ -602,8 +618,10 @@ export class DiffState {
     this.atCommit = null;
     this.lines = null;
     this.blameTrail = [];
-    this.blameLine = null;
-    this.openedAt = request.source === 'commit' ? request.rev : null;
+    this.sheetLine = line;
+    // A file opened where a code search found something belongs to the search, not to the
+    // selected commit, and selecting another must not close it.
+    this.openedAt = request.source === 'commit' && line === null ? request.rev : null;
     this.blame = null;
     this.text = null;
     this.contents = null;
@@ -662,7 +680,7 @@ export class DiffState {
     this.atCommit = null;
     this.lines = null;
     this.blameTrail = [];
-    this.blameLine = null;
+    this.sheetLine = null;
     this.openedAt = null;
     this.expanded = false;
     this.unguarded = false;

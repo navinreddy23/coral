@@ -109,6 +109,8 @@ export const BINDINGS: Binding[] = [
     context: 'global', match: (e) => plain(e) && e.key === '/' },
   { id: 'search.commits', label: 'Search commits', keys: 'Ctrl F', group: 'Command palette',
     context: 'global', match: (e) => primary(e) && !e.shift && is(e, 'f') },
+  { id: 'search.code', label: 'Search the code', keys: 'Ctrl Shift F', group: 'Command palette',
+    context: 'global', match: (e) => primary(e) && e.shift && is(e, 'f') },
   { id: 'repo.open', label: 'Open repository', keys: 'Ctrl Shift O', group: 'Command palette',
     context: 'global', match: (e) => primary(e) && e.shift && is(e, 'o') },
 

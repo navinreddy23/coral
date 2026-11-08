@@ -564,17 +564,19 @@
   }
 
   /**
-   * Brings the reader's line into view once a blame reached by going back, or coming back,
-   * lands: the same line is somewhere else in another revision of the file.
+   * Brings the reader's line into view once the sheet's text lands: a blame reached by going
+   * back or coming back, where the same line is somewhere else in another revision, or a file
+   * opened where a code search found something.
    */
-  let placedBlame: unknown = null;
+  let placedSheet: unknown = null;
   $effect(() => {
-    const blame = diff.blame;
-    const line = diff.blameLine;
+    const landed = diff.view === 'blame' ? diff.blame : diff.view === 'file' ? diff.contents : null;
+    const line = diff.sheetLine;
     const el = scroller;
-    if (blame === null || line === null || el === null || placedBlame === blame) return;
-    placedBlame = blame;
-    el.scrollTop = Math.max(0, RANGE_BAR + (line - 1) * ROW - el.clientHeight / 3);
+    if (landed === null || line === null || el === null || placedSheet === landed) return;
+    placedSheet = landed;
+    const above = diff.view === 'blame' ? RANGE_BAR : 0;
+    el.scrollTop = Math.max(0, above + (line - 1) * ROW - el.clientHeight / 3);
   });
 
   /** A new file, or a new revision of it, numbers its lines afresh. */
@@ -656,7 +658,11 @@
   >
     <div class="window" style:transform="translateY({firstLine * ROW}px)">
       {#each shownLines as line (line.no)}
-        <div class="file-line" class:ranged={blaming && range !== null && line.no >= range.from && line.no <= range.to}>
+        <div
+          class="file-line"
+          class:ranged={blaming && range !== null && line.no >= range.from && line.no <= range.to}
+          class:wanted={!blaming && diff.sheetLine === line.no}
+        >
           {#if blaming}
             <span class="author">
               {#if line.oid !== null}
@@ -1260,6 +1266,9 @@
   .line-range { box-sizing: border-box; height: 30px; flex-wrap: nowrap; }
   .line-range > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .line-range .muted { color: var(--fg-2); margin: 0; padding: 0; }
+  /* The line a code search found, marked as a picked range is. */
+  .file-line.wanted .no { background: var(--accent-soft); color: var(--fg-0); box-shadow: inset 2px 0 0 var(--accent-line); }
+  .file-line.wanted .text { background: var(--accent-soft); }
   .file-line.ranged .no { background: var(--accent-soft); color: var(--fg-0); box-shadow: inset 2px 0 0 var(--accent-line); }
   .file-line.ranged .text { background: var(--accent-soft); }
 

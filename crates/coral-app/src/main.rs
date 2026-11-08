@@ -3,7 +3,7 @@
 
 use coral_app_lib::{
     actions, activity, assist, avatar, bisect, blob, commands, conflicts, experimental, gitignore,
-    graph, hosting, lfs, notes, profile, recent, reflog, remotes, repoconfig, scope, search,
+    graph, grep, hosting, lfs, notes, profile, recent, reflog, remotes, repoconfig, scope, search,
     signing, ssh, tabs, template, terminal, tool, transfer, update, version, watcher,
 };
 
@@ -198,6 +198,8 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         graph::file_text,
         search::search_commits,
         search::stop_search,
+        grep::grep_code,
+        grep::stop_grep,
         bisect::repo_bisection,
         reflog::repo_reflog,
         blob::file_blob,
@@ -289,6 +291,7 @@ fn window() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(graph::GraphCache::default())
         .manage(search::Searches::default())
+        .manage(grep::Greps::default())
         .manage(terminal::Terminals::default())
         .manage(watcher::Watchers::default())
         .manage(transfer::Transfers::default())

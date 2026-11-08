@@ -785,6 +785,37 @@ describe('the shell', () => {
     });
   });
 
+  it('searches the code at HEAD from the keyboard, and opens a line it found', async () => {
+    const { container } = await shell({
+      grep_code: { matches: [{ path: 'src/a.c', line: 2, column: 1, text: 'needle' }], more: false },
+      file_blob: new TextEncoder().encode('hay\nneedle\n'),
+    });
+    await fireEvent.keyDown(window, { key: 'F', ctrlKey: true, shiftKey: true });
+    const input = await waitFor(() => {
+      const found = container.querySelector('section.grep input.pattern');
+      if (!found) throw new Error('no code search yet');
+      return found as HTMLInputElement;
+    });
+    expect(container.querySelector('.plot')?.classList.contains('hidden')).toBe(true);
+    await fireEvent.input(input, { target: { value: 'needle' } });
+    await fireEvent.keyDown(input, { key: 'Enter' });
+    const hit = await waitFor(() => {
+      const found = container.querySelector('section.grep .hit');
+      if (!found) throw new Error('nothing found yet');
+      return found as HTMLElement;
+    });
+    expect(invoke.mock.calls.find(([cmd]) => cmd === 'grep_code')?.[1]).toMatchObject({
+      rev: 'HEAD',
+      query: { pattern: 'needle' },
+    });
+    await fireEvent.click(hit);
+    await waitFor(() => {
+      const wanted = container.querySelector('.file-sheet .file-line.wanted');
+      if (!wanted) throw new Error('no file yet');
+      expect(wanted.textContent).toContain('needle');
+    });
+  });
+
   it('draws no pill for a ref that is hidden', async () => {
     // Hiding takes a branch out of the walk, but its commits usually stay: another branch
     // still reaches them. The label must not stay with them, or the graph goes on naming a
