@@ -1158,3 +1158,162 @@ async fn moving_a_branch_onto_another_leaves_the_commits_below_it_behind() {
     );
     assert_eq!(repo.git(["symbolic-ref", "--short", "HEAD"]), "topic");
 }
+
+#[tokio::test]
+async fn a_commit_carries_its_sign_off_and_co_authors_as_trailers() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let repo = repo.write("a.txt", "2\n");
+    repo.git(["add", "a.txt"]);
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+    let opts = coral_core::ops::CommitOpts {
+        message: "Pair on the parser\n\nWorked through it together.".to_owned(),
+        signoff: true,
+        co_authors: vec![
+            "Grace Hopper <grace@fixture.invalid>".to_owned(),
+            "Alan Turing <alan@fixture.invalid>".to_owned(),
+        ],
+        ..Default::default()
+    };
+    loc.commit(&runner, &opts).await.unwrap();
+
+    let trailers = repo.git(["log", "-1", "--format=%(trailers:only,unfold)"]);
+    let lines: Vec<&str> = trailers.lines().filter(|l| !l.is_empty()).collect();
+    assert!(
+        lines.iter().any(|l| l.starts_with("Signed-off-by: ")),
+        "{trailers}"
+    );
+    assert!(
+        lines.contains(&"Co-authored-by: Grace Hopper <grace@fixture.invalid>"),
+        "{trailers}"
+    );
+    assert!(
+        lines.contains(&"Co-authored-by: Alan Turing <alan@fixture.invalid>"),
+        "{trailers}"
+    );
+    assert!(
+        repo.git(["log", "-1", "--format=%B"])
+            .contains("Worked through it together.\n\n"),
+        "the trailers start a block of their own after the body"
+    );
+}
+
+#[tokio::test]
+async fn a_repository_remembers_whether_it_signs_off() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+    assert!(!loc.signs_off(&runner).await.unwrap());
+    loc.set_signs_off(&runner, true).await.unwrap();
+    assert!(loc.signs_off(&runner).await.unwrap());
+    assert_eq!(repo.git(["config", "coral.signOff"]).trim(), "true");
+    loc.set_signs_off(&runner, false).await.unwrap();
+    assert!(!loc.signs_off(&runner).await.unwrap());
+}
+
+#[tokio::test]
+async fn recent_authors_are_named_as_the_mailmap_names_them() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let repo = repo.write(
+        ".mailmap",
+        "Ada Lovelace <ada@fixture.invalid> <old@fixture.invalid>\n",
+    );
+    repo.git(["add", ".mailmap"]);
+    repo.git([
+        "commit",
+        "--quiet",
+        "--author=Ada L <old@fixture.invalid>",
+        "-m",
+        "under the old address",
+    ]);
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+    let people = loc.recent_authors(&runner).await.unwrap();
+    let ada: Vec<_> = people
+        .iter()
+        .filter(|p| p.email == "ada@fixture.invalid")
+        .collect();
+    assert_eq!(ada.len(), 1, "{people:?}");
+    assert_eq!(ada[0].name, "Ada Lovelace");
+}
+
+#[tokio::test]
+async fn cleanup_knows_which_branches_are_merged_and_which_lost_their_upstream() {
+    let upstream = TestRepo::new().write("a.txt", "1\n").commit("base");
+    upstream.git(["branch", "spike"]);
+    let home = tempfile::tempdir().unwrap();
+    let clone = home.path().join("clone");
+    let status = std::process::Command::new("git")
+        .arg("clone")
+        .arg("--quiet")
+        .arg(upstream.path())
+        .arg(&clone)
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let git = |args: &[&str]| {
+        let out = std::process::Command::new("git")
+            .args(args)
+            .current_dir(&clone)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_AUTHOR_NAME", "A")
+            .env("GIT_AUTHOR_EMAIL", "a@fixture.invalid")
+            .env("GIT_COMMITTER_NAME", "A")
+            .env("GIT_COMMITTER_EMAIL", "a@fixture.invalid")
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    git(&["branch", "merged-one"]);
+    git(&[
+        "checkout",
+        "--quiet",
+        "-b",
+        "spike",
+        "--track",
+        "origin/spike",
+    ]);
+    std::fs::write(clone.join("s.txt"), "s\n").unwrap();
+    git(&["add", "s.txt"]);
+    git(&["commit", "--quiet", "-m", "on the spike"]);
+    git(&["checkout", "--quiet", "main"]);
+    upstream.git(["branch", "--delete", "--force", "spike"]);
+    git(&["fetch", "--quiet", "--prune"]);
+
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, &clone).await.unwrap();
+    let refs = loc.refs(&runner).await.unwrap();
+    let spike = refs.iter().find(|r| r.short == "spike").unwrap();
+    assert!(spike.gone, "its upstream was deleted and pruned: {spike:?}");
+    assert_eq!(
+        refs.iter().find(|r| r.short == "main").map(|r| r.gone),
+        Some(false)
+    );
+
+    assert_eq!(
+        loc.merged_into(&runner, "main").await.unwrap(),
+        ["merged-one"]
+    );
+
+    loc.unset_upstream(&runner, "spike").await.unwrap();
+    let spike = loc
+        .refs(&runner)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|r| r.short == "spike")
+        .unwrap();
+    assert_eq!((spike.upstream, spike.gone), (None, false));
+    assert!(
+        loc.unset_upstream(&runner, "spike").await.is_err(),
+        "nothing left to stop"
+    );
+}

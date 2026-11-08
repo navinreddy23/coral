@@ -85,9 +85,11 @@ are backwards and the tool says so.
 **Remotes and hosting.** Fetch, pull, push, prune, and per-ref rejection reporting. Each one
 shows what git is doing and can be stopped, which is what makes having no timeout on them safe. Forcing is
 always `--force-with-lease`. Coral is its own git credential helper, so a token never appears in
-a URL, a config file or an argument list. GitHub and GitLab, including Enterprise and
-self-hosted, list their pull and merge requests beside the branches, and a request's review
-can be read, commented on, approved or answered with a request for changes from there.
+a URL, a config file or an argument list. GitHub, GitLab, Gitea and Forgejo, Bitbucket and
+Azure DevOps, including Enterprise and self-hosted, list their pull and merge requests beside the
+branches, and a request's review can be read, commented on, approved or answered with a request
+for changes from there. The repository in front of you is fetched every few minutes on its own,
+quietly, and never as something undo would offer to take back.
 
 **Profiles.** Work repositories and personal ones on one machine. A profile owns its own tabs,
 groups and recent list, and carries a name, an email address and an ssh key that a repository
@@ -120,7 +122,7 @@ CLI cannot disagree about what an operation did.
 | Path | What it is |
 |---|---|
 | `crates/coral-core` | The engine. Everything git. No UI, no HTTP, no Tauri. |
-| `crates/coral-hosting` | GitHub and GitLab. Never on the graph's critical path. |
+| `crates/coral-hosting` | GitHub, GitLab, Gitea, Bitbucket and Azure DevOps. Never on the graph's critical path. |
 | `crates/coral-cli` | Binary `coral`. The headless test surface. |
 | `crates/coral-app` | Tauri backend. Thin wrappers over the engine. |
 | `ui/` | Svelte 5 + Vite interface. Renders; never decides. |

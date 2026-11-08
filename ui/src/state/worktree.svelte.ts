@@ -5,6 +5,8 @@ import {
   deletePaths,
   discardPaths,
   repoStatus,
+  takePaths,
+  type TakeFrom,
   stagePaths,
   type Part,
   type ReadOptions,
@@ -72,6 +74,13 @@ export class WorktreeState {
     await this.#run(() => discardPaths(path, restore, remove));
   }
 
+  /** Writes files into the working tree as a commit or a stash has them, staging nothing. */
+  async take(from: TakeFrom, files: string[]): Promise<void> {
+    if (files.length === 0) return;
+    const path = this.#path;
+    await this.#run(() => takePaths(path, from, files));
+  }
+
   async stage(paths: string[], stage: boolean): Promise<void> {
     if (paths.length === 0) return;
     await this.#run(() => stagePaths(this.#path, paths, stage));
@@ -103,11 +112,9 @@ export class WorktreeState {
     await this.#run(() => deletePaths(path, tracked, untracked));
   }
 
-  async commit(message: string, amend = false): Promise<void> {
+  async commit(message: string, amend = false, signoff = false, coAuthors: string[] = []): Promise<void> {
     if (message.trim().length === 0) return;
-    await this.#run(() =>
-      commitStaged(this.#path, message, amend),
-    );
+    await this.#run(() => commitStaged(this.#path, message, amend, null, signoff, coAuthors));
   }
 
   /**

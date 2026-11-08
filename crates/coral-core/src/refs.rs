@@ -55,6 +55,64 @@ impl RepoLocation {
         Ok(!out.stdout.is_empty())
     }
 
+    /// The newest commit both `a` and `b` contain, or `None` for histories that never met.
+    ///
+    /// What "what does this branch add" is measured from: the tips alone also count everything
+    /// the other side gained since the two parted, as if this branch had taken it away.
+    ///
+    /// # Errors
+    /// Propagates git failures, including an unknown revision.
+    pub async fn merge_base(
+        &self,
+        runner: &GitRunner,
+        a: &str,
+        b: &str,
+    ) -> Result<Option<String>, CoralError> {
+        let out = runner
+            .output_allowing(
+                GitCommand::read("merge-base", self.display_path())
+                    .arg("merge-base")
+                    .arg(format!("{a}^{{commit}}"))
+                    .arg(format!("{b}^{{commit}}")),
+                &[1],
+            )
+            .await?;
+        if out.code == 1 {
+            return Ok(None);
+        }
+        Ok(Some(String::from_utf8_lossy(&out.stdout).trim().to_owned()))
+    }
+
+    /// The local branches whose every commit `target` already has, apart from `target` itself
+    /// and the branch checked out.
+    ///
+    /// Those are the ones deleting takes nothing from: `git branch -d` agrees, and refuses the
+    /// rest.
+    ///
+    /// # Errors
+    /// Propagates git failures, including an unknown `target`.
+    pub async fn merged_into(
+        &self,
+        runner: &GitRunner,
+        target: &str,
+    ) -> Result<Vec<String>, CoralError> {
+        let out = runner
+            .output(
+                GitCommand::read("for-each-ref", self.display_path())
+                    .args(["for-each-ref", "--format=%(refname:short)%00%(HEAD)"])
+                    .arg(format!("--merged={target}"))
+                    .arg("refs/heads/"),
+            )
+            .await?;
+        let target_name = target.strip_prefix("refs/heads/").unwrap_or(target);
+        Ok(String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .filter_map(|line| line.split_once('\0'))
+            .filter(|(name, head)| *head != "*" && *name != target_name)
+            .map(|(name, _)| name.to_owned())
+            .collect())
+    }
+
     /// Whether `older` is reachable from `newer`.
     ///
     /// `merge-base --is-ancestor` writes nothing and answers by exiting 0 or 1, so 1 has to be
@@ -108,6 +166,9 @@ pub struct GitRef {
     pub upstream: Option<String>,
     pub ahead: u32,
     pub behind: u32,
+    /// Its upstream was deleted on the remote and pruned here: `[gone]` to git. The branch
+    /// follows nothing any more, which is what makes it worth asking about.
+    pub gone: bool,
 }
 
 impl GitRef {
@@ -181,6 +242,7 @@ fn parse_line(line: &[u8]) -> Result<GitRef, CoralError> {
     let annotated = f[2] == "tag";
     let (kind, short) = classify(&name, annotated);
     let (ahead, behind) = parse_track(f[4]);
+    let gone = f[4] == "[gone]";
 
     Ok(GitRef {
         short,
@@ -190,6 +252,7 @@ fn parse_line(line: &[u8]) -> Result<GitRef, CoralError> {
         upstream: (!f[3].is_empty()).then(|| strip_remote_prefix(f[3]).to_owned()),
         ahead,
         behind,
+        gone,
         name,
     })
 }

@@ -13,6 +13,7 @@ function ref(short: string, kind: PlacedRef['kind']): PlacedRef {
     upstream: null,
     ahead: 0,
     behind: 0,
+    gone: false,
     row: 0,
   };
 }

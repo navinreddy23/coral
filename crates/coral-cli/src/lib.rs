@@ -92,7 +92,20 @@ pub enum Command {
         /// Record it as a squash into this commit; --message becomes the extra text.
         #[arg(long, value_name = "REV", conflicts_with = "amend")]
         squash: Option<String>,
+        /// Someone else who wrote it, as "Name <email>". Give it once for each.
+        #[arg(long = "co-author", value_name = "WHO")]
+        co_authors: Vec<String>,
     },
+    /// List who wrote the repository's recent commits, most active first.
+    Authors,
+    /// List the local branches a revision already has every commit of.
+    Merged {
+        /// The branch they are merged into.
+        #[arg(default_value = "HEAD")]
+        into: String,
+    },
+    /// Stop a branch following an upstream.
+    UnsetUpstream { branch: String },
     /// Merge a revision into the current branch.
     Merge {
         rev: String,
@@ -184,6 +197,9 @@ pub enum Command {
         /// Include untracked files when pushing.
         #[arg(long)]
         include_untracked: bool,
+        /// The branch to make, for `branch`.
+        #[arg(long, required_if_eq("action", "branch"))]
+        name: Option<String>,
     },
     /// List configured remotes.
     Remotes,
@@ -199,8 +215,14 @@ pub enum Command {
     Fetch {
         remote: Option<String>,
         /// Drop tracking branches whose remote counterparts are gone.
-        #[arg(long)]
+        #[arg(long, conflicts_with_all = ["deepen", "unshallow"])]
         prune: bool,
+        /// In a shallow clone, fetch this many more commits behind where history stops.
+        #[arg(long, value_name = "COMMITS", conflicts_with = "unshallow")]
+        deepen: Option<u32>,
+        /// In a shallow clone, fetch the rest of the history.
+        #[arg(long)]
+        unshallow: bool,
     },
     /// Push to a remote.
     Push {
@@ -279,6 +301,17 @@ pub enum Command {
         lines: Option<Vec<usize>>,
     },
     /// Throw away worktree changes. This cannot be undone from the index.
+    /// Write files into the working tree as a commit or a stash has them, staging nothing.
+    Take {
+        /// The commit to take them from.
+        #[arg(required_unless_present = "stash", conflicts_with = "stash")]
+        rev: Option<String>,
+        /// A stash entry to take them from instead.
+        #[arg(long)]
+        stash: Option<usize>,
+        #[arg(long = "path", value_name = "PATH", required = true)]
+        paths: Vec<String>,
+    },
     Discard {
         #[arg(value_name = "PATH", required_unless_present = "file")]
         paths: Vec<String>,
@@ -295,11 +328,22 @@ pub enum Command {
     /// Show changes to the worktree, or to the index with --staged.
     Diff {
         /// Diff the index against HEAD rather than the worktree against the index.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "since")]
         staged: bool,
+        /// Diff the worktree against this commit: everything since it, staged or not.
+        #[arg(long, value_name = "REV")]
+        since: Option<String>,
         /// Limit to these paths.
         #[arg(value_name = "PATH")]
         paths: Vec<String>,
+    },
+    /// List the files that differ between two revisions.
+    Compare {
+        from: String,
+        to: String,
+        /// Only what `to` gained since the two parted, rather than everything between the tips.
+        #[arg(long)]
+        merge_base: bool,
     },
     /// Read commit history.
     Log {
@@ -363,6 +407,18 @@ pub enum Command {
     },
     /// Open a conflicted file in git's configured merge tool.
     Mergetool { file: String },
+    /// Show how often the window fetches this repository on its own, or change it.
+    AutoFetch {
+        /// Fetch every this many minutes, between 1 and 1440.
+        #[arg(long, value_name = "MINUTES", conflicts_with_all = ["off", "default"])]
+        every: Option<u16>,
+        /// Never fetch this repository automatically.
+        #[arg(long, conflicts_with = "default")]
+        off: bool,
+        /// Use the window's own interval again.
+        #[arg(long)]
+        default: bool,
+    },
     /// Show whether git reuses recorded conflict resolutions here, or turn it on or off.
     Rerere {
         #[arg(long, conflicts_with = "off")]
@@ -645,8 +701,8 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
             output::render(&commands::create::clone(&what, quiet).await)
         }
         Command::Status => output::render(&commands::status::run(repo).await),
-        Command::Diff { staged, paths } => {
-            output::render(&commands::diff::run(repo, staged, &paths).await)
+        command @ (Command::Diff { .. } | Command::Compare { .. }) => {
+            dispatch_diff(command, repo).await
         }
         command @ Command::Log { .. } => dispatch_log(command, repo).await,
         Command::Find { query, limit } => {
@@ -658,7 +714,10 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
         Command::Refs { kind } => output::render(&commands::refs::run(repo, kind).await),
         Command::Submodules => output::render(&commands::submodule::run(repo).await),
         Command::Worktrees => output::render(&commands::worktree::list(repo).await),
+        Command::Authors => output::render(&commands::log::authors(repo).await),
+        Command::Merged { into } => output::render(&commands::refs::merged(repo, &into).await),
         command @ (Command::Rerere { .. }
+        | Command::AutoFetch { .. }
         | Command::Tools
         | Command::Difftool { .. }
         | Command::Mergetool { .. }
@@ -726,6 +785,21 @@ async fn dispatch_config(command: Command, repo: &std::path::Path) -> output::Re
         Command::Mergetool { file } => {
             output::render(&commands::tool::mergetool(repo, &file).await)
         }
+        Command::AutoFetch {
+            every,
+            off,
+            default,
+        } => {
+            use commands::remote::AutoFetchChange;
+            use coral_core::autofetch::AutoFetch;
+            let change = match (every, off, default) {
+                (Some(minutes), _, _) => AutoFetchChange::Set(Some(AutoFetch::Every { minutes })),
+                (None, true, _) => AutoFetchChange::Set(Some(AutoFetch::Off)),
+                (None, false, true) => AutoFetchChange::Set(None),
+                (None, false, false) => AutoFetchChange::Show,
+            };
+            output::render(&commands::remote::auto_fetch(repo, change).await)
+        }
         Command::Rerere { on, off } => {
             let set = if on {
                 Some(true)
@@ -753,6 +827,23 @@ async fn dispatch_config(command: Command, repo: &std::path::Path) -> output::Re
             )
             .await,
         ),
+        _ => unreachable!("routed by `dispatch`"),
+    }
+}
+
+/// What differs: the working tree, the index, or two revisions.
+async fn dispatch_diff(command: Command, repo: &std::path::Path) -> output::Rendered {
+    match command {
+        Command::Diff {
+            staged,
+            since,
+            paths,
+        } => output::render(&commands::diff::run(repo, staged, since.as_deref(), &paths).await),
+        Command::Compare {
+            from,
+            to,
+            merge_base,
+        } => output::render(&commands::diff::compare(repo, &from, &to, merge_base).await),
         _ => unreachable!("routed by `dispatch`"),
     }
 }
@@ -797,8 +888,22 @@ async fn dispatch_remote(command: Command, repo: &std::path::Path) -> output::Re
         } => {
             output::render(&commands::remote::manage(repo, &action, &name, value.as_deref()).await)
         }
-        Command::Fetch { remote, prune } => {
-            output::render(&commands::remote::fetch(repo, remote, prune).await)
+        Command::Fetch {
+            remote,
+            prune,
+            deepen,
+            unshallow,
+        } => {
+            use coral_core::remote::Deepen;
+            let how = match (deepen, unshallow) {
+                (Some(commits), _) => Some(Deepen::By { commits }),
+                (None, true) => Some(Deepen::All),
+                (None, false) => None,
+            };
+            match how {
+                Some(how) => output::render(&commands::remote::deepen(repo, remote, how).await),
+                None => output::render(&commands::remote::fetch(repo, remote, prune).await),
+            }
         }
         Command::Push {
             remote,
@@ -836,6 +941,7 @@ async fn dispatch_write(command: Command, repo: &std::path::Path) -> output::Ren
             allow_empty,
             fixup,
             squash,
+            co_authors,
         } => {
             let fold = match (fixup, squash) {
                 (Some(target), _) => Some(coral_core::ops::FoldInto {
@@ -855,6 +961,7 @@ async fn dispatch_write(command: Command, repo: &std::path::Path) -> output::Ren
                 author,
                 allow_empty,
                 fold,
+                co_authors,
             };
             output::render(&commands::write::commit(repo, opts).await)
         }
@@ -889,6 +996,9 @@ async fn dispatch_write(command: Command, repo: &std::path::Path) -> output::Ren
         Command::TagCreate { name, at, message } => {
             output::render(&commands::write::tag_create(repo, name, at, message).await)
         }
+        Command::UnsetUpstream { branch } => {
+            output::render(&commands::write::unset_upstream(repo, &branch).await)
+        }
         Command::TagDelete { name } => {
             output::render(&commands::write::tag_delete(repo, name).await)
         }
@@ -897,8 +1007,9 @@ async fn dispatch_write(command: Command, repo: &std::path::Path) -> output::Ren
             index,
             message,
             include_untracked,
+            name,
         } => output::render(
-            &commands::write::stash(repo, action, index, message, include_untracked).await,
+            &commands::write::stash(repo, action, index, message, include_untracked, name).await,
         ),
         Command::Conflicts => output::render(&commands::conflicts::list(repo).await),
         Command::ConflictShow { file } => {
@@ -955,6 +1066,9 @@ async fn dispatch_tree(command: Command, repo: &std::path::Path) -> output::Rend
             file,
             lines,
         } => output::render(&stage_or_unstage(repo, paths, hunk, file, lines, D::Unstage).await),
+        Command::Take { rev, stash, paths } => {
+            output::render(&commands::stage::take(repo, rev.as_deref(), stash, &paths).await)
+        }
         Command::Discard {
             paths,
             hunk,

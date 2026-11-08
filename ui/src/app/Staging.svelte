@@ -32,6 +32,9 @@
     locks = new Map(),
     onDraft = null,
     drafting = false,
+    signsOff = false,
+    onSignOff = () => undefined,
+    onWantPeople = () => undefined,
   }: {
     worktree: WorktreeState;
     /**
@@ -79,7 +82,23 @@
     onCommit: () => void;
     /** How the panel's height is shared between its sections, and which are folded away. */
     sections: SectionsState;
+    /** Whether commits here are signed off, which this repository remembers. */
+    signsOff?: boolean;
+    onSignOff?: (on: boolean) => void;
+    /** Asks for who has written here lately, the first time a co-author is being typed. */
+    onWantPeople?: () => void;
   } = $props();
+
+  let coAuthor = $state('');
+
+  function addCoAuthor() {
+    if (draft.addCoAuthor(coAuthor)) coAuthor = '';
+  }
+
+  /** The name alone, for the chip; the address is in its title. */
+  function nameOf(who: string): string {
+    return who.replace(/\s*<[^>]*>$/u, '');
+  }
 
   /**
    * git's own convention, and what every review tool wraps at.
@@ -460,6 +479,14 @@
         <input type="checkbox" bind:checked={draft.amend} />
         {t('staging.amend')}
       </label>
+      <label class="signoff" title="Ends the message with Signed-off-by and your name. This repository remembers it.">
+        <input
+          type="checkbox"
+          checked={signsOff}
+          onchange={(e) => onSignOff(e.currentTarget.checked)}
+        />
+        {t('staging.signOff')}
+      </label>
       {#if onDraft !== null}
         <button
           class="draft"
@@ -483,6 +510,38 @@
     </div>
     <textarea class="description" rows="3" placeholder={t('staging.description')} bind:value={draft.description}
     ></textarea>
+    <!-- Co-authors as chips, each a Co-authored-by trailer on the commit. -->
+    <div class="coauthors">
+      {#each draft.coAuthors as who (who)}
+        <span class="chip" title={who}>
+          {nameOf(who)}
+          <button
+            class="unchip"
+            aria-label={`${t('staging.removeCoAuthor')} ${who}`}
+            onclick={() => draft.removeCoAuthor(who)}
+          ><Icon name="close" size={10} /></button>
+        </span>
+      {/each}
+      <input
+        class="who"
+        list="coral-people"
+        placeholder={t('staging.coAuthor')}
+        bind:value={coAuthor}
+        onfocus={onWantPeople}
+        onchange={addCoAuthor}
+        onkeydown={(e) => {
+          if (e.key === 'Enter') {
+            addCoAuthor();
+            e.preventDefault();
+          }
+        }}
+      />
+      <datalist id="coral-people">
+        {#each draft.people as p (p.email)}
+          <option value={`${p.name} <${p.email}>`}></option>
+        {/each}
+      </datalist>
+    </div>
     </div>
     {/if}
     <button class="commit" disabled={!canCommit} onclick={onCommit}>
@@ -505,6 +564,26 @@
 <style>
   .above { display: flex; align-items: center; gap: var(--space-2); }
   .above .amend { flex: 1; }
+  .above .signoff { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-1); }
+  .coauthors {
+    display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1);
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 2px; max-width: 14em;
+    padding: 1px 2px 1px var(--space-2); border-radius: var(--radius-1);
+    background: var(--bg-2); color: var(--fg-0); font-size: var(--text-sm);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .unchip {
+    display: flex; padding: 2px; border: 0; background: none; cursor: pointer; color: var(--fg-2);
+    border-radius: var(--radius-1);
+  }
+  .unchip:hover { color: var(--fg-0); background: var(--bg-1); }
+  .who {
+    flex: 1 1 8em; min-width: 8em; font: inherit; font-size: var(--text-sm);
+    padding: 2px var(--space-2); background: var(--bg-0); color: var(--fg-0);
+    border: 1px solid var(--border); border-radius: var(--radius-1);
+  }
   .draft {
     flex: 0 0 auto; font: inherit; font-size: var(--text-sm); cursor: pointer; white-space: nowrap;
     padding: 1px var(--space-2); background: var(--bg-1); color: var(--fg-1);

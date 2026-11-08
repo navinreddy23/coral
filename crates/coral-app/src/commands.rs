@@ -218,7 +218,7 @@ pub async fn repo_clone(
     // Keyed by where it will land, since there is no repository to name yet and that is the
     // one string the window already has: it is what the form says the clone will be at.
     let key = what.destination().display().to_string();
-    let cloning = crate::transfer::watched(&app, &key, "Clone", move |report| async move {
+    let cloning = crate::transfer::watched(&app, &key, "Clone", false, move |report| async move {
         coral_core::create::clone(&runner, &what, |p| report.progress(&p)).await
     });
     match cloning.await {
@@ -362,6 +362,66 @@ pub async fn delete_paths(
 
 /// What the log calls a discard. It names the deletions separately, because that is the half
 /// nothing can bring back and the half worth being able to find afterwards.
+/// Everyone who wrote one of the repository's recent commits, most active first, for naming a
+/// co-author.
+///
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn recent_authors(path: String) -> Result<Vec<coral_core::authors::Person>, IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc.recent_authors(&runner).await?)
+}
+
+/// Where taken files come from: a commit, or a stash entry.
+#[derive(Debug, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum TakeFrom {
+    Commit { rev: String },
+    Stash { index: usize },
+}
+
+/// Writes files into the working tree as they are in a commit or a stash, leaving the index
+/// alone, then reports the resulting status.
+///
+/// Not journaled: it moves no ref, and like discarding it replaces what was on disk. The
+/// window asks first when that was a change of the user's own.
+///
+/// # Errors
+/// Propagates git failures, including an unknown revision.
+#[tauri::command]
+pub async fn take_paths(
+    path: String,
+    from: TakeFrom,
+    files: Vec<String>,
+) -> Result<coral_core::Status, IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    let logged = crate::activity::started(&path, &format!("take {} file(s)", files.len()));
+    let done = async {
+        for file in &files {
+            let source = match &from {
+                TakeFrom::Commit { rev } => rev.clone(),
+                TakeFrom::Stash { index } => loc.stash_source(&runner, *index, file).await?,
+            };
+            loc.restore_from(&runner, &source, &[file.as_str()]).await?;
+        }
+        Ok::<(), coral_core::CoralError>(())
+    }
+    .await;
+    match done {
+        Ok(()) => logged.finished(),
+        Err(e) => {
+            logged.failed(&e.to_string());
+            return Err(e.into());
+        }
+    }
+    Ok(loc.status(&runner).await?)
+}
+
 fn discard_label(restore: &[String], remove: &[String]) -> String {
     match (restore.len(), remove.len()) {
         (0, 0) => "Discard nothing".to_owned(),
@@ -380,6 +440,8 @@ pub async fn commit_staged(
     message: String,
     amend: bool,
     fold: Option<coral_core::ops::FoldInto>,
+    signoff: bool,
+    co_authors: Vec<String>,
 ) -> Result<coral_core::Status, IpcError> {
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
@@ -396,6 +458,8 @@ pub async fn commit_staged(
         message,
         amend,
         fold,
+        signoff,
+        co_authors,
         ..coral_core::ops::CommitOpts::default()
     };
     let logged = crate::activity::started(&path, label);

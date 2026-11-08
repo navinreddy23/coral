@@ -5,6 +5,7 @@ import {
   fileHistory,
   fileText,
   lineHistory,
+  sinceFileDiff,
   worktreeDiff,
 } from '../ipc/commands';
 import type { ReadOptions } from '../ipc/commands';
@@ -17,11 +18,15 @@ export type { DiffMode, FileView };
 /** How many commits a page of a file's history holds. */
 export const HISTORY_PAGE = 50;
 
+/** What a diff is between: a commit and its parent, two commits, or a commit and the working tree. */
+export type Source = 'commit' | 'unstaged' | 'staged' | 'compare' | 'since';
+
 /** Where the diff on screen came from, so it can be read again. */
 interface Request {
   repo: string;
-  source: 'commit' | 'unstaged' | 'staged' | 'compare';
-  /** The commit, for a commit diff; the older of the two when comparing. */
+  source: Source;
+  /** The commit, for a commit diff; the older of the two when comparing; the one the working
+   * tree is measured from for `since`. */
   rev: string;
   /** The newer of the two, when comparing. */
   to: string;
@@ -125,6 +130,12 @@ export class DiffState {
           repo: r.repo,
           before: { side: { kind: 'commit', rev: r.rev }, file: was },
           after: { side: { kind: 'commit', rev: r.to }, file: r.path },
+        };
+      case 'since':
+        return {
+          repo: r.repo,
+          before: { side: { kind: 'commit', rev: r.rev }, file: was },
+          after: { side: { kind: 'worktree' }, file: r.path },
         };
       case 'staged':
         return {
@@ -358,7 +369,7 @@ export class DiffState {
   empty = $state<string | null>(null);
 
   /** What is being shown, so the header can say whether it is a commit or the working tree. */
-  source = $state<'commit' | 'unstaged' | 'staged' | 'compare'>('commit');
+  source = $state<Source>('commit');
 
   /** What the panel was opened on, so the history can hand it back. */
   #opened: Request | null = null;
@@ -382,6 +393,14 @@ export class DiffState {
     await this.#load(
       { repo, source: 'compare', rev: from, to, path, oldPath },
       'That file is the same in both commits.',
+    );
+  }
+
+  /** Opens one file's diff between a commit and the working tree. */
+  async openSince(repo: string, rev: string, path: string, oldPath: string | null = null): Promise<void> {
+    await this.#load(
+      { repo, source: 'since', rev, to: '', path, oldPath },
+      'That file in the working tree is as it was in that commit.',
     );
   }
 
@@ -524,6 +543,9 @@ function read(request: Request, options: ReadOptions): Promise<FileDiff | null> 
   if (request.source === 'commit') {
     return fileDiff(request.repo, request.rev, request.path, request.oldPath, options);
   }
+  if (request.source === 'since') {
+    return sinceFileDiff(request.repo, request.rev, request.path, request.oldPath, options);
+  }
   return worktreeDiff(request.repo, request.source === 'staged', request.path, options);
 }
 
@@ -534,6 +556,7 @@ function absent(staged: boolean): string {
 
 function absentFor(source: Request['source']): string {
   if (source === 'compare') return 'That file is the same in both commits.';
+  if (source === 'since') return 'That file in the working tree is as it was in that commit.';
   if (source === 'commit') return 'This commit did not change that file.';
   return absent(source === 'staged');
 }

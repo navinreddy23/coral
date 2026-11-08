@@ -494,3 +494,47 @@ one signal on a path taken only when somebody stopped something is not worth a d
 form matters: `kill -KILL -<pid>` is read by procps as a second signal, does nothing, and exits
 zero, so the guard looked like it worked for as long as nobody checked. It is `kill -s KILL --
 -<pid>`, and the way that was caught was watching a cancelled fetch leave its child behind.
+
+## A fetch on a timer is not one the user did
+
+Fetching every few minutes is GitKraken's default and the window's too, on for ten minutes, but
+nothing about it may look like the user acted. Run as an ordinary action it would have written an
+undo entry each time and, since recording a change clears redo, emptied redo every ten minutes;
+it would have held the flag that refuses a second action, so a click during it did nothing; and
+it would have put a success toast in the corner over whatever somebody was reading.
+
+So it is an action with `background: true`, which is not journaled, run through a path that holds
+no `busy`. A user's own action that starts meanwhile awaits it rather than racing it for the same
+refs, and the status bar says "Fetching…" and stops it on a click, so a fetch that hangs is never a
+wait without a way out. It stays off the transfer strip, which takes its height from the panes and
+so moved every row under the pointer while it ran. It reloads nothing itself: the watcher sees
+`refs/remotes` move and does what it does for a fetch run in a terminal. It counts from opening the
+repository, not from zero, because opening already walks the graph, and only while the window has
+focus, because a rewalk nobody is looking at buys nothing.
+
+It found a second fault on the way. Transfers were keyed by repository, and a second one under
+the same key replaced the first's stop switch — which stopped it — and the first's clean-up then
+removed the second's. Two fetches of one repository cancelled each other; the window had only
+ever avoided that by running one thing at a time. A transfer under a key already held is now
+refused, naming the one that is running.
+
+## Deepening a shallow clone is noticed by the file that says where history stops
+
+`fetch --deepen` and `--unshallow` move no ref, and every check of whether the graph is stale was
+keyed on refs: the window rewalked only when a ref moved, the cached walk was kept unless the
+refs' fingerprint changed, and the watcher counted nothing outside refs, the index and the
+operation files. The walk after a deepen was the short one, everywhere, until something else
+happened.
+
+The `shallow` file is what changes, so it is what is watched: its bytes are part of the
+fingerprint, a change to it is a change to the walk for the watcher, and the window rewalks after
+a deepen whatever the refs did.
+
+## Opening a link needs a scope as well as the command
+
+Tauri's opener checks the address against a URL scope after the capability lets the command
+through, and the capability granted the command alone. With no scope every address is refused,
+so every link the window offered failed in the built app with "Not allowed to open url" — and
+nothing showed it, since the preview and the unit tests do not run Tauri. `allow-default-urls`
+grants http, https, mailto and tel, which is every kind of address Coral links to, and a test
+reads the capability and says why both entries are there.

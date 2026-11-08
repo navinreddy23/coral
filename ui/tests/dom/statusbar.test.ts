@@ -24,6 +24,7 @@ function head(ahead: number, behind: number): PlacedRef {
     upstream: 'origin/master',
     ahead,
     behind,
+    gone: false,
     row: 0,
   };
 }
@@ -166,5 +167,17 @@ describe('the way in to the activity log', () => {
     const { container } = bar({ onLogs: () => (opened += 1) });
     await fireEvent.click(container.querySelector('.logs') as HTMLElement);
     expect(opened).toBe(1);
+  });
+});
+
+describe('a fetch in the background', () => {
+  it('is said in the status bar and stopped from there', async () => {
+    let stopped = 0;
+    expect(bar().container.textContent).not.toContain('Fetching');
+    const { container } = bar({ fetching: true, onStopFetching: () => (stopped += 1) });
+    const chip = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Fetching'));
+    expect(chip?.title).toContain('stop');
+    chip?.click();
+    expect(stopped).toBe(1);
   });
 });

@@ -79,6 +79,11 @@ pub fn classify(loc: &RepoLocation, path: &Path) -> Option<RepoChanged> {
         if rel == "index" {
             c.index = true;
         }
+        // Fetching more of a shallow clone's history moves no ref; this list of where history
+        // stops is the only thing in the git dir that says the walk would come out longer.
+        if rel == "shallow" {
+            c.graph = true;
+        }
         if rel == "HEAD"
             || rel.starts_with("refs/")
             || rel == "packed-refs"
@@ -172,8 +177,12 @@ impl RepoLocation {
             )
             .await?;
         let head = std::fs::read(self.git_dir.join("HEAD")).unwrap_or_default();
+        // Where a shallow clone's history stops, since deepening it changes the walk without
+        // moving any ref: kept out, the cached walk stayed the short one.
+        let shallow = std::fs::read(self.common_dir.join("shallow")).unwrap_or_default();
         let mut both = refs.stdout;
         both.extend_from_slice(&head);
+        both.extend_from_slice(&shallow);
         Ok(hash(&both))
     }
 

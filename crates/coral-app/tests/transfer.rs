@@ -24,7 +24,14 @@ async fn a_fetch_that_cannot_reach_its_remote_says_so_in_the_log() {
     repo.git(["remote", "add", "nowhere", "/does/not/exist/at/all.git"]);
     let path = repo.path().display().to_string();
 
-    let out = app::actions::run_action(&path, app::actions::Action::Fetch { remote: None }).await;
+    let out = app::actions::run_action(
+        &path,
+        app::actions::Action::Fetch {
+            remote: None,
+            background: false,
+        },
+    )
+    .await;
     assert!(
         out.is_err(),
         "a fetch of a remote that is not there should fail"
@@ -75,5 +82,49 @@ fn a_cancellation_is_not_written_down_as_a_failure() {
         last.level,
         app::activity::Level::Error,
         "and it is not coloured as an error"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_background_fetch_moves_remote_branches_but_leaves_undo_alone() {
+    use coral_core::process::GitRunner;
+    use coral_core::repo::RepoLocation;
+    use coral_core::undo::Journal;
+
+    let upstream = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let clone = TestRepo::new();
+    clone.git([
+        "remote",
+        "add",
+        "origin",
+        &upstream.path().display().to_string(),
+    ]);
+    let path = clone.path().display().to_string();
+    let fetch = |background| app::actions::Action::Fetch {
+        remote: None,
+        background,
+    };
+
+    app::actions::run_action(&path, fetch(false)).await.unwrap();
+    let upstream = upstream.write("a.txt", "2\n").commit("moved on");
+    let done = app::actions::run_action(&path, fetch(true)).await.unwrap();
+    assert_eq!(done.what, "fetch in the background");
+
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, clone.path()).await.unwrap();
+    let labels: Vec<_> = Journal::load(&loc)
+        .entries
+        .into_iter()
+        .map(|e| e.label)
+        .collect();
+    assert_eq!(
+        labels,
+        ["fetch"],
+        "only the fetch somebody asked for is undoable"
+    );
+    assert_eq!(
+        clone.git(["rev-parse", "origin/main"]).trim(),
+        upstream.git(["rev-parse", "HEAD"]).trim(),
+        "the background fetch still brought the new commit"
     );
 }

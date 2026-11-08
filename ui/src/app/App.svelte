@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { messageOf } from '../ipc/error';
+  import { codeOf, messageOf } from '../ipc/error';
   import {
     covers,
     hasFlag,
@@ -25,6 +25,8 @@
     patchRangeSize,
     remoteHasTag,
     branchSetUpstream,
+    branchUnsetUpstream,
+    branchesMerged,
     ignore,
     stopTracking,
     lfsKept,
@@ -53,6 +55,7 @@
   import RebasePicker from './RebasePicker.svelte';
   import { RebaseState } from '../state/rebase.svelte';
   import Palette, { type Command } from './Palette.svelte';
+  import Cleanup from './Cleanup.svelte';
   import StatusBar from './StatusBar.svelte';
   import HostAccount from './HostAccount.svelte';
   import Ask, { type Choice } from './Ask.svelte';
@@ -113,7 +116,7 @@
   import { bandWidth, columnWidth, laneToken } from '../graph/column';
   import { shortAge } from './age';
   import { initialsOf } from '../graph/initials';
-  import type { Action, JournalView, Listing } from '../ipc/commands';
+  import type { Action, JournalView, Listing, TakeFrom } from '../ipc/commands';
   import {
     DEFAULT_METRICS,
     metricsFor,
@@ -153,7 +156,7 @@
     toggleMaximize as toggleMaximise,
   } from '../ipc/window';
   import { ThemeState, type ThemeChoice } from '../state/theme.svelte';
-  import { SelectionState, type Picked } from '../state/selection.svelte';
+  import { SelectionState, type Named, type Picked } from '../state/selection.svelte';
   import { LfsState } from '../state/lfs.svelte';
   import { lfsAvailable } from '../ipc/start';
   import { WorktreeState } from '../state/worktree.svelte';
@@ -166,6 +169,7 @@
   import { TabsState, type Session } from '../state/tabs.svelte';
   import { ViewsState, type PanelState } from '../state/views.svelte';
   import { UpdateState } from '../state/update.svelte';
+  import { AutoFetchState } from '../state/autofetch.svelte';
   import { isTextTarget, resolve, tabJump } from '../state/shortcuts';
   import Shortcuts from './Shortcuts.svelte';
   import TabBar from './TabBar.svelte';
@@ -626,6 +630,7 @@
   const ssh = new SshState();
   const toasts = new ToastsState();
   const updates = new UpdateState();
+  const autoFetch = new AutoFetchState();
 
   /*
    * The check at launch, which runs only if it has been turned on in About. Once, untracked:
@@ -842,7 +847,35 @@
     if (detachedRow !== null) return detachedRow;
     if (headName === null) return null;
     const on = refs.groups.local.find((r) => r.short === headName);
-    return on?.row ?? null;
+    if (on === undefined || on.row === null) return null;
+    return onItsRow(on) ? on.row : null;
+  });
+
+  /**
+   * Whether a ref's commit is the one on the row it was placed on, as far as the loaded window
+   * can say.
+   *
+   * A walk that brings a commit in shifts every row under it by one, and the refs are placed
+   * again only once it lands. On the kernel that was a second and a half after every fetch that
+   * brought something, with `master` and the ring that marks HEAD on a commit only
+   * `origin/master` had. A ref that fails this is left off its row until the refs catch up.
+   */
+  function onItsRow(ref: PlacedRef): boolean {
+    const frame = graph.frame;
+    if (ref.row === null || frame === null) return true;
+    const local = localRow(frame, ref.row);
+    if (local === null) return true;
+    return (ref.peeled ?? ref.target).startsWith(oidOf(frame, local));
+  }
+
+  /** The labels for each row, without any that the walk has moved out from under them. */
+  const labelsByRow = $derived.by(() => {
+    const out = new Map<number, PlacedRef[]>();
+    for (const [row, list] of refs.byRow) {
+      const kept = list.filter(onItsRow);
+      if (kept.length > 0) out.set(row, kept);
+    }
+    return out;
   });
 
   $effect(() => {
@@ -1075,7 +1108,12 @@
       await worktree.stage(worktree.unstaged.map((f) => f.path), true);
     }
     if (!commitDraft.ready(worktree)) return;
-    await worktree.commit(commitDraft.message, commitDraft.amend);
+    await worktree.commit(
+      commitDraft.message,
+      commitDraft.amend,
+      repoConfig.config?.signsOff ?? false,
+      commitDraft.coAuthors,
+    );
     if (worktree.error) {
       if (needsIdentity(worktree.error)) await offerToSayWhoYouAre();
       return;
@@ -1176,7 +1214,7 @@
 
   async function stageOpenFile(stage: boolean) {
     const path = diff.path;
-    if (!info || path === null || diff.source === 'commit' || diff.source === 'compare') return;
+    if (!info || path === null || (diff.source !== 'staged' && diff.source !== 'unstaged')) return;
     await worktree.stage([path], stage);
     await reloadDiff(info.path);
   }
@@ -1322,6 +1360,24 @@
   }
 
   /**
+   * Reads again what a failed action can still have moved.
+   *
+   * A cleanup refused on its third branch has deleted the first two, and the engine journals
+   * them so undo can bring them back. The watcher's word on that arrived while the action held
+   * the window and was let go, so without this the panel went on listing two branches that were
+   * gone and Undo did not know there was anything to undo.
+   */
+  async function afterFailure(path: string, before: string) {
+    await Promise.all([refs.load(path), worktree.load(path)]);
+    if (refSignature() !== before) {
+      graph.forget();
+      await graph.open(path);
+      await Promise.all([refs.load(path), stashes.load(path)]);
+    }
+    void readJournal(path);
+  }
+
+  /**
    * Runs an action and reloads whatever it could have changed.
    *
    * Refs and status always, the graph only when a ref actually moved: rewalking 1.4M commits
@@ -1358,8 +1414,12 @@
         const title = what === null ? 'Something went wrong' : `${what} failed`;
         toasts.push('error', title, actions.report.text);
       }
+      await afterFailure(path, before);
       return false;
     }
+
+    // The user's own fetch is as fresh as one on the timer, so the timer counts from it.
+    if (action.kind === 'fetch' || action.kind === 'pull') autoFetch.fetched(path);
 
     const said = outcomeToast(action.kind, outcome.what, outcome.message, outcome.conflicted);
     const announced = toasts.push(said.kind, said.title, said.detail);
@@ -1399,7 +1459,9 @@
       await worktrees.load(path);
     }
     const after = refSignature();
-    if (before !== after) {
+    // Fetching more of a shallow clone's history moves no ref and makes the walk longer.
+    if (action.kind === 'deepen') info = await open(path).catch(() => info);
+    if (before !== after || action.kind === 'deepen') {
       // `forget` first, as the scope rewalk does and for the same reason: a ref moved, so the
       // rows on screen are a different set of commits rather than a stale copy of this one.
       // Kept, the graph took the reloading path, which skips the fast first paint and repaints
@@ -1682,7 +1744,7 @@
   }
 
   function checkoutsFor(row: number): MenuItem[] {
-    const out = checkoutItems(refs.byRow.get(row) ?? [], headName, revisionActions);
+    const out = checkoutItems(labelsByRow.get(row) ?? [], headName, revisionActions);
     return out.length === 0 ? out : [...out, { kind: 'separator' }];
   }
 
@@ -1695,7 +1757,7 @@
    * by its commit, which merges and rebases just as well.
    */
   function combineFor(row: number, oid: string, where: Ancestry): MenuItem[] {
-    const here = refs.byRow.get(row) ?? [];
+    const here = labelsByRow.get(row) ?? [];
     // Nothing sensible to say about a detached HEAD, which has no branch to move.
     if (headName === null) return [];
 
@@ -1757,6 +1819,13 @@
         run: () => ref.row !== null && void revealAt(ref.row, ref.peeled ?? ref.target),
       });
     }
+    if (ref.kind.kind !== 'stash') {
+      items.push({
+        kind: 'item',
+        label: `Compare ${ref.short} with…`,
+        run: () => pickToCompare({ oid: ref.peeled ?? ref.target, name: ref.short }),
+      });
+    }
 
     // `upstream/main` checks out as `main`, and when `main` is the branch already out that is
     // nothing at all: the item claimed to make it track `upstream/main` and did not.
@@ -1780,6 +1849,25 @@
       ref.kind.kind === 'remote_branch'
         ? refs.groups.local.find((r) => r.short === withoutRemote(ref.short))
         : undefined;
+    if (ref.kind.kind === 'local_branch' && ref.upstream !== null) {
+      items.push({
+        kind: 'item',
+        label: `Stop tracking ${ref.upstream}`,
+        hint: ref.gone ? 'it is gone from the remote' : undefined,
+        disabled: busy,
+        run: () => void stopFollowing(ref.short, ref.upstream ?? ''),
+      });
+    }
+    if (ref.kind.kind === 'local_branch') {
+      items.push({
+        kind: 'item',
+        label: 'Clean up branches…',
+        hint: 'merged and gone',
+        disabled: busy,
+        run: () => void openCleanup(),
+      });
+    }
+
     if (follower && follower.upstream !== ref.short) {
       items.push({
         kind: 'item',
@@ -2175,6 +2263,52 @@
     void goTo(label);
   }
 
+  async function stopFollowing(branch: string, upstream: string) {
+    if (!info) return;
+    const path = info.path;
+    try {
+      await branchUnsetUpstream(path, branch);
+    } catch (e) {
+      toasts.push('error', `Could not stop ${branch} tracking ${upstream}`, messageOf(e));
+      return;
+    }
+    toasts.push('ok', `${branch} follows nothing now.`);
+    await Promise.all([refs.load(path), worktree.load(path)]);
+  }
+
+  /** Never offered by the cleanup sheet, however merged they are. */
+  const LONG_LIVED = ['main', 'master', 'develop', 'development', 'trunk'];
+
+  /** The branches the cleanup sheet offers, once asked for. */
+  let cleanup = $state<{ into: string; merged: string[]; gone: string[] } | null>(null);
+
+  /**
+   * Finds what can go: branches merged into the one checked out, and branches whose upstream
+   * was deleted on the remote. The second are offered but not ticked, since they hold commits.
+   */
+  async function openCleanup() {
+    if (!info || headName === null) return;
+    let merged: string[];
+    try {
+      merged = await branchesMerged(info.path, headName);
+    } catch (e) {
+      toasts.push('error', 'Could not tell which branches are merged', messageOf(e));
+      return;
+    }
+    // The branches a repository lives on are merged into whatever grew from them, which makes
+    // deleting them lossless and still nothing anybody means by cleaning up.
+    const kept = (name: string) => LONG_LIVED.includes(name);
+    const gone = refs.groups.local
+      .filter((r) => r.gone && r.short !== headName && !merged.includes(r.short) && !kept(r.short))
+      .map((r) => r.short);
+    cleanup = { into: headName, merged: merged.filter((b) => !kept(b)), gone };
+  }
+
+  async function deleteBranches(merged: string[], unmerged: string[]) {
+    cleanup = null;
+    await act({ kind: 'branchDeleteMany', merged, unmerged });
+  }
+
   async function track(branch: string, upstream: string) {
     if (!info) return;
     const path = info.path;
@@ -2506,8 +2640,20 @@
         { kind: 'separator' },
         ...bisectFor(oid),
         { kind: 'separator' },
+        {
+          kind: 'item',
+          label: 'Compare with working tree',
+          run: () => info && void selection.compareWithWorktree(info.path, { oid, name: short }),
+        },
         { kind: 'item', label: 'Copy commit sha', hint: short, run: () => void copySha(oid) },
         { kind: 'item', label: 'Copy link to this commit', run: () => void copyLink(oid) },
+        ...(hosting.view?.host
+          ? [{
+              kind: 'item' as const,
+              label: `Open on ${forgeOf(hosting.view.host.kind).label}`,
+              run: () => void openOnHost(oid),
+            }]
+          : []),
         { kind: 'item', label: 'Create patch from commit', run: () => void patchOf(oid) },
         {
           kind: 'item',
@@ -2668,6 +2814,9 @@
    */
   /** Past this many, exporting a range is worth confirming rather than just doing. */
   const MANY_PATCHES = 50;
+
+  /** How much more history one press fetches into a shallow clone. */
+  const DEEPEN_BY = 100;
 
   async function patchButton() {
     if (!info) return;
@@ -2903,6 +3052,19 @@
     else toasts.push('error', 'Could not reach the clipboard');
   }
 
+  /** The commit's page on the repository's host, in the browser. */
+  async function openOnHost(oid: string) {
+    if (!info) return;
+    const url = await commitUrl(info.path, oid, null).catch(() => null);
+    if (url === null) {
+      toasts.push('info', 'No web address for this commit', 'The remote is not a host Coral knows.');
+      return;
+    }
+    await openInBrowser(url).catch((e: unknown) =>
+      toasts.push('error', 'Could not open the browser', messageOf(e)),
+    );
+  }
+
   async function copyLink(oid: string) {
     if (!info) return;
     const url = await commitUrl(info.path, oid, null).catch(() => null);
@@ -3003,6 +3165,14 @@
           disabled: worktree.busy || actions.busy,
           run: () => void act({ kind: 'stashApply', index: stash.index, pop: true }),
         },
+        {
+          kind: 'item',
+          label: 'Make a branch from it…',
+          hint: 'where it was taken',
+          disabled: worktree.busy || actions.busy,
+          worktree: true,
+          run: () => void branchFromStash(stash),
+        },
         { kind: 'separator' },
         {
           kind: 'item',
@@ -3013,6 +3183,117 @@
         },
       ],
     };
+  }
+
+  /**
+   * A branch where the stash was taken, with the stash applied on it.
+   *
+   * The way back for a stash that no longer applies where you are: on the commit it was made
+   * from, it applies as it was made. git drops it once it has.
+   */
+  async function branchFromStash(stash: PlacedStash) {
+    // git makes the branch and checks it out before applying the stash, and an apply refused
+    // over changes of the user's own leaves them on a new branch with nothing applied. Said
+    // before anything is done instead.
+    const mine = worktree.staged.length > 0 || worktree.unstaged.some((e) => e.worktree !== 'untracked');
+    if (mine) {
+      await ask({
+        title: 'Your changes are in the way',
+        detail:
+          'Making a branch from a stash checks out the commit it was taken from and applies the ' +
+          'stash there, which needs a working copy with no changes of its own. Commit or stash ' +
+          'yours first, then make the branch.',
+        asksText: false,
+        placeholder: '',
+        initial: '',
+        choices: [{ id: 'ok', label: 'OK', primary: true }],
+      });
+      return;
+    }
+    await askUntilAccepted(
+      '',
+      (initial, refused) =>
+        askText(
+          'Make a branch from this stash',
+          withRefusal(
+            `${stash.message}\n\nThe branch starts where the stash was taken, is checked out, and ` +
+              'has the stash applied on it. The stash is dropped once it applies.',
+            refused,
+          ),
+          initial,
+        ),
+      async (name) => settled(await act({ kind: 'stashBranch', name, index: stash.index })),
+      refusal,
+    );
+  }
+
+  /**
+   * Writes one file into the working copy as a commit or a stash has it, staging nothing.
+   *
+   * Like discarding, it replaces what is on disk and leaves nothing to undo it with, so when
+   * the file holds changes of the user's own it says so and asks first.
+   */
+  async function takeFile(from: TakeFrom, file: string, what: string) {
+    if (!info) return;
+    const changed = [...worktree.staged, ...worktree.unstaged].some((e) => e.path === file);
+    if (changed) {
+      const { choice } = await ask({
+        title: `Replace your changes to ${file}?`,
+        detail:
+          `${what} goes into the working copy in place of what is there now. Your changes to ` +
+          'it are not kept anywhere, and this cannot be undone.',
+        asksText: false,
+        placeholder: '',
+        initial: '',
+        choices: [{ id: 'replace', label: 'Replace them', danger: true }],
+      });
+      if (choice === null) return;
+    }
+    await worktree.take(from, [file]);
+    if (worktree.error) toasts.push('error', `Could not take ${file}`, worktree.error);
+    else toasts.push('ok', `Took ${file}`, `${what}, as a change to stage or not.`);
+  }
+
+  /** What one file in a commit or a stash can be taken back as, for its menu. */
+  function takeItems(file: string): MenuItem[] {
+    const detail = selection.detail;
+    if (detail === null) return [];
+    const rev = detail.commit.oid;
+    const stash = stashes.list.find((s) => s.oid === rev);
+    if (stash !== undefined) {
+      return [
+        {
+          kind: 'item',
+          label: 'Take this file from the stash',
+          hint: 'into the working copy',
+          disabled: worktree.busy,
+          run: () => void takeFile({ kind: 'stash', index: stash.index }, file, `${file} from ${stash.name}`),
+        },
+      ];
+    }
+    const change = detail.files.find((f) => f.path === file)?.change;
+    const short = rev.slice(0, 8);
+    const items: MenuItem[] = [];
+    if (change !== 'deleted') {
+      items.push({
+        kind: 'item',
+        label: 'Take this version',
+        hint: `as of ${short}`,
+        disabled: worktree.busy,
+        run: () => void takeFile({ kind: 'commit', rev }, file, `${file} as of ${short}`),
+      });
+    }
+    if (change !== 'added' && detail.commit.parents.length > 0) {
+      items.push({
+        kind: 'item',
+        label: 'Take the version before this commit',
+        hint: `as of ${short}^`,
+        disabled: worktree.busy,
+        run: () =>
+          void takeFile({ kind: 'commit', rev: `${rev}^` }, file, `${file} as it was before ${short}`),
+      });
+    }
+    return items;
   }
 
   async function dropStash(stash: PlacedStash) {
@@ -3550,6 +3831,8 @@
         run: () => void copyName(file),
       },
       { kind: 'separator' },
+      ...takeItems(file),
+      { kind: 'separator' },
       ...toolItems(file, rev === null ? null : { kind: 'commit', rev }),
       ...actionItems('file', { file, commit: rev, branch: headName }),
     ];
@@ -3830,6 +4113,13 @@
    */
   function openFile(file: string) {
     if (!info) return;
+    const revs = selection.againstRevs;
+    if (revs !== null) {
+      const was = selection.compared.find((f) => f.path === file)?.oldPath ?? null;
+      if (revs.to === null) void diff.openSince(info.path, revs.from, file, was);
+      else void diff.openCompare(info.path, revs.from, revs.to, file, was);
+      return;
+    }
     const pair = selection.pair;
     if (pair !== null) {
       const was = selection.compared.find((f) => f.path === file)?.oldPath ?? null;
@@ -3844,11 +4134,114 @@
 
   /** Drops the comparison and goes back to the newer of the two on its own. */
   function clearCompare() {
+    if (selection.against !== null) {
+      diff.close();
+      selection.clear();
+      return;
+    }
     const pair = selection.pair;
     if (!info || pair === null) return;
     diff.close();
     void selection.select(info.path, pair.to.row, pair.to.oid, listingFor(pair.to.oid));
   }
+
+  /** What a shallow clone can fetch more of, as a menu over the chip that says it is one. */
+  function deepenMenu(event: MouseEvent) {
+    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    menu = {
+      x: box.left,
+      y: box.top - 4,
+      items: deepenItems(),
+    };
+  }
+
+  function deepenItems(): MenuItem[] {
+    return [
+      {
+        kind: 'item',
+        label: `Fetch ${DEEPEN_BY} more commits of history`,
+        disabled: actions.busy,
+        run: () => void act({ kind: 'deepen', remote: null, how: { kind: 'by', commits: DEEPEN_BY } }),
+      },
+      {
+        kind: 'item',
+        label: 'Fetch all history',
+        hint: 'no longer shallow',
+        disabled: actions.busy,
+        run: () => void act({ kind: 'deepen', remote: null, how: { kind: 'all' } }),
+      },
+    ];
+  }
+
+  /** The palette, opened to choose one thing rather than to run any command. */
+  let choosing = $state<{ placeholder: string; commands: Command[] } | null>(null);
+
+  /** Offers every branch and tag to compare `from` with, in the palette. */
+  function pickToCompare(from: Named) {
+    const kinds: Record<string, string> = { local_branch: 'Branch', remote_branch: 'Remote', tag: 'Tag' };
+    choosing = {
+      placeholder: `Compare ${from.name} with…`,
+      commands: refs.all
+        .filter((r) => r.kind.kind in kinds && r.short !== from.name)
+        .map((r) => ({
+          id: r.name,
+          label: r.short,
+          group: kinds[r.kind.kind] ?? '',
+          run: () => {
+            if (info) void selection.compareRefs(info.path, from, { oid: r.peeled ?? r.target, name: r.short }, true);
+          },
+        })),
+    };
+  }
+
+  /** Between the tips, or only what the second gained since the two parted. */
+  function measureFromBase(sinceTheyParted: boolean) {
+    const a = selection.against;
+    if (!info || a?.kind !== 'refs') return;
+    diff.close();
+    void selection.compareRefs(info.path, a.from, a.to, sinceTheyParted);
+  }
+
+  function swapCompared() {
+    const a = selection.against;
+    if (!info || a?.kind !== 'refs') return;
+    diff.close();
+    void selection.compareRefs(info.path, a.to, a.from, a.base !== null);
+  }
+
+  /** What the details panel says about the comparison on screen, if there is one. */
+  const comparison = $derived.by(() => {
+    const a = selection.against;
+    if (a?.kind === 'worktree') {
+      return {
+        from: a.from.oid,
+        to: null,
+        files: selection.compared,
+        title: `${a.from.name} against the working tree`,
+        fromName: a.from.name,
+        toName: 'The working tree',
+        base: null,
+        note: 'Staged and unstaged changes alike. Untracked files are not compared.',
+        leave: 'Done comparing',
+      };
+    }
+    if (a?.kind === 'refs') {
+      return {
+        from: a.from.oid,
+        to: a.to.oid,
+        files: selection.compared,
+        title: `${a.from.name} against ${a.to.name}`,
+        fromName: a.from.name,
+        toName: a.to.name,
+        base: a.base,
+        note: null,
+        leave: 'Done comparing',
+      };
+    }
+    const pair = selection.pair;
+    if (pair === null) return null;
+    return { from: pair.from.oid, to: pair.to.oid, files: selection.compared };
+  });
 
   /**
    * Everything the palette offers.
@@ -3867,6 +4260,23 @@
           ] satisfies Command[])
         : []),
       { id: 'fetch', label: 'Fetch', group: 'Remote', run: () => void act({ kind: 'fetch', remote: null }) },
+      { id: 'cleanup', label: 'Clean up branches…', group: 'Branch', run: () => void openCleanup() },
+      ...(info?.shallow
+        ? [
+            {
+              id: 'deepen',
+              label: `Fetch ${DEEPEN_BY} more commits of history`,
+              group: 'Remote',
+              run: () => void act({ kind: 'deepen', remote: null, how: { kind: 'by', commits: DEEPEN_BY } }),
+            },
+            {
+              id: 'unshallow',
+              label: 'Fetch all history',
+              group: 'Remote',
+              run: () => void act({ kind: 'deepen', remote: null, how: { kind: 'all' } }),
+            },
+          ]
+        : []),
       { id: 'pull', label: 'Pull (fast-forward only)', group: 'Remote', run: () => void act({ kind: 'pull', remote: null, mode: 'ffOnly' }) },
       { id: 'pull-rebase', label: 'Pull, rebasing', group: 'Remote', run: () => void act({ kind: 'pull', remote: null, mode: 'rebase' }) },
       { id: 'push', label: 'Push', group: 'Remote', run: () => void act({ kind: 'push', remote: null, setUpstream: true, refspec: null, tags: false, forceWithLease: false, delete: false }) },
@@ -4682,6 +5092,41 @@
    */
   let watchIsPartial = $state(false);
 
+  /**
+   * Fetches the repository in front of you because the timer said so.
+   *
+   * Nothing a reload needs is done here: the fetch writes under `refs/remotes`, the watcher
+   * sees that, and `repoChanged` reloads what it always reloads for a fetch run from a
+   * terminal. A repository with no remote has nothing to fetch, and one already talking to
+   * its server is left to finish.
+   */
+  async function fetchInBackground(path: string): Promise<void> {
+    if (info?.path !== path || remotes.list.length === 0) return;
+    if (transfer.running.some((t) => t.key === path)) return;
+    try {
+      const done = await actions.quietly(path, { kind: 'fetch', remote: null, background: true });
+      if (done !== null) autoFetch.settled(null);
+    } catch (e) {
+      // Stopped from the bar is somebody's decision, not a failure to report back to them.
+      if (codeOf(e) === 'cancelled') return;
+      const why = messageOf(e);
+      if (autoFetch.settled(why) && !actions.busy) {
+        actions.report = { text: `Could not fetch in the background: ${why}`, tone: 'warn', what: null };
+      }
+    }
+  }
+
+  // The timer follows the tab in front of you, and that repository's own interval with it.
+  $effect(() => {
+    const path = loadedPath;
+    autoFetch.follow(path === '' ? null : path, fetchInBackground);
+  });
+  $effect(() => {
+    const own = repoConfig.config?.autoFetch ?? null;
+    autoFetch.override = repoConfig.path === loadedPath ? own : null;
+  });
+  $effect(() => () => autoFetch.stop());
+
   // One watch, following whichever repository the active tab is showing.
   $effect(() => {
     const path = loadedPath;
@@ -5334,7 +5779,7 @@
       submodule={tabs.active?.submodule ?? null}
       branch={headName ?? 'detached'}
       busy={worktree.busy || actions.busy}
-      comparing={selection.pair !== null}
+      comparing={selection.pair !== null || selection.against !== null}
       terminalOpen={terminal.open}
       leftPanel={views.current.sidebar}
       stashes={stashes.list.length}
@@ -5383,6 +5828,7 @@
     <div class="screen">
     <Preferences
       {updates}
+      {autoFetch}
       {avatars}
       {signing}
       {ssh}
@@ -5780,7 +6226,7 @@
               wrong end of a typed array, which would show another commit's date and hash.
             -->
             {@const local = localRow(graph.frame, row)}
-            {@const labels = orderRefs(refs.byRow.get(row) ?? [], headName, (n) => scope.hides(n))}
+            {@const labels = orderRefs(labelsByRow.get(row) ?? [], headName, (n) => scope.hides(n))}
             {@const subject = visibleMeta.get(row)?.summary ?? ''}
             {@const split = splitPrefix(subject)}
             <li
@@ -5957,6 +6403,9 @@
             onCommit={() => void recordCommit(false)}
             onDraft={assist.ready ? () => void draftMessage() : null}
             drafting={assist.drafting}
+            signsOff={repoConfig.config?.signsOff ?? false}
+            onSignOff={(on) => void repoConfig.setSignsOff(on)}
+            onWantPeople={() => info && void commitDraft.loadPeople(info.path)}
             locks={lfs.byPath}
             {sections}
           />
@@ -5976,14 +6425,11 @@
           tracker={repoConfig.config?.tracker ?? null}
           readIssue={hosting.available ? (n) => hosting.issue(n) : null}
           onOpenUrl={(url) => void openInBrowser(url)}
+          onOpenOnHost={(oid) => void openOnHost(oid)}
           repo={info?.path ?? null}
-          compare={selection.pair === null
-            ? null
-            : {
-                from: selection.pair.from.oid,
-                to: selection.pair.to.oid,
-                files: selection.compared,
-              }}
+          compare={comparison}
+          onSinceBase={selection.against?.kind === 'refs' ? measureFromBase : null}
+          onSwap={selection.against?.kind === 'refs' ? swapCompared : null}
           nothing={graph.totalRows === 0}
           loading={selection.loading}
           error={selection.error}
@@ -6055,6 +6501,10 @@
       onPlace={() => void placeHost()}
       update={updates.available ? (updates.result?.latest ?? null) : null}
       onUpdate={() => openPreferences('about')}
+      shallow={info.shallow}
+      onShallow={(event) => deepenMenu(event)}
+      fetching={transfer.quietly !== null && transfer.quietly.key === info.path}
+      onStopFetching={() => void transfer.cancelQuiet()}
       report={actions.report}
       busy={actions.busy || worktree.busy || merge.busy}
       onDismiss={() => actions.clear()}
@@ -6074,6 +6524,7 @@
     error={hosting.error}
     onSignIn={(token) => void signInToHost(token)}
     onSignOut={() => void hosting.signOut()}
+    onOpenUrl={(url) => void openInBrowser(url)}
     onClose={() => {
       showHostAccount = false;
       hosting.error = null;
@@ -6102,6 +6553,24 @@
 
 {#if showPalette}
   <Palette {commands} onClose={() => (showPalette = false)} />
+{/if}
+
+{#if cleanup}
+  <Cleanup
+    into={cleanup.into}
+    merged={cleanup.merged}
+    gone={cleanup.gone}
+    onDelete={(merged, unmerged) => void deleteBranches(merged, unmerged)}
+    onClose={() => (cleanup = null)}
+  />
+{/if}
+
+{#if choosing}
+  <Palette
+    commands={choosing.commands}
+    placeholder={choosing.placeholder}
+    onClose={() => (choosing = null)}
+  />
 {/if}
 
 {#if showHelp}
@@ -6330,15 +6799,15 @@
    * the row: it is drawn entirely leftwards into the lane column and stops exactly where the
    * message cell begins, which carries the same colour on.
    *
-   * Square, so it meets the message cell without a seam, and a pixel short of the row's head
-   * and foot, where the message cell leaves its gap.
+   * Square, so it meets the message cell without a seam, and two pixels short of the row's
+   * head and foot, where the message cell leaves its gap.
    */
   .lane-strip {
     /* Positioned rather than laid out, so it takes no part in the row's flow and no negative
        margin has to cancel it. `right: 100%` puts its right edge exactly on the message cell's
        leading edge, which leaves that cell's own inset bar — the one that marks the selected
        row — visible instead of painted over. */
-    position: absolute; right: 100%; top: 1px; bottom: 1px;
+    position: absolute; right: 100%; top: 2px; bottom: 2px;
     width: var(--lane-gap, 0px);
     background: var(--row-tint, transparent);
   }

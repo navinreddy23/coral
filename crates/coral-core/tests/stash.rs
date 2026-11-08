@@ -100,3 +100,33 @@ async fn stashing_before_the_first_commit_says_why_it_cannot() {
     assert_eq!(err.code(), "refused");
     assert!(err.to_string().contains("first commit"), "{err}");
 }
+
+#[tokio::test]
+async fn a_stash_becomes_a_branch_where_it_was_taken_and_leaves_the_stack() {
+    let repo = TestRepo::new().write("a.txt", "base\n").commit("base");
+    let base = repo.git(["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = repo.write("a.txt", "half done\n");
+    repo.git(["stash", "push", "--quiet", "-m", "half done"]);
+    let repo = repo.write("a.txt", "moved on\n").commit("moved on");
+    let (runner, loc) = open(&repo).await;
+
+    let out = loc.stash_branch(&runner, "half-done", 0).await.unwrap();
+    assert!(out.completed, "{out:?}");
+    assert_eq!(repo.git(["branch", "--show-current"]).trim(), "half-done");
+    assert_eq!(
+        repo.git(["rev-parse", "HEAD"]).trim(),
+        base,
+        "made where the stash was taken"
+    );
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("a.txt")).unwrap(),
+        "half done\n"
+    );
+    assert!(
+        repo.git(["stash", "list"]).trim().is_empty(),
+        "the entry is dropped"
+    );
+
+    let taken = loc.stash_branch(&runner, "half-done", 0).await;
+    assert!(taken.is_err(), "nothing left to make a branch from");
+}

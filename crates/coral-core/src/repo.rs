@@ -63,6 +63,8 @@ pub struct RepoInfo {
     /// Whether a commit-graph is present. Its absence is the single biggest predictor of a
     /// slow first paint on a large repository.
     pub commit_graph: bool,
+    /// A shallow clone: some commits' parents were never fetched, so history stops short.
+    pub shallow: bool,
 }
 
 /// Whether a repository is still at `at`.
@@ -298,14 +300,41 @@ impl RepoLocation {
         paths: &[&str],
         options: crate::diff::DiffOptions,
     ) -> Result<Vec<crate::diff::FileDiff>, CoralError> {
+        let against: &[&str] = if staged { &["--cached"] } else { &[] };
+        self.working_diff(runner, against, paths, options).await
+    }
+
+    /// Diffs the working tree against `rev`: everything since that commit, staged or not.
+    ///
+    /// # Errors
+    /// Propagates git failures, including an unknown revision, and [`CoralError::Protocol`] if
+    /// the output does not parse.
+    pub async fn diff_since(
+        &self,
+        runner: &GitRunner,
+        rev: &str,
+        paths: &[&str],
+        options: crate::diff::DiffOptions,
+    ) -> Result<Vec<crate::diff::FileDiff>, CoralError> {
+        self.working_diff(runner, &["--end-of-options", rev], paths, options)
+            .await
+    }
+
+    /// The three invocations every diff of the working tree is built from, against the index
+    /// (no `against`), against `HEAD` from the index (`--cached`), or against a commit.
+    async fn working_diff(
+        &self,
+        runner: &GitRunner,
+        against: &[&str],
+        paths: &[&str],
+        options: crate::diff::DiffOptions,
+    ) -> Result<Vec<crate::diff::FileDiff>, CoralError> {
         let base = |args: &[&str]| {
-            let mut c = GitCommand::status("diff", self.display_path())
+            let c = GitCommand::status("diff", self.display_path())
                 .arg("diff")
-                .arg("-M");
-            if staged {
-                c = c.arg("--cached");
-            }
-            c = c.args(args);
+                .arg("-M")
+                .args(args)
+                .args(against);
             if paths.is_empty() {
                 c
             } else {
@@ -1060,6 +1089,63 @@ impl RepoLocation {
         runner.output(cmd).await.map(|_| ())
     }
 
+    /// Writes `paths` into the working tree as they are at `rev`, leaving the index alone.
+    ///
+    /// Only the working copy: what is taken reads as an ordinary change, to look at and stage
+    /// or not, rather than as something already decided. A path `rev` does not have is removed.
+    ///
+    /// # Errors
+    /// Propagates git failures, including an unknown revision.
+    pub async fn restore_from(
+        &self,
+        runner: &GitRunner,
+        rev: &str,
+        paths: &[&str],
+    ) -> Result<(), CoralError> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+        let cmd = GitCommand::write("restore", self.display_path())
+            .arg("restore")
+            .arg(format!("--source={rev}"))
+            .args(["--worktree", "--"])
+            .args(paths);
+        runner.output(cmd).await.map(|_| ())
+    }
+
+    /// Where a stash keeps `path`: the entry itself for a tracked file, its third parent for
+    /// one that was untracked when it was stashed.
+    ///
+    /// `git stash -u` records untracked files in a commit of their own, so a file that was new
+    /// is nowhere in the entry's tree and restoring it from there would delete it instead.
+    ///
+    /// # Errors
+    /// Propagates git failures.
+    pub async fn stash_source(
+        &self,
+        runner: &GitRunner,
+        index: usize,
+        path: &str,
+    ) -> Result<String, CoralError> {
+        let entry = format!("stash@{{{index}}}");
+        let has = |rev: String| {
+            GitCommand::read("cat-file", self.display_path())
+                .args(["cat-file", "-e"])
+                .arg(format!("{rev}:{path}"))
+        };
+        let tracked = runner
+            .output_allowing(has(entry.clone()), &[1, 128])
+            .await?;
+        if tracked.code == 0 {
+            return Ok(entry);
+        }
+        let untracked = format!("{entry}^3");
+        let found = runner
+            .output_allowing(has(untracked.clone()), &[1, 128])
+            .await?;
+        Ok(if found.code == 0 { untracked } else { entry })
+    }
+
     /// Removes tracked `paths` from the working tree, staging the deletion.
     ///
     /// `git rm -f`, so the file goes and the index is told: anything less leaves a deletion
@@ -1138,6 +1224,7 @@ impl RepoLocation {
             head: self.head(runner).await?,
             state: self.op_state(),
             commit_graph: self.has_commit_graph(),
+            shallow: self.common_dir.join("shallow").exists(),
         })
     }
 }

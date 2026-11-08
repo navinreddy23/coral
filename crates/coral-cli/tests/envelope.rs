@@ -390,3 +390,174 @@ async fn a_rewrite_of_a_commit_off_the_branch_is_refused_with_a_code() {
     assert_eq!(out.json["ok"], false, "{}", out.json);
     assert_eq!(out.json["error"]["code"], "refused");
 }
+
+#[tokio::test]
+async fn auto_fetch_shows_sets_and_hands_back_the_interval() {
+    let fixture = TestRepo::new().write("a.txt", "1\n").commit("first");
+    let repo = fixture.path().to_str().unwrap();
+    let run = |extra: &'static [&'static str]| {
+        let mut args = vec!["--json", "--repo", repo, "auto-fetch"];
+        args.extend_from_slice(extra);
+        coral_cli::run(argv(&args))
+    };
+
+    let shown = run(&[]).await;
+    assert_eq!(
+        shown.json["result"]["setting"],
+        serde_json::Value::Null,
+        "{}",
+        shown.json
+    );
+
+    let every = run(&["--every", "3"]).await;
+    assert_eq!(
+        every.json["result"]["setting"]["kind"], "every",
+        "{}",
+        every.json
+    );
+    assert_eq!(every.json["result"]["setting"]["minutes"], 3);
+
+    let off = run(&["--off"]).await;
+    assert_eq!(off.json["result"]["setting"]["kind"], "off");
+
+    let refused = run(&["--every", "0"]).await;
+    assert_eq!(refused.json["error"]["code"], "refused", "{}", refused.json);
+
+    let back = run(&["--default"]).await;
+    assert_eq!(back.json["result"]["setting"], serde_json::Value::Null);
+}
+
+#[tokio::test]
+async fn compare_and_diff_since_answer_like_the_window() {
+    let fixture = TestRepo::new().write("a.txt", "1\n").commit("base");
+    fixture.git(["checkout", "--quiet", "-b", "side"]);
+    let fixture = fixture.write("side.txt", "s\n").commit("on the side");
+    fixture.git(["checkout", "--quiet", "main"]);
+    let fixture = fixture.write("main.txt", "m\n").commit("on main");
+    let path = fixture.path().to_str().unwrap().to_owned();
+    let repo = path.as_str();
+    let paths = |out: &serde_json::Value| -> Vec<String> {
+        let mut found: Vec<String> = out["result"]["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| f["path"].as_str().unwrap().to_owned())
+            .collect();
+        found.sort();
+        found
+    };
+
+    let tips = coral_cli::run(argv(&["--json", "--repo", repo, "compare", "main", "side"])).await;
+    assert_eq!(paths(&tips.json), ["main.txt", "side.txt"], "{}", tips.json);
+    let since = coral_cli::run(argv(&[
+        "--json",
+        "--repo",
+        repo,
+        "compare",
+        "main",
+        "side",
+        "--merge-base",
+    ]))
+    .await;
+    assert_eq!(paths(&since.json), ["side.txt"], "{}", since.json);
+    assert!(since.json["result"]["base"].is_string());
+
+    let fixture = fixture.write("a.txt", "2\n");
+    let worktree = coral_cli::run(argv(&[
+        "--json", "--repo", repo, "diff", "--since", "HEAD~1",
+    ]))
+    .await;
+    assert_eq!(
+        paths(&worktree.json),
+        ["a.txt", "main.txt"],
+        "{}",
+        worktree.json
+    );
+    drop(fixture);
+}
+
+#[tokio::test]
+async fn take_writes_a_file_as_a_commit_or_a_stash_has_it_and_stages_nothing() {
+    let fixture = TestRepo::new().write("a.txt", "first\n").commit("first");
+    let fixture = fixture.write("a.txt", "second\n").commit("second");
+    let path = fixture.path().to_str().unwrap().to_owned();
+    let repo = path.as_str();
+
+    let out = coral_cli::run(argv(&[
+        "--json", "--repo", repo, "take", "HEAD~1", "--path", "a.txt",
+    ]))
+    .await;
+    assert_eq!(out.json["ok"], true, "{}", out.json);
+    assert_eq!(
+        std::fs::read_to_string(fixture.path().join("a.txt")).unwrap(),
+        "first\n"
+    );
+    assert_eq!(fixture.git(["diff", "--cached", "--name-only"]).trim(), "");
+
+    fixture.git(["stash", "push", "--quiet"]);
+    let out = coral_cli::run(argv(&[
+        "--json", "--repo", repo, "take", "--stash", "0", "--path", "a.txt",
+    ]))
+    .await;
+    assert_eq!(out.json["ok"], true, "{}", out.json);
+    assert_eq!(
+        std::fs::read_to_string(fixture.path().join("a.txt")).unwrap(),
+        "first\n"
+    );
+}
+
+#[tokio::test]
+async fn a_stash_becomes_a_branch_from_the_command_line() {
+    let fixture = TestRepo::new().write("a.txt", "base\n").commit("base");
+    let fixture = fixture.write("a.txt", "half\n");
+    fixture.git(["stash", "push", "--quiet"]);
+    let path = fixture.path().to_str().unwrap().to_owned();
+
+    let refused = coral_cli::run(argv(&["--json", "--repo", &path, "stash", "branch"])).await;
+    assert_ne!(
+        refused.json["ok"], true,
+        "a branch needs a name: {}",
+        refused.json
+    );
+
+    let out = coral_cli::run(argv(&[
+        "--json", "--repo", &path, "stash", "branch", "--name", "half",
+    ]))
+    .await;
+    assert_eq!(out.json["ok"], true, "{}", out.json);
+    assert_eq!(fixture.git(["branch", "--show-current"]).trim(), "half");
+}
+
+#[tokio::test]
+async fn merged_lists_what_can_go_and_unset_upstream_stops_tracking() {
+    let fixture = TestRepo::new().write("a.txt", "1\n").commit("base");
+    fixture.git(["branch", "done"]);
+    fixture.git(["branch", "--track", "follower", "main"]);
+    let path = fixture.path().to_str().unwrap().to_owned();
+
+    let merged = coral_cli::run(argv(&["--json", "--repo", &path, "merged"])).await;
+    let mut names: Vec<String> = merged.json["result"]["branches"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|b| b.as_str().unwrap().to_owned())
+        .collect();
+    names.sort();
+    assert_eq!(names, ["done", "follower"], "{}", merged.json);
+
+    let out = coral_cli::run(argv(&[
+        "--json",
+        "--repo",
+        &path,
+        "unset-upstream",
+        "follower",
+    ]))
+    .await;
+    assert_eq!(out.json["ok"], true, "{}", out.json);
+    assert!(
+        !fixture
+            .git(["config", "--list"])
+            .contains("branch.follower.merge"),
+        "follower follows nothing now"
+    );
+}

@@ -23,6 +23,15 @@ use crate::commands::IpcError;
 pub enum Action {
     Fetch {
         remote: Option<String>,
+        /// The window's own timer rather than the user. Not journaled: a fetch nobody asked
+        /// for would otherwise fill the undo list and clear redo every few minutes.
+        #[serde(default)]
+        background: bool,
+    },
+    /// Fetch more of a shallow clone's history.
+    Deepen {
+        remote: Option<String>,
+        how: coral_core::remote::Deepen,
     },
     Pull {
         remote: Option<String>,
@@ -55,6 +64,12 @@ pub enum Action {
         name: String,
         at: Option<String>,
         checkout: bool,
+    },
+    /// Deletes several branches as one step, so one undo brings them all back. `merged` ones
+    /// go with `-d`, which git refuses for anything not merged; `unmerged` ones need `-D`.
+    BranchDeleteMany {
+        merged: Vec<String>,
+        unmerged: Vec<String>,
     },
     BranchDelete {
         name: String,
@@ -107,6 +122,11 @@ pub enum Action {
     StashApply {
         index: usize,
         pop: bool,
+    },
+    /// Make a branch where the stash was taken and apply it there.
+    StashBranch {
+        name: String,
+        index: usize,
     },
     StashDrop {
         index: usize,
@@ -351,15 +371,33 @@ impl Action {
         }
     }
 
+    fn fetch_label(&self) -> String {
+        match self {
+            Self::Fetch {
+                background: true, ..
+            } => "fetch in the background",
+            Self::Deepen {
+                how: coral_core::remote::Deepen::All,
+                ..
+            } => "fetch all history",
+            Self::Deepen { .. } => "fetch more history",
+            _ => "fetch",
+        }
+        .to_owned()
+    }
+
     /// What the journal should call this, and the label a failure is reported under.
     fn label(&self) -> String {
         match self {
-            Self::Fetch { .. } => "fetch".to_owned(),
+            Self::Fetch { .. } | Self::Deepen { .. } => self.fetch_label(),
             Self::Pull { .. } => "pull".to_owned(),
             Self::Push { .. } => self.push_label(),
             Self::Checkout { rev } => format!("checkout {}", named(rev)),
             Self::BranchCreate { name, .. } => format!("create branch {name}"),
             Self::BranchDelete { name, .. } => format!("delete branch {name}"),
+            Self::BranchDeleteMany { merged, unmerged } => {
+                format!("delete {} branches", merged.len() + unmerged.len())
+            }
             Self::BranchRename { from, to } => format!("rename {from} to {to}"),
             Self::Merge { rev, mode } => match mode {
                 MergeMode::FfOnly => format!("fast-forward to {}", named(rev)),
@@ -394,6 +432,7 @@ impl Action {
             Self::StashApply { pop: true, .. } => "stash pop".to_owned(),
             Self::StashApply { .. } => "stash apply".to_owned(),
             Self::StashDrop { .. } => "stash drop".to_owned(),
+            Self::StashBranch { name, .. } => format!("branch {name} from a stash"),
             Self::TagCreate { name, .. } => format!("tag {name}"),
             Self::TagDelete { name } => format!("delete tag {name}"),
             Self::TagMove { name, at } => {
@@ -451,9 +490,18 @@ impl Action {
 
     /// False for the bisect steps, whose state is git's own log rather than refs alone:
     /// undoing one by putting the refs back would leave `BISECT_LOG` saying otherwise, and the
-    /// way back from a bisection is ending it.
+    /// way back from a bisection is ending it. False for a background fetch too, which nobody
+    /// asked for and so nobody would think to undo.
     const fn journaled(&self) -> bool {
-        !matches!(self, Self::BisectMark { .. } | Self::BisectReset)
+        !matches!(
+            self,
+            Self::BisectMark { .. }
+                | Self::BisectReset
+                | Self::Fetch {
+                    background: true,
+                    ..
+                }
+        )
     }
 
     /// True for the two that move through the journal rather than adding to it.
@@ -469,6 +517,7 @@ impl Action {
         matches!(
             self,
             Self::Fetch { .. }
+                | Self::Deepen { .. }
                 | Self::Pull { .. }
                 | Self::Push { .. }
                 | Self::CheckoutProposal { .. }
@@ -525,6 +574,13 @@ pub async fn repo_action(
         return run_action(&path, action).await;
     }
     let label = action.label();
+    let quiet = matches!(
+        action,
+        Action::Fetch {
+            background: true,
+            ..
+        }
+    );
     // Borrowed by the key and the label as well as by the work, so the block takes references
     // rather than the strings themselves.
     let (at, named) = (path.as_str(), label.as_str());
@@ -534,7 +590,7 @@ pub async fn repo_action(
     // operation started and never saying what became of it — in the log somebody opens to
     // find out exactly that.
     let entry = crate::activity::started(at, named);
-    let outcome = crate::transfer::watched(&app, at, named, |report| async move {
+    let outcome = crate::transfer::watched(&app, at, named, quiet, |report| async move {
         act(at, action, named, &|p| report.progress(p)).await
     })
     .await;
@@ -638,12 +694,29 @@ async fn act(
         _ => None,
     };
     let before = loc.snapshot_refs(&runner).await?;
-    let done = run(&loc, &runner, action, report).await?;
-    let after = loc.snapshot_refs(&runner).await?;
-    match reset {
-        Some(mode) => loc.journal_reset(label, before, after, mode)?,
-        None => loc.journal_change(label, before, after, coral_core::undo::Restore::Worktree)?,
+    let done = run(&loc, &runner, action, report).await;
+    // Journaled whether or not it finished. An action that fails partway can still have moved
+    // refs — the third of four branches refusing to go leaves the first two deleted — and an
+    // entry only success wrote left those with no way back. One that moved nothing records
+    // nothing, as `journal_change` skips an empty change.
+    let journaled = async {
+        let after = loc.snapshot_refs(&runner).await?;
+        match reset {
+            Some(mode) => loc.journal_reset(label, before, after, mode),
+            None => loc.journal_change(label, before, after, coral_core::undo::Restore::Worktree),
+        }
     }
+    .await;
+    let done = match (done, journaled) {
+        (Ok(done), Ok(())) => done,
+        (Ok(_), Err(e)) => return Err(e.into()),
+        (Err(e), journaled) => {
+            if let Err(j) = journaled {
+                tracing::warn!(error = %j, "could not journal what a failed action had moved");
+            }
+            return Err(e.into());
+        }
+    };
 
     Ok(ActionOutcome {
         what: label.to_owned(),
@@ -692,12 +765,14 @@ async fn run(
 ) -> Result<Done, coral_core::CoralError> {
     match action {
         Action::Fetch { .. }
+        | Action::Deepen { .. }
         | Action::Pull { .. }
         | Action::Push { .. }
         | Action::CheckoutProposal { .. } => run_remote(loc, runner, action, report).await,
         Action::Checkout { .. }
         | Action::BranchCreate { .. }
         | Action::BranchDelete { .. }
+        | Action::BranchDeleteMany { .. }
         | Action::BranchRename { .. }
         | Action::Merge { .. }
         | Action::Rebase { .. }
@@ -722,10 +797,15 @@ async fn run_remote(
     report: &(dyn Fn(&coral_core::remote::Progress) + Sync),
 ) -> Result<Done, coral_core::CoralError> {
     match action {
-        Action::Fetch { remote } => {
+        Action::Fetch { remote, .. } => {
             // Prune: a fetch that leaves deleted remote branches in the sidebar is a fetch
             // that makes the sidebar wrong, which is the thing it was run to correct.
             loc.fetch(runner, remote.as_deref(), true, |p| report(&p))
+                .await?;
+            Ok(Done::quiet())
+        }
+        Action::Deepen { remote, how } => {
+            loc.deepen(runner, remote.as_deref(), how, |p| report(&p))
                 .await?;
             Ok(Done::quiet())
         }
@@ -803,6 +883,14 @@ async fn run_refs(
                 .await?;
         }
         Action::BranchDelete { name, force } => loc.branch_delete(runner, &name, force).await?,
+        Action::BranchDeleteMany { merged, unmerged } => {
+            for name in &merged {
+                loc.branch_delete(runner, name, false).await?;
+            }
+            for name in &unmerged {
+                loc.branch_delete(runner, name, true).await?;
+            }
+        }
         Action::BranchRename { from, to } => loc.branch_rename(runner, &from, &to).await?,
         Action::Merge { rev, mode } => {
             let out = loc.merge(runner, &rev, mode, None).await?;
@@ -906,6 +994,9 @@ async fn run_tree(
             return Ok(Done::from(&loc.stash_apply(runner, index, pop).await?));
         }
         Action::StashDrop { index } => loc.stash_drop(runner, index).await?,
+        Action::StashBranch { name, index } => {
+            return Ok(Done::from(&loc.stash_branch(runner, &name, index).await?));
+        }
         Action::WorktreeAdd { path, rev, branch } => {
             loc.worktree_add(runner, std::path::Path::new(&path), &rev, branch.as_deref())
                 .await?;

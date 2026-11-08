@@ -2,11 +2,36 @@
   import { t } from '../state/locale.svelte';
   import FolderPicker from './FolderPicker.svelte';
   import type { RepoConfigState } from '../state/repoconfig.svelte';
+  import { intervalWords } from '../state/autofetch.svelte';
+  import type { AutoFetch } from '../ipc/types';
 
   /** The repository's own git switches: how it merges, how fast its status is, what it holds. */
-  const { repoConfig }: { repoConfig: RepoConfigState } = $props();
+  const {
+    repoConfig,
+    windowMinutes,
+  }: {
+    repoConfig: RepoConfigState;
+    /** The interval under General, which is what "as everywhere else" means. */
+    windowMinutes: number;
+  } = $props();
   const config = $derived(repoConfig.config);
   let picking = $state(false);
+
+  /** A wider choice than General's, since one busy or one metered remote is the reason to set it. */
+  const OWN_MINUTES = [1, 5, 10, 30, 60];
+
+  const fetchChoice = $derived.by(() => {
+    const own = config?.autoFetch ?? null;
+    if (own === null) return 'window';
+    return own.kind === 'off' ? 'off' : String(own.minutes);
+  });
+
+  function chooseFetch(value: string) {
+    let to: AutoFetch | null = null;
+    if (value === 'off') to = { kind: 'off' };
+    else if (value !== 'window') to = { kind: 'every', minutes: Number(value) };
+    void repoConfig.setAutoFetch(to);
+  }
 </script>
 
 <section class="pane">
@@ -73,6 +98,27 @@
       git which paths changed since it last asked.
     </p>
   {/if}
+
+  <h3>Fetching</h3>
+  <div class="field">
+    <label for="auto-fetch" class="name">Automatically</label>
+    <select
+      id="auto-fetch"
+      value={fetchChoice}
+      disabled={config === null || repoConfig.busy}
+      onchange={(e) => chooseFetch(e.currentTarget.value)}
+    >
+      <option value="window">As under General: {intervalWords(windowMinutes).toLowerCase()}</option>
+      <option value="off">Never, for this repository</option>
+      {#each OWN_MINUTES as minutes (minutes)}
+        <option value={String(minutes)}>{intervalWords(minutes)}</option>
+      {/each}
+    </select>
+  </div>
+  <p class="muted">
+    How often Coral fetches this repository on its own while it is the one in front of you. Kept
+    in the repository's config as <code>coral.autoFetch</code>.
+  </p>
 
   <h3>Issue links</h3>
   <div class="field">
@@ -166,6 +212,10 @@
   .row { display: flex; gap: var(--space-2); }
   .field { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2); }
   .field .name { flex: 0 0 auto; width: 6em; color: var(--fg-2); }
+  #auto-fetch {
+    font: inherit; padding: 3px var(--space-2); background: var(--bg-0); color: var(--fg-0);
+    border: 1px solid var(--border-strong); border-radius: var(--radius-1);
+  }
   #tracker {
     flex: 1 1 auto; min-width: 0; max-width: 34em; font: inherit; font-family: var(--font-mono);
     font-variant-ligatures: none; padding: 3px var(--space-2); background: var(--bg-0);

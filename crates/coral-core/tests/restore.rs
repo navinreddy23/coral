@@ -144,3 +144,60 @@ async fn refuses_a_path_git_does_not_know_rather_than_half_finishing() {
         "and nothing was discarded"
     );
 }
+
+#[tokio::test]
+async fn a_file_is_taken_from_any_commit_into_the_working_copy_only() {
+    let repo = TestRepo::new().write("a.txt", "first\n").commit("first");
+    let first = repo.git(["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = repo.write("a.txt", "second\n").commit("second");
+    let (runner, loc) = open(&repo).await;
+
+    loc.restore_from(&runner, &first, &["a.txt"]).await.unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("a.txt")).unwrap(),
+        "first\n"
+    );
+    assert_eq!(
+        repo.git(["diff", "--cached", "--name-only"]).trim(),
+        "",
+        "nothing is staged: it reads as an ordinary change"
+    );
+    assert_eq!(repo.git(["diff", "--name-only"]).trim(), "a.txt");
+}
+
+#[tokio::test]
+async fn a_stashed_file_comes_from_the_entry_or_from_its_untracked_part() {
+    let repo = TestRepo::new().write("a.txt", "base\n").commit("base");
+    let repo = repo
+        .write("a.txt", "stashed edit\n")
+        .write("new.txt", "was untracked\n");
+    repo.git(["stash", "push", "--quiet", "--include-untracked"]);
+    let (runner, loc) = open(&repo).await;
+
+    assert_eq!(
+        loc.stash_source(&runner, 0, "a.txt").await.unwrap(),
+        "stash@{0}"
+    );
+    assert_eq!(
+        loc.stash_source(&runner, 0, "new.txt").await.unwrap(),
+        "stash@{0}^3"
+    );
+
+    for path in ["a.txt", "new.txt"] {
+        let source = loc.stash_source(&runner, 0, path).await.unwrap();
+        loc.restore_from(&runner, &source, &[path]).await.unwrap();
+    }
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("a.txt")).unwrap(),
+        "stashed edit\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(repo.path().join("new.txt")).unwrap(),
+        "was untracked\n"
+    );
+    assert!(
+        !repo.git(["stash", "list"]).trim().is_empty(),
+        "the stash itself is kept"
+    );
+}

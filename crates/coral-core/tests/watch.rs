@@ -187,6 +187,9 @@ async fn classifies_git_dir_paths_by_what_they_affect() {
     assert!(merge.ops && merge.refs && merge.index);
     assert!(git("rebase-merge/done").is_some_and(|c| c.ops));
     assert!(git("sequencer/todo").is_some_and(|c| c.ops));
+
+    // Deepening a shallow clone moves no ref; the list of where history stops is what changes.
+    assert!(git("shallow").is_some_and(|c| c.graph && !c.refs));
 }
 
 /// Object churn and our own lock files are pure noise; reacting to them would mean refreshing

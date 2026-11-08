@@ -33,6 +33,7 @@ import { TabsState } from "../src/state/tabs.svelte";
 import { ThemeState } from "../src/state/theme.svelte";
 import { ViewsState } from "../src/state/views.svelte";
 import { UpdateState } from "../src/state/update.svelte";
+import { AutoFetchState } from "../src/state/autofetch.svelte";
 import { ExperimentalState } from "../src/state/experimental.svelte";
 import { ProfilesState } from "../src/state/profiles.svelte";
 import { SigningState } from "../src/state/signing.svelte";
@@ -380,6 +381,7 @@ mount(Preferences, {
   ),
   props: {
     updates: new UpdateState(),
+    autoFetch: new AutoFetchState(),
     signing,
     ssh: new SshState(),
     repoConfig: new RepoConfigState(),

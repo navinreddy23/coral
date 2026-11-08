@@ -20,10 +20,22 @@ export class TransferState {
   /** The keys asked to stop, until the report that says they did. */
   stopping = $state<string[]>([]);
 
-  /** The one on the bar: the most recent, since that is what the user just set going. */
-  readonly current = $derived(this.running.at(-1) ?? null);
+  /** The ones the user set going, which are what the bar is for. */
+  readonly loud = $derived(this.running.filter((t) => t.quiet !== true));
 
-  readonly waiting = $derived(this.running.length - 1);
+  /** The one on the bar: the most recent, since that is what the user just set going. */
+  readonly current = $derived(this.loud.at(-1) ?? null);
+
+  readonly waiting = $derived(this.loud.length - 1);
+
+  /**
+   * A fetch the window started on its own, if one is running.
+   *
+   * Kept off the bar: the bar takes a row of height from the panes, and appearing every few
+   * minutes it moved the rows under the pointer of somebody about to click one. The status bar
+   * says it instead, and stops it on a click.
+   */
+  readonly quietly = $derived(this.running.find((t) => t.quiet === true) ?? null);
 
   /**
    * True once git has said something countable.
@@ -73,7 +85,15 @@ export class TransferState {
 
   /** Asks the engine to stop the one on the bar. */
   async cancel(): Promise<void> {
-    const t = this.current;
+    await this.#stop(this.current);
+  }
+
+  /** Asks the engine to stop the fetch the window started on its own. */
+  async cancelQuiet(): Promise<void> {
+    await this.#stop(this.quietly);
+  }
+
+  async #stop(t: TransferReport | null): Promise<void> {
     if (t === null || this.stopping.includes(t.key)) return;
     this.stopping = [...this.stopping, t.key];
     try {

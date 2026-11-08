@@ -15,6 +15,17 @@ pub struct Remote {
     pub push_url: String,
 }
 
+/// How much more of a shallow clone's history to fetch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "types.ts"))]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Deepen {
+    /// This many more commits behind each shallow boundary.
+    By { commits: u32 },
+    /// Everything, so the clone is no longer shallow.
+    All,
+}
+
 /// One phase of a transfer, as git reports it on stderr.
 ///
 /// Not exported to `types.ts`: the window never sees a transfer phase, and this shares a name
@@ -297,16 +308,54 @@ impl RepoLocation {
         runner: &GitRunner,
         remote: Option<&str>,
         prune: bool,
+        on_progress: F,
+    ) -> Result<(), CoralError>
+    where
+        F: FnMut(Progress),
+    {
+        let extra: &[&str] = if prune { &["--prune"] } else { &[] };
+        self.fetch_with(runner, remote, extra, on_progress).await
+    }
+
+    /// Fetches more of the history a shallow clone left out.
+    ///
+    /// Moves no ref: what changes is `shallow`, the list of commits whose parents were not
+    /// fetched, and the commits behind them. Only the branches the clone already fetches get
+    /// deeper; a single-branch clone stays single-branch, which was a choice made at cloning.
+    ///
+    /// # Errors
+    /// Propagates git failures, including asking a clone that is not shallow to unshallow.
+    pub async fn deepen<F>(
+        &self,
+        runner: &GitRunner,
+        remote: Option<&str>,
+        how: Deepen,
+        on_progress: F,
+    ) -> Result<(), CoralError>
+    where
+        F: FnMut(Progress),
+    {
+        let flag = match how {
+            Deepen::By { commits } => format!("--deepen={commits}"),
+            Deepen::All => "--unshallow".to_owned(),
+        };
+        self.fetch_with(runner, remote, &[flag.as_str()], on_progress)
+            .await
+    }
+
+    async fn fetch_with<F>(
+        &self,
+        runner: &GitRunner,
+        remote: Option<&str>,
+        extra: &[&str],
         mut on_progress: F,
     ) -> Result<(), CoralError>
     where
         F: FnMut(Progress),
     {
-        let mut cmd =
-            GitCommand::network("fetch", self.display_path()).args(["fetch", "--progress"]);
-        if prune {
-            cmd = cmd.arg("--prune");
-        }
+        let mut cmd = GitCommand::network("fetch", self.display_path())
+            .args(["fetch", "--progress"])
+            .args(extra);
         cmd = match remote {
             Some(name) => cmd.arg(name),
             None => cmd.arg("--all"),

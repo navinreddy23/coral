@@ -122,6 +122,37 @@ pub async fn edited(
     })
 }
 
+/// Writes `paths` into the working tree as a commit or a stash entry has them.
+///
+/// # Errors
+/// [`CoralError::NotARepository`], or any git failure, including an unknown revision.
+pub async fn take(
+    path: &Path,
+    rev: Option<&str>,
+    stash: Option<usize>,
+    paths: &[String],
+) -> Result<Staged, CoralError> {
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, path).await?;
+    for file in paths {
+        let source = match (stash, rev) {
+            (Some(index), _) => loc.stash_source(&runner, index, file).await?,
+            (None, Some(rev)) => rev.to_owned(),
+            (None, None) => {
+                return Err(CoralError::Refused {
+                    label: "take files",
+                    detail: "name a commit or a stash to take them from".to_owned(),
+                });
+            }
+        };
+        loc.restore_from(&runner, &source, &[file.as_str()]).await?;
+    }
+    Ok(Staged {
+        paths: paths.to_vec(),
+        direction: "taken",
+    })
+}
+
 /// Throws away worktree changes.
 ///
 /// # Errors

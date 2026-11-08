@@ -95,6 +95,16 @@ because a bar at nought per cent claims progress it has no basis for, and that i
 state a host which never answers stays in. Stop is offered from the first moment for the same
 reason.
 
+A fetch the window starts on its own is left off the strip, which takes its height from the panes:
+every row moving down a line and back again every ten minutes put the graph under the pointer of
+somebody about to click it. The status bar says "Fetching…" instead, and a click on it stops the
+fetch. It fetches the repository in front of you while the window has focus, every ten minutes by
+default: Never, 5, 10 or 30 under Preferences → General, and a repository can ask for its own
+interval or for none under Repository (`coral.autoFetch`). It is not added to undo, it holds
+nothing a click would wait on, a user's own action that starts meanwhile waits for it rather than
+racing it, and it says nothing unless it fails — once, on the status line, until a fetch gets
+through.
+
 ## Toolbar
 
 Forty pixels, left-aligned, and icons alone. Undo and Redo, disabled when the journal is empty;
@@ -158,13 +168,18 @@ reason and the two ways out of it, pulling and rebasing or forcing. Forcing alwa
 and is always `--force-with-lease`, so it refuses when the remote has moved since Coral last
 fetched and cannot overwrite a change it has not seen.
 
-Context menus — local branch: checkout, rename, delete, push, pull, set upstream, merge into
-current, rebase current onto, create PR/MR, hide, solo, copy name. Remote branch: checkout
+Context menus — local branch: checkout, rename, delete, push, pull, set upstream, stop tracking
+it, merge into current, rebase current onto, compare with another ref, create PR/MR, hide, solo,
+copy name, and "Clean up branches…": a sheet of the branches merged into the current one, ticked,
+and of those whose upstream is gone but which are not merged, unticked under a warning, deleted
+together as one step that one undo restores (main, master, develop and trunk are never
+offered). Remote branch: checkout
 (creating a tracking local), delete from remote, merge, rebase, create PR/MR. Remote: fetch,
 push the current branch to it, edit, remove, prune, open on web. Pushing to a remote that is
 not the upstream names the branch, since git will not work it out for a remote the branch has
-never been to, and leaves the upstream where it was. Tag: checkout, push, delete, copy. Stash: apply, pop, drop,
-view diff.
+never been to, and leaves the upstream where it was. Tag: checkout, push, delete, copy, compare.
+Stash: apply, pop, make a branch from it (where it was taken, with it applied there), drop, view
+diff; a file in it can be taken into the working copy, untracked ones included.
 
 ## Patches
 
@@ -186,7 +201,7 @@ as a dimmed line it turned a screen of commits into a wall of text, and it is a 
 the right panel. No column headers — they named three columns whose contents are a pill, a
 drawing and a sentence, and cost twenty-six pixels of every screen.
 
-Each row's band, from its node across its message, is parted from the next by two pixels of
+Each row's band, from its node across its message, is parted from the next by four pixels of
 page, as GitKraken draws it, so a run of commits on one lane reads as a stack of rows rather
 than one block of colour. The gap is painted at the head and foot of the band rather than taken
 out of the row, so the band stays centred on its node and the lane lines run through it.
@@ -216,8 +231,10 @@ same three numbers reach the stylesheet and the canvas metrics, which cannot rea
 - Drag and drop: local pill onto local pill opens merge / rebase / create PR; local onto remote
   pushes; remote onto local pulls. Drop targets highlight.
 - Right-click a commit: checkout, create branch here, create tag here, cherry-pick, revert,
-  reset current branch to here (soft/mixed/hard), rebase current onto, merge into current, copy
-  SHA, view details, hide/solo this branch.
+  reset current branch to here (soft/mixed/hard), rebase current onto, merge into current,
+  compare with working tree, copy SHA, copy its link or open it on the host, view details,
+  hide/solo this branch. A file in its list can be taken into the working copy as of the commit
+  or as it was before it, unstaged, asking first when that replaces changes of your own.
 - Hide/solo removes hidden tips from the walk or walks only that tip; state persists per repo.
 - Keyboard: ↑↓ moves selection, Enter opens details, `/` focuses the filter, Esc clears.
 
@@ -230,11 +247,20 @@ at its own split, and grows with it once the divider is dragged. Under it the av
 tree/flat toggle and a path filter, and `+ - ~` counts. Clicking a file opens the diff in the
 centre with a breadcrumb back to the graph.
 
+**Comparing** — a second commit Ctrl-clicked compares the two. From a commit's menu, "Compare
+with working tree" compares it with what is on disk, staged or not (untracked files are not part
+of it, and the panel says so). From a branch or tag's menu, "Compare <ref> with…" opens the
+palette to choose the other ref; it measures from where the two parted, shows that commit, and
+offers the tips instead and a Swap. Either way the panel names both ends, lists the files that
+differ, and opens each one's diff between the same two; "Done comparing" leaves.
+
 **Staging panel** (WIP selected) — "Unstaged Files" with "Stage all files", "Staged Files" with
 "Unstage all files", each row with hover buttons to stage/unstage and to discard with
 confirmation; a conflicted files section during operations. Below: summary input with character
 count, description textarea, an amend checkbox that fills the message in from the commit it
-would replace and takes it back if it is unticked untouched, and "Commit changes to N files"
+would replace and takes it back if it is unticked untouched, a "Sign off" checkbox the repository
+remembers (`coral.signOff`), co-authors as chips — typed as `Name <email>` or picked from who has
+written here lately — each a `Co-authored-by` trailer, and "Commit changes to N files"
 (Ctrl/Cmd+Enter).
 During an operation the button becomes "Commit and merge" / "Continue rebase" with an Abort
 link.
@@ -293,6 +319,9 @@ different and nobody wants to reason about both at once. Everything is the defau
 history only is `--depth` on a single branch, which the graph walker grafts at its boundary.
 History now, file contents on demand is `--filter=blob:none`: every commit and every tree
 arrive, the graph is complete, and reading an old file needs the network.
+
+A shallow clone says so in the status bar, beside its commit count. The chip offers to fetch a
+hundred more commits of history or all of it, and the palette has both.
 
 ## Signing in to a host
 

@@ -564,3 +564,53 @@ describe('in another language', () => {
     }
   });
 });
+
+describe('signing off and naming co-authors', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    invoke.mockReset();
+    invoke.mockImplementation(async (cmd: string) =>
+      cmd === 'recent_authors'
+        ? [{ name: 'Grace Hopper', email: 'grace@fixture.invalid', commits: 3 }]
+        : status(),
+    );
+  });
+
+  it('reports the sign-off box to the window, which remembers it for the repository', async () => {
+    const onSignOff = vi.fn();
+    const { container } = await panel({ signsOff: true, onSignOff });
+    const box = [...container.querySelectorAll('label')]
+      .find((l) => l.textContent?.includes('Sign off'))
+      ?.querySelector('input') as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    await fireEvent.click(box);
+    expect(onSignOff).toHaveBeenCalledWith(false);
+  });
+
+  it('adds co-authors as chips, offers who has written here, and takes them away again', async () => {
+    const onWantPeople = vi.fn();
+    const { container, commit } = await panel({ onWantPeople });
+    const field = container.querySelector('input.who') as HTMLInputElement;
+    await fireEvent.focus(field);
+    expect(onWantPeople).toHaveBeenCalled();
+    await commit.loadPeople('/repo');
+    await tick();
+    expect([...container.querySelectorAll('#coral-people option')].map((o) => o.getAttribute('value'))).toEqual([
+      'Grace Hopper <grace@fixture.invalid>',
+    ]);
+
+    await fireEvent.input(field, { target: { value: 'grace@fixture.invalid' } });
+    await fireEvent.keyDown(field, { key: 'Enter' });
+    const chip = await waitFor(() => {
+      const found = container.querySelector('.coauthors .chip');
+      if (!found) throw new Error('no chip');
+      return found as HTMLElement;
+    });
+    expect(chip.textContent?.trim()).toBe('Grace Hopper');
+    expect(chip.title).toBe('Grace Hopper <grace@fixture.invalid>');
+    expect(field.value).toBe('');
+
+    await fireEvent.click(chip.querySelector('button') as HTMLElement);
+    expect(container.querySelector('.coauthors .chip')).toBeNull();
+  });
+});

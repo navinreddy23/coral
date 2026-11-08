@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, render, waitFor } from '@testing-library/svelte';
 import { fireEvent } from '@testing-library/dom';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 vi.mock('../../src/ipc/invoke', () => ({ invoke: vi.fn(), isPreview: () => false }));
@@ -19,6 +19,7 @@ import { ToolsState } from '../../src/state/tools.svelte';
 import { ThemeState } from '../../src/state/theme.svelte';
 import { ViewsState } from '../../src/state/views.svelte';
 import { UpdateState } from '../../src/state/update.svelte';
+import { AutoFetchState } from '../../src/state/autofetch.svelte';
 
 afterEach(cleanup);
 
@@ -29,6 +30,7 @@ function prefs(over: Record<string, unknown> = {}) {
     ...render(Preferences, {
       props: {
         updates: new UpdateState(),
+        autoFetch: new AutoFetchState(),
         signing: new SigningState(),
         ssh: new SshState(),
     repoConfig: new RepoConfigState(),
@@ -114,6 +116,8 @@ describe('the Repository pane', () => {
       caches: { untrackedCache: false, fsmonitor: false, fsmonitorSupported: false },
       sparse: { enabled: false, cone: true, folders: [] },
       tracker: null,
+      autoFetch: null,
+      signsOff: false,
     };
     const set = vi.spyOn(repoConfig, 'setRerere').mockResolvedValue();
     const { container } = prefs({ repoConfig, pane: 'repository' });
@@ -140,6 +144,8 @@ describe('the Repository pane', () => {
       caches: { untrackedCache: false, fsmonitor: false, fsmonitorSupported: false },
       sparse: { enabled: false, cone: true, folders: [] },
       tracker: null,
+      autoFetch: null,
+      signsOff: false,
     };
     const untracked = vi.spyOn(repoConfig, 'setUntrackedCache').mockResolvedValue();
     const { container } = prefs({ repoConfig, pane: 'repository' });
@@ -160,6 +166,8 @@ describe('the Repository pane', () => {
       caches: { untrackedCache: false, fsmonitor: false, fsmonitorSupported: false },
       sparse: { enabled: true, cone: true, folders: ['drivers/gpu', 'kernel'] },
       tracker: null,
+      autoFetch: null,
+      signsOff: false,
     };
     const off = vi.spyOn(repoConfig, 'disableSparse').mockResolvedValue();
     const { container } = prefs({ repoConfig, pane: 'repository' });
@@ -250,5 +258,50 @@ describe('drafting with Claude, in Experimental', () => {
     expect((container.querySelector('#assist-model') as HTMLInputElement).placeholder).toBe(
       'claude-opus-5-5',
     );
+  });
+});
+
+describe('fetching on a timer', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('chooses the window’s interval under General and keeps it', async () => {
+    const autoFetch = new AutoFetchState();
+    const { container } = prefs({ autoFetch, pane: 'general' });
+    expect(container.querySelector('.page h2')?.textContent).toBe('General');
+    const select = container.querySelector('.page select') as HTMLSelectElement;
+    expect(select.value).toBe('10');
+    expect([...select.options].map((o) => o.textContent)).toEqual([
+      'Never',
+      'Every 5 minutes',
+      'Every 10 minutes',
+      'Every 30 minutes',
+    ]);
+    await fireEvent.change(select, { target: { value: '30' } });
+    expect(autoFetch.minutes).toBe(30);
+    expect(localStorage.getItem('coral.autoFetch')).toBe('30');
+  });
+
+  it('lets one repository ask for its own, and hand it back', async () => {
+    const repoConfig = new RepoConfigState();
+    repoConfig.config = {
+      rerere: false,
+      caches: { untrackedCache: false, fsmonitor: false, fsmonitorSupported: false },
+      sparse: { enabled: false, cone: true, folders: [] },
+      tracker: null,
+      autoFetch: { kind: 'every', minutes: 1 },
+      signsOff: false,
+    };
+    const set = vi.spyOn(repoConfig, 'setAutoFetch').mockResolvedValue();
+    const { container } = prefs({ repoConfig, pane: 'repository' });
+    const select = container.querySelector('#auto-fetch') as HTMLSelectElement;
+    expect(select.value).toBe('1');
+    expect(select.options[0]?.textContent).toBe('As under General: every 10 minutes');
+
+    await fireEvent.change(select, { target: { value: 'off' } });
+    expect(set).toHaveBeenLastCalledWith({ kind: 'off' });
+    await fireEvent.change(select, { target: { value: 'window' } });
+    expect(set).toHaveBeenLastCalledWith(null);
+    await fireEvent.change(select, { target: { value: '60' } });
+    expect(set).toHaveBeenLastCalledWith({ kind: 'every', minutes: 60 });
   });
 });

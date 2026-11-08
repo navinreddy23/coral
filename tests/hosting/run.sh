@@ -104,7 +104,12 @@ printf '{"tabs":[{"id":1,"path":"%s","group":null}],"groups":[],"active":1,"next
 printf '{"bitbucket.localhost":"bitbucket","azure.localhost":"azure"}' \
     > "$home/.config/dev.coral.app/hosts.json"
 printf '#!/bin/sh\nexit 255\n' > "$work/bin/ssh"
-chmod +x "$work/bin/ssh"
+# A link the window opens is written down rather than handed to the desktop's browser, which
+# would open it on the user's own screen, outside the private display.
+mkdir -p "$out/$provider"
+: > "$out/$provider/opened.log"
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s"\n' "$out/$provider/opened.log" > "$work/bin/xdg-open"
+chmod +x "$work/bin/ssh" "$work/bin/xdg-open"
 
 n=91
 while [ -e "/tmp/.X11-unix/X$n" ]; do n=$((n + 1)); done

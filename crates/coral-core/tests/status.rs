@@ -263,3 +263,35 @@ async fn an_issue_tracker_needs_a_place_for_the_key_and_can_be_taken_away() {
     loc.set_tracker(&runner, None).await.unwrap();
     assert_eq!(loc.tracker(&runner).await.unwrap(), None);
 }
+
+#[tokio::test]
+async fn a_repository_can_set_its_own_fetch_interval_and_give_it_back() {
+    use coral_core::autofetch::AutoFetch;
+
+    let repo = TestRepo::new().write("a.txt", "a\n").commit("base");
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+    assert_eq!(loc.auto_fetch(&runner).await.unwrap(), None);
+
+    let e = loc
+        .set_auto_fetch(&runner, Some(AutoFetch::Every { minutes: 0 }))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), "refused");
+
+    loc.set_auto_fetch(&runner, Some(AutoFetch::Every { minutes: 2 }))
+        .await
+        .unwrap();
+    assert_eq!(
+        loc.auto_fetch(&runner).await.unwrap(),
+        Some(AutoFetch::Every { minutes: 2 })
+    );
+    assert_eq!(repo.git(["config", "coral.autoFetch"]).trim(), "2");
+
+    loc.set_auto_fetch(&runner, Some(AutoFetch::Off))
+        .await
+        .unwrap();
+    assert_eq!(loc.auto_fetch(&runner).await.unwrap(), Some(AutoFetch::Off));
+    loc.set_auto_fetch(&runner, None).await.unwrap();
+    assert_eq!(loc.auto_fetch(&runner).await.unwrap(), None);
+}

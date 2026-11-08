@@ -20,7 +20,7 @@ const STYLES = componentStyles();
 /** Components that float free of the page, and may therefore cast a shadow. */
 const OVERLAYS = new Set([
   'Menu.svelte', 'Ask.svelte', 'FolderPicker.svelte', 'Palette.svelte', 'Toasts.svelte', 'HostAccount.svelte',
-  'RebasePicker.svelte', 'Shortcuts.svelte', 'TabBar.svelte', 'DiffView.svelte',
+  'RebasePicker.svelte', 'Shortcuts.svelte', 'TabBar.svelte', 'DiffView.svelte', 'Cleanup.svelte',
 ]);
 
 /** Literal colours that are correct and say so where they are written. */

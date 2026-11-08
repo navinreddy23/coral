@@ -468,3 +468,49 @@ describe('what a message refers to', () => {
     expect(container.querySelector('.mentions .num')?.textContent).toBe('PROJ-7');
   });
 });
+
+describe('the commit on its host', () => {
+  it('offers the host’s page beside the object id only when there is a host', async () => {
+    const opened: string[] = [];
+    const without = render(Details, { props: { ...props, detail: detail(), host: null } });
+    expect(without.container.querySelector('button[title^="Open on"]')).toBeNull();
+    without.unmount();
+
+    const d = detail();
+    const { container } = render(Details, {
+      props: {
+        ...props,
+        detail: d,
+        host: { kind: 'gitlab', origin: 'https://gitlab.com', owner: 'g', repo: 'p' },
+        onOpenOnHost: (oid: string) => opened.push(oid),
+      },
+    });
+    const button = container.querySelector('button[title="Open on GitLab"]') as HTMLElement;
+    expect(button).not.toBeNull();
+    await fireEvent.click(button);
+    expect(opened).toEqual([d.commit.oid]);
+  });
+});
+
+describe('a comparison being read', () => {
+  it('keeps saying which two it is, and does not claim nothing differs', () => {
+    const { container } = render(Details, {
+      props: {
+        ...props,
+        detail: null,
+        loading: true,
+        compare: {
+          from: 'a'.repeat(40),
+          to: 'b'.repeat(40),
+          files: [],
+          title: 'v6.0 against master',
+          fromName: 'v6.0',
+          toName: 'master',
+        },
+      },
+    });
+    expect(container.textContent).toContain('v6.0 against master');
+    expect(container.textContent).toContain('Reading what differs…');
+    expect(container.textContent).not.toContain('0 files differ');
+  });
+});

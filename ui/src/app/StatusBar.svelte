@@ -21,6 +21,10 @@
     onPlace = () => undefined,
     update = null,
     onUpdate = () => {},
+    shallow = false,
+    onShallow = () => undefined,
+    fetching = false,
+    onStopFetching = () => undefined,
   }: {
     branch: string | null;
     /** The ref for the current branch, for its ahead and behind counts. */
@@ -42,6 +46,13 @@
     update?: string | null;
     /** Opens About, where it can be installed. */
     onUpdate?: () => void;
+    /** A shallow clone, whose history stops short of its first commit. */
+    shallow?: boolean;
+    /** Offers to fetch more of that history. */
+    onShallow?: (event: MouseEvent) => void;
+    /** A fetch the window started on its own is running. */
+    fetching?: boolean;
+    onStopFetching?: () => void;
   } = $props();
 
   /** Exact counts stop being useful past a point; the reference caps them at 99+. */
@@ -105,9 +116,23 @@
       {host.unplaced}<span class="muted">{t('status.whatIsThis')}</span>
     </button>
   {/if}
+  {#if fetching}
+    <!-- Here rather than on the strip above the panes, which would push every row down a
+         line while it ran and back up when it finished. Still a way out, as every transfer is. -->
+    <button class="host fetching" onclick={onStopFetching} title="Fetching in the background. Click to stop it">
+      <span class="glyph"><Icon name="fetch" size={12} /></span>Fetching…
+    </button>
+  {/if}
   {#if commits > 0}
     <!-- A repository with one commit in it has one commit in it. -->
     <span class="count">{t('status.commits', { n: commits.toLocaleString() })}</span>
+  {/if}
+  {#if shallow}
+    <!-- The count above is of the commits fetched, which in a shallow clone is not all of
+         them; saying so is the way in to fetching the rest. -->
+    <button class="host" onclick={onShallow} title="History stops short here. Fetch more of it">
+      shallow clone
+    </button>
   {/if}
   <span class="muted">git {gitVersion}</span>
 

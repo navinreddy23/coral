@@ -4,11 +4,14 @@ import {
   repoSetFsmonitor,
   repoSetSparse,
   repoSetTracker,
+  repoSetAutoFetch,
+  repoSetSignsOff,
   repoSetRerere,
   repoSetUntrackedCache,
   type RepoConfig,
 } from '../ipc/commands';
 import { messageOf } from '../ipc/error';
+import type { AutoFetch } from '../ipc/types';
 
 /**
  * The open repository's own git switches, as the Repository pane shows them.
@@ -51,6 +54,14 @@ export class RepoConfigState {
 
   async setTracker(url: string): Promise<void> {
     await this.#change(() => repoSetTracker(this.#path, url.trim() === '' ? null : url.trim()));
+  }
+
+  async setSignsOff(on: boolean): Promise<void> {
+    await this.#change(() => repoSetSignsOff(this.#path, on));
+  }
+
+  async setAutoFetch(to: AutoFetch | null): Promise<void> {
+    await this.#change(() => repoSetAutoFetch(this.#path, to));
   }
 
   async disableSparse(): Promise<void> {

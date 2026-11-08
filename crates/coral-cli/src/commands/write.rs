@@ -418,6 +418,21 @@ pub async fn tag_delete(path: &Path, name: String) -> Result<Done, CoralError> {
     })
 }
 
+/// Stops a branch following an upstream. Configuration rather than history, so not
+/// journaled, as the window does not journal it either.
+///
+/// # Errors
+/// Propagates git failures, including a branch with no upstream to stop.
+pub async fn unset_upstream(path: &Path, branch: &str) -> Result<Done, CoralError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc = coral_core::repo::RepoLocation::discover(&runner, path).await?;
+    loc.unset_upstream(&runner, branch).await?;
+    Ok(Done {
+        what: format!("{branch} follows nothing now"),
+        oid: None,
+    })
+}
+
 /// What to do with the stash.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
 pub enum StashAction {
@@ -425,6 +440,8 @@ pub enum StashAction {
     Apply,
     Pop,
     Drop,
+    /// Make a branch where the entry was taken and apply it there.
+    Branch,
 }
 
 /// Pushes, applies, pops or drops a stash entry.
@@ -438,6 +455,7 @@ pub async fn stash(
     index: usize,
     message: Option<String>,
     include_untracked: bool,
+    name: Option<String>,
 ) -> Result<OpOutcome, CoralError> {
     let label = format!("stash {action:?}").to_lowercase();
     journaled(path, &label, |r, l| async move {
@@ -452,6 +470,13 @@ pub async fn stash(
             StashAction::Drop => {
                 l.stash_drop(&r, index).await?;
                 l.op_outcome(&r, String::new()).await
+            }
+            StashAction::Branch => {
+                let name = name.ok_or_else(|| CoralError::Refused {
+                    label: "make a branch from a stash",
+                    detail: "it needs --name".to_owned(),
+                })?;
+                l.stash_branch(&r, &name, index).await
             }
             StashAction::Apply => l.stash_apply(&r, index, false).await,
             StashAction::Pop => l.stash_apply(&r, index, true).await,

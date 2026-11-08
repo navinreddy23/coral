@@ -325,6 +325,28 @@ impl crate::repo::RepoLocation {
         Ok(parse_name_status(&out.stdout))
     }
 
+    /// The tracked files that differ between `rev` and the working tree, staged or not.
+    ///
+    /// Untracked files are not among them: a diff against a commit sees only what git tracks,
+    /// and a file nobody has added is not a change to anything `rev` holds.
+    ///
+    /// # Errors
+    /// Propagates git failures, including an unknown revision.
+    pub async fn changed_since(
+        &self,
+        runner: &crate::process::GitRunner,
+        rev: &str,
+    ) -> Result<Vec<ChangedFile>, crate::error::CoralError> {
+        let out = runner
+            .output(
+                crate::process::GitCommand::status("diff", self.display_path())
+                    .args(["diff", "-z", "--name-status", "-M", "--end-of-options"])
+                    .arg(rev),
+            )
+            .await?;
+        Ok(parse_name_status(&out.stdout))
+    }
+
     /// The files one commit changed, against its first parent.
     ///
     /// Without a merge flag a merge commit reports no files at all. `--diff-merges=first-parent`

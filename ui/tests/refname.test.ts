@@ -13,6 +13,7 @@ function ref(short: string, over: Partial<PlacedRef> = {}): PlacedRef {
     upstream: null,
     ahead: 0,
     behind: 0,
+    gone: false,
     row: 0,
     ...over,
   };

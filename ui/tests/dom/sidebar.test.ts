@@ -31,6 +31,7 @@ function ref(short: string, row: number | null = 0): PlacedRef {
     upstream: null,
     ahead: 0,
     behind: 0,
+    gone: false,
     row,
   };
 }

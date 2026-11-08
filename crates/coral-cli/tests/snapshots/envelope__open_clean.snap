@@ -16,6 +16,7 @@ expression: out.json
       "name": "main"
     },
     "state": "clean",
-    "commitGraph": false
+    "commitGraph": false,
+    "shallow": false
   }
 }

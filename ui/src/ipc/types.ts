@@ -11,6 +11,11 @@
 export type Ancestry = "same" | "behind" | "ahead" | "diverged";
 
 /**
+ * What this repository asks for instead of the window's own interval.
+ */
+export type AutoFetch = { "kind": "off" } | { "kind": "every", minutes: number, };
+
+/**
  * Where a bisection has got to.
  */
 export type Bisection = { terms: Terms, 
@@ -170,6 +175,11 @@ deleteModify: boolean,
 recorded: boolean, };
 
 /**
+ * How much more of a shallow clone's history to fetch.
+ */
+export type Deepen = { "kind": "by", commits: number, } | { "kind": "all" };
+
+/**
  * The tools git would start, by the names git has for them, or `None` where none is set.
  */
 export type ExternalTools = { diff: string | null, merge: string | null, };
@@ -226,7 +236,12 @@ target: string,
 /**
  * The commit an annotated tag ultimately points at. `None` for everything else.
  */
-peeled: string | null, upstream: string | null, ahead: number, behind: number, };
+peeled: string | null, upstream: string | null, ahead: number, behind: number, 
+/**
+ * Its upstream was deleted on the remote and pruned here: `[gone]` to git. The branch
+ * follows nothing any more, which is what makes it worth asking about.
+ */
+gone: boolean, };
 
 /**
  * Where HEAD points.
@@ -360,6 +375,15 @@ applying: boolean,
 prepared: string | null, };
 
 /**
+ * Somebody who wrote commits here, as `.mailmap` names them.
+ */
+export type Person = { name: string, email: string, 
+/**
+ * How many of the recent commits are theirs, which is the order they are offered in.
+ */
+commits: number, };
+
+/**
  * How far through a multi-step operation git has got.
  */
 export type Progress = { current: number, total: number, };
@@ -448,7 +472,11 @@ export type RepoInfo = { path: string, gitDir: string, commonDir: string, isBare
  * Whether a commit-graph is present. Its absence is the single biggest predictor of a
  * slow first paint on a large repository.
  */
-commitGraph: boolean, };
+commitGraph: boolean, 
+/**
+ * A shallow clone: some commits' parents were never fetched, so history stops short.
+ */
+shallow: boolean, };
 
 /**
  * What the two sides of a conflict should be called in the interface.

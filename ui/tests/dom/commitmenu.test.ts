@@ -26,6 +26,8 @@ const frameOids = (() => {
 })();
 
 const invoke = vi.hoisted(() => vi.fn());
+const openUrl = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 vi.mock('../../src/ipc/invoke', () => ({ invoke, isPreview: () => false }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => undefined }));
@@ -193,11 +195,13 @@ function on(
     name: kind.kind === 'tag' ? `refs/tags/${short}` : `refs/heads/${short}`,
     short,
     kind,
-    target: 'a'.repeat(40),
+    // The commit actually on its row: a label is drawn only where its commit is.
+    target: frameOids[over.row ?? 0] ?? 'a'.repeat(40),
     peeled: null,
     upstream: null,
     ahead: 0,
     behind: 0,
+    gone: false,
     row: 0,
     ...over,
   };
@@ -233,6 +237,109 @@ describe('the commit menu', () => {
     }
     // The reset submenu names the branch it would move.
     expect(labels.some((l) => l.startsWith('Reset master to'))).toBe(true);
+  });
+
+  it('opens the commit on its host only when there is a host to open it on', async () => {
+    const { container } = await shell();
+    expect(await openMenu(container)).not.toContain('Open on GitHub');
+  });
+
+  it('opens the commit’s own page on the host', async () => {
+    const url = `https://github.com/ada/notes/commit/${frameOids[0]}`;
+    const { container } = await shell({
+      hosting_status: {
+        host: { kind: 'github', origin: 'https://github.com', owner: 'ada', repo: 'notes' },
+        detail: null,
+        token: 'shared',
+      },
+      commit_url: url,
+    });
+    await waitFor(async () => {
+      const labels = await openMenu(container);
+      if (!labels.includes('Open on GitHub')) throw new Error('no host yet');
+    });
+    openUrl.mockClear();
+    await fireEvent.click(itemNamed(container, 'Open on GitHub'));
+    await waitFor(() => expect(openUrl).toHaveBeenCalledWith(url));
+    const asked = invoke.mock.calls.find(([cmd]) => cmd === 'commit_url');
+    expect(asked?.[1]).toMatchObject({ oid: frameOids[0] });
+  });
+
+  it('fetches more of a shallow clone’s history from the status bar, then walks again', async () => {
+    const shallow = {
+      path: REPO,
+      gitDir: `${REPO}/.git`,
+      gitVersion: '2.43.0',
+      head: { kind: 'branch', name: 'master' },
+      state: 'clean',
+      commitGraph: true,
+      shallow: true,
+    };
+    const { container } = await shell({ open_repo: shallow });
+    const chip = await waitFor(() => {
+      const found = [...container.querySelectorAll('footer button')].find(
+        (b) => b.textContent?.trim() === 'shallow clone',
+      );
+      if (!found) throw new Error('no chip');
+      return found as HTMLElement;
+    });
+    const walksBefore = invoke.mock.calls.filter(([cmd]) => cmd === 'graph_frame').length;
+    await fireEvent.click(chip);
+    await fireEvent.click(itemNamed(container, 'Fetch 100 more commits of history'));
+    await waitFor(() => {
+      expect(lastAction()).toEqual({
+        kind: 'deepen',
+        remote: null,
+        how: { kind: 'by', commits: 100 },
+      });
+    });
+    // No ref moved, and the walk is longer: it has to be done again all the same.
+    await waitFor(() => {
+      const walks = invoke.mock.calls.filter(([cmd]) => cmd === 'graph_frame').length;
+      expect(walks).toBeGreaterThan(walksBefore);
+    });
+  });
+
+  it('says nothing about history for a clone that has all of it', async () => {
+    const { container } = await shell();
+    expect(container.querySelector('footer')?.textContent).not.toContain('shallow clone');
+  });
+
+  it('compares a commit with the working tree and reads its files against it', async () => {
+    const { container } = await shell({
+      changed_since: [{ path: 'a.c', oldPath: null, change: 'modified' }],
+      since_file_diff: null,
+    });
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Compare with working tree'));
+    await waitFor(() => {
+      expect(container.textContent).toContain('against the working tree');
+    });
+    expect(invoke.mock.calls.find(([cmd]) => cmd === 'changed_since')?.[1]).toMatchObject({
+      rev: frameOids[0],
+    });
+    expect(container.textContent).toContain('Untracked files are not compared.');
+
+    await fireEvent.click(await waitFor(() => {
+      const found = [...container.querySelectorAll('.files .file')].find((e) =>
+        e.textContent?.includes('a.c'),
+      );
+      if (!found) throw new Error('no file yet');
+      return found as HTMLElement;
+    }));
+    await waitFor(() => {
+      expect(invoke.mock.calls.find(([cmd]) => cmd === 'since_file_diff')?.[1]).toMatchObject({
+        rev: frameOids[0],
+        file: 'a.c',
+      });
+    });
+
+    await fireEvent.click(
+      [...container.querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === 'Done comparing',
+      ) as HTMLElement,
+    );
+    expect(container.textContent).not.toContain('against the working tree');
   });
 
   it('fixes a commit up with what is staged, and offers to fold it in', async () => {
@@ -622,11 +729,12 @@ describe('the branch and tag menu', () => {
       name: kind.kind === 'tag' ? `refs/tags/${short}` : `refs/heads/${short}`,
       short,
       kind,
-      target: 'a'.repeat(40),
+      target: frameOids[0] ?? 'a'.repeat(40),
       peeled: null,
       upstream: null,
       ahead: 0,
       behind: 0,
+      gone: false,
       row: 0,
     };
   }
@@ -670,6 +778,155 @@ describe('the branch and tag menu', () => {
 
     await fireEvent.click(itemNamed(container, 'Checkout v1.2.0'));
     expect(lastAction()).toEqual({ kind: 'checkout', rev: 'v1.2.0' });
+  });
+
+  it('stops a branch tracking its upstream, and says when that upstream is gone', async () => {
+    const { container } = await shell(
+      {
+        repo_refs: [{ ...on('topic', { kind: 'local_branch' }), upstream: 'origin/topic', gone: true }],
+        branch_unset_upstream: null,
+      },
+      true,
+    );
+    const labels = await refMenu(container, 'topic');
+    expect(labels).toContain('Stop tracking origin/topic');
+    await fireEvent.click(itemNamed(container, 'Stop tracking origin/topic'));
+    await waitFor(() => {
+      expect(invoke.mock.calls.find(([cmd]) => cmd === 'branch_unset_upstream')?.[1]).toMatchObject({
+        branch: 'topic',
+      });
+    });
+  });
+
+  it('cleans up merged branches at once, leaving a gone but unmerged one for the user to tick', async () => {
+    const { container } = await shell(
+      {
+        repo_refs: [
+          on('old-one', { kind: 'local_branch' }),
+          { ...on('spike', { kind: 'local_branch' }), upstream: 'origin/spike', gone: true },
+        ],
+        branches_merged: ['old-one'],
+      },
+      true,
+    );
+    await refMenu(container, 'old-one');
+    await fireEvent.click(itemNamed(container, 'Clean up branches…'));
+    const sheet = await waitFor(() => {
+      const found = container.querySelector('[aria-labelledby="cleanup-title"]');
+      if (!found) throw new Error('no sheet');
+      return found as HTMLElement;
+    });
+    expect(invoke.mock.calls.find(([cmd]) => cmd === 'branches_merged')?.[1]).toMatchObject({
+      into: 'master',
+    });
+    const box = (name: string) =>
+      [...sheet.querySelectorAll('label')].find((l) => l.textContent?.includes(name))
+        ?.querySelector('input') as HTMLInputElement;
+    expect(box('old-one').checked).toBe(true);
+    expect(box('spike').checked).toBe(false);
+    const go = () =>
+      [...sheet.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Delete')) as HTMLButtonElement;
+    expect(go().textContent?.trim()).toBe('Delete 1 branch');
+
+    await fireEvent.click(box('spike'));
+    expect(go().textContent?.trim()).toBe('Delete 2 branches');
+    await fireEvent.click(go());
+    await waitFor(() => {
+      expect(lastAction()).toEqual({ kind: 'branchDeleteMany', merged: ['old-one'], unmerged: ['spike'] });
+    });
+  });
+
+  it('reads the branches and the journal again when a cleanup stops partway', async () => {
+    const { container } = await shell(
+      { repo_refs: [on('old-one', { kind: 'local_branch' })], branches_merged: ['old-one'] },
+      true,
+    );
+    await refMenu(container, 'old-one');
+    await fireEvent.click(itemNamed(container, 'Clean up branches…'));
+    const sheet = await waitFor(() => {
+      const found = container.querySelector('[aria-labelledby="cleanup-title"]');
+      if (!found) throw new Error('no sheet');
+      return found as HTMLElement;
+    });
+    const before = (cmd: string) => invoke.mock.calls.filter(([c]) => c === cmd).length;
+    const refsBefore = before('repo_refs');
+    const journalBefore = before('repo_journal');
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'repo_action') {
+        // eslint-disable-next-line no-throw-literal
+        throw { code: 'git_error', message: "cannot delete branch 'busy' used by worktree", what: 'delete 2 branches' };
+      }
+      const table: Record<string, unknown> = {
+        ...answers(),
+        repo_refs: [],
+        repo_journal: { undo: 'delete 2 branches', redo: null },
+      };
+      if (!(cmd in table)) throw new Error(`unstubbed command ${cmd}`);
+      return table[cmd];
+    });
+    await fireEvent.click(
+      [...sheet.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Delete')) as HTMLElement,
+    );
+    await waitFor(() => {
+      expect(before('repo_refs')).toBeGreaterThan(refsBefore);
+      expect(before('repo_journal')).toBeGreaterThan(journalBefore);
+    });
+  });
+
+  it('compares a branch with another chosen in the palette, from where they parted', async () => {
+    const base = 'b'.repeat(40);
+    const { container } = await shell(
+      {
+        repo_refs: [
+          on('topic', { kind: 'local_branch' }),
+          { ...on('v1.2.0', { kind: 'tag', annotated: false }), target: 'c'.repeat(40) },
+        ],
+        merge_base: base,
+        compare_commits: [{ path: 'lanes.ts', oldPath: null, change: 'modified' }],
+        compare_file_diff: null,
+      },
+      true,
+    );
+    expect(await refMenu(container, 'topic')).toContain('Compare topic with…');
+    await fireEvent.click(itemNamed(container, 'Compare topic with…'));
+
+    const box = await waitFor(() => {
+      const found = container.querySelector('input[aria-label="Command palette"]');
+      if (!found) throw new Error('no palette');
+      return found as HTMLInputElement;
+    });
+    expect(box.placeholder).toBe('Compare topic with…');
+    await fireEvent.input(box, { target: { value: 'v1.2' } });
+    await fireEvent.keyDown(box, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(container.querySelector('#detail-message')?.textContent).toContain('Parted at');
+    });
+    expect(invoke.mock.calls.find(([cmd]) => cmd === 'merge_base')?.[1]).toMatchObject({
+      a: frameOids[0],
+      b: 'c'.repeat(40),
+    });
+    expect(invoke.mock.calls.filter(([cmd]) => cmd === 'compare_commits').at(-1)?.[1]).toMatchObject({
+      from: base,
+      to: 'c'.repeat(40),
+    });
+    expect(container.textContent).toContain('topic against v1.2.0');
+
+    // A file reads across the same two the list was read across.
+    await fireEvent.click(await waitFor(() => {
+      const found = [...container.querySelectorAll('.files .file')].find((e) =>
+        e.textContent?.includes('lanes.ts'),
+      );
+      if (!found) throw new Error('no file yet');
+      return found as HTMLElement;
+    }));
+    await waitFor(() => {
+      expect(invoke.mock.calls.find(([cmd]) => cmd === 'compare_file_diff')?.[1]).toMatchObject({
+        from: base,
+        to: 'c'.repeat(40),
+        file: 'lanes.ts',
+      });
+    });
   });
 
   it('offers to push a tag, since a push sends none of them', async () => {
@@ -1157,7 +1414,6 @@ describe('a remote branch with a local of its own name', () => {
   const diverged = [
     on('origin/topic', { kind: 'remote_branch', remote: 'origin' }, {
       name: 'refs/remotes/origin/topic',
-      target: 'b'.repeat(40),
     }),
     on('topic', { kind: 'local_branch' }, { row: 3, upstream: 'origin/topic', ahead: 2, behind: 1 }),
   ];
@@ -1291,11 +1547,12 @@ describe('double-clicking a pill', () => {
       name: kind.kind === 'tag' ? `refs/tags/${short}` : `refs/heads/${short}`,
       short,
       kind,
-      target: 'a'.repeat(40),
+      target: frameOids[0] ?? 'a'.repeat(40),
       peeled: null,
       upstream: null,
       ahead: 0,
       behind: 0,
+      gone: false,
       row: 0,
     };
   }
@@ -1400,11 +1657,12 @@ describe('what undo and redo say they will do', () => {
       name: kind.kind === 'tag' ? `refs/tags/${short}` : `refs/heads/${short}`,
       short,
       kind,
-      target: 'a'.repeat(40),
+      target: frameOids[0] ?? 'a'.repeat(40),
       peeled: null,
       upstream: null,
       ahead: 0,
       behind: 0,
+      gone: false,
       row: 0,
     };
   }
@@ -1466,6 +1724,48 @@ describe('the menu on a stash row', () => {
     }
   });
 
+  it('makes a branch from a stash, by the name asked for', async () => {
+    const { container } = await shell({ repo_stashes: [stash] });
+    await waitFor(() => {
+      if (!container.textContent?.includes('WIP on main')) throw new Error('no stash yet');
+    });
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Make a branch from it…'));
+    const field = await waitFor(() => {
+      const found = container.querySelector('[role="dialog"] input');
+      if (!found) throw new Error('no name box yet');
+      return found as HTMLInputElement;
+    });
+    await fireEvent.input(field, { target: { value: 'half-done' } });
+    await confirm(container, true);
+    await waitFor(() => {
+      expect(lastAction()).toEqual({ kind: 'stashBranch', name: 'half-done', index: 0 });
+    });
+  });
+
+  it('says what is in the way rather than making half a branch from a stash', async () => {
+    const mine = {
+      path: 'a.txt', origPath: null, index: 'unmodified', worktree: 'modified', conflict: null,
+      score: null, submodule: false, modeChanged: false,
+    };
+    const { container } = await shell({
+      repo_stashes: [stash],
+      repo_status: { entries: [mine], conflicted: [] },
+    });
+    await waitFor(() => {
+      if (!container.textContent?.includes('WIP on main')) throw new Error('no stash yet');
+    });
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Make a branch from it…'));
+    await waitFor(() => {
+      expect(container.querySelector('[role="dialog"]')?.textContent).toContain(
+        'Your changes are in the way',
+      );
+    });
+    expect(container.querySelector('[role="dialog"] input')).toBeNull();
+    expect(lastAction()).toBeUndefined();
+  });
+
   it('still gives an ordinary commit its own menu', async () => {
     // The row the stash is on is the only one that changes.
     const { container } = await shell({ repo_stashes: [{ ...stash, oid: 'f'.repeat(40), row: 5 }] });
@@ -1475,6 +1775,88 @@ describe('the menu on a stash row', () => {
     const labels = await openMenu(container);
     expect(labels).toContain('Drop commit');
     expect(labels).not.toContain('Pop it');
+  });
+});
+
+describe('taking a file back from a commit', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  const detail = (change: string) => ({
+    commit: {
+      oid: frameOids[0],
+      parents: ['p'.repeat(40)],
+      author: { name: 'Ada', email: 'ada@example.com', time: 0, offset: 0 },
+      committer: { name: 'Ada', email: 'ada@example.com', time: 0, offset: 0 },
+      summary: 'core: the summary',
+      body: '',
+    },
+    files: [{ path: 'a.c', oldPath: null, change }],
+  });
+
+  async function fileMenu(container: HTMLElement): Promise<string[]> {
+    await fireEvent.click(container.querySelector('li.row button.hit') as HTMLElement);
+    const file = await waitFor(() => {
+      const found = [...container.querySelectorAll('.files .file')].find((e) =>
+        e.textContent?.includes('a.c'),
+      );
+      if (!found) throw new Error('no file yet');
+      return found as HTMLElement;
+    });
+    await fireEvent.contextMenu(file);
+    await waitFor(() => {
+      if (!container.querySelector('.menu')) throw new Error('no menu');
+    });
+    return [...container.querySelectorAll('.menu .label')].map((e) => e.textContent?.trim() ?? '');
+  }
+
+  const took = () => invoke.mock.calls.filter(([cmd]) => cmd === 'take_paths').map(([, a]) => a);
+
+  it('offers both versions of a changed file and takes the one asked for, staging nothing', async () => {
+    const { container } = await shell({
+      commit_detail: detail('modified'),
+      take_paths: { entries: [], conflicted: [] },
+    });
+    const labels = await fileMenu(container);
+    expect(labels).toContain('Take this version');
+    expect(labels).toContain('Take the version before this commit');
+
+    await fireEvent.click(itemNamed(container, 'Take the version before this commit'));
+    await waitFor(() => expect(took()).toHaveLength(1));
+    expect(took()[0]).toMatchObject({
+      from: { kind: 'commit', rev: `${frameOids[0]}^` },
+      files: ['a.c'],
+    });
+  });
+
+  it('offers no version a commit does not have', async () => {
+    const { container } = await shell({ commit_detail: detail('added') });
+    const labels = await fileMenu(container);
+    expect(labels).toContain('Take this version');
+    expect(labels).not.toContain('Take the version before this commit');
+  });
+
+  it('asks before replacing changes of the user’s own, and takes nothing when told no', async () => {
+    const mine = {
+      path: 'a.c', origPath: null, index: 'unmodified', worktree: 'modified', conflict: null,
+      score: null, submodule: false, modeChanged: false,
+    };
+    const { container } = await shell({
+      commit_detail: detail('modified'),
+      repo_status: { entries: [mine], conflicted: [] },
+      take_paths: { entries: [], conflicted: [] },
+    });
+    await fileMenu(container);
+    await fireEvent.click(itemNamed(container, 'Take this version'));
+    await waitFor(() => {
+      expect(container.querySelector('[role="dialog"]')?.textContent).toContain(
+        'Replace your changes to a.c?',
+      );
+    });
+    await confirm(container, false);
+    expect(took()).toHaveLength(0);
   });
 });
 
@@ -1498,5 +1880,30 @@ describe('keys a focused control has taken', () => {
     await fireEvent.keyDown(divider, { key: 'ArrowUp' });
     await fireEvent.keyDown(divider, { key: 'ArrowDown' });
     expect(selected()).toBe(1);
+  });
+});
+
+describe('labels the walk has moved out from under', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  it('leaves a ref off a row whose commit is not its own, and on the row that is', async () => {
+    // As the refs stand between a walk that brought a commit in and their being placed again:
+    // `stale` still names row 0, but row 0 now holds a different commit.
+    const { container } = await shell(
+      {
+        repo_refs: [
+          on('placed', { kind: 'local_branch' }),
+          on('stale', { kind: 'local_branch' }, { target: 'f'.repeat(40) }),
+        ],
+      },
+      true,
+    );
+    const pills = [...container.querySelectorAll('li.row .pill-text')].map((p) => p.textContent?.trim());
+    expect(pills).toContain('placed');
+    expect(pills).not.toContain('stale');
+    expect(container.textContent).toContain('stale');
   });
 });

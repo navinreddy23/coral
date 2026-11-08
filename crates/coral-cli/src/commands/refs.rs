@@ -67,3 +67,36 @@ impl crate::output::Human for RefList {
         out
     }
 }
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Merged {
+    pub into: String,
+    pub branches: Vec<String>,
+}
+
+/// The local branches `into` has every commit of, bar itself and the one checked out.
+///
+/// # Errors
+/// [`CoralError::NotARepository`], or any git failure, including an unknown `into`.
+pub async fn merged(path: &Path, into: &str) -> Result<Merged, CoralError> {
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, path).await?;
+    Ok(Merged {
+        into: into.to_owned(),
+        branches: loc.merged_into(&runner, into).await?,
+    })
+}
+
+impl crate::output::Human for Merged {
+    fn human(&self) -> String {
+        if self.branches.is_empty() {
+            return format!("no other branch is merged into {}", self.into);
+        }
+        let mut out = format!("merged into {}:", self.into);
+        for b in &self.branches {
+            let _ = write!(out, "\n  {b}");
+        }
+        out
+    }
+}
