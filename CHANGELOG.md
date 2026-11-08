@@ -1,5 +1,59 @@
 # Changelog
 
+## 1.6.0
+
+### Added
+
+- **Fetch on a timer.** The repository in front of you is fetched every ten minutes while the
+  window has focus, and straight away when it gets focus back after longer than that. Preferences
+  → General sets Never, 5, 10 or 30 minutes, and a repository can ask for its own interval, or for
+  none, under Repository (`coral.autoFetch`). A fetch on the timer is not added to undo, never
+  makes a click wait, and says nothing unless it fails, once, on the status line. While it runs
+  the status bar says "Fetching…", and a click there stops it.
+- **Open a commit on its host.** "Open on GitHub", or whichever host it is, sits beside "Copy link
+  to this commit" in a commit's menu, and as a button beside the commit's id in the details panel.
+- **Compare with the working tree, or one ref with another.** "Compare with working tree" on a
+  commit's menu lists every tracked file that differs between that commit and what is on disk,
+  staged or not. "Compare <ref> with…" on a branch or tag's menu picks the other end from the
+  palette and measures from where the two parted, with the tips instead and Swap a click away.
+  The panel names both ends, and each file opens its diff between the same two. On the command
+  line, `coral diff --since <rev>` and `coral compare <a> <b> [--merge-base]`.
+- **Fetch more of a shallow clone.** A shallow clone says so in the status bar, beside its commit
+  count, and the chip fetches a hundred more commits of history or all of it; both are in the
+  palette too. `coral fetch --deepen <n>` and `--unshallow`.
+- **Take a file back.** In a commit's file list, "Take this version" and "Take the version before
+  this commit" put that file in the working copy, unstaged, so it reads as an ordinary change. A
+  file in a stash can be taken the same way, untracked ones included. Replacing changes of your
+  own asks first, since it cannot be undone. `coral take`.
+- **Make a branch from a stash.** For a stash that no longer applies where you are: a new branch
+  at the commit it was taken from, with it applied there and dropped. If changes of your own are
+  in the way, the window says so before doing anything. `coral stash branch`.
+- **Sign-off and co-authors.** The commit panel has a "Sign off" box the repository remembers
+  (`coral.signOff`), and co-authors as chips, typed as `Name <email>` or picked from who has
+  written here lately. Each becomes a `Co-authored-by` trailer. `coral commit --co-author`,
+  `coral authors`.
+- **Clean up branches.** From the palette or a local branch's menu: a sheet of the branches merged
+  into the current one, ticked, and of those whose upstream is gone but which hold commits of
+  their own, unticked under a warning. They are deleted as one step, and one undo brings them all
+  back. main, master, develop and trunk are never offered. "Stop tracking" on a branch's menu
+  forgets its upstream. `coral merged`, `coral unset-upstream`.
+
+### Changed
+
+- Four pixels of page part each commit row from the next, rather than two.
+
+### Fixed
+
+- No web link opened in the installed app: a pull request's page, the release page in About,
+  everything else that leads to a browser. The window was allowed to call the opener but given
+  no addresses it could open.
+- "Make one at …" in the sign-in dialog did nothing when clicked. It opens the host's token page.
+- An action that failed partway through left what it had already done out of undo, and the
+  window showed things as they were before it. It is journaled whether or not it finished, and
+  the window reads the repository again after a failure.
+- Two transfers of one repository stopped each other. A second one is refused while the first
+  runs, and an action of your own started during a fetch on the timer waits for it.
+
 ## 1.5.0
 
 ### A quieter window
