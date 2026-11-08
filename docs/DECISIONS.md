@@ -505,11 +505,12 @@ it would have put a success toast in the corner over whatever somebody was readi
 
 So it is an action with `background: true`, which is not journaled, run through a path that holds
 no `busy`. A user's own action that starts meanwhile awaits it rather than racing it for the same
-refs, and it is on the transfer strip with Stop, so a fetch that hangs is never a wait without a
-way out. It reloads nothing itself: the watcher sees `refs/remotes` move and does what it does for
-a fetch run in a terminal. It counts from opening the repository, not from zero, because opening
-already walks the graph, and only while the window has focus, because a rewalk nobody is looking
-at buys nothing.
+refs, and the status bar says "Fetching…" and stops it on a click, so a fetch that hangs is never a
+wait without a way out. It stays off the transfer strip, which takes its height from the panes and
+so moved every row under the pointer while it ran. It reloads nothing itself: the watcher sees
+`refs/remotes` move and does what it does for a fetch run in a terminal. It counts from opening the
+repository, not from zero, because opening already walks the graph, and only while the window has
+focus, because a rewalk nobody is looking at buys nothing.
 
 It found a second fault on the way. Transfers were keyed by repository, and a second one under
 the same key replaced the first's stop switch — which stopped it — and the first's clean-up then

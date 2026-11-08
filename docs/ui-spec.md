@@ -95,13 +95,15 @@ because a bar at nought per cent claims progress it has no basis for, and that i
 state a host which never answers stays in. Stop is offered from the first moment for the same
 reason.
 
-A fetch the window starts on its own runs on the same strip, labelled "fetch in the
-background", so it can be stopped like any other. It does so for the repository in front of you
-while the window has focus, every ten minutes by default: Never, 5, 10 or 30 under Preferences →
-General, and a repository can ask for its own interval or for none under Repository
-(`coral.autoFetch`). It is not added to undo, it holds nothing a click would wait on, a user's
-own action that starts meanwhile waits for it rather than racing it, and it says nothing unless
-it fails — once, on the status line, until a fetch gets through.
+A fetch the window starts on its own is left off the strip, which takes its height from the panes:
+every row moving down a line and back again every ten minutes put the graph under the pointer of
+somebody about to click it. The status bar says "Fetching…" instead, and a click on it stops the
+fetch. It fetches the repository in front of you while the window has focus, every ten minutes by
+default: Never, 5, 10 or 30 under Preferences → General, and a repository can ask for its own
+interval or for none under Repository (`coral.autoFetch`). It is not added to undo, it holds
+nothing a click would wait on, a user's own action that starts meanwhile waits for it rather than
+racing it, and it says nothing unless it fails — once, on the status line, until a fetch gets
+through.
 
 ## Toolbar
 
