@@ -76,7 +76,12 @@ printf '{"tabs":[%s],"groups":[],"active":1,"nextId":%d}' "$tabs" $((${#repos[@]
     > "$home/.config/dev.coral.app/session.json"
 # git is allowed to want ssh only if something is wrong; it gets one that answers nothing.
 printf '#!/bin/sh\nexit 255\n' > "$work/bin/ssh"
-chmod +x "$work/bin/ssh"
+# A link the window opens is written down rather than handed to the desktop's browser, which
+# would open it on the user's own screen, outside the private display.
+mkdir -p "$out"
+: > "$out/opened.log"
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s"\n' "$out/opened.log" > "$work/bin/xdg-open"
+chmod +x "$work/bin/ssh" "$work/bin/xdg-open"
 
 # GTK prefers Wayland whenever WAYLAND_DISPLAY is set, and would open on the user's desktop.
 env -u WAYLAND_DISPLAY XDG_SESSION_TYPE=x11 GDK_BACKEND=x11 DISPLAY="$DISPLAY_ID" \
