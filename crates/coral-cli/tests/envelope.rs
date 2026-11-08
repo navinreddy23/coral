@@ -350,6 +350,24 @@ async fn blame_looks_past_listed_commits_unless_told_to_name_every_one() {
 }
 
 #[tokio::test]
+async fn grep_finds_lines_at_a_revision_under_the_paths_given() {
+    let fixture = TestRepo::new()
+        .write("src/a.c", "int Count;\n")
+        .write("docs/a.md", "count\n")
+        .commit("first");
+    let repo = fixture.path().to_str().unwrap();
+    let out = coral_cli::run(argv(&[
+        "--json", "--repo", repo, "grep", "count", "-i", "--", "src",
+    ]))
+    .await;
+    let r = &out.json["result"];
+    assert_eq!(r["matches"].as_array().unwrap().len(), 1, "{}", out.json);
+    assert_eq!(r["matches"][0]["path"], "src/a.c");
+    assert_eq!(r["matches"][0]["line"], 1);
+    assert_eq!(r["more"], false);
+}
+
+#[tokio::test]
 async fn worktrees_lists_the_one_every_repository_has() {
     let fixture = TestRepo::new().write("a.txt", "a\n").commit("first");
     let out = coral_cli::run(argv(&[

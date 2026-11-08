@@ -378,6 +378,21 @@ pub enum Command {
         #[arg(long, default_value_t = 50)]
         limit: u64,
     },
+    /// Search the files of one revision for a pattern.
+    Grep {
+        pattern: String,
+        /// Revision whose files to search.
+        #[arg(long, default_value = "HEAD")]
+        rev: String,
+        /// Read the pattern as an extended regular expression rather than as text.
+        #[arg(long, short = 'E')]
+        regex: bool,
+        #[arg(long, short = 'i')]
+        ignore_case: bool,
+        /// Pathspecs to look under.
+        #[arg(last = true)]
+        paths: Vec<String>,
+    },
     /// Attribute each line of a file to the commit that last changed it.
     Blame {
         /// Revision to blame at.
@@ -712,6 +727,7 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
             output::render(&commands::find::run(repo, &query, limit).await)
         }
         command @ Command::Blame { .. } => dispatch_blame(command, repo).await,
+        command @ Command::Grep { .. } => dispatch_grep(command, repo).await,
         Command::Refs { kind } => output::render(&commands::refs::run(repo, kind).await),
         Command::Submodules => output::render(&commands::submodule::run(repo).await),
         Command::Worktrees => output::render(&commands::worktree::list(repo).await),
@@ -894,6 +910,30 @@ async fn dispatch_blame(command: Command, repo: &std::path::Path) -> output::Ren
         coral_core::blame::ListedCommits::Skip
     };
     output::render(&commands::blame::run(repo, &rev, &file, listed).await)
+}
+
+async fn dispatch_grep(command: Command, repo: &std::path::Path) -> output::Rendered {
+    let Command::Grep {
+        pattern,
+        rev,
+        regex,
+        ignore_case,
+        paths,
+    } = command
+    else {
+        unreachable!("routed by `dispatch`")
+    };
+    let query = coral_core::grep::GrepQuery {
+        pattern,
+        how: if regex {
+            coral_core::grep::GrepPattern::Regex
+        } else {
+            coral_core::grep::GrepPattern::Fixed
+        },
+        ignore_case,
+        paths,
+    };
+    output::render(&commands::grep::run(repo, &rev, &query).await)
 }
 
 async fn dispatch_remote(command: Command, repo: &std::path::Path) -> output::Rendered {

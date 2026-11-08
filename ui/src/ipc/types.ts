@@ -267,6 +267,35 @@ peeled: string | null, upstream: string | null, ahead: number, behind: number,
 gone: boolean, };
 
 /**
+ * One line a search found.
+ */
+export type GrepMatch = { path: string, line: number, 
+/**
+ * Where the first match on the line starts, in bytes from one.
+ */
+column: number, text: string, };
+
+/**
+ * How the pattern is read.
+ */
+export type GrepPattern = "fixed" | "regex";
+
+/**
+ * What to look for, and where.
+ */
+export type GrepQuery = { pattern: string, how: GrepPattern, ignoreCase: boolean, 
+/**
+ * Pathspecs to look under; empty for the whole tree.
+ */
+paths: Array<string>, };
+
+export type GrepResult = { matches: Array<GrepMatch>, 
+/**
+ * Whether it stopped at [`MOST`] with more still to find.
+ */
+more: boolean, };
+
+/**
  * Where HEAD points.
  */
 export type Head = { "kind": "branch", name: string, } | { "kind": "detached", oid: string, } | { "kind": "unborn", name: string, };
