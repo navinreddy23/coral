@@ -52,6 +52,14 @@ function field(container: Element): HTMLInputElement {
 }
 
 describe('the host account dialog', () => {
+  it('opens the token page in the browser, which a plain link in the window cannot', async () => {
+    const opened: string[] = [];
+    const { container } = dialog({ onOpenUrl: (url: string) => opened.push(url) });
+    const link = container.querySelector('.hint a') as HTMLAnchorElement;
+    await fireEvent.click(link);
+    expect(opened).toEqual(['https://github.com/settings/tokens']);
+  });
+
   it('says a profile owns its own token, by name', () => {
     const { container } = dialog({ view: view('profile'), profile: 'Work' });
     const state = container.querySelector('.state')?.textContent ?? '';

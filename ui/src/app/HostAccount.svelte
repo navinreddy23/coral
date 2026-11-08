@@ -19,6 +19,7 @@
     onSignIn,
     onSignOut,
     onClose,
+    onOpenUrl = () => undefined,
   }: {
     view: HostView;
     /** The name of the profile at the window, which is who a new token is stored for. */
@@ -29,6 +30,11 @@
     onSignIn: (token: string) => void;
     onSignOut: () => void;
     onClose: () => void;
+    /**
+     * Opens a page in the browser. A plain link cannot: the window opens no second window, so
+     * `target="_blank"` on the token page's address did nothing at all when clicked.
+     */
+    onOpenUrl?: (url: string) => void;
   } = $props();
 
   let token = $state('');
@@ -125,7 +131,13 @@
 
     {#if makeUrl}
       <p class="hint">
-        Make one at <a href={makeUrl} target="_blank" rel="noreferrer">{makeUrl}</a> with the
+        Make one at <a
+          href={makeUrl}
+          onclick={(e) => {
+            e.preventDefault();
+            onOpenUrl(makeUrl);
+          }}>{makeUrl}</a
+        > with the
         <code>{scope}</code> scope{forge.shape ? `, and paste ${forge.shape}` : ''}. It is kept
         in this machine's keyring, never in the repository.
       </p>

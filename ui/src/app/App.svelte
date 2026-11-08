@@ -6115,6 +6115,7 @@
     error={hosting.error}
     onSignIn={(token) => void signInToHost(token)}
     onSignOut={() => void hosting.signOut()}
+    onOpenUrl={(url) => void openInBrowser(url)}
     onClose={() => {
       showHostAccount = false;
       hosting.error = null;
