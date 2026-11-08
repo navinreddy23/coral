@@ -999,10 +999,14 @@ impl RepoLocation {
         rev: &str,
         path: &str,
         was: Option<&str>,
+        listed: crate::blame::ListedCommits,
     ) -> Result<crate::blame::Blame, CoralError> {
         let named = self.named_at(runner, rev, path, was).await?;
+        let (skips, skipping) = self.skips(runner, listed).await?;
         let cmd = GitCommand::read("blame", self.display_path())
-            .args(["blame", "--porcelain", "--incremental", rev, "--"])
+            .args(["blame", "--porcelain", "--incremental"])
+            .args(skips)
+            .args([rev, "--"])
             .arg(named);
 
         let mut parser = crate::blame::BlameParser::default();
@@ -1012,7 +1016,9 @@ impl RepoLocation {
                 Ok(crate::process::Sink::Continue)
             })
             .await?;
-        Ok(parser.finish())
+        let mut blame = parser.finish();
+        blame.skipping = skipping;
+        Ok(blame)
     }
 
     /// Stages whole paths.

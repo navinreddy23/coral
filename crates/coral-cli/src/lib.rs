@@ -385,6 +385,9 @@ pub enum Command {
         rev: String,
         /// File to blame.
         file: String,
+        /// Name the commits `.git-blame-ignore-revs` lists too, rather than looking past them.
+        #[arg(long)]
+        every_commit: bool,
     },
     /// List refs.
     Refs {
@@ -708,9 +711,7 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
         Command::Find { query, limit } => {
             output::render(&commands::find::run(repo, &query, limit).await)
         }
-        Command::Blame { rev, file } => {
-            output::render(&commands::blame::run(repo, &rev, &file).await)
-        }
+        command @ Command::Blame { .. } => dispatch_blame(command, repo).await,
         Command::Refs { kind } => output::render(&commands::refs::run(repo, kind).await),
         Command::Submodules => output::render(&commands::submodule::run(repo).await),
         Command::Worktrees => output::render(&commands::worktree::list(repo).await),
@@ -876,6 +877,23 @@ async fn dispatch_log(command: Command, repo: &std::path::Path) -> output::Rende
         limit: Some(limit),
     };
     output::render(&commands::log::run(repo, &q).await)
+}
+
+async fn dispatch_blame(command: Command, repo: &std::path::Path) -> output::Rendered {
+    let Command::Blame {
+        rev,
+        file,
+        every_commit,
+    } = command
+    else {
+        unreachable!("routed by `dispatch`")
+    };
+    let listed = if every_commit {
+        coral_core::blame::ListedCommits::Blame
+    } else {
+        coral_core::blame::ListedCommits::Skip
+    };
+    output::render(&commands::blame::run(repo, &rev, &file, listed).await)
 }
 
 async fn dispatch_remote(command: Command, repo: &std::path::Path) -> output::Rendered {

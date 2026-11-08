@@ -560,3 +560,17 @@ Six colours and no more, all muted: a diff's own tints are what a reader is look
 forty scopes in forty colours drown them. No italics, since the code face ships a regular and a
 bold only. The kernel's MAINTAINERS, a megabyte in thirty-one thousand lines, marks where
 colouring stops being worth its memory.
+
+## Blame looks past `.git-blame-ignore-revs` without being configured to
+
+git reads a list of commits to look past only from `blame.ignoreRevsFile`, and almost no clone
+sets it, so the list a project keeps for its reformats does nothing for most people who read
+its blame. GitHub applies it by default; so does Coral, unless the user's own configuration
+names a list, which then wins exactly as it would in a terminal. The header says how many
+commits are being looked past and turns it off in one click, so a reformat is never silently
+somebody else's line.
+
+A configured list that does not exist is the opposite case: git refuses the whole blame with
+"could not open object name list". `--no-ignore-revs-file` clears what the configuration added
+before the command line gives back the files that are there, so the blame still answers and the
+header says which file was missing.

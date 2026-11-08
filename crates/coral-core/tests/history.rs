@@ -1,4 +1,4 @@
-use coral_core::blame::BlameParser;
+use coral_core::blame::{BlameParser, ListedCommits, Skipping};
 use coral_core::history::LogQuery;
 use coral_core::process::GitRunner;
 use coral_core::repo::RepoLocation;
@@ -136,7 +136,10 @@ async fn blame_attributes_every_line_to_the_commit_that_wrote_it() {
     let second = repo.git(["rev-parse", "HEAD"]);
 
     let (runner, loc) = open(&repo).await;
-    let blame = loc.blame(&runner, "HEAD", "f.txt", None).await.unwrap();
+    let blame = loc
+        .blame(&runner, "HEAD", "f.txt", None, ListedCommits::Skip)
+        .await
+        .unwrap();
 
     assert_eq!(blame.commit_for_line(1).unwrap().oid, first);
     assert_eq!(
@@ -151,6 +154,111 @@ async fn blame_attributes_every_line_to_the_commit_that_wrote_it() {
     assert_eq!(c.author.name, "Coral Fixture");
     assert_eq!(c.summary, "second");
     assert_eq!(c.filename, "f.txt");
+}
+
+#[tokio::test]
+async fn blame_says_where_each_commit_took_its_lines_from() {
+    let repo = TestRepo::new()
+        .write("old.txt", "one\ntwo\n")
+        .commit("first");
+    let first = repo.git(["rev-parse", "HEAD"]).trim().to_owned();
+    repo.git(["mv", "old.txt", "new.txt"]);
+    let repo = repo.write("new.txt", "one\nTWO\n").commit("second");
+
+    let (runner, loc) = open(&repo).await;
+    let blame = loc
+        .blame(&runner, "HEAD", "new.txt", None, ListedCommits::Skip)
+        .await
+        .unwrap();
+
+    // The changed line goes back to the first commit, under the name the file had there.
+    let second = blame.commit_for_line(2).unwrap();
+    let before = second.previous.as_ref().unwrap();
+    assert_eq!(before.oid, first);
+    assert_eq!(before.filename, "old.txt");
+    // git counts a root commit as a boundary unless asked not to: nothing is before it.
+    let root = blame.commit_for_line(1).unwrap();
+    assert!(root.boundary);
+    assert!(root.previous.is_none());
+}
+
+/// A repository whose `.git-blame-ignore-revs` lists a reformat: `first` wrote the line and
+/// `reformat` only changed its spacing.
+fn reformatted() -> (TestRepo, String, String) {
+    let repo = TestRepo::new()
+        .write("f.c", "int a;\nint b;\n")
+        .commit("first");
+    let first = repo.git(["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = repo.write("f.c", "int  a;\nint b;\n").commit("reformat");
+    let reformat = repo.git(["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = repo
+        .write(
+            ".git-blame-ignore-revs",
+            &format!("# Spacing only\n{reformat}\n"),
+        )
+        .commit("list the reformat");
+    (repo, first, reformat)
+}
+
+#[tokio::test]
+async fn blame_looks_past_the_commits_a_repository_lists_unless_asked_not_to() {
+    let (repo, first, reformat) = reformatted();
+    let (runner, loc) = open(&repo).await;
+
+    let skipped = loc
+        .blame(&runner, "HEAD", "f.c", None, ListedCommits::Skip)
+        .await
+        .unwrap();
+    assert_eq!(
+        skipped.commit_for_line(1).unwrap().oid,
+        first,
+        "past the reformat"
+    );
+    assert_eq!(skipped.skipping, Skipping::Listed { count: 1 });
+
+    let named = loc
+        .blame(&runner, "HEAD", "f.c", None, ListedCommits::Blame)
+        .await
+        .unwrap();
+    assert_eq!(named.commit_for_line(1).unwrap().oid, reformat);
+    assert_eq!(named.skipping, Skipping::Offered { count: 1 });
+}
+
+#[tokio::test]
+async fn a_configured_list_that_is_not_there_is_noted_rather_than_failing_the_blame() {
+    // git refuses the whole blame with "could not open object name list" over it.
+    let (repo, _, reformat) = reformatted();
+    repo.git(["config", "blame.ignoreRevsFile", "nowhere.txt"]);
+    let (runner, loc) = open(&repo).await;
+    let blame = loc
+        .blame(&runner, "HEAD", "f.c", None, ListedCommits::Skip)
+        .await
+        .unwrap();
+    assert_eq!(
+        blame.skipping,
+        Skipping::Missing {
+            file: "nowhere.txt".to_owned()
+        }
+    );
+    assert_eq!(
+        blame.commit_for_line(1).unwrap().oid,
+        reformat,
+        "nothing skipped"
+    );
+
+    // One that is there is the user's own choice, and git applies it as it would anywhere.
+    repo.git(["config", "blame.ignoreRevsFile", ".git-blame-ignore-revs"]);
+    let blame = loc
+        .blame(&runner, "HEAD", "f.c", None, ListedCommits::Blame)
+        .await
+        .unwrap();
+    assert_eq!(
+        blame.skipping,
+        Skipping::Configured {
+            file: ".git-blame-ignore-revs".to_owned()
+        }
+    );
+    assert_ne!(blame.commit_for_line(1).unwrap().oid, reformat);
 }
 
 /// Git describes a commit once and then refers back to it by oid alone. A later chunk naming
@@ -184,6 +292,42 @@ fn a_repeated_commit_keeps_the_details_from_its_first_mention() {
         c.author.email, "ada@example.com",
         "the angle brackets are stripped"
     );
+}
+
+/// Where a commit's lines were before it, and whether the walk stopped at it rather than
+/// finding who wrote them: what "blame before this commit" needs, and what makes it impossible.
+#[test]
+fn a_commit_keeps_where_its_lines_were_before_it_and_whether_it_is_a_boundary() {
+    let mut p = BlameParser::default();
+    for line in [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 3 1 2".as_bytes(),
+        b"author Ada",
+        b"author-mail <ada@example.com>",
+        b"author-time 1500000000",
+        b"summary second",
+        b"previous bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb old name.txt",
+        b"filename f.txt",
+        "cccccccccccccccccccccccccccccccccccccccc 1 3 1".as_bytes(),
+        b"author Grace",
+        b"author-mail <grace@example.com>",
+        b"author-time 1400000000",
+        b"summary first",
+        b"boundary",
+        b"filename f.txt",
+    ] {
+        p.push(line).unwrap();
+    }
+    let blame = p.finish();
+
+    let second = blame.commit_for_line(1).unwrap();
+    let before = second.previous.as_ref().unwrap();
+    assert_eq!(before.oid, "b".repeat(40));
+    assert_eq!(before.filename, "old name.txt", "a path may hold spaces");
+    assert!(!second.boundary);
+
+    let first = blame.commit_for_line(3).unwrap();
+    assert!(first.previous.is_none());
+    assert!(first.boundary);
 }
 
 #[test]
@@ -368,7 +512,13 @@ async fn blame_reaches_a_file_by_the_name_it_had_then() {
     let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
 
     let blame = loc
-        .blame(&runner, &base, "after.txt", Some("before.txt"))
+        .blame(
+            &runner,
+            &base,
+            "after.txt",
+            Some("before.txt"),
+            ListedCommits::Skip,
+        )
         .await
         .unwrap();
     assert_eq!(blame.chunks.len(), 1, "the file as it was named then");

@@ -323,6 +323,33 @@ async fn blame_maps_lines_to_the_commits_that_wrote_them() {
 }
 
 #[tokio::test]
+async fn blame_looks_past_listed_commits_unless_told_to_name_every_one() {
+    let fixture = TestRepo::new().write("f.c", "int a;\n").commit("first");
+    let fixture = fixture.write("f.c", "int  a;\n").commit("reformat");
+    let reformat = fixture.git(["rev-parse", "HEAD"]).trim().to_owned();
+    let fixture = fixture
+        .write(".git-blame-ignore-revs", &format!("{reformat}\n"))
+        .commit("list it");
+    let blame = |extra: &'static [&'static str]| {
+        let repo = fixture.path().to_str().unwrap().to_owned();
+        async move {
+            let mut args = vec!["--json", "--repo", &repo, "blame", "f.c"];
+            args.extend_from_slice(extra);
+            coral_cli::run(argv(&args)).await.json["result"].clone()
+        }
+    };
+
+    let skipped = blame(&[]).await;
+    assert_eq!(skipped["skipping"]["kind"], "listed");
+    assert_eq!(skipped["skipping"]["count"], 1);
+    assert_ne!(skipped["chunks"][0]["oid"], reformat);
+
+    let named = blame(&["--every-commit"]).await;
+    assert_eq!(named["skipping"]["kind"], "offered");
+    assert_eq!(named["chunks"][0]["oid"], reformat);
+}
+
+#[tokio::test]
 async fn worktrees_lists_the_one_every_repository_has() {
     let fixture = TestRepo::new().write("a.txt", "a\n").commit("first");
     let out = coral_cli::run(argv(&[
