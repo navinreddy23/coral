@@ -3164,6 +3164,24 @@
    * from, it applies as it was made. git drops it once it has.
    */
   async function branchFromStash(stash: PlacedStash) {
+    // git makes the branch and checks it out before applying the stash, and an apply refused
+    // over changes of the user's own leaves them on a new branch with nothing applied. Said
+    // before anything is done instead.
+    const mine = worktree.staged.length > 0 || worktree.unstaged.some((e) => e.worktree !== 'untracked');
+    if (mine) {
+      await ask({
+        title: 'Your changes are in the way',
+        detail:
+          'Making a branch from a stash checks out the commit it was taken from and applies the ' +
+          'stash there, which needs a working copy with no changes of its own. Commit or stash ' +
+          'yours first, then make the branch.',
+        asksText: false,
+        placeholder: '',
+        initial: '',
+        choices: [{ id: 'ok', label: 'OK', primary: true }],
+      });
+      return;
+    }
     await askUntilAccepted(
       '',
       (initial, refused) =>

@@ -1735,6 +1735,29 @@ describe('the menu on a stash row', () => {
     });
   });
 
+  it('says what is in the way rather than making half a branch from a stash', async () => {
+    const mine = {
+      path: 'a.txt', origPath: null, index: 'unmodified', worktree: 'modified', conflict: null,
+      score: null, submodule: false, modeChanged: false,
+    };
+    const { container } = await shell({
+      repo_stashes: [stash],
+      repo_status: { entries: [mine], conflicted: [] },
+    });
+    await waitFor(() => {
+      if (!container.textContent?.includes('WIP on main')) throw new Error('no stash yet');
+    });
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Make a branch from it…'));
+    await waitFor(() => {
+      expect(container.querySelector('[role="dialog"]')?.textContent).toContain(
+        'Your changes are in the way',
+      );
+    });
+    expect(container.querySelector('[role="dialog"] input')).toBeNull();
+    expect(lastAction()).toBeUndefined();
+  });
+
   it('still gives an ordinary commit its own menu', async () => {
     // The row the stash is on is the only one that changes.
     const { container } = await shell({ repo_stashes: [{ ...stash, oid: 'f'.repeat(40), row: 5 }] });
