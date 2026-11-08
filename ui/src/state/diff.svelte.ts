@@ -85,6 +85,15 @@ export class DiffState {
   /** The file as the change leaves it, once the file view has asked for it. */
   contents = $state<Contents | null>(null);
   /**
+   * Both sides of the change in full, once colouring has asked for them.
+   *
+   * A diff is coloured from the whole files, not from the lines its hunks show: three lines
+   * from the middle of a block comment look like code on their own.
+   */
+  sideTexts = $state<{ before: string | null; after: string | null } | null>(null);
+  /** The diff `sideTexts` were read for, so a reload reads them again. */
+  #sidesFor: FileDiff | null = null;
+  /**
    * The commits that touched this file, newest first, once the history view has asked.
    *
    * Null until the read comes back, which is not the same as empty. Walking a kernel file's
@@ -339,6 +348,24 @@ export class DiffState {
     else if (this.view === 'file') await this.#loadContents();
   }
 
+  /** Reads both sides of the change on screen in full, once per answer from git. */
+  async readSides(): Promise<void> {
+    const file = this.file;
+    const sides = this.sides;
+    if (file === null || sides === null || file.binary || this.#sidesFor === file) return;
+    this.#sidesFor = file;
+    try {
+      const [before, after] = await Promise.all([
+        fileBlob(sides.repo, sides.before.side, sides.before.file),
+        fileBlob(sides.repo, sides.after.side, sides.after.file),
+      ]);
+      if (this.file !== file) return;
+      this.sideTexts = { before: textOf(before), after: textOf(after) };
+    } catch {
+      // Too large to read, most likely: drawn plain, as it was before there were colours.
+    }
+  }
+
   /**
    * Reads the file as the change leaves it, for the file view.
    *
@@ -510,6 +537,7 @@ export class DiffState {
     this.blame = null;
     this.text = null;
     this.contents = null;
+    this.sideTexts = null;
     this.history = null;
     this.moreHistory = false;
     this.source = request.source;
@@ -557,6 +585,8 @@ export class DiffState {
     this.blame = null;
     this.text = null;
     this.contents = null;
+    this.sideTexts = null;
+    this.#sidesFor = null;
     this.history = null;
     this.moreHistory = false;
     this.atCommit = null;
@@ -591,6 +621,12 @@ function contentsOf(bytes: ArrayBuffer | null, before: boolean): Contents {
   const head = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 8000));
   if (head.includes(0)) return { kind: 'binary', before };
   return { kind: 'text', text: new TextDecoder().decode(bytes), before };
+}
+
+/** A side's bytes as text, or null where it has none or is binary. */
+function textOf(bytes: ArrayBuffer | null): string | null {
+  const contents = contentsOf(bytes, false);
+  return contents.kind === 'text' ? contents.text : null;
 }
 
 /** Side by side shows the file end to end; inline shows the hunks. */

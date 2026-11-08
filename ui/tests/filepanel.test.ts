@@ -179,6 +179,28 @@ describe('the file panel', () => {
     expect(diff.contents).toEqual({ kind: 'text', text: 'one\ntwo\n', before: false });
   });
 
+  it('reads both whole sides for colouring once per answer, and again after a reload', async () => {
+    invoke.mockImplementation((name: string, args: { side?: { kind: string } }) => {
+      if (name === 'file_blob') {
+        return Promise.resolve(new TextEncoder().encode(args.side?.kind === 'worktree' ? 'new\n' : 'old\n'));
+      }
+      return Promise.resolve(name === 'worktree_diff' ? { ...EMPTY_DIFF, hunks: [] } : null);
+    });
+    const diff = new DiffState(new ViewsState());
+    await diff.openWorking('/repo', false, 'a.c');
+    await diff.readSides();
+    await diff.readSides();
+    expect(diff.sideTexts).toEqual({ before: 'old\n', after: 'new\n' });
+    expect(called('file_blob').map((c) => (c[1] as { side: { kind: string } }).side.kind)).toEqual([
+      'index', 'worktree',
+    ]);
+
+    // A file that changed on disk is a new answer from git, and its sides are read again.
+    await diff.reload('/repo');
+    await diff.readSides();
+    expect(called('file_blob')).toHaveLength(4);
+  });
+
   it('reads the file again when whitespace stops counting', async () => {
     answering();
     const diff = new DiffState(new ViewsState());

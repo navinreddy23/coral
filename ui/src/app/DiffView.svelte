@@ -8,10 +8,15 @@
   import { shortAge } from './age';
   import { initialsOf } from '../graph/initials';
   import type { DiffState } from '../state/diff.svelte';
-  import type { FileDiff } from '../ipc/types';
+  import type { SyntaxState } from '../state/syntax.svelte';
+  import { grammarOf } from '../syntax/grammar';
+  import type { Token } from '../syntax/token';
+  import type { FileDiff, Line } from '../ipc/types';
 
-  const { diff, onClose, onPart, onEdit = () => undefined }: {
+  const { diff, syntax = null, onClose, onPart, onEdit = () => undefined }: {
     diff: DiffState;
+    /** Code colours, or null to draw every line plain. */
+    syntax?: SyntaxState | null;
     onClose: () => void;
     /**
      * Stages, unstages or discards part of a file.
@@ -92,6 +97,40 @@
    * the same map, and side by side re-renders its rows on every scroll frame.
    */
   const words = $derived(wordMarks(diff.file?.hunks ?? []));
+
+  /**
+   * Colours, asked for as each view needs them and drawn once they are back.
+   *
+   * The diff is coloured from the two whole files, a line at a time by its number on its own
+   * side; a line whose text is not that side's line — a context line git printed from the other
+   * side under ignored whitespace — is left plain rather than coloured from the wrong text.
+   */
+  const grammar = $derived(diff.path === null ? null : grammarOf(diff.path));
+  $effect(() => {
+    if (syntax === null || !syntax.on || grammar === null) return;
+    if (diff.view === 'blame') syntax.want(grammar, diff.text);
+    else if (diff.view === 'file') syntax.want(grammar, diff.contents?.kind === 'text' ? diff.contents.text : null);
+    else {
+      void diff.readSides();
+      syntax.want(grammar, diff.sideTexts?.before ?? null);
+      syntax.want(grammar, diff.sideTexts?.after ?? null);
+    }
+  });
+  const before = $derived(sideOf(diff.sideTexts?.before ?? null));
+  const after = $derived(sideOf(diff.sideTexts?.after ?? null));
+
+  function sideOf(text: string | null): { lines: string[]; tokens: Token[][] } | null {
+    const tokens = syntax?.tokens(grammar, text) ?? null;
+    return text === null || tokens === null ? null : { lines: text.split('\n'), tokens };
+  }
+
+  /** A diff line's colours, from the side it is on, or null to draw it plain. */
+  function coloursOf(line: Line | null, side: 'before' | 'after'): Token[] | null {
+    const from = side === 'before' ? before : after;
+    const no = side === 'before' ? line?.oldNo : line?.newNo;
+    if (line === null || from === null || no === null || no === undefined) return null;
+    return from.lines[no - 1] === line.text ? (from.tokens[no - 1] ?? null) : null;
+  }
 
   /** Height of one row, matching `--diff-row` in the stylesheet below. */
   const ROW = 17;
@@ -346,6 +385,15 @@
     }));
   });
 
+  /** Colours for the sheet's lines, which are the file's own and numbered as it is. */
+  const sheetColours = $derived(
+    diff.view === 'blame'
+      ? (syntax?.tokens(grammar, diff.text) ?? null)
+      : diff.view === 'file' && diff.contents?.kind === 'text'
+        ? (syntax?.tokens(grammar, diff.contents.text) ?? null)
+        : null,
+  );
+
   /** Whether the scroller holds the file a line at a time rather than a diff. */
   const sheeted = $derived(diff.view === 'blame' || diff.view === 'file');
   const sheetLines = $derived(diff.view === 'blame' ? blamed : diff.view === 'file' ? fileLines : []);
@@ -465,7 +513,7 @@
           {:else}
             <span class="no">{line.no}</span>
           {/if}
-          <span class="text"><CodeLine text={line.content} spans={null} /></span>
+          <span class="text"><CodeLine text={line.content} spans={null} tokens={sheetColours?.[line.no - 1] ?? null} /></span>
         </div>
       {/each}
     </div>
@@ -769,6 +817,7 @@
                       ><span class="sign">{sign[line.kind]}</span><CodeLine
                         text={line.text}
                         spans={words.get(line) ?? null}
+                        tokens={coloursOf(line, line.kind === 'remove' ? 'before' : 'after')}
                       />{#if line.noNewline}<span class="nonl" title={NO_NEWLINE}
                         >no newline</span
                       >{/if}</button
@@ -779,6 +828,7 @@
                     ><span class="sign">{sign[line.kind]}</span><CodeLine
                       text={line.text}
                       spans={words.get(line) ?? null}
+                      tokens={coloursOf(line, line.kind === 'remove' ? 'before' : 'after')}
                     />{#if line.noNewline}<span class="nonl" title={NO_NEWLINE}>no newline</span
                       >{/if}</td
                   >
@@ -802,6 +852,7 @@
                 ><CodeLine
                   text={row.left?.text ?? ''}
                   spans={row.left ? words.get(row.left) ?? null : null}
+                  tokens={coloursOf(row.left ?? null, 'before')}
                 />{#if row.left?.noNewline}<span class="nonl" title={NO_NEWLINE}>no newline</span
                   >{/if}</span
               >
@@ -810,6 +861,7 @@
                 ><CodeLine
                   text={row.right?.text ?? ''}
                   spans={row.right ? words.get(row.right) ?? null : null}
+                  tokens={coloursOf(row.right ?? null, 'after')}
                 />{#if row.right?.noNewline}<span class="nonl" title={NO_NEWLINE}>no newline</span
                   >{/if}</span
               >

@@ -280,6 +280,14 @@ so. A file the commit did not touch, which is most of "View all files", offers "
 where it says so. Blame and File draw only the lines on screen, so the kernel's MAINTAINERS opens
 as quickly as a file of ten lines; both are refused past 32 MB.
 
+Code is coloured by what it is — keywords, strings, comments, numbers and constants, names and
+types, and markup — in six muted colours, each at least 4.5:1 on every ground code sits on, in
+the diff, the blame and the file alike. The grammar comes from the file's name, among twenty-five
+languages; anything else is drawn plain. A diff is coloured from both whole files, so the
+middle of a block comment is a comment, and colours arrive after the text rather than holding
+it up. A file over a megabyte or twenty thousand lines stays plain, and Appearance turns colours
+off.
+
 A binary file that is an image is drawn instead: before and after side by side, each captioned
 with its dimensions and size, on a checkerboard so transparency shows. A side the file is
 missing from says so. The bytes come over the binary IPC path, as the graph frames do.

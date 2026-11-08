@@ -17,6 +17,7 @@
   import DiffView from './DiffView.svelte';
   import { inTheWay } from './overwrite';
   import { DiffState } from '../state/diff.svelte';
+  import { SyntaxState } from '../state/syntax.svelte';
   import { HostingState } from '../state/hosting.svelte';
   import {
     commitDetail,
@@ -471,6 +472,7 @@
   const panes = new PanesState();
   const sections = new SectionsState();
   const diff = new DiffState(views);
+  const syntax = new SyntaxState(views);
   const actions = new ActionsState();
   const commitDraft = new CommitState();
   /**
@@ -6054,7 +6056,7 @@
         onMessageUsed={() => commitDraft.clear()}
       />
     {:else if diff.path !== null}
-      <DiffView {diff} onClose={() => diff.close()} onPart={applyPart} onEdit={editHunk} />
+      <DiffView {diff} {syntax} onClose={() => diff.close()} onPart={applyPart} onEdit={editHunk} />
     {/if}
     <div class="plot" class:hidden={diff.path !== null || merge.inProgress}>
       <!-- Above the list it is about, and above the column handles, which run full height. -->

@@ -538,3 +538,25 @@ so every link the window offered failed in the built app with "Not allowed to op
 nothing showed it, since the preview and the unit tests do not run Tauri. `allow-default-urls`
 grants http, https, mailto and tel, which is every kind of address Coral links to, and a test
 reads the capability and says why both entries are there.
+
+## Code is coloured in the window, in a worker, from whole files
+
+Highlighting could have been done in the engine, which already splits every diff into lines. It
+is not, because every `Line` would then carry its tokens across the bridge and into the
+generated types, for a view that can be switched off, and the CLI would carry them too. In the
+window it costs one worker, a separate file the bundler emits beside the page, which the content
+security policy already allows as `'self'`. A grammar compiled to WebAssembly would have needed
+`wasm-unsafe-eval` added to that policy, so highlight.js, which is plain JavaScript with no
+`eval`, and only its core with twenty-five grammars.
+
+Colours are worked out from both whole files, never from the lines a hunk shows. Three lines
+from inside a block comment look like code, and coloured as code they say something false about
+the file. So the window reads both sides in full alongside the diff, the worker colours each
+once, and a diff line takes the colours of its own line number on its own side — or none, if
+the text there is not its text, as for a context line git printed from the other side under
+ignored whitespace.
+
+Six colours and no more, all muted: a diff's own tints are what a reader is looking for, and
+forty scopes in forty colours drown them. No italics, since the code face ships a regular and a
+bold only. The kernel's MAINTAINERS, a megabyte in thirty-one thousand lines, marks where
+colouring stops being worth its memory.
