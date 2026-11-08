@@ -325,23 +325,30 @@
    *
    * By the rows themselves rather than by arithmetic: this table is not virtualised and its
    * rows are not a uniform height once a line wraps, so where a change actually sits is a
-   * question only the rendered row can answer.
+   * question only the rendered row can answer. A change is a run of added and removed lines,
+   * and the step goes to the first line of the next run, set a third of the way down as side by
+   * side sets it: centred, it sat below the line it was measured from and the next press found
+   * the same row again.
    */
   function stepInline(direction: 1 | -1) {
     const root = table;
-    if (root === null) return;
-    const rows = [...root.querySelectorAll('tr.add, tr.delete')] as HTMLElement[];
-    if (rows.length === 0) return;
+    const el = scroller;
+    if (root === null || el === null) return;
+    const all = [...root.querySelectorAll('tr')] as HTMLElement[];
+    const changed = (row: HTMLElement | undefined) =>
+      row !== undefined && (row.classList.contains('add') || row.classList.contains('remove'));
+    const starts = all.filter((row, i) => changed(row) && !changed(all[i - 1]));
+    if (starts.length === 0) return;
 
-    // A third of the way down, matching the split view: a change half off the bottom is the
-    // next one, not one already passed.
-    const box = root.getBoundingClientRect();
-    const line = box.top + root.clientHeight / 3;
+    // A third of the way down the pane, matching the split view: a change half off the bottom
+    // is the next one, not one already passed.
+    const line = el.getBoundingClientRect().top + el.clientHeight / 3;
     const next =
       direction === 1
-        ? rows.find((row) => row.getBoundingClientRect().top > line + 1)
-        : [...rows].reverse().find((row) => row.getBoundingClientRect().top < line - 1);
-    next?.scrollIntoView({ block: 'center' });
+        ? starts.find((row) => row.getBoundingClientRect().top > line + 1)
+        : [...starts].reverse().find((row) => row.getBoundingClientRect().top < line - 1);
+    if (next === undefined) return;
+    el.scrollTop += next.getBoundingClientRect().top - line;
   }
 
   /** A file's text as lines, without the empty one after its last newline. */

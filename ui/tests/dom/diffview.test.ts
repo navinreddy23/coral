@@ -330,6 +330,42 @@ describe('the diff viewer', () => {
     await vi.waitFor(() => expect(scroller.scrollTop).toBeGreaterThan(200 * 17));
   });
 
+  it('steps inline from one change to the next, a change that only removes lines included', async () => {
+    // It looked for `tr.delete`, which no row is, and centred each row it found below the line
+    // it measured from, so the next press found the same row again.
+    const lines = [
+      line('context', 'a', 1, 1), line('context', 'b', 2, 2),
+      line('add', 'new 1', null, 3), line('add', 'new 2', null, 4),
+      ...['c', 'd', 'e', 'f', 'g', 'h'].map((t, i) => line('context', t, 3 + i, 5 + i)),
+      line('remove', 'gone 1', 9, null), line('remove', 'gone 2', 10, null),
+      line('context', 'i', 11, 11),
+    ];
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'a.c';
+    diff.file = { ...fileDiff(), hunks: [{ header: '@@', oldStart: 1, oldLines: 11, newStart: 1, newLines: 11, lines }] };
+    diff.setMode('inline');
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+
+    // A pane 90 pixels tall at 100, and every row 17 pixels below the one before it.
+    const scroller = view.container.querySelector('.scroll') as HTMLElement;
+    Object.defineProperty(scroller, 'clientHeight', { value: 90 });
+    scroller.getBoundingClientRect = () => ({ top: 100 }) as DOMRect;
+    [...view.container.querySelectorAll('tr')].forEach((row, i) => {
+      row.getBoundingClientRect = () => ({ top: 100 + i * 17 - scroller.scrollTop }) as DOMRect;
+    });
+
+    const next = view.container.querySelector('button[title="Next change"]') as HTMLElement;
+    const previous = view.container.querySelector('button[title="Previous change"]') as HTMLElement;
+    const went: number[] = [];
+    for (const button of [next, next, next, previous]) {
+      await fireEvent.click(button);
+      went.push(scroller.scrollTop);
+    }
+    // Each run's first line a third of the way down: the additions, the removals, nothing
+    // further, and back to the additions.
+    expect(went).toEqual([21, 157, 157, 21]);
+  });
+
   it('keeps the picked-lines bar one height, hint or pick', () => {
     // happy-dom lays nothing out, so the rule is what is checked: a height set, not a minimum
     // its contents can grow past, and a hint that cannot wrap onto a second line.
