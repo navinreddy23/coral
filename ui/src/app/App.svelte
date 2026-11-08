@@ -847,7 +847,35 @@
     if (detachedRow !== null) return detachedRow;
     if (headName === null) return null;
     const on = refs.groups.local.find((r) => r.short === headName);
-    return on?.row ?? null;
+    if (on === undefined || on.row === null) return null;
+    return onItsRow(on) ? on.row : null;
+  });
+
+  /**
+   * Whether a ref's commit is the one on the row it was placed on, as far as the loaded window
+   * can say.
+   *
+   * A walk that brings a commit in shifts every row under it by one, and the refs are placed
+   * again only once it lands. On the kernel that was a second and a half after every fetch that
+   * brought something, with `master` and the ring that marks HEAD on a commit only
+   * `origin/master` had. A ref that fails this is left off its row until the refs catch up.
+   */
+  function onItsRow(ref: PlacedRef): boolean {
+    const frame = graph.frame;
+    if (ref.row === null || frame === null) return true;
+    const local = localRow(frame, ref.row);
+    if (local === null) return true;
+    return (ref.peeled ?? ref.target).startsWith(oidOf(frame, local));
+  }
+
+  /** The labels for each row, without any that the walk has moved out from under them. */
+  const labelsByRow = $derived.by(() => {
+    const out = new Map<number, PlacedRef[]>();
+    for (const [row, list] of refs.byRow) {
+      const kept = list.filter(onItsRow);
+      if (kept.length > 0) out.set(row, kept);
+    }
+    return out;
   });
 
   $effect(() => {
@@ -1716,7 +1744,7 @@
   }
 
   function checkoutsFor(row: number): MenuItem[] {
-    const out = checkoutItems(refs.byRow.get(row) ?? [], headName, revisionActions);
+    const out = checkoutItems(labelsByRow.get(row) ?? [], headName, revisionActions);
     return out.length === 0 ? out : [...out, { kind: 'separator' }];
   }
 
@@ -1729,7 +1757,7 @@
    * by its commit, which merges and rebases just as well.
    */
   function combineFor(row: number, oid: string, where: Ancestry): MenuItem[] {
-    const here = refs.byRow.get(row) ?? [];
+    const here = labelsByRow.get(row) ?? [];
     // Nothing sensible to say about a detached HEAD, which has no branch to move.
     if (headName === null) return [];
 
@@ -6198,7 +6226,7 @@
               wrong end of a typed array, which would show another commit's date and hash.
             -->
             {@const local = localRow(graph.frame, row)}
-            {@const labels = orderRefs(refs.byRow.get(row) ?? [], headName, (n) => scope.hides(n))}
+            {@const labels = orderRefs(labelsByRow.get(row) ?? [], headName, (n) => scope.hides(n))}
             {@const subject = visibleMeta.get(row)?.summary ?? ''}
             {@const split = splitPrefix(subject)}
             <li

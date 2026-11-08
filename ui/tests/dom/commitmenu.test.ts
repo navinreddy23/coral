@@ -195,7 +195,8 @@ function on(
     name: kind.kind === 'tag' ? `refs/tags/${short}` : `refs/heads/${short}`,
     short,
     kind,
-    target: 'a'.repeat(40),
+    // The commit actually on its row: a label is drawn only where its commit is.
+    target: frameOids[over.row ?? 0] ?? 'a'.repeat(40),
     peeled: null,
     upstream: null,
     ahead: 0,
@@ -728,7 +729,7 @@ describe('the branch and tag menu', () => {
       name: kind.kind === 'tag' ? `refs/tags/${short}` : `refs/heads/${short}`,
       short,
       kind,
-      target: 'a'.repeat(40),
+      target: frameOids[0] ?? 'a'.repeat(40),
       peeled: null,
       upstream: null,
       ahead: 0,
@@ -902,7 +903,7 @@ describe('the branch and tag menu', () => {
       expect(container.querySelector('#detail-message')?.textContent).toContain('Parted at');
     });
     expect(invoke.mock.calls.find(([cmd]) => cmd === 'merge_base')?.[1]).toMatchObject({
-      a: 'a'.repeat(40),
+      a: frameOids[0],
       b: 'c'.repeat(40),
     });
     expect(invoke.mock.calls.filter(([cmd]) => cmd === 'compare_commits').at(-1)?.[1]).toMatchObject({
@@ -1413,7 +1414,6 @@ describe('a remote branch with a local of its own name', () => {
   const diverged = [
     on('origin/topic', { kind: 'remote_branch', remote: 'origin' }, {
       name: 'refs/remotes/origin/topic',
-      target: 'b'.repeat(40),
     }),
     on('topic', { kind: 'local_branch' }, { row: 3, upstream: 'origin/topic', ahead: 2, behind: 1 }),
   ];
@@ -1547,7 +1547,7 @@ describe('double-clicking a pill', () => {
       name: kind.kind === 'tag' ? `refs/tags/${short}` : `refs/heads/${short}`,
       short,
       kind,
-      target: 'a'.repeat(40),
+      target: frameOids[0] ?? 'a'.repeat(40),
       peeled: null,
       upstream: null,
       ahead: 0,
@@ -1657,7 +1657,7 @@ describe('what undo and redo say they will do', () => {
       name: kind.kind === 'tag' ? `refs/tags/${short}` : `refs/heads/${short}`,
       short,
       kind,
-      target: 'a'.repeat(40),
+      target: frameOids[0] ?? 'a'.repeat(40),
       peeled: null,
       upstream: null,
       ahead: 0,
@@ -1880,5 +1880,30 @@ describe('keys a focused control has taken', () => {
     await fireEvent.keyDown(divider, { key: 'ArrowUp' });
     await fireEvent.keyDown(divider, { key: 'ArrowDown' });
     expect(selected()).toBe(1);
+  });
+});
+
+describe('labels the walk has moved out from under', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    localStorage.clear();
+  });
+
+  it('leaves a ref off a row whose commit is not its own, and on the row that is', async () => {
+    // As the refs stand between a walk that brought a commit in and their being placed again:
+    // `stale` still names row 0, but row 0 now holds a different commit.
+    const { container } = await shell(
+      {
+        repo_refs: [
+          on('placed', { kind: 'local_branch' }),
+          on('stale', { kind: 'local_branch' }, { target: 'f'.repeat(40) }),
+        ],
+      },
+      true,
+    );
+    const pills = [...container.querySelectorAll('li.row .pill-text')].map((p) => p.textContent?.trim());
+    expect(pills).toContain('placed');
+    expect(pills).not.toContain('stale');
+    expect(container.textContent).toContain('stale');
   });
 });
