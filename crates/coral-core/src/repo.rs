@@ -298,14 +298,41 @@ impl RepoLocation {
         paths: &[&str],
         options: crate::diff::DiffOptions,
     ) -> Result<Vec<crate::diff::FileDiff>, CoralError> {
+        let against: &[&str] = if staged { &["--cached"] } else { &[] };
+        self.working_diff(runner, against, paths, options).await
+    }
+
+    /// Diffs the working tree against `rev`: everything since that commit, staged or not.
+    ///
+    /// # Errors
+    /// Propagates git failures, including an unknown revision, and [`CoralError::Protocol`] if
+    /// the output does not parse.
+    pub async fn diff_since(
+        &self,
+        runner: &GitRunner,
+        rev: &str,
+        paths: &[&str],
+        options: crate::diff::DiffOptions,
+    ) -> Result<Vec<crate::diff::FileDiff>, CoralError> {
+        self.working_diff(runner, &["--end-of-options", rev], paths, options)
+            .await
+    }
+
+    /// The three invocations every diff of the working tree is built from, against the index
+    /// (no `against`), against `HEAD` from the index (`--cached`), or against a commit.
+    async fn working_diff(
+        &self,
+        runner: &GitRunner,
+        against: &[&str],
+        paths: &[&str],
+        options: crate::diff::DiffOptions,
+    ) -> Result<Vec<crate::diff::FileDiff>, CoralError> {
         let base = |args: &[&str]| {
-            let mut c = GitCommand::status("diff", self.display_path())
+            let c = GitCommand::status("diff", self.display_path())
                 .arg("diff")
-                .arg("-M");
-            if staged {
-                c = c.arg("--cached");
-            }
-            c = c.args(args);
+                .arg("-M")
+                .args(args)
+                .args(against);
             if paths.is_empty() {
                 c
             } else {

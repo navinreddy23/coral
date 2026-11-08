@@ -301,6 +301,28 @@ export function compareFileDiff(
   return invoke<FileDiff | null>('compare_file_diff', { path, from, to, file, oldFile, options });
 }
 
+/** The tracked files that differ between a commit and the working tree, staged or not. */
+export function changedSince(path: string, rev: string): Promise<ChangedFile[]> {
+  return invoke<ChangedFile[]>('changed_since', { path, rev });
+}
+
+/** One file's diff between a commit and the working tree. */
+export function sinceFileDiff(
+  path: string,
+  rev: string,
+  file: string,
+  /** The name it had at `rev`, when it was renamed since. Null otherwise. */
+  oldFile: string | null,
+  options: ReadOptions,
+): Promise<FileDiff | null> {
+  return invoke<FileDiff | null>('since_file_diff', { path, rev, file, oldFile, options });
+}
+
+/** Where two revisions parted, or null for histories that never met. */
+export function mergeBase(path: string, a: string, b: string): Promise<string | null> {
+  return invoke<string | null>('merge_base', { path, a, b });
+}
+
 /** One file's contents at one revision, for the blame view to put its chunks beside. */
 export function fileText(
   path: string,

@@ -1,8 +1,10 @@
 import {
+  changedSince,
   commitDetail,
   commitNote,
   commitVerification,
   compareCommits,
+  mergeBase,
   type Listing,
 } from '../ipc/commands';
 
@@ -15,6 +17,23 @@ export interface Picked {
   row: number;
   oid: string;
 }
+
+/** One end of a comparison asked for by name: the commit, and what the user called it. */
+export interface Named {
+  oid: string;
+  name: string;
+}
+
+/**
+ * A comparison asked for from a menu rather than made by picking two rows.
+ *
+ * Held by revision, not by row: a branch compared with another need be nowhere in the rows
+ * loaded, and the working tree is no row at all. `base` is where the two parted, once asked to
+ * measure from there: what `to` gained since, rather than everything between the tips.
+ */
+export type Against =
+  | { kind: 'worktree'; from: Named }
+  | { kind: 'refs'; from: Named; to: Named; base: string | null };
 
 /**
  * The selected commit and its details, or the pair being compared.
@@ -45,8 +64,11 @@ export class SelectionState {
    * as an answer to "what changed between these two".
    */
   pair = $state<{ from: Picked; to: Picked } | null>(null);
-  /** What differs between the pair, once it has been read. */
+  /** What differs between the pair, or between the ends of {@link against}, once read. */
   compared = $state<ChangedFile[]>([]);
+
+  /** A comparison asked for from a menu; null otherwise. Never set alongside {@link pair}. */
+  against = $state<Against | null>(null);
 
   /**
    * Three or more commits picked together, newest first; empty otherwise.
@@ -70,6 +92,7 @@ export class SelectionState {
     this.pair = null;
     this.compared = [];
     this.many = [];
+    this.against = null;
     this.#anchor = null;
   }
 
@@ -138,6 +161,7 @@ export class SelectionState {
     this.#token += 1;
     this.many = sorted;
     this.pair = null;
+    this.against = null;
     this.compared = [];
     this.detail = null;
     this.verification = null;
@@ -155,6 +179,7 @@ export class SelectionState {
   ): Promise<void> {
     this.#anchor = { row, oid };
     this.pair = null;
+    this.against = null;
     this.compared = [];
     this.many = [];
     this.row = row;
@@ -207,6 +232,7 @@ export class SelectionState {
     const picked = { row, oid };
     const [from, to] = anchor.row > row ? [anchor, picked] : [picked, anchor];
     this.many = [];
+    this.against = null;
     this.pair = { from, to };
     this.detail = null;
     this.verification = null;
@@ -218,6 +244,62 @@ export class SelectionState {
     const token = ++this.#token;
     try {
       const files = await compareCommits(path, from.oid, to.oid);
+      if (token === this.#token) this.compared = files;
+    } catch (e) {
+      if (token === this.#token) {
+        this.error = messageOf(e);
+        this.compared = [];
+      }
+    } finally {
+      if (token === this.#token) this.loading = false;
+    }
+  }
+
+  /** Compares a commit with the working tree: everything since it, staged or not. */
+  async compareWithWorktree(path: string, from: Named): Promise<void> {
+    await this.#against(path, { kind: 'worktree', from }, () => changedSince(path, from.oid));
+  }
+
+  /**
+   * Compares one revision with another, by the names they were asked for by.
+   *
+   * `sinceTheyParted` measures from where the two parted, which is what "what does `to` add"
+   * means: between the tips alone, everything `from` gained since then reads as if `to` had
+   * taken it away.
+   */
+  async compareRefs(path: string, from: Named, to: Named, sinceTheyParted: boolean): Promise<void> {
+    await this.#against(path, { kind: 'refs', from, to, base: null }, async () => {
+      if (!sinceTheyParted) return compareCommits(path, from.oid, to.oid);
+      const base = await mergeBase(path, from.oid, to.oid);
+      if (base === null) throw new Error(`${from.name} and ${to.name} share no history.`);
+      if (this.against?.kind === 'refs') this.against = { ...this.against, base };
+      return compareCommits(path, base, to.oid);
+    });
+  }
+
+  /** The two revisions the open comparison reads a file's diff between; null for none. */
+  get againstRevs(): { from: string; to: string | null } | null {
+    const a = this.against;
+    if (a === null) return null;
+    if (a.kind === 'worktree') return { from: a.from.oid, to: null };
+    return { from: a.base ?? a.from.oid, to: a.to.oid };
+  }
+
+  async #against(path: string, against: Against, read: () => Promise<ChangedFile[]>): Promise<void> {
+    const token = ++this.#token;
+    this.#anchor = null;
+    this.row = null;
+    this.pair = null;
+    this.many = [];
+    this.detail = null;
+    this.verification = null;
+    this.note = null;
+    this.compared = [];
+    this.against = against;
+    this.loading = true;
+    this.error = null;
+    try {
+      const files = await read();
       if (token === this.#token) this.compared = files;
     } catch (e) {
       if (token === this.#token) {

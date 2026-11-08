@@ -134,3 +134,68 @@ describe('comparing two commits', () => {
     expect(selection.marks(40)).toBe(false);
   });
 });
+
+describe('comparing from a menu', () => {
+  const tip = 'n'.repeat(40);
+  const other = 'm'.repeat(40);
+  const base = 'b'.repeat(40);
+
+  it('compares a commit with the working tree, staged or not, and reads files against it', async () => {
+    invoke.mockImplementation((name: string) =>
+      Promise.resolve(name === 'changed_since' ? DIFFER : null),
+    );
+    const selection = new SelectionState();
+    await selection.select('/repo', 4, tip);
+    await selection.compareWithWorktree('/repo', { oid: tip, name: 'n1234567' });
+
+    expect(selection.against).toEqual({ kind: 'worktree', from: { oid: tip, name: 'n1234567' } });
+    expect(selection.compared).toEqual(DIFFER);
+    expect(selection.row).toBeNull();
+    expect(selection.marks(4)).toBe(false);
+    expect(selection.againstRevs).toEqual({ from: tip, to: null });
+
+    const diff = new DiffState(new ViewsState());
+    await diff.openSince('/repo', tip, 'one.txt');
+    expect(called('since_file_diff')[0]?.[1]).toMatchObject({ rev: tip, file: 'one.txt' });
+    expect(diff.sides?.after.side).toEqual({ kind: 'worktree' });
+    expect(diff.empty).toBe('That file in the working tree is as it was in that commit.');
+  });
+
+  it('compares two refs from where they parted, and between the tips when asked', async () => {
+    invoke.mockImplementation((name: string) =>
+      Promise.resolve(name === 'merge_base' ? base : name === 'compare_commits' ? DIFFER : null),
+    );
+    const selection = new SelectionState();
+    const main = { oid: tip, name: 'main' };
+    const topic = { oid: other, name: 'topic' };
+    await selection.compareRefs('/repo', main, topic, true);
+
+    expect(called('merge_base')[0]?.[1]).toMatchObject({ a: tip, b: other });
+    expect(called('compare_commits').at(-1)?.[1]).toMatchObject({ from: base, to: other });
+    expect(selection.against).toEqual({ kind: 'refs', from: main, to: topic, base });
+    expect(selection.againstRevs).toEqual({ from: base, to: other });
+
+    await selection.compareRefs('/repo', main, topic, false);
+    expect(called('compare_commits').at(-1)?.[1]).toMatchObject({ from: tip, to: other });
+    expect(selection.againstRevs).toEqual({ from: tip, to: other });
+  });
+
+  it('says so when two refs share no history to measure from', async () => {
+    invoke.mockImplementation(() => Promise.resolve(null));
+    const selection = new SelectionState();
+    await selection.compareRefs('/repo', { oid: tip, name: 'main' }, { oid: other, name: 'gh-pages' }, true);
+    expect(selection.error).toBe('main and gh-pages share no history.');
+    expect(selection.compared).toEqual([]);
+  });
+
+  it('ends when a commit is picked, as a pair does', async () => {
+    invoke.mockImplementation((name: string) =>
+      Promise.resolve(name === 'changed_since' ? DIFFER : name === 'commit_detail' ? DETAIL : null),
+    );
+    const selection = new SelectionState();
+    await selection.compareWithWorktree('/repo', { oid: tip, name: 'n' });
+    await selection.select('/repo', 9, 'x'.repeat(40));
+    expect(selection.against).toBeNull();
+    expect(selection.againstRevs).toBeNull();
+  });
+});

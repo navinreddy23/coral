@@ -797,3 +797,80 @@ async fn the_same_file_is_read_when_the_guard_is_lifted() {
     assert!(!file.too_large);
     assert_eq!(file.added, Some(200_000));
 }
+
+#[tokio::test]
+async fn the_working_tree_compares_with_any_commit_staged_or_not_but_without_untracked_files() {
+    let repo = TestRepo::new()
+        .write("a.txt", "a\n")
+        .write("b.txt", "b\n")
+        .write("c.txt", "c\n")
+        .commit("first");
+    let first = repo.git(["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = repo.write("a.txt", "a, committed since\n").commit("second");
+    let repo = repo
+        .write("b.txt", "b, staged\n")
+        .write("c.txt", "c, not staged\n");
+    repo.git(["add", "b.txt"]);
+    let repo = repo.write("new.txt", "nobody added this\n");
+
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+    let mut listed: Vec<_> = loc
+        .changed_since(&runner, &first)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|f| f.path)
+        .collect();
+    listed.sort();
+    assert_eq!(listed, ["a.txt", "b.txt", "c.txt"]);
+
+    let files = loc
+        .diff_since(&runner, &first, &["a.txt"], DiffOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(files.len(), 1);
+    let lines: Vec<_> = files[0].hunks[0]
+        .lines
+        .iter()
+        .map(|l| (l.kind, l.text.to_string()))
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            (LineKind::Remove, "a".to_owned()),
+            (LineKind::Add, "a, committed since".to_owned()),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn the_merge_base_is_where_two_branches_parted_and_none_for_unrelated_histories() {
+    let repo = TestRepo::new().write("a.txt", "a\n").commit("base");
+    let base = repo.git(["rev-parse", "HEAD"]).trim().to_owned();
+    repo.git(["checkout", "--quiet", "-b", "side"]);
+    let repo = repo.write("side.txt", "s\n").commit("on the side");
+    repo.git(["checkout", "--quiet", "main"]);
+    let repo = repo.write("main.txt", "m\n").commit("on main");
+    repo.git(["checkout", "--quiet", "--orphan", "elsewhere"]);
+    let repo = repo.write("other.txt", "o\n").commit("unrelated");
+
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+    assert_eq!(
+        loc.merge_base(&runner, "main", "side")
+            .await
+            .unwrap()
+            .as_deref(),
+        Some(base.as_str())
+    );
+    assert_eq!(
+        loc.merge_base(&runner, "main", "elsewhere").await.unwrap(),
+        None
+    );
+    assert!(
+        loc.merge_base(&runner, "main", "nothing-by-that-name")
+            .await
+            .is_err()
+    );
+}

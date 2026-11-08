@@ -55,6 +55,34 @@ impl RepoLocation {
         Ok(!out.stdout.is_empty())
     }
 
+    /// The newest commit both `a` and `b` contain, or `None` for histories that never met.
+    ///
+    /// What "what does this branch add" is measured from: the tips alone also count everything
+    /// the other side gained since the two parted, as if this branch had taken it away.
+    ///
+    /// # Errors
+    /// Propagates git failures, including an unknown revision.
+    pub async fn merge_base(
+        &self,
+        runner: &GitRunner,
+        a: &str,
+        b: &str,
+    ) -> Result<Option<String>, CoralError> {
+        let out = runner
+            .output_allowing(
+                GitCommand::read("merge-base", self.display_path())
+                    .arg("merge-base")
+                    .arg(format!("{a}^{{commit}}"))
+                    .arg(format!("{b}^{{commit}}")),
+                &[1],
+            )
+            .await?;
+        if out.code == 1 {
+            return Ok(None);
+        }
+        Ok(Some(String::from_utf8_lossy(&out.stdout).trim().to_owned()))
+    }
+
     /// Whether `older` is reachable from `newer`.
     ///
     /// `merge-base --is-ancestor` writes nothing and answers by exiting 0 or 1, so 1 has to be

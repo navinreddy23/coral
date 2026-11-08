@@ -886,6 +886,63 @@ pub async fn compare_file_diff(
     Ok(files.into_iter().next())
 }
 
+/// The tracked files that differ between a commit and the working tree.
+///
+/// # Errors
+/// Propagates git failures, including an unknown revision.
+#[tauri::command]
+pub async fn changed_since(
+    path: String,
+    rev: String,
+) -> Result<Vec<coral_core::commit::ChangedFile>, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc.changed_since(&runner, &rev).await?)
+}
+
+/// One file's diff between a commit and the working tree.
+///
+/// # Errors
+/// Propagates git failures.
+#[tauri::command]
+pub async fn since_file_diff(
+    path: String,
+    rev: String,
+    file: String,
+    old_file: Option<String>,
+    options: ReadOptions,
+) -> Result<Option<coral_core::diff::FileDiff>, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    let files = loc
+        .diff_since(
+            &runner,
+            &rev,
+            &both(&file, old_file.as_deref()),
+            options.into(),
+        )
+        .await?;
+    Ok(files.into_iter().next())
+}
+
+/// Where two revisions parted, or `None` for histories that never met.
+///
+/// # Errors
+/// Propagates git failures, including an unknown revision.
+#[tauri::command]
+pub async fn merge_base(
+    path: String,
+    a: String,
+    b: String,
+) -> Result<Option<String>, crate::commands::IpcError> {
+    let runner = coral_core::process::GitRunner::discover().await?;
+    let loc =
+        coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
+    Ok(loc.merge_base(&runner, &a, &b).await?)
+}
+
 /// One file's contents at one revision, for the blame view to put its chunks beside.
 ///
 /// # Errors

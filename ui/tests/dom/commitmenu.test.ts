@@ -263,6 +263,39 @@ describe('the commit menu', () => {
     expect(asked?.[1]).toMatchObject({ oid: frameOids[0] });
   });
 
+  it('compares a commit with the working tree and reads its files against it', async () => {
+    const { container } = await shell({
+      changed_since: [{ path: 'a.c', oldPath: null, change: 'modified' }],
+      since_file_diff: null,
+    });
+    await openMenu(container);
+    await fireEvent.click(itemNamed(container, 'Compare with working tree'));
+    await waitFor(() => {
+      expect(container.textContent).toContain('against the working tree');
+    });
+    expect(invoke.mock.calls.find(([cmd]) => cmd === 'changed_since')?.[1]).toMatchObject({
+      rev: frameOids[0],
+    });
+    expect(container.textContent).toContain('Untracked files are not compared.');
+
+    await fireEvent.click([...container.querySelectorAll('.files button, .file')].find((e) =>
+      e.textContent?.includes('a.c'),
+    ) as HTMLElement);
+    await waitFor(() => {
+      expect(invoke.mock.calls.find(([cmd]) => cmd === 'since_file_diff')?.[1]).toMatchObject({
+        rev: frameOids[0],
+        file: 'a.c',
+      });
+    });
+
+    await fireEvent.click(
+      [...container.querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === 'Done comparing',
+      ) as HTMLElement,
+    );
+    expect(container.textContent).not.toContain('against the working tree');
+  });
+
   it('fixes a commit up with what is staged, and offers to fold it in', async () => {
     const staged = {
       path: 'a.c', origPath: null, index: 'modified', worktree: 'unmodified', conflict: null,
@@ -698,6 +731,58 @@ describe('the branch and tag menu', () => {
 
     await fireEvent.click(itemNamed(container, 'Checkout v1.2.0'));
     expect(lastAction()).toEqual({ kind: 'checkout', rev: 'v1.2.0' });
+  });
+
+  it('compares a branch with another chosen in the palette, from where they parted', async () => {
+    const base = 'b'.repeat(40);
+    const { container } = await shell(
+      {
+        repo_refs: [
+          on('topic', { kind: 'local_branch' }),
+          { ...on('v1.2.0', { kind: 'tag', annotated: false }), target: 'c'.repeat(40) },
+        ],
+        merge_base: base,
+        compare_commits: [{ path: 'lanes.ts', oldPath: null, change: 'modified' }],
+        compare_file_diff: null,
+      },
+      true,
+    );
+    expect(await refMenu(container, 'topic')).toContain('Compare topic with…');
+    await fireEvent.click(itemNamed(container, 'Compare topic with…'));
+
+    const box = await waitFor(() => {
+      const found = container.querySelector('input[aria-label="Command palette"]');
+      if (!found) throw new Error('no palette');
+      return found as HTMLInputElement;
+    });
+    expect(box.placeholder).toBe('Compare topic with…');
+    await fireEvent.input(box, { target: { value: 'v1.2' } });
+    await fireEvent.keyDown(box, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(container.querySelector('#detail-message')?.textContent).toContain('Parted at');
+    });
+    expect(invoke.mock.calls.find(([cmd]) => cmd === 'merge_base')?.[1]).toMatchObject({
+      a: 'a'.repeat(40),
+      b: 'c'.repeat(40),
+    });
+    expect(invoke.mock.calls.filter(([cmd]) => cmd === 'compare_commits').at(-1)?.[1]).toMatchObject({
+      from: base,
+      to: 'c'.repeat(40),
+    });
+    expect(container.textContent).toContain('topic against v1.2.0');
+
+    // A file reads across the same two the list was read across.
+    await fireEvent.click([...container.querySelectorAll('.files button, .file')].find((e) =>
+      e.textContent?.includes('lanes.ts'),
+    ) as HTMLElement);
+    await waitFor(() => {
+      expect(invoke.mock.calls.find(([cmd]) => cmd === 'compare_file_diff')?.[1]).toMatchObject({
+        from: base,
+        to: 'c'.repeat(40),
+        file: 'lanes.ts',
+      });
+    });
   });
 
   it('offers to push a tag, since a push sends none of them', async () => {

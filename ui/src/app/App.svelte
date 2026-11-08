@@ -153,7 +153,7 @@
     toggleMaximize as toggleMaximise,
   } from '../ipc/window';
   import { ThemeState, type ThemeChoice } from '../state/theme.svelte';
-  import { SelectionState, type Picked } from '../state/selection.svelte';
+  import { SelectionState, type Named, type Picked } from '../state/selection.svelte';
   import { LfsState } from '../state/lfs.svelte';
   import { lfsAvailable } from '../ipc/start';
   import { WorktreeState } from '../state/worktree.svelte';
@@ -1178,7 +1178,7 @@
 
   async function stageOpenFile(stage: boolean) {
     const path = diff.path;
-    if (!info || path === null || diff.source === 'commit' || diff.source === 'compare') return;
+    if (!info || path === null || (diff.source !== 'staged' && diff.source !== 'unstaged')) return;
     await worktree.stage([path], stage);
     await reloadDiff(info.path);
   }
@@ -1760,6 +1760,13 @@
         kind: 'item',
         label: 'Show it in the graph',
         run: () => ref.row !== null && void revealAt(ref.row, ref.peeled ?? ref.target),
+      });
+    }
+    if (ref.kind.kind !== 'stash') {
+      items.push({
+        kind: 'item',
+        label: `Compare ${ref.short} with…`,
+        run: () => pickToCompare({ oid: ref.peeled ?? ref.target, name: ref.short }),
       });
     }
 
@@ -2511,6 +2518,11 @@
         { kind: 'separator' },
         ...bisectFor(oid),
         { kind: 'separator' },
+        {
+          kind: 'item',
+          label: 'Compare with working tree',
+          run: () => info && void selection.compareWithWorktree(info.path, { oid, name: short }),
+        },
         { kind: 'item', label: 'Copy commit sha', hint: short, run: () => void copySha(oid) },
         { kind: 'item', label: 'Copy link to this commit', run: () => void copyLink(oid) },
         ...(hosting.view?.host
@@ -3855,6 +3867,13 @@
    */
   function openFile(file: string) {
     if (!info) return;
+    const revs = selection.againstRevs;
+    if (revs !== null) {
+      const was = selection.compared.find((f) => f.path === file)?.oldPath ?? null;
+      if (revs.to === null) void diff.openSince(info.path, revs.from, file, was);
+      else void diff.openCompare(info.path, revs.from, revs.to, file, was);
+      return;
+    }
     const pair = selection.pair;
     if (pair !== null) {
       const was = selection.compared.find((f) => f.path === file)?.oldPath ?? null;
@@ -3869,11 +3888,86 @@
 
   /** Drops the comparison and goes back to the newer of the two on its own. */
   function clearCompare() {
+    if (selection.against !== null) {
+      diff.close();
+      selection.clear();
+      return;
+    }
     const pair = selection.pair;
     if (!info || pair === null) return;
     diff.close();
     void selection.select(info.path, pair.to.row, pair.to.oid, listingFor(pair.to.oid));
   }
+
+  /** The palette, opened to choose one thing rather than to run any command. */
+  let choosing = $state<{ placeholder: string; commands: Command[] } | null>(null);
+
+  /** Offers every branch and tag to compare `from` with, in the palette. */
+  function pickToCompare(from: Named) {
+    const kinds: Record<string, string> = { local_branch: 'Branch', remote_branch: 'Remote', tag: 'Tag' };
+    choosing = {
+      placeholder: `Compare ${from.name} with…`,
+      commands: refs.all
+        .filter((r) => r.kind.kind in kinds && r.short !== from.name)
+        .map((r) => ({
+          id: r.name,
+          label: r.short,
+          group: kinds[r.kind.kind] ?? '',
+          run: () => {
+            if (info) void selection.compareRefs(info.path, from, { oid: r.peeled ?? r.target, name: r.short }, true);
+          },
+        })),
+    };
+  }
+
+  /** Between the tips, or only what the second gained since the two parted. */
+  function measureFromBase(sinceTheyParted: boolean) {
+    const a = selection.against;
+    if (!info || a?.kind !== 'refs') return;
+    diff.close();
+    void selection.compareRefs(info.path, a.from, a.to, sinceTheyParted);
+  }
+
+  function swapCompared() {
+    const a = selection.against;
+    if (!info || a?.kind !== 'refs') return;
+    diff.close();
+    void selection.compareRefs(info.path, a.to, a.from, a.base !== null);
+  }
+
+  /** What the details panel says about the comparison on screen, if there is one. */
+  const comparison = $derived.by(() => {
+    const a = selection.against;
+    if (a?.kind === 'worktree') {
+      return {
+        from: a.from.oid,
+        to: null,
+        files: selection.compared,
+        title: `${a.from.name} against the working tree`,
+        fromName: a.from.name,
+        toName: 'The working tree',
+        base: null,
+        note: 'Staged and unstaged changes alike. Untracked files are not compared.',
+        leave: 'Done comparing',
+      };
+    }
+    if (a?.kind === 'refs') {
+      return {
+        from: a.from.oid,
+        to: a.to.oid,
+        files: selection.compared,
+        title: `${a.from.name} against ${a.to.name}`,
+        fromName: a.from.name,
+        toName: a.to.name,
+        base: a.base,
+        note: null,
+        leave: 'Done comparing',
+      };
+    }
+    const pair = selection.pair;
+    if (pair === null) return null;
+    return { from: pair.from.oid, to: pair.to.oid, files: selection.compared };
+  });
 
   /**
    * Everything the palette offers.
@@ -5394,7 +5488,7 @@
       submodule={tabs.active?.submodule ?? null}
       branch={headName ?? 'detached'}
       busy={worktree.busy || actions.busy}
-      comparing={selection.pair !== null}
+      comparing={selection.pair !== null || selection.against !== null}
       terminalOpen={terminal.open}
       leftPanel={views.current.sidebar}
       stashes={stashes.list.length}
@@ -6039,13 +6133,9 @@
           onOpenUrl={(url) => void openInBrowser(url)}
           onOpenOnHost={(oid) => void openOnHost(oid)}
           repo={info?.path ?? null}
-          compare={selection.pair === null
-            ? null
-            : {
-                from: selection.pair.from.oid,
-                to: selection.pair.to.oid,
-                files: selection.compared,
-              }}
+          compare={comparison}
+          onSinceBase={selection.against?.kind === 'refs' ? measureFromBase : null}
+          onSwap={selection.against?.kind === 'refs' ? swapCompared : null}
           nothing={graph.totalRows === 0}
           loading={selection.loading}
           error={selection.error}
@@ -6165,6 +6255,14 @@
 
 {#if showPalette}
   <Palette {commands} onClose={() => (showPalette = false)} />
+{/if}
+
+{#if choosing}
+  <Palette
+    commands={choosing.commands}
+    placeholder={choosing.placeholder}
+    onClose={() => (choosing = null)}
+  />
 {/if}
 
 {#if showHelp}

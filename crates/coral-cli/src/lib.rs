@@ -295,11 +295,22 @@ pub enum Command {
     /// Show changes to the worktree, or to the index with --staged.
     Diff {
         /// Diff the index against HEAD rather than the worktree against the index.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "since")]
         staged: bool,
+        /// Diff the worktree against this commit: everything since it, staged or not.
+        #[arg(long, value_name = "REV")]
+        since: Option<String>,
         /// Limit to these paths.
         #[arg(value_name = "PATH")]
         paths: Vec<String>,
+    },
+    /// List the files that differ between two revisions.
+    Compare {
+        from: String,
+        to: String,
+        /// Only what `to` gained since the two parted, rather than everything between the tips.
+        #[arg(long)]
+        merge_base: bool,
     },
     /// Read commit history.
     Log {
@@ -657,8 +668,8 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
             output::render(&commands::create::clone(&what, quiet).await)
         }
         Command::Status => output::render(&commands::status::run(repo).await),
-        Command::Diff { staged, paths } => {
-            output::render(&commands::diff::run(repo, staged, &paths).await)
+        command @ (Command::Diff { .. } | Command::Compare { .. }) => {
+            dispatch_diff(command, repo).await
         }
         command @ Command::Log { .. } => dispatch_log(command, repo).await,
         Command::Find { query, limit } => {
@@ -781,6 +792,23 @@ async fn dispatch_config(command: Command, repo: &std::path::Path) -> output::Re
             )
             .await,
         ),
+        _ => unreachable!("routed by `dispatch`"),
+    }
+}
+
+/// What differs: the working tree, the index, or two revisions.
+async fn dispatch_diff(command: Command, repo: &std::path::Path) -> output::Rendered {
+    match command {
+        Command::Diff {
+            staged,
+            since,
+            paths,
+        } => output::render(&commands::diff::run(repo, staged, since.as_deref(), &paths).await),
+        Command::Compare {
+            from,
+            to,
+            merge_base,
+        } => output::render(&commands::diff::compare(repo, &from, &to, merge_base).await),
         _ => unreachable!("routed by `dispatch`"),
     }
 }

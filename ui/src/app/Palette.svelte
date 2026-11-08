@@ -10,7 +10,16 @@
     run: () => void;
   }
 
-  const { commands, onClose }: { commands: Command[]; onClose: () => void } = $props();
+  const {
+    commands,
+    onClose,
+    placeholder = 'Type a command',
+  }: {
+    commands: Command[];
+    onClose: () => void;
+    /** What the box says before anything is typed, for a palette opened to choose one thing. */
+    placeholder?: string;
+  } = $props();
 
   let query = $state('');
   let cursor = $state(0);
@@ -60,7 +69,7 @@
       bind:this={input}
       bind:value={query}
       onkeydown={onKey}
-      placeholder="Type a command"
+      {placeholder}
       aria-label="Command palette"
     />
     <ul>

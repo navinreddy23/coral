@@ -426,3 +426,52 @@ async fn auto_fetch_shows_sets_and_hands_back_the_interval() {
     let back = run(&["--default"]).await;
     assert_eq!(back.json["result"]["setting"], serde_json::Value::Null);
 }
+
+#[tokio::test]
+async fn compare_and_diff_since_answer_like_the_window() {
+    let fixture = TestRepo::new().write("a.txt", "1\n").commit("base");
+    fixture.git(["checkout", "--quiet", "-b", "side"]);
+    let fixture = fixture.write("side.txt", "s\n").commit("on the side");
+    fixture.git(["checkout", "--quiet", "main"]);
+    let fixture = fixture.write("main.txt", "m\n").commit("on main");
+    let path = fixture.path().to_str().unwrap().to_owned();
+    let repo = path.as_str();
+    let paths = |out: &serde_json::Value| -> Vec<String> {
+        let mut found: Vec<String> = out["result"]["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| f["path"].as_str().unwrap().to_owned())
+            .collect();
+        found.sort();
+        found
+    };
+
+    let tips = coral_cli::run(argv(&["--json", "--repo", repo, "compare", "main", "side"])).await;
+    assert_eq!(paths(&tips.json), ["main.txt", "side.txt"], "{}", tips.json);
+    let since = coral_cli::run(argv(&[
+        "--json",
+        "--repo",
+        repo,
+        "compare",
+        "main",
+        "side",
+        "--merge-base",
+    ]))
+    .await;
+    assert_eq!(paths(&since.json), ["side.txt"], "{}", since.json);
+    assert!(since.json["result"]["base"].is_string());
+
+    let fixture = fixture.write("a.txt", "2\n");
+    let worktree = coral_cli::run(argv(&[
+        "--json", "--repo", repo, "diff", "--since", "HEAD~1",
+    ]))
+    .await;
+    assert_eq!(
+        paths(&worktree.json),
+        ["a.txt", "main.txt"],
+        "{}",
+        worktree.json
+    );
+    drop(fixture);
+}

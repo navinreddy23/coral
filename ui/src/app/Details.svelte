@@ -30,6 +30,8 @@
     onEditNote,
     repo,
     compare,
+    onSinceBase = null,
+    onSwap = null,
     picture = null,
     nothing,
     loading,
@@ -64,7 +66,25 @@
      * The two commits being compared and what differs between them, when a second commit has
      * been picked. Takes the place of the one commit's own details.
      */
-    compare: { from: string; to: string; files: ChangedFile[] } | null;
+    compare: {
+      from: string;
+      /** Null for the working tree. */
+      to: string | null;
+      files: ChangedFile[];
+      /** What the two are, said in words, for a comparison asked for by name. */
+      title?: string;
+      fromName?: string;
+      toName?: string;
+      /** Where the two parted, when measured from there. */
+      base?: string | null;
+      note?: string | null;
+      /** What the way out of the comparison is called. */
+      leave?: string;
+    } | null;
+    /** Measures from where the two parted, or between the tips; null where that means nothing. */
+    onSinceBase?: ((on: boolean) => void) | null;
+    /** Turns the comparison round; null where there is nothing to turn. */
+    onSwap?: (() => void) | null;
     /** The author's picture, shown in the disc in place of the initials when there is one. */
     picture?: string | null;
     /** Goes back to the newer of the two on its own. */
@@ -212,7 +232,7 @@
 
   // Read when the box is ticked, and again whenever the commit changes under it.
   $effect(() => {
-    const rev = compare?.to ?? detail?.commit.oid ?? null;
+    const rev = compare === null ? (detail?.commit.oid ?? null) : (compare.to ?? compare.from);
     if (!showAll || rev === null || repo === null) {
       everything = [];
       allError = null;
@@ -334,18 +354,42 @@
         <span class="caret">
           <Icon name={closed.message ? 'chevronRight' : 'chevronDown'} size={14} />
         </span>
-        <span>Comparing two commits</span>
+        <span>{compare.title ?? 'Comparing two commits'}</span>
       </button>
     </h2>
     {#if !closed.message}
     <div id="detail-message">
     <dl class="fields">
       <dt>From</dt>
-      <dd class="mono">{compare.from.slice(0, 12)}</dd>
+      <dd>
+        {#if compare.fromName && !compare.from.startsWith(compare.fromName)}<span class="end">{compare.fromName}</span>{/if}
+        <span class="mono">{compare.from.slice(0, 12)}</span>
+      </dd>
       <dt>To</dt>
-      <dd class="mono">{compare.to.slice(0, 12)}</dd>
+      <dd>
+        {#if compare.toName}<span class="end">{compare.toName}</span>{/if}
+        {#if compare.to !== null}<span class="mono">{compare.to.slice(0, 12)}</span>{/if}
+      </dd>
+      {#if compare.base}
+        <dt>Parted at</dt>
+        <dd class="mono">{compare.base.slice(0, 12)}</dd>
+      {/if}
     </dl>
-    <button class="single" onclick={onClearCompare}>Show just the newer commit</button>
+    {#if compare.note}<p class="muted note">{compare.note}</p>{/if}
+    {#if onSinceBase !== null}
+      <label class="since">
+        <input
+          type="checkbox"
+          checked={compare.base !== null && compare.base !== undefined}
+          onchange={(e) => onSinceBase?.(e.currentTarget.checked)}
+        />
+        Only what {compare.toName ?? 'it'} gained since the two parted
+      </label>
+    {/if}
+    <div class="ends">
+      {#if onSwap !== null}<button class="single" onclick={() => onSwap?.()}>Swap</button>{/if}
+      <button class="single" onclick={onClearCompare}>{compare.leave ?? 'Show just the newer commit'}</button>
+    </div>
     </div>
     {/if}
   {:else if !detail}
@@ -700,6 +744,13 @@
     background: none; border: 0; padding: 0; color: var(--accent);
   }
   .single:hover { text-decoration: underline; }
+  .ends { display: flex; gap: var(--space-4); }
+  .end { color: var(--fg-0); font-weight: var(--weight-semibold); margin-right: var(--space-2); }
+  .note { margin: var(--space-2) 0; }
+  .since {
+    display: flex; align-items: center; gap: var(--space-2); margin: var(--space-2) 0;
+    color: var(--fg-1); background: var(--bg-0);
+  }
   .ref {
     font: inherit; padding: 0; border: 0; cursor: pointer; background: none;
     color: var(--accent); text-decoration: underline; text-underline-offset: 2px;
