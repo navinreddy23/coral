@@ -1332,6 +1332,24 @@
   }
 
   /**
+   * Reads again what a failed action can still have moved.
+   *
+   * A cleanup refused on its third branch has deleted the first two, and the engine journals
+   * them so undo can bring them back. The watcher's word on that arrived while the action held
+   * the window and was let go, so without this the panel went on listing two branches that were
+   * gone and Undo did not know there was anything to undo.
+   */
+  async function afterFailure(path: string, before: string) {
+    await Promise.all([refs.load(path), worktree.load(path)]);
+    if (refSignature() !== before) {
+      graph.forget();
+      await graph.open(path);
+      await Promise.all([refs.load(path), stashes.load(path)]);
+    }
+    void readJournal(path);
+  }
+
+  /**
    * Runs an action and reloads whatever it could have changed.
    *
    * Refs and status always, the graph only when a ref actually moved: rewalking 1.4M commits
@@ -1368,6 +1386,7 @@
         const title = what === null ? 'Something went wrong' : `${what} failed`;
         toasts.push('error', title, actions.report.text);
       }
+      await afterFailure(path, before);
       return false;
     }
 

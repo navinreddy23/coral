@@ -831,6 +831,43 @@ describe('the branch and tag menu', () => {
     });
   });
 
+  it('reads the branches and the journal again when a cleanup stops partway', async () => {
+    const { container } = await shell(
+      { repo_refs: [on('old-one', { kind: 'local_branch' })], branches_merged: ['old-one'] },
+      true,
+    );
+    await refMenu(container, 'old-one');
+    await fireEvent.click(itemNamed(container, 'Clean up branches…'));
+    const sheet = await waitFor(() => {
+      const found = container.querySelector('[aria-labelledby="cleanup-title"]');
+      if (!found) throw new Error('no sheet');
+      return found as HTMLElement;
+    });
+    const before = (cmd: string) => invoke.mock.calls.filter(([c]) => c === cmd).length;
+    const refsBefore = before('repo_refs');
+    const journalBefore = before('repo_journal');
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'repo_action') {
+        // eslint-disable-next-line no-throw-literal
+        throw { code: 'git_error', message: "cannot delete branch 'busy' used by worktree", what: 'delete 2 branches' };
+      }
+      const table: Record<string, unknown> = {
+        ...answers(),
+        repo_refs: [],
+        repo_journal: { undo: 'delete 2 branches', redo: null },
+      };
+      if (!(cmd in table)) throw new Error(`unstubbed command ${cmd}`);
+      return table[cmd];
+    });
+    await fireEvent.click(
+      [...sheet.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Delete')) as HTMLElement,
+    );
+    await waitFor(() => {
+      expect(before('repo_refs')).toBeGreaterThan(refsBefore);
+      expect(before('repo_journal')).toBeGreaterThan(journalBefore);
+    });
+  });
+
   it('compares a branch with another chosen in the palette, from where they parted', async () => {
     const base = 'b'.repeat(40);
     const { container } = await shell(

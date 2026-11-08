@@ -189,3 +189,52 @@ async fn a_failed_action_says_which_operation_failed() {
         failed.message
     );
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_cleanup_that_stops_partway_can_still_be_undone() {
+    // The branch checked out in another working tree is one git will not delete, so the bulk
+    // delete fails after taking the ones before it.
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    for b in ["first", "second", "busy", "last"] {
+        repo.git(["branch", b]);
+    }
+    let elsewhere = tempfile::tempdir().unwrap();
+    let wt = elsewhere.path().join("wt");
+    repo.git(["worktree", "add", "--quiet", wt.to_str().unwrap(), "busy"]);
+    let path = repo.path().display().to_string();
+    let doomed = |names: &[&str]| names.iter().map(|n| (*n).to_owned()).collect::<Vec<_>>();
+
+    let out = app::actions::run_action(
+        &path,
+        app::actions::Action::BranchDeleteMany {
+            merged: doomed(&["first", "second", "busy", "last"]),
+            unmerged: Vec::new(),
+        },
+    )
+    .await;
+    assert!(
+        out.is_err(),
+        "the branch in the other working tree stops it"
+    );
+    let left = repo.git(["branch", "--format=%(refname:short)"]);
+    assert!(
+        !left.contains("first") && !left.contains("second"),
+        "{left}"
+    );
+
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+    let last = Journal::load(&loc)
+        .entries
+        .pop()
+        .expect("what it did delete is journaled");
+    assert_eq!(last.label, "delete 4 branches");
+
+    app::actions::run_action(&path, app::actions::Action::Undo)
+        .await
+        .unwrap();
+    let back = repo.git(["branch", "--format=%(refname:short)"]);
+    for b in ["first", "second", "busy", "last"] {
+        assert!(back.lines().any(|l| l == b), "{b} is back: {back}");
+    }
+}

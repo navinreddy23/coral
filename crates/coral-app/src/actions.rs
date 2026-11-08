@@ -687,12 +687,29 @@ async fn act(
         _ => None,
     };
     let before = loc.snapshot_refs(&runner).await?;
-    let done = run(&loc, &runner, action, report).await?;
-    let after = loc.snapshot_refs(&runner).await?;
-    match reset {
-        Some(mode) => loc.journal_reset(label, before, after, mode)?,
-        None => loc.journal_change(label, before, after, coral_core::undo::Restore::Worktree)?,
+    let done = run(&loc, &runner, action, report).await;
+    // Journaled whether or not it finished. An action that fails partway can still have moved
+    // refs — the third of four branches refusing to go leaves the first two deleted — and an
+    // entry only success wrote left those with no way back. One that moved nothing records
+    // nothing, as `journal_change` skips an empty change.
+    let journaled = async {
+        let after = loc.snapshot_refs(&runner).await?;
+        match reset {
+            Some(mode) => loc.journal_reset(label, before, after, mode),
+            None => loc.journal_change(label, before, after, coral_core::undo::Restore::Worktree),
+        }
     }
+    .await;
+    let done = match (done, journaled) {
+        (Ok(done), Ok(())) => done,
+        (Ok(_), Err(e)) => return Err(e.into()),
+        (Err(e), journaled) => {
+            if let Err(j) = journaled {
+                tracing::warn!(error = %j, "could not journal what a failed action had moved");
+            }
+            return Err(e.into());
+        }
+    };
 
     Ok(ActionOutcome {
         what: label.to_owned(),
