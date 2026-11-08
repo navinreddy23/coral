@@ -55,10 +55,14 @@ pub struct Report {
     pub remote: bool,
     /// Why it failed, when it did.
     pub detail: String,
+    /// Started by the window rather than the user: a fetch on a timer. The window says so
+    /// without the strip, which takes a row of height from the panes and would move the rows
+    /// under somebody's pointer every few minutes.
+    pub quiet: bool,
 }
 
 impl Report {
-    fn new(key: &str, label: &str, state: State) -> Self {
+    fn new(key: &str, label: &str, state: State, quiet: bool) -> Self {
         Self {
             key: key.to_owned(),
             label: label.to_owned(),
@@ -69,6 +73,7 @@ impl Report {
             percent: 0,
             remote: false,
             detail: String::new(),
+            quiet,
         }
     }
 }
@@ -143,6 +148,7 @@ pub async fn watched<T, E, F, Fut>(
     app: &tauri::AppHandle,
     key: &str,
     label: &str,
+    quiet: bool,
     work: F,
 ) -> Result<T, E>
 where
@@ -164,10 +170,11 @@ where
         app: app.clone(),
         key: key.to_owned(),
         label: label.to_owned(),
+        quiet,
     };
     // Before git has said anything. A host that never answers produces no progress at all, and
     // a way out that only appears with the first record would never appear.
-    sender.send(Report::new(key, label, State::Running));
+    sender.send(Report::new(key, label, State::Running, quiet));
 
     let outcome = tokio::select! {
         done = work(sender.clone()) => Some(done),
@@ -177,17 +184,17 @@ where
 
     match outcome {
         Some(Ok(value)) => {
-            sender.send(Report::new(key, label, State::Finished));
+            sender.send(Report::new(key, label, State::Finished, quiet));
             Ok(value)
         }
         Some(Err(e)) => {
-            let mut report = Report::new(key, label, State::Failed);
+            let mut report = Report::new(key, label, State::Failed, quiet);
             report.detail = e.to_string();
             sender.send(report);
             Err(e)
         }
         None => {
-            sender.send(Report::new(key, label, State::Cancelled));
+            sender.send(Report::new(key, label, State::Cancelled, quiet));
             Err(coral_core::CoralError::Cancelled { label: "transfer" }.into())
         }
     }
@@ -200,6 +207,7 @@ pub struct Sender {
     app: tauri::AppHandle,
     key: String,
     label: String,
+    quiet: bool,
 }
 
 impl Sender {
@@ -215,6 +223,7 @@ impl Sender {
             percent: p.percent,
             remote: p.remote,
             detail: String::new(),
+            quiet: self.quiet,
         });
     }
 

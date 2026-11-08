@@ -25,6 +25,11 @@ export interface TransferReport {
   /** The work is happening on the server rather than here. */
   remote: boolean;
   detail: string;
+  /**
+   * Started by the window rather than the user: a fetch on a timer. Said in the status bar
+   * rather than on the strip, which would take a row from the panes every few minutes.
+   */
+  quiet?: boolean;
 }
 
 /** Stops one, answering whether there was one to stop. */

@@ -218,7 +218,7 @@ pub async fn repo_clone(
     // Keyed by where it will land, since there is no repository to name yet and that is the
     // one string the window already has: it is what the form says the clone will be at.
     let key = what.destination().display().to_string();
-    let cloning = crate::transfer::watched(&app, &key, "Clone", move |report| async move {
+    let cloning = crate::transfer::watched(&app, &key, "Clone", false, move |report| async move {
         coral_core::create::clone(&runner, &what, |p| report.progress(&p)).await
     });
     match cloning.await {

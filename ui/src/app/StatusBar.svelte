@@ -23,6 +23,8 @@
     onUpdate = () => {},
     shallow = false,
     onShallow = () => undefined,
+    fetching = false,
+    onStopFetching = () => undefined,
   }: {
     branch: string | null;
     /** The ref for the current branch, for its ahead and behind counts. */
@@ -48,6 +50,9 @@
     shallow?: boolean;
     /** Offers to fetch more of that history. */
     onShallow?: (event: MouseEvent) => void;
+    /** A fetch the window started on its own is running. */
+    fetching?: boolean;
+    onStopFetching?: () => void;
   } = $props();
 
   /** Exact counts stop being useful past a point; the reference caps them at 99+. */
@@ -109,6 +114,13 @@
          Asking once is what lets it list that server's pull requests. -->
     <button class="host" onclick={onPlace} title="Say what {host.unplaced} runs">
       {host.unplaced}<span class="muted">{t('status.whatIsThis')}</span>
+    </button>
+  {/if}
+  {#if fetching}
+    <!-- Here rather than on the strip above the panes, which would push every row down a
+         line while it ran and back up when it finished. Still a way out, as every transfer is. -->
+    <button class="host fetching" onclick={onStopFetching} title="Fetching in the background. Click to stop it">
+      <span class="glyph"><Icon name="fetch" size={12} /></span>Fetching…
     </button>
   {/if}
   {#if commits > 0}

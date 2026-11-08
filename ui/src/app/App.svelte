@@ -6457,6 +6457,8 @@
       onUpdate={() => openPreferences('about')}
       shallow={info.shallow}
       onShallow={(event) => deepenMenu(event)}
+      fetching={transfer.quietly !== null && transfer.quietly.key === info.path}
+      onStopFetching={() => void transfer.cancelQuiet()}
       report={actions.report}
       busy={actions.busy || worktree.busy || merge.busy}
       onDismiss={() => actions.clear()}

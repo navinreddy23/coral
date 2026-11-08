@@ -65,3 +65,39 @@ describe('the transfer bar', () => {
     expect(container.textContent).toContain('Stopping');
   });
 });
+
+describe('a fetch the window started on its own', () => {
+  const running = () => ({
+    key: '/home/dev/coral',
+    label: 'Fetch',
+    state: 'running' as const,
+    phase: '',
+    current: 0,
+    total: 0,
+    percent: 0,
+    remote: false,
+    detail: '',
+  });
+
+  it('stays off the strip, so the panes do not move, and can still be stopped', async () => {
+    invoke.mockReset();
+    invoke.mockResolvedValue(true);
+    const transfer = new TransferState();
+    transfer.take({ ...running(), label: 'fetch in the background', quiet: true });
+    const { container } = render(Transfer, { props: { transfer } });
+    expect(transfer.current).toBeNull();
+    expect(container.textContent?.trim()).toBe('');
+    expect(transfer.quietly?.key).toBe('/home/dev/coral');
+
+    await transfer.cancelQuiet();
+    expect(invoke).toHaveBeenCalledWith('cancel_transfer', { key: '/home/dev/coral' });
+  });
+
+  it('leaves the strip to the user’s own transfer when both run', () => {
+    const transfer = new TransferState();
+    transfer.take({ ...running(), key: '/a', label: 'fetch in the background', quiet: true });
+    transfer.take({ ...running(), key: '/b', label: 'Clone' });
+    expect(transfer.current?.key).toBe('/b');
+    expect(transfer.waiting).toBe(0);
+  });
+});

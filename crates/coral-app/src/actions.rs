@@ -574,6 +574,13 @@ pub async fn repo_action(
         return run_action(&path, action).await;
     }
     let label = action.label();
+    let quiet = matches!(
+        action,
+        Action::Fetch {
+            background: true,
+            ..
+        }
+    );
     // Borrowed by the key and the label as well as by the work, so the block takes references
     // rather than the strings themselves.
     let (at, named) = (path.as_str(), label.as_str());
@@ -583,7 +590,7 @@ pub async fn repo_action(
     // operation started and never saying what became of it — in the log somebody opens to
     // find out exactly that.
     let entry = crate::activity::started(at, named);
-    let outcome = crate::transfer::watched(&app, at, named, |report| async move {
+    let outcome = crate::transfer::watched(&app, at, named, quiet, |report| async move {
         act(at, action, named, &|p| report.progress(p)).await
     })
     .await;
