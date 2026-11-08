@@ -1,3 +1,4 @@
+import { fileBlob } from '../ipc/blob';
 import {
   compareFileDiff,
   fileBlame,
@@ -41,6 +42,16 @@ interface Request {
   oldPath: string | null;
 }
 
+/**
+ * What the file view draws: the file's text, or why there is none.
+ *
+ * `before` is set when the change took the file away, so what is drawn is how it was.
+ */
+export type Contents =
+  | { kind: 'text'; text: string; before: boolean }
+  | { kind: 'binary'; before: boolean }
+  | { kind: 'absent' };
+
 /** One side of the change on screen: where its bytes are, and under which name. */
 export interface Side {
   side: BlobSide;
@@ -71,6 +82,8 @@ export class DiffState {
   blame = $state<Blame | null>(null);
   /** The file itself at the revision the blame was taken at, so the two line up. */
   text = $state<string | null>(null);
+  /** The file as the change leaves it, once the file view has asked for it. */
+  contents = $state<Contents | null>(null);
   /**
    * The commits that touched this file, newest first, once the history view has asked.
    *
@@ -231,7 +244,8 @@ export class DiffState {
   get view(): FileView {
     if (this.source === 'compare') return 'diff';
     const remembered = this.#views.current.fileView;
-    return remembered === 'blame' && this.file?.binary === true ? 'diff' : remembered;
+    const lined = remembered === 'blame' || remembered === 'file';
+    return lined && this.file?.binary === true ? 'diff' : remembered;
   }
 
   setView(view: FileView): void {
@@ -312,6 +326,29 @@ export class DiffState {
     this.sideError = null;
     if (this.view === 'blame') await this.#loadBlame();
     else if (this.view === 'history') await this.#loadHistory();
+    else if (this.view === 'file') await this.#loadContents();
+  }
+
+  /**
+   * Reads the file as the change leaves it, for the file view.
+   *
+   * By side rather than by revision, so the working copy's file is the one on disk and a staged
+   * one is what the index holds. A change that deleted the file has nothing after it, and the
+   * view shows it as it was.
+   */
+  async #loadContents(keep = false): Promise<void> {
+    const sides = this.sides;
+    if (sides === null) return;
+    const side = ++this.#side;
+    if (!keep) this.contents = null;
+    try {
+      const after = await fileBlob(sides.repo, sides.after.side, sides.after.file);
+      const bytes = after ?? (await fileBlob(sides.repo, sides.before.side, sides.before.file));
+      if (side !== this.#side) return;
+      this.contents = contentsOf(bytes, after === null);
+    } catch (e) {
+      if (side === this.#side) this.sideError = messageOf(e);
+    }
   }
 
   async #loadBlame(): Promise<void> {
@@ -428,6 +465,7 @@ export class DiffState {
     const request = this.#request;
     if (request === null || request.source === 'commit') return;
     await this.#reread({ ...request, repo });
+    if (this.view === 'file') await this.#loadContents(true);
   }
 
   /** Reads the open file again, leaving what is on screen up until the answer arrives. */
@@ -459,6 +497,7 @@ export class DiffState {
     this.openedAt = request.source === 'commit' ? request.rev : null;
     this.blame = null;
     this.text = null;
+    this.contents = null;
     this.history = null;
     this.moreHistory = false;
     this.source = request.source;
@@ -503,6 +542,7 @@ export class DiffState {
     this.#opened = null;
     this.blame = null;
     this.text = null;
+    this.contents = null;
     this.history = null;
     this.moreHistory = false;
     this.atCommit = null;
@@ -522,6 +562,20 @@ export class DiffState {
 function revisionOf(request: Request): string {
   if (request.source === 'compare') return request.to;
   return request.source === 'commit' ? request.rev : 'HEAD';
+}
+
+/**
+ * A file's bytes as the file view draws them.
+ *
+ * Binary by git's own test, a NUL in the first eight thousand bytes, so the view and the diff
+ * agree about which files have lines. Decoded as the engine decodes text, with what is not UTF-8
+ * replaced rather than refused.
+ */
+function contentsOf(bytes: ArrayBuffer | null, before: boolean): Contents {
+  if (bytes === null) return { kind: 'absent' };
+  const head = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 8000));
+  if (head.includes(0)) return { kind: 'binary', before };
+  return { kind: 'text', text: new TextDecoder().decode(bytes), before };
 }
 
 /** Side by side shows the file end to end; inline shows the hunks. */

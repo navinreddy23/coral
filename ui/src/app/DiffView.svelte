@@ -305,6 +305,13 @@
     next?.scrollIntoView({ block: 'center' });
   }
 
+  /** A file's text as lines, without the empty one after its last newline. */
+  function linesOf(text: string): string[] {
+    const lines = text.split('\n');
+    if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+    return lines;
+  }
+
   /** The file's lines paired with the commit that last changed each. */
   const blamed = $derived.by(() => {
     const blame = diff.blame;
@@ -314,9 +321,7 @@
     const by = new Map<number, (typeof blame.chunks)[number]>();
     for (const chunk of blame.chunks) by.set(chunk.finalLine, chunk);
 
-    const lines = text.split('\n');
-    if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
-    return lines.map((content, i) => {
+    return linesOf(text).map((content, i) => {
       const chunk = by.get(i + 1);
       const commit = chunk === undefined ? undefined : blame.commits[chunk.oid];
       return {
@@ -331,6 +336,57 @@
       };
     });
   });
+
+  /** The file view's lines: the file alone, with nobody beside them. */
+  const fileLines = $derived.by(() => {
+    const contents = diff.contents;
+    if (contents?.kind !== 'text') return [];
+    return linesOf(contents.text).map((content, i) => ({
+      no: i + 1, content, oid: null, who: '', when: 0, summary: '',
+    }));
+  });
+
+  /** Whether the scroller holds the file a line at a time rather than a diff. */
+  const sheeted = $derived(diff.view === 'blame' || diff.view === 'file');
+  const sheetLines = $derived(diff.view === 'blame' ? blamed : diff.view === 'file' ? fileLines : []);
+
+  /** Height of the picked-lines bar above a blame, matching `.line-range` below. */
+  const RANGE_BAR = 30;
+
+  /**
+   * Only the lines on screen are built, as side by side builds only its rows.
+   *
+   * Blame drew every line of the file as a table row, and the kernel's MAINTAINERS is thirty
+   * thousand of them: a hundred thousand cells laid out before the first paint, for the forty
+   * lines anyone can see. Measured from under the picked-lines bar, which blame keeps at the
+   * top of the same scroller.
+   */
+  const firstLine = $derived(
+    Math.max(0, Math.floor(Math.max(0, scrolled - (diff.view === 'blame' ? RANGE_BAR : 0)) / ROW) - OVERSCAN),
+  );
+  const shownLines = $derived(
+    sheetLines.slice(firstLine, firstLine + Math.ceil(viewport / ROW) + OVERSCAN * 2),
+  );
+
+  /**
+   * The columns of the sheet, sized from the whole file rather than from the lines built.
+   *
+   * With only some lines in the document, a column fitted to its content would change width as
+   * longer names or lines scrolled into it, and the code would step sideways under the reader.
+   * The longest line is counted with tabs at the eight columns `white-space: pre` gives them,
+   * so the sheet is as wide as its widest line and scrolls sideways to it.
+   */
+  const sheetDigits = $derived(Math.max(3, String(sheetLines.length).length));
+  const widest = $derived(sheetLines.reduce((n, line) => Math.max(n, columnsOf(line.content)), 0));
+  const authorChars = $derived(
+    Math.min(24, Object.values(diff.blame?.commits ?? {}).reduce((n, c) => Math.max(n, c.author.name.length), 0)),
+  );
+
+  function columnsOf(text: string): number {
+    let n = 0;
+    for (const c of text) n = c === '\t' ? n + 8 - (n % 8) : n + 1;
+    return n;
+  }
 
   /**
    * The run of blame lines picked for a history of their own, by clicking a number and
@@ -379,6 +435,43 @@
 
 </script>
 
+{#snippet sheet(blaming: boolean)}
+  <div
+    class="file-sheet"
+    class:blame={blaming}
+    style:height="{sheetLines.length * ROW}px"
+    style:--gutter="calc({sheetDigits}ch + var(--space-3) + var(--space-2))"
+    style:--aside={blaming ? `calc(${authorChars + 12}ch + 3 * var(--space-2))` : '0px'}
+    style:min-width="calc(var(--aside) + var(--gutter) + {widest}ch + 2 * var(--space-2))"
+  >
+    <div class="window" style:transform="translateY({firstLine * ROW}px)">
+      {#each shownLines as line (line.no)}
+        <div class="file-line" class:ranged={blaming && range !== null && line.no >= range.from && line.no <= range.to}>
+          {#if blaming}
+            <span class="author">
+              {#if line.oid !== null}
+                <span class="chip" title="{line.summary}&#10;{line.who}">
+                  <span class="name">{line.who}</span>
+                  <span class="mono">{line.oid.slice(0, 7)}</span>
+                  <span class="when">{shortAge(line.when)}</span>
+                </span>
+              {/if}
+            </span>
+            <button
+              class="no line-pick"
+              onclick={(e) => pickLine(line.no, e)}
+              title="Pick this line; Shift-click another to pick the lines between"
+            >{line.no}</button>
+          {:else}
+            <span class="no">{line.no}</span>
+          {/if}
+          <span class="text"><CodeLine text={line.content} spans={null} /></span>
+        </div>
+      {/each}
+    </div>
+  </div>
+{/snippet}
+
 <section class="diff">
   <header>
     <span class="path mono" title={diff.path ?? ''}>{elidePath(diff.path ?? '', 72)}</span>
@@ -404,6 +497,12 @@
         <button class:on={diff.view === 'history'} onclick={() => diff.setView('history')}>
           History
         </button>
+        <button
+          class:on={diff.view === 'file'}
+          disabled={diff.file?.binary === true}
+          title={diff.file?.binary === true ? 'A binary file has no lines to show' : 'The whole file as this change leaves it'}
+          onclick={() => diff.setView('file')}>File</button
+        >
       </div>
     {/if}
 
@@ -414,6 +513,10 @@
       header to the right, out from under the pointer that had just chosen one of them.
     -->
     <span class="spread"></span>
+
+    {#if diff.view === 'file' && diff.contents !== null && diff.contents.kind !== 'absent' && diff.contents.before}
+      <span class="note">As it was: this change deleted it</span>
+    {/if}
 
     {#if diff.view === 'diff'}
       <div class="toggle" role="group" aria-label="Diff layout">
@@ -549,37 +652,35 @@
             </button>
           {/if}
         </div>
-        <table class="lines blame">
-          <tbody>
-            {#each blamed as line (line.no)}
-              <tr class:ranged={range !== null && line.no >= range.from && line.no <= range.to}>
-                <td class="author">
-                  {#if line.oid !== null}
-                    <span class="chip" title="{line.summary}&#10;{line.who}">
-                      {line.who}
-                      <span class="mono">{line.oid.slice(0, 7)}</span>
-                      <span class="when">{shortAge(line.when)}</span>
-                    </span>
-                  {/if}
-                </td>
-                <td
-                  class="no line-pick"
-                  onclick={(e) => pickLine(line.no, e)}
-                  title="Pick this line; Shift-click another to pick the lines between"
-                >{line.no}</td>
-                <td class="text">{line.content}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        {@render sheet(true)}
+      {/if}
+    {:else if diff.view === 'file'}
+      {#if diff.sideError}
+        <p class="error">{diff.sideError}</p>
+      {:else if diff.contents === null}
+        <p class="muted">Reading the file…</p>
+      {:else if diff.contents.kind === 'absent'}
+        <p class="muted">There is no file here to show.</p>
+      {:else if diff.contents.kind === 'binary'}
+        <p class="muted">A binary file has no lines to show.</p>
+      {:else if fileLines.length === 0}
+        <p class="muted">The file is empty.</p>
+      {:else}
+        {@render sheet(false)}
       {/if}
     {:else if diff.loading}
       <p class="muted">Loading…</p>
     {:else if diff.error}
       <p class="error">{diff.error}</p>
     {:else if diff.empty}
-      <!-- Not red: the file is simply not part of this change, which is an answer. -->
-      <p class="muted">{diff.empty}</p>
+      <!-- Not red: the file is simply not part of this change, which is an answer. The file
+           itself is still there to read, which is what a click in "view all files" is after. -->
+      <p class="muted">
+        {diff.empty}
+        {#if diff.source !== 'compare'}
+          <button class="anyway" onclick={() => diff.setView('file')}>Show the file</button>
+        {/if}
+      </p>
     {:else if !diff.file}
       <p class="muted">Nothing to show.</p>
     {:else if diff.file.binary}
@@ -718,7 +819,9 @@
       </div>
     {/if}
 
-    {#if diff.mode === 'split' && split.total > split.rows.length}
+    {#if sheeted}
+      <!-- The sheet is the whole file, so there is no window of it to explain. -->
+    {:else if diff.mode === 'split' && split.total > split.rows.length}
       <p class="muted">
         Showing lines {(split.from + 1).toLocaleString()} to
         {(split.from + split.rows.length).toLocaleString()} of {split.total.toLocaleString()},
@@ -731,9 +834,9 @@
     {/if}
   </div>
 
-  <!-- Not in blame: the marks, the band and the jump below all measure against the diff's
-       rows, and blame puts the whole file in this same scroller instead. -->
-  {#if diff.mode === 'split' && diff.view !== 'blame' && marks.length > 0}
+  <!-- Not in blame or the file: the marks, the band and the jump below all measure against the
+       diff's rows, and those put the whole file in this same scroller instead. -->
+  {#if diff.mode === 'split' && !sheeted && marks.length > 0}
     <button
       class="overview"
       onclick={jump}
@@ -886,8 +989,10 @@
     border-radius: var(--radius-0); padding: 0 var(--space-2); line-height: 18px;
   }
   .scope button:hover, .line-range button:hover { background: var(--bg-2); color: var(--fg-0); }
+  /* Held at the left as well as the top: the sheet under it is as wide as the file's widest
+     line and scrolls sideways, and the way on should not scroll out of view with it. */
   .line-range {
-    position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: var(--space-2);
+    position: sticky; top: 0; left: 0; z-index: 2; display: flex; align-items: center; gap: var(--space-2);
     padding: var(--space-1) var(--space-2); background: var(--bg-1);
     border-bottom: 1px solid var(--border); color: var(--fg-1); font-size: var(--text-sm);
   }
@@ -897,10 +1002,8 @@
   .line-range { box-sizing: border-box; height: 30px; flex-wrap: nowrap; }
   .line-range > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .line-range .muted { color: var(--fg-2); margin: 0; padding: 0; }
-  td.no.line-pick { cursor: pointer; }
-  td.no.line-pick:hover { color: var(--fg-0); }
-  tr.ranged td.no { background: var(--accent-soft); color: var(--fg-0); box-shadow: inset 2px 0 0 var(--accent-line); }
-  tr.ranged td.text { background: var(--accent-soft); }
+  .file-line.ranged .no { background: var(--accent-soft); color: var(--fg-0); box-shadow: inset 2px 0 0 var(--accent-line); }
+  .file-line.ranged .text { background: var(--accent-soft); }
 
   .modes code {
     font-family: var(--font-mono); font-size: var(--text-sm);
@@ -923,17 +1026,39 @@
   }
   .anyway:hover { background: var(--bg-3); color: var(--fg-0); }
 
+  /*
+   * Blame and the file, a line at a time: a spacer as tall as the file with only the lines on
+   * screen inside it, as side by side is drawn. The window is the same rule as that sheet's.
+   */
+  .file-sheet {
+    position: relative;
+    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm); font-weight: var(--weight-regular); line-height: 17px;
+  }
+  .file-line { display: grid; height: 17px; grid-template-columns: var(--gutter) minmax(0, 1fr); }
+  .file-sheet.blame .file-line { grid-template-columns: var(--aside) var(--gutter) minmax(0, 1fr); }
+  .file-line .no {
+    text-align: right; user-select: none; padding: 0 var(--space-2) 0 var(--space-3);
+    color: var(--fg-2); background: var(--bg-2); box-sizing: border-box;
+    border: 0; border-right: 1px solid var(--border);
+    font: inherit; font-variant-numeric: tabular-nums;
+  }
+  button.no.line-pick { cursor: pointer; }
+  button.no.line-pick:hover { color: var(--fg-0); }
+
   /* Who wrote each line, named once per run rather than once per line. */
   .blame .author {
-    width: 1%; white-space: nowrap; user-select: none; vertical-align: top;
+    min-width: 0; white-space: nowrap; user-select: none;
     padding: 0 var(--space-2); background: var(--bg-1);
     border-right: 1px solid var(--border);
   }
   .chip {
-    display: inline-flex; gap: var(--space-2); align-items: baseline;
+    display: flex; gap: var(--space-2); align-items: baseline; min-width: 0;
     font-family: var(--font-ui); font-size: var(--text-sm); color: var(--fg-1);
   }
+  .chip .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .chip .mono, .chip .when { flex: 0 0 auto; }
   .chip .when { color: var(--fg-2); }
+  .note { flex: 0 1 auto; min-width: 0; color: var(--fg-2); font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--bg-1); }
   .scroll { flex: 1; min-width: 0; overflow: auto; }
 
   /*

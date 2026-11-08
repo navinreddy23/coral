@@ -119,6 +119,66 @@ describe('the file panel', () => {
     expect(called('file_blame')[0]?.[1]).toMatchObject({ rev: 'HEAD' });
   });
 
+  it('reads the file view from the side the change leaves it on', async () => {
+    // By side, not by revision: the working copy's file is the one on disk and a staged one is
+    // what the index holds, where blame has to read HEAD for both.
+    const text = new TextEncoder().encode('one\ntwo\n');
+    answering({ file_blob: text });
+    const diff = new DiffState(new ViewsState());
+
+    await diff.open('/repo', 'deadbeef', 'a.c');
+    diff.setView('file');
+    await vi.waitFor(() => expect(diff.contents).not.toBeNull());
+    expect(diff.contents).toEqual({ kind: 'text', text: 'one\ntwo\n', before: false });
+    expect(called('file_blob')[0]?.[1]).toEqual({
+      path: '/repo', side: { kind: 'commit', rev: 'deadbeef' }, file: 'a.c',
+    });
+
+    await diff.openWorking('/repo', false, 'a.c');
+    await vi.waitFor(() => expect(diff.contents).not.toBeNull());
+    expect(called('file_blob').at(-1)?.[1]).toMatchObject({ side: { kind: 'worktree' } });
+
+    await diff.openWorking('/repo', true, 'a.c');
+    await vi.waitFor(() => expect(diff.contents).not.toBeNull());
+    expect(called('file_blob').at(-1)?.[1]).toMatchObject({ side: { kind: 'index' } });
+    expect(called('file_blame')).toHaveLength(0);
+  });
+
+  it('shows a deleted file as it was, and a binary one as having no lines', async () => {
+    const was = new TextEncoder().encode('gone\n');
+    invoke.mockImplementation((name: string, args: { side?: { kind: string } }) => {
+      if (name === 'file_blob') return Promise.resolve(args.side?.kind === 'commit' ? new Uint8Array() : was);
+      return Promise.resolve(name === 'file_diff' ? EMPTY_DIFF : null);
+    });
+    const diff = new DiffState(new ViewsState());
+    await diff.open('/repo', 'deadbeef', 'gone.c');
+    diff.setView('file');
+    await vi.waitFor(() => expect(diff.contents).not.toBeNull());
+    expect(diff.contents).toEqual({ kind: 'text', text: 'gone\n', before: true });
+    expect(called('file_blob').map((c) => (c[1] as { side: { kind: string } }).side.kind)).toEqual([
+      'commit', 'parent',
+    ]);
+
+    // git's own test, so the view and the diff agree about which files have lines.
+    answering({ file_blob: new Uint8Array([0x89, 0x50, 0x00, 0x47]) });
+    await diff.open('/repo', 'deadbeef', 'logo.png');
+    await vi.waitFor(() => expect(diff.contents).not.toBeNull());
+    expect(diff.contents).toEqual({ kind: 'binary', before: false });
+  });
+
+  it('reads the working copy\'s file again when it changes on disk', async () => {
+    answering({ file_blob: new TextEncoder().encode('one\n') });
+    const diff = new DiffState(new ViewsState());
+    await diff.openWorking('/repo', false, 'a.c');
+    diff.setView('file');
+    await vi.waitFor(() => expect(diff.contents).not.toBeNull());
+
+    answering({ file_blob: new TextEncoder().encode('one\ntwo\n') });
+    await diff.reload('/repo');
+    // Kept up while the new one is read, so an editor's autosave does not flash the pane.
+    expect(diff.contents).toEqual({ kind: 'text', text: 'one\ntwo\n', before: false });
+  });
+
   it('reads the file again when whitespace stops counting', async () => {
     answering();
     const diff = new DiffState(new ViewsState());

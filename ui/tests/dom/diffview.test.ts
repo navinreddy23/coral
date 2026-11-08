@@ -215,13 +215,13 @@ describe('the diff viewer', () => {
     };
     const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
 
-    const numbers = view.container.querySelectorAll('table.blame td.no');
+    const numbers = view.container.querySelectorAll('.file-sheet.blame .no');
     // Not `.pick`: that is the line-staging button's class, and its full width pushed the
     // code column a quarter of the pane to the right in the real window.
     expect(numbers[0]?.classList.contains('pick')).toBe(false);
     await fireEvent.click(numbers[2] as HTMLElement);
     await fireEvent.click(numbers[0] as HTMLElement, { shiftKey: true });
-    expect(view.container.querySelectorAll('tr.ranged')).toHaveLength(3);
+    expect(view.container.querySelectorAll('.file-line.ranged')).toHaveLength(3);
     expect(view.container.querySelector('.line-range')?.textContent).toContain('lines 1–3 picked');
 
     const go = view.container.querySelector('.line-range .go') as HTMLButtonElement;
@@ -237,6 +237,78 @@ describe('the diff viewer', () => {
     // The bar stays, saying how to pick, so nothing below it moves.
     expect(view.container.querySelector('.line-range .go')).toBeNull();
     expect(view.container.querySelector('.line-range')?.textContent).toContain('Pick a line number');
+  });
+
+  it('builds only the lines on screen of a long blame', () => {
+    // Every line was a table row, and on the kernel's MAINTAINERS that was a hundred thousand
+    // cells before the first paint.
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'MAINTAINERS';
+    diff.file = fileDiff();
+    diff.setView('blame');
+    diff.blame = {
+      chunks: [{ oid: 'a'.repeat(40), finalLine: 1, origLine: 1, lines: 5000 }],
+      commits: {
+        ['a'.repeat(40)]: {
+          oid: 'a'.repeat(40),
+          author: { name: 'Ada', email: 'ada@example.com', time: 1_700_000_000, offset: 0 },
+          summary: 'first',
+          filename: 'MAINTAINERS',
+        },
+      },
+    } as unknown as NonNullable<typeof diff.blame>;
+    diff.text = Array.from({ length: 5000 }, (_, i) => `line ${i + 1}`).join('\n') + '\n';
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+
+    const sheet = view.container.querySelector('.file-sheet.blame') as HTMLElement;
+    expect(sheet.style.height).toBe(`${5000 * 17}px`);
+    const built = view.container.querySelectorAll('.file-line');
+    expect(built.length).toBeGreaterThan(0);
+    expect(built.length).toBeLessThan(100);
+    // The chip is on the first line of its run and nowhere else.
+    expect(view.container.querySelectorAll('.chip')).toHaveLength(1);
+  });
+
+  it('shows the file a line at a time, with nobody beside it', () => {
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'a.c';
+    diff.file = fileDiff();
+    diff.setView('file');
+    diff.contents = { kind: 'text', text: 'one\n\ttwo\nthree\n', before: false };
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+
+    const sheet = view.container.querySelector('.file-sheet') as HTMLElement;
+    expect(sheet.classList.contains('blame')).toBe(false);
+    expect([...sheet.querySelectorAll('.no')].map((n) => n.textContent)).toEqual(['1', '2', '3']);
+    expect([...sheet.querySelectorAll('.text')].map((n) => n.textContent)).toEqual(['one', '\ttwo', 'three']);
+    expect(sheet.querySelector('.author')).toBeNull();
+    // Wide enough for its widest line, with a tab counted at the eight columns it is drawn at.
+    expect(sheet.style.minWidth).toContain(' 11ch');
+    expect(view.container.querySelector('header .note')).toBeNull();
+  });
+
+  it('says when the file shown is how it was before the change deleted it', () => {
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'gone.c';
+    diff.file = { ...fileDiff(), change: 'deleted' };
+    diff.setView('file');
+    diff.contents = { kind: 'text', text: 'gone\n', before: true };
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+    expect(view.container.querySelector('header .note')?.textContent).toContain('this change deleted it');
+  });
+
+  it('offers the file itself where the change has nothing to show for it', async () => {
+    // "View all files" is mostly files the commit did not touch, and the pane said so and
+    // stopped there.
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'README';
+    diff.empty = 'This commit did not change that file.';
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+    const show = [...view.container.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Show the file',
+    ) as HTMLButtonElement;
+    await fireEvent.click(show);
+    expect(diff.view).toBe('file');
   });
 
   it('keeps the picked-lines bar one height, hint or pick', () => {
@@ -425,7 +497,7 @@ describe('a comparison of two commits', () => {
     expect(diff.view).toBe('diff');
     const { container } = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
     expect(container.querySelector('table.lines')).not.toBeNull();
-    expect(container.querySelector('table.lines.blame')).toBeNull();
+    expect(container.querySelector('.file-sheet.blame')).toBeNull();
   });
 
   it('offers no blame or history tab for it', () => {

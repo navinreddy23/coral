@@ -273,6 +273,13 @@ tabs, and next/previous change in both layouts. The unified view can be widened 
 to the whole file; side by side always shows the whole of it. Large and binary files render as a placeholder
 with an explicit load action.
 
+Beside Diff, Blame and History, **File** shows the whole file as the change leaves it: as the
+commit has it, as the index has it for a staged change, and as it is on disk for an unstaged one,
+read again when it changes there. A change that deleted the file shows it as it was, and says
+so. A file the commit did not touch, which is most of "View all files", offers "Show the file"
+where it says so. Blame and File draw only the lines on screen, so the kernel's MAINTAINERS opens
+as quickly as a file of ten lines; both are refused past 32 MB.
+
 A binary file that is an image is drawn instead: before and after side by side, each captioned
 with its dimensions and size, on a checkerboard so transparency shows. A side the file is
 missing from says so. The bytes come over the binary IPC path, as the graph frames do.
