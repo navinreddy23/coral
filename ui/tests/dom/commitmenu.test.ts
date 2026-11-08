@@ -319,9 +319,13 @@ describe('the commit menu', () => {
     });
     expect(container.textContent).toContain('Untracked files are not compared.');
 
-    await fireEvent.click([...container.querySelectorAll('.files button, .file')].find((e) =>
-      e.textContent?.includes('a.c'),
-    ) as HTMLElement);
+    await fireEvent.click(await waitFor(() => {
+      const found = [...container.querySelectorAll('.files .file')].find((e) =>
+        e.textContent?.includes('a.c'),
+      );
+      if (!found) throw new Error('no file yet');
+      return found as HTMLElement;
+    }));
     await waitFor(() => {
       expect(invoke.mock.calls.find(([cmd]) => cmd === 'since_file_diff')?.[1]).toMatchObject({
         rev: frameOids[0],
@@ -908,9 +912,13 @@ describe('the branch and tag menu', () => {
     expect(container.textContent).toContain('topic against v1.2.0');
 
     // A file reads across the same two the list was read across.
-    await fireEvent.click([...container.querySelectorAll('.files button, .file')].find((e) =>
-      e.textContent?.includes('lanes.ts'),
-    ) as HTMLElement);
+    await fireEvent.click(await waitFor(() => {
+      const found = [...container.querySelectorAll('.files .file')].find((e) =>
+        e.textContent?.includes('lanes.ts'),
+      );
+      if (!found) throw new Error('no file yet');
+      return found as HTMLElement;
+    }));
     await waitFor(() => {
       expect(invoke.mock.calls.find(([cmd]) => cmd === 'compare_file_diff')?.[1]).toMatchObject({
         from: base,

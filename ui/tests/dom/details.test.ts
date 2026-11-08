@@ -491,3 +491,26 @@ describe('the commit on its host', () => {
     expect(opened).toEqual([d.commit.oid]);
   });
 });
+
+describe('a comparison being read', () => {
+  it('keeps saying which two it is, and does not claim nothing differs', () => {
+    const { container } = render(Details, {
+      props: {
+        ...props,
+        detail: null,
+        loading: true,
+        compare: {
+          from: 'a'.repeat(40),
+          to: 'b'.repeat(40),
+          files: [],
+          title: 'v6.0 against master',
+          fromName: 'v6.0',
+          toName: 'master',
+        },
+      },
+    });
+    expect(container.textContent).toContain('v6.0 against master');
+    expect(container.textContent).toContain('Reading what differs…');
+    expect(container.textContent).not.toContain('0 files differ');
+  });
+});

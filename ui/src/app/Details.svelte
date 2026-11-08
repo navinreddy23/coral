@@ -323,7 +323,7 @@
   >
   {#if error}
     <p class="error">{error}</p>
-  {:else if loading}
+  {:else if loading && compare === null}
     <p class="muted">Loading…</p>
   {:else if many.length > 0}
     <!--
@@ -561,11 +561,18 @@
         <span class="caret">
           <Icon name={closed.files ? 'chevronRight' : 'chevronDown'} size={13} />
         </span>
-        {files.length} file{files.length === 1 ? '' : 's'}{compare
-          ? files.length === 1
-            ? ' differs'
-            : ' differ'
-          : ''}
+        <!-- Said while a comparison is read, rather than "0 files differ": between two
+             releases of the kernel the answer takes a second, and nothing differing is a
+             different answer. -->
+        {#if loading && compare}
+          Reading what differs…
+        {:else}
+          {files.length} file{files.length === 1 ? '' : 's'}{compare
+            ? files.length === 1
+              ? ' differs'
+              : ' differ'
+            : ''}
+        {/if}
       </button>
     </h3>
     {#if !closed.files}
