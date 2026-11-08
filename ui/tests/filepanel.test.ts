@@ -70,7 +70,7 @@ describe('the file panel', () => {
     // Picked bottom-up, read top-down.
     await diff.historyOfLines(9, 4);
     expect(diff.view).toBe('history');
-    expect(diff.lines).toEqual({ from: 4, to: 9, rev: 'deadbeef' });
+    expect(diff.lines).toEqual({ from: 4, to: 9, rev: 'deadbeef', path: 'a.c' });
     expect(called('line_history')[0]?.[1]).toMatchObject({
       path: '/repo', rev: 'deadbeef', file: 'a.c', from: 4, to: 9,
     });
@@ -200,6 +200,49 @@ describe('the file panel', () => {
     await diff.reload('/repo');
     await diff.readSides();
     expect(called('file_blob')).toHaveLength(4);
+  });
+
+  it('blames the file as it was before a commit, under its name there, and comes back', async () => {
+    answering();
+    const diff = new DiffState(new ViewsState());
+    await diff.open('/repo', 'deadbeef', 'new.c');
+    diff.setView('blame');
+    await vi.waitFor(() => expect(diff.blame).not.toBeNull());
+
+    await diff.blameBefore({ rev: 'c0ffee', path: 'old.c', past: 'rename it', line: 7, back: 30 });
+    // The name git gave is the name at that revision, so there is no older one to try.
+    expect(called('file_blame').at(-1)?.[1]).toMatchObject({ rev: 'c0ffee', file: 'old.c', oldFile: null });
+    expect(called('file_text').at(-1)?.[1]).toMatchObject({ rev: 'c0ffee', file: 'old.c' });
+    expect(diff.blameLine).toBe(7);
+
+    // Lines picked there are numbered there.
+    answering({ line_history: [] });
+    await diff.historyOfLines(2, 3);
+    expect(diff.lines).toEqual({ from: 2, to: 3, rev: 'c0ffee', path: 'old.c' });
+    expect(called('line_history').at(-1)?.[1]).toMatchObject({ rev: 'c0ffee', file: 'old.c' });
+
+    diff.setView('blame');
+    await diff.blameBack();
+    expect(diff.blameTrail).toEqual([]);
+    expect(diff.blameLine).toBe(30);
+    expect(called('file_blame').at(-1)?.[1]).toMatchObject({ rev: 'deadbeef', file: 'new.c' });
+
+    // Another file starts from its own blame.
+    await diff.blameBefore({ rev: 'c0ffee', path: 'old.c', past: 'x', line: 1, back: 1 });
+    await diff.open('/repo', 'deadbeef', 'b.c');
+    expect(diff.blameTrail).toEqual([]);
+  });
+
+  it('looks past the listed commits until told to name them', async () => {
+    answering();
+    const diff = new DiffState(new ViewsState());
+    await diff.open('/repo', 'deadbeef', 'a.c');
+    diff.setView('blame');
+    await vi.waitFor(() => expect(diff.blame).not.toBeNull());
+    expect(called('file_blame').at(-1)?.[1]).toMatchObject({ listed: 'skip' });
+
+    await diff.setSkipListed(false);
+    expect(called('file_blame').at(-1)?.[1]).toMatchObject({ listed: 'blame' });
   });
 
   it('reads the file again when whitespace stops counting', async () => {

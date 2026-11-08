@@ -2507,6 +2507,36 @@
   }
 
   /**
+   * Goes to a commit a blame names, closing the diff to show the graph it is in.
+   *
+   * A branch hidden or soloed away can leave it outside the walk, with no row to go to.
+   * Widening undoes what somebody chose to hide, so it is asked rather than done.
+   */
+  async function showBlamed(oid: string) {
+    if (!info) return;
+    const path = info.path;
+    diff.close();
+    let row = await graphRowOf(path, oid).catch(() => null);
+    if (row === null && (scope.solo !== null || scope.hidden.length > 0)) {
+      const { choice } = await ask({
+        title: 'That commit is outside what the graph shows',
+        detail:
+          'It is only on branches that are hidden, or not on the one shown on its own. Showing ' +
+          'every branch puts it back in the graph.',
+        asksText: false,
+        placeholder: '',
+        initial: '',
+        choices: [{ id: 'everything', label: 'Show every branch', primary: true }],
+      });
+      if (choice !== 'everything') return;
+      await showEverything();
+      row = await graphRowOf(path, oid).catch(() => null);
+    }
+    if (row !== null) await revealAt(row, oid);
+    else toasts.push('info', 'That commit is not in the graph', 'It is not reachable from any branch or tag shown.');
+  }
+
+  /**
    * What right-clicking a commit offers.
    *
    * Grouped as the reference groups them: where to go, what to bring in, what to make here,
@@ -6056,7 +6086,14 @@
         onMessageUsed={() => commitDraft.clear()}
       />
     {:else if diff.path !== null}
-      <DiffView {diff} {syntax} onClose={() => diff.close()} onPart={applyPart} onEdit={editHunk} />
+      <DiffView
+        {diff}
+        {syntax}
+        onClose={() => diff.close()}
+        onPart={applyPart}
+        onEdit={editHunk}
+        onShowCommit={(oid) => void showBlamed(oid)}
+      />
     {/if}
     <div class="plot" class:hidden={diff.path !== null || merge.inProgress}>
       <!-- Above the list it is about, and above the column handles, which run full height. -->

@@ -277,6 +277,14 @@ both sides and coloured like the rest; they are rows of their own, so staging pa
 names the same lines whatever is open around it. Large and binary files render as a placeholder
 with an explicit load action.
 
+In Blame, a commit's chip opens a menu: show it in the graph (asking first to show every branch
+when it is only on hidden ones), blame the file as it was before it — under the name it had
+there, at the reader's line, with Back in the header to return — and copy its id. Before a root
+commit, or the edge of a shallow clone, there is nothing, and the item says so. A repository's
+`.git-blame-ignore-revs` is looked past unless your own configuration names a list, and the
+header says how many commits that skips, with a click to name them after all; a configured list
+that is not there is noted in the header instead of failing the blame.
+
 Beside Diff, Blame and History, **File** shows the whole file as the change leaves it: as the
 commit has it, as the index has it for a staged change, and as it is on disk for an unstaged one,
 read again when it changes there. A change that deleted the file shows it as it was, and says

@@ -5,6 +5,8 @@
   import { gapsOf, type Gap } from '../diff/gap';
   import { wordMarks } from '../diff/word';
   import CodeLine from './CodeLine.svelte';
+  import Menu, { type MenuItem } from './Menu.svelte';
+  import { copyText } from './clipboard';
   import { elidePath } from './path';
   import { shortAge } from './age';
   import { initialsOf } from '../graph/initials';
@@ -14,7 +16,7 @@
   import type { Token } from '../syntax/token';
   import type { FileDiff, Line } from '../ipc/types';
 
-  const { diff, syntax = null, onClose, onPart, onEdit = () => undefined }: {
+  const { diff, syntax = null, onClose, onPart, onEdit = () => undefined, onShowCommit = null }: {
     diff: DiffState;
     /** Code colours, or null to draw every line plain. */
     syntax?: SyntaxState | null;
@@ -29,6 +31,8 @@
     onPart: (part: 'stage' | 'unstage' | 'discard', hunk: number, lines: number[]) => void;
     /** Stage a hunk as rewritten: its new side, context and added lines, as text to edit. */
     onEdit?: (hunk: number, text: string) => void;
+    /** Goes to a commit a blame names, in the graph; null where there is no graph to go to. */
+    onShowCommit?: ((oid: string) => void) | null;
   } = $props();
 
   /**
@@ -436,6 +440,7 @@
         // Only the first line of a run carries the chip; a column repeating one name down
         // twenty lines is what makes a blame unreadable.
         oid: chunk?.oid ?? null,
+        orig: chunk?.origLine ?? 0,
         who: commit?.author.name ?? '',
         when: commit?.author.time ?? 0,
         summary: commit?.summary ?? '',
@@ -448,7 +453,7 @@
     const contents = diff.contents;
     if (contents?.kind !== 'text') return [];
     return linesOf(contents.text).map((content, i) => ({
-      no: i + 1, content, oid: null, who: '', when: 0, summary: '',
+      no: i + 1, content, oid: null, orig: 0, who: '', when: 0, summary: '',
     }));
   });
 
@@ -523,6 +528,54 @@
     rangeAnchor = no;
     range = { from: no, to: no };
   }
+
+  /** The menu a blame chip opens, where it was clicked. */
+  let chipMenu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
+
+  /**
+   * What a commit named in a blame offers: going to it, blaming the file as it was before it,
+   * and its id.
+   *
+   * Before it is where git says its lines came from, under the name the file had there; a
+   * boundary — a root commit, or the edge of a shallow clone — has nothing before it to blame.
+   */
+  function openChip(event: MouseEvent, oid: string, line: number, orig: number) {
+    const commit = diff.blame?.commits[oid];
+    const previous = commit?.previous ?? null;
+    const items: MenuItem[] = [];
+    if (onShowCommit !== null) {
+      items.push({ kind: 'item', label: 'Show commit in graph', run: () => onShowCommit(oid) });
+    }
+    items.push({
+      kind: 'item',
+      label: 'Blame before this commit',
+      hint: previous === null ? 'nothing before it' : undefined,
+      disabled: previous === null,
+      run: () => {
+        if (previous === null) return;
+        void diff.blameBefore({
+          rev: previous.oid, path: previous.filename, past: commit?.summary ?? oid.slice(0, 7), line: orig, back: line,
+        });
+      },
+    });
+    items.push({ kind: 'separator' });
+    items.push({ kind: 'item', label: 'Copy commit id', run: () => void copyText(oid) });
+    chipMenu = { x: event.clientX, y: event.clientY, items };
+  }
+
+  /**
+   * Brings the reader's line into view once a blame reached by going back, or coming back,
+   * lands: the same line is somewhere else in another revision of the file.
+   */
+  let placedBlame: unknown = null;
+  $effect(() => {
+    const blame = diff.blame;
+    const line = diff.blameLine;
+    const el = scroller;
+    if (blame === null || line === null || el === null || placedBlame === blame) return;
+    placedBlame = blame;
+    el.scrollTop = Math.max(0, RANGE_BAR + (line - 1) * ROW - el.clientHeight / 3);
+  });
 
   /** A new file, or a new revision of it, numbers its lines afresh. */
   $effect(() => {
@@ -607,11 +660,16 @@
           {#if blaming}
             <span class="author">
               {#if line.oid !== null}
-                <span class="chip" title="{line.summary}&#10;{line.who}">
+                {@const oid = line.oid}
+                <button
+                  class="chip"
+                  title="{line.summary}&#10;{line.who}"
+                  onclick={(e) => openChip(e, oid, line.no, line.orig)}
+                >
                   <span class="name">{line.who}</span>
                   <span class="mono">{line.oid.slice(0, 7)}</span>
                   <span class="when">{shortAge(line.when)}</span>
-                </span>
+                </button>
               {/if}
             </span>
             <button
@@ -673,6 +731,38 @@
 
     {#if diff.view === 'file' && diff.contents !== null && diff.contents.kind !== 'absent' && diff.contents.before}
       <span class="note">As it was: this change deleted it</span>
+    {/if}
+
+    {#if diff.view === 'blame'}
+      {@const step = diff.blameTrail.at(-1)}
+      {@const skipping = diff.blame?.skipping}
+      {#if step !== undefined}
+        <!-- The file blamed is named when it is not the one in the header: going back past a
+             rename blames the file under the name it had then. -->
+        <span class="note" title={step.path}
+          >{step.path === diff.path ? 'Before' : `${step.path}, before`} “{step.past}”</span
+        >
+        <button class="wider" onclick={() => void diff.blameBack()} title="Back to the blame this came from">Back</button>
+      {/if}
+      {#if skipping?.kind === 'listed'}
+        <button
+          class="wider"
+          onclick={() => void diff.setSkipListed(false)}
+          title="Looking past the commits .git-blame-ignore-revs lists, reformats mostly. Click to name them too."
+        >Skipping {skipping.count} listed</button>
+      {:else if skipping?.kind === 'offered'}
+        <button
+          class="wider"
+          onclick={() => void diff.setSkipListed(true)}
+          title="Look past the commits .git-blame-ignore-revs lists, reformats mostly"
+        >Skip {skipping.count} listed</button>
+      {:else if skipping?.kind === 'configured'}
+        <span class="note" title="blame.ignoreRevsFile in your git configuration">Skipping what {skipping.file} lists</span>
+      {:else if skipping?.kind === 'missing'}
+        <span class="note warn" title="blame.ignoreRevsFile in your git configuration"
+          >{skipping.file} is not there, so it skips nothing</span
+        >
+      {/if}
     {/if}
 
     {#if diff.view === 'diff'}
@@ -1022,6 +1112,10 @@
   </div>
 </section>
 
+{#if chipMenu !== null}
+  <Menu x={chipMenu.x} y={chipMenu.y} items={chipMenu.items} onClose={() => (chipMenu = null)} />
+{/if}
+
 <style>
   .diff {
     flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-0);
@@ -1216,9 +1310,12 @@
     border-right: 1px solid var(--border);
   }
   .chip {
-    display: flex; gap: var(--space-2); align-items: baseline; min-width: 0;
+    display: flex; gap: var(--space-2); align-items: baseline; min-width: 0; width: 100%;
     font-family: var(--font-ui); font-size: var(--text-sm); color: var(--fg-1);
+    background: none; border: 0; padding: 0; cursor: pointer; text-align: left; line-height: 17px;
   }
+  .chip:hover .name { color: var(--fg-0); text-decoration: underline; }
+  .note.warn { color: var(--warn); }
   .chip .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .chip .mono, .chip .when { flex: 0 0 auto; }
   .chip .when { color: var(--fg-2); }

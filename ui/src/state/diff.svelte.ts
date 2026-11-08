@@ -52,6 +52,20 @@ export type Contents =
   | { kind: 'binary'; before: boolean }
   | { kind: 'absent' };
 
+/**
+ * A blame reached by going back past a commit.
+ *
+ * The revision and name blamed, the summary of the commit gone past, the line to bring into
+ * view there, and the line to come back to in the blame left behind.
+ */
+export interface BlameStep {
+  rev: string;
+  path: string;
+  past: string;
+  line: number;
+  back: number;
+}
+
 /** One side of the change on screen: where its bytes are, and under which name. */
 export interface Side {
   side: BlobSide;
@@ -110,9 +124,24 @@ export class DiffState {
   atCommit = $state<string | null>(null);
   /**
    * The lines whose history the history view holds instead of the file's, numbered as the
-   * file stands at `rev`, or null for the whole file.
+   * file stands at `rev` under `path`, or null for the whole file.
    */
-  lines = $state<{ from: number; to: number; rev: string } | null>(null);
+  lines = $state<{ from: number; to: number; rev: string; path: string } | null>(null);
+
+  /**
+   * Whether blame looks past the commits `.git-blame-ignore-revs` lists.
+   *
+   * On unless the reader says otherwise, and not remembered: the list is the repository's
+   * statement of which commits say nothing about who wrote a line, and seeing past it is the
+   * exception asked for one file at a time.
+   */
+  skipListed = $state(true);
+
+  /** Blames reached by going back past a commit, the latest last; empty for the file as opened. */
+  blameTrail = $state<BlameStep[]>([]);
+
+  /** The line to bring into view once the blame on its way lands, or null to leave the view. */
+  blameLine = $state<number | null>(null);
 
   /**
    * The commit the panel was opened on, null for the working tree or a comparison.
@@ -318,7 +347,8 @@ export class DiffState {
   async historyOfLines(a: number, b: number): Promise<void> {
     const request = this.#request;
     if (request === null) return;
-    this.lines = { from: Math.min(a, b), to: Math.max(a, b), rev: revisionOf(request) };
+    const at = this.#blamed(request);
+    this.lines = { from: Math.min(a, b), to: Math.max(a, b), rev: at.rev, path: at.path };
     this.#historyLimit = HISTORY_PAGE;
     this.#views.set('fileView', 'history');
     await this.#loadHistory();
@@ -398,13 +428,12 @@ export class DiffState {
     this.blame = null;
     this.text = null;
     this.sideError = null;
-    // A commit's blame is of the file as that commit left it; the working tree's is of HEAD,
-    // since a line nobody has committed has nobody to attribute it to.
-    const rev = revisionOf(request);
+    const { rev, path, was } = this.#blamed(request);
+    const listed = this.skipListed ? 'skip' : 'blame';
     try {
       const [blame, text] = await Promise.all([
-        fileBlame(request.repo, rev, request.path, request.oldPath),
-        fileText(request.repo, rev, request.path, request.oldPath),
+        fileBlame(request.repo, rev, path, was, listed),
+        fileText(request.repo, rev, path, was),
       ]);
       if (side !== this.#side) return;
       this.blame = blame;
@@ -412,6 +441,42 @@ export class DiffState {
     } catch (e) {
       if (side === this.#side) this.sideError = messageOf(e);
     }
+  }
+
+  /**
+   * Which revision and name a blame is of.
+   *
+   * A commit's blame is of the file as that commit left it; the working tree's is of HEAD,
+   * since a line nobody has committed has nobody to attribute it to. Gone back past a commit,
+   * it is of the revision and name that commit's lines came from, which git has said exactly.
+   */
+  #blamed(request: Request): { rev: string; path: string; was: string | null } {
+    const step = this.blameTrail.at(-1);
+    if (step !== undefined) return { rev: step.rev, path: step.path, was: null };
+    return { rev: revisionOf(request), path: request.path, was: request.oldPath };
+  }
+
+  /** Blames the file as it was before a commit, keeping the way back. */
+  async blameBefore(step: BlameStep): Promise<void> {
+    this.blameTrail = [...this.blameTrail, step];
+    this.blameLine = step.line;
+    await this.#loadBlame();
+  }
+
+  /** Back to the blame before the last step back, at the line the reader left it from. */
+  async blameBack(): Promise<void> {
+    const left = this.blameTrail.at(-1);
+    if (left === undefined) return;
+    this.blameTrail = this.blameTrail.slice(0, -1);
+    this.blameLine = left.back;
+    await this.#loadBlame();
+  }
+
+  /** Looks past the repository's listed commits, or names them, and blames again. */
+  async setSkipListed(skip: boolean): Promise<void> {
+    if (skip === this.skipListed) return;
+    this.skipListed = skip;
+    await this.#loadBlame();
   }
 
   async #loadHistory(): Promise<void> {
@@ -425,7 +490,7 @@ export class DiffState {
       const got = lines === null
         ? await fileHistory(request.repo, revisionOf(request), request.path, this.#historyLimit)
         : await lineHistory(
-          request.repo, lines.rev, request.path, lines.from, lines.to, this.#historyLimit,
+          request.repo, lines.rev, lines.path, lines.from, lines.to, this.#historyLimit,
         );
       if (side !== this.#side) return;
       this.history = got;
@@ -536,6 +601,8 @@ export class DiffState {
     this.unguarded = false;
     this.atCommit = null;
     this.lines = null;
+    this.blameTrail = [];
+    this.blameLine = null;
     this.openedAt = request.source === 'commit' ? request.rev : null;
     this.blame = null;
     this.text = null;
@@ -594,6 +661,8 @@ export class DiffState {
     this.moreHistory = false;
     this.atCommit = null;
     this.lines = null;
+    this.blameTrail = [];
+    this.blameLine = null;
     this.openedAt = null;
     this.expanded = false;
     this.unguarded = false;

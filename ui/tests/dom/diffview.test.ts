@@ -431,6 +431,69 @@ describe('the diff viewer', () => {
     expect(went).toEqual([21, 157, 157, 21]);
   });
 
+  it('offers to go to a blamed commit, blame before it, or copy it, from its chip', async () => {
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'a.c';
+    diff.file = fileDiff();
+    diff.setView('blame');
+    const commit = (oid: string, summary: string, previous: { oid: string; filename: string } | null, boundary: boolean) => ({
+      oid,
+      author: { name: 'Ada', email: 'ada@example.com', time: 1_700_000_000, offset: 0 },
+      summary,
+      filename: 'a.c',
+      previous,
+      boundary,
+    });
+    diff.blame = {
+      chunks: [
+        { oid: 'a'.repeat(40), finalLine: 1, origLine: 1, lines: 2 },
+        { oid: 'b'.repeat(40), finalLine: 3, origLine: 5, lines: 1 },
+      ],
+      commits: {
+        ['a'.repeat(40)]: commit('a'.repeat(40), 'root', null, true),
+        ['b'.repeat(40)]: commit('b'.repeat(40), 'rename', { oid: 'c'.repeat(40), filename: 'old.c' }, false),
+      },
+      skipping: { kind: 'listed', count: 2 },
+    } as unknown as NonNullable<typeof diff.blame>;
+    diff.text = 'one\ntwo\nthree\n';
+    const steps: unknown[] = [];
+    diff.blameBefore = async (step) => {
+      steps.push(step);
+    };
+    let skip: boolean | null = null;
+    diff.setSkipListed = async (on) => {
+      skip = on;
+    };
+    const shown: string[] = [];
+    const view = render(DiffView, {
+      props: { diff, onClose: () => {}, onPart: () => {}, onShowCommit: (oid: string) => shown.push(oid) },
+    });
+    const item = (label: string) =>
+      [...document.querySelectorAll('[role="menuitem"], .menu button')].find((b) =>
+        b.textContent?.includes(label),
+      ) as HTMLButtonElement | undefined;
+
+    // A root commit is a boundary: there is nothing before it to blame.
+    const chips = view.container.querySelectorAll('.chip');
+    await fireEvent.click(chips[0] as HTMLElement);
+    expect(item('Blame before this commit')?.disabled).toBe(true);
+    await fireEvent.click(item('Show commit in graph') as HTMLElement);
+    expect(shown).toEqual(['a'.repeat(40)]);
+
+    // The other came from another name, and the reader's line goes with them.
+    await fireEvent.click(chips[1] as HTMLElement);
+    await fireEvent.click(item('Blame before this commit') as HTMLElement);
+    expect(steps).toEqual([{ rev: 'c'.repeat(40), path: 'old.c', past: 'rename', line: 5, back: 3 }]);
+
+    // What is skipped says so, and a click names those commits instead.
+    const toggle = [...view.container.querySelectorAll('header button')].find((b) =>
+      b.textContent?.includes('Skipping 2 listed'),
+    ) as HTMLElement;
+    await fireEvent.click(toggle);
+    expect(skip).toBe(false);
+    view.unmount();
+  });
+
   it('keeps the picked-lines bar one height, hint or pick', () => {
     // happy-dom lays nothing out, so the rule is what is checked: a height set, not a minimum
     // its contents can grow past, and a hint that cannot wrap onto a second line.
