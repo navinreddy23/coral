@@ -76,10 +76,15 @@ impl Report {
 /// Every transfer that is running, and the switch that stops it.
 #[derive(Default)]
 pub struct Transfers {
-    inner: Mutex<HashMap<String, tokio::sync::oneshot::Sender<()>>>,
+    inner: Mutex<HashMap<String, Running>>,
 }
 
-type Held<'a> = std::sync::MutexGuard<'a, HashMap<String, tokio::sync::oneshot::Sender<()>>>;
+struct Running {
+    stop: tokio::sync::oneshot::Sender<()>,
+    label: String,
+}
+
+type Held<'a> = std::sync::MutexGuard<'a, HashMap<String, Running>>;
 
 impl Transfers {
     fn held(&self) -> Held<'_> {
@@ -88,11 +93,39 @@ impl Transfers {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
+    /// Registers a transfer under `key`, handing back what fires when it is stopped.
+    ///
+    /// # Errors
+    /// The label of the transfer already running under `key`. Replacing it instead dropped
+    /// that one's switch, which stops it, and its clean-up then removed this one's, which
+    /// stopped this one too: two fetches of one repository cancelled each other.
+    pub fn claim(
+        &self,
+        key: &str,
+        label: &str,
+    ) -> Result<tokio::sync::oneshot::Receiver<()>, String> {
+        let mut held = self.held();
+        if let Some(running) = held.get(key) {
+            return Err(running.label.clone());
+        }
+        let (stop, stopped) = tokio::sync::oneshot::channel();
+        held.insert(
+            key.to_owned(),
+            Running {
+                stop,
+                label: label.to_owned(),
+            },
+        );
+        Ok(stopped)
+    }
+
     /// Stops the transfer under `key`, answering whether there was one.
     pub fn cancel(&self, key: &str) -> bool {
         // The receiver also fires when this is dropped, so a send to a transfer that has just
         // finished is not an error; there is simply nothing there.
-        self.held().remove(key).is_some_and(|s| s.send(()).is_ok())
+        self.held()
+            .remove(key)
+            .is_some_and(|r| r.stop.send(()).is_ok())
     }
 }
 
@@ -104,8 +137,8 @@ impl Transfers {
 /// clone takes its half-made directory with it.
 ///
 /// # Errors
-/// Whatever the operation returns, and [`coral_core::CoralError::Cancelled`] when it was
-/// stopped.
+/// Whatever the operation returns, [`coral_core::CoralError::Cancelled`] when it was stopped,
+/// and [`coral_core::CoralError::Refused`] while another transfer holds the same key.
 pub async fn watched<T, E, F, Fut>(
     app: &tauri::AppHandle,
     key: &str,
@@ -117,6 +150,16 @@ where
     F: FnOnce(Sender) -> Fut,
     Fut: std::future::Future<Output = Result<T, E>>,
 {
+    let transfers = app.state::<Transfers>();
+    // Before the first report, so a refused transfer never puts a bar up over the one that is
+    // really running.
+    let stopped = transfers.claim(key, label).map_err(|running| {
+        E::from(coral_core::CoralError::Refused {
+            label: "start that",
+            detail: format!("{running} is still running for this repository"),
+        })
+    })?;
+
     let sender = Sender {
         app: app.clone(),
         key: key.to_owned(),
@@ -125,10 +168,6 @@ where
     // Before git has said anything. A host that never answers produces no progress at all, and
     // a way out that only appears with the first record would never appear.
     sender.send(Report::new(key, label, State::Running));
-
-    let transfers = app.state::<Transfers>();
-    let (stop, stopped) = tokio::sync::oneshot::channel();
-    transfers.held().insert(key.to_owned(), stop);
 
     let outcome = tokio::select! {
         done = work(sender.clone()) => Some(done),
@@ -202,4 +241,26 @@ pub fn cancel_transfer(transfers: tauri::State<'_, Transfers>, key: String) -> b
 #[must_use]
 pub fn running_transfers(transfers: tauri::State<'_, Transfers>) -> Vec<String> {
     transfers.held().keys().cloned().collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Transfers;
+
+    #[test]
+    fn a_second_transfer_of_one_repository_is_refused_not_swapped_in() {
+        let transfers = Transfers::default();
+        let mut first = transfers.claim("/repo", "fetch in the background").unwrap();
+        assert_eq!(
+            transfers.claim("/repo", "pull").unwrap_err(),
+            "fetch in the background"
+        );
+        assert!(
+            first.try_recv().is_err(),
+            "refusing the second must leave the first running"
+        );
+        assert!(transfers.claim("/elsewhere", "push").is_ok());
+        assert!(transfers.cancel("/repo"));
+        assert!(transfers.claim("/repo", "pull").is_ok());
+    }
 }
