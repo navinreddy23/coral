@@ -27,6 +27,13 @@ PUNCTUATION = {
     "!": ("Shift_L", "1"),
     "#": ("Shift_L", "3"),
     "=": ("equal",),
+    ",": ("comma",),
+    "'": ("apostrophe",),
+    "<": ("Shift_L", "comma"),
+    ">": ("Shift_L", "period"),
+    "@": ("Shift_L", "2"),
+    "(": ("Shift_L", "9"),
+    ")": ("Shift_L", "0"),
 }
 
 
