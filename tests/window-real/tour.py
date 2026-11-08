@@ -2,7 +2,7 @@
 
     tour.py <display> <shots-dir> <wm-log>
 
-The window is opened by run.sh on the `work` and `merging` fixtures at its default 1440 by 900,
+The window is opened by run.sh on the `work`, `merging` and `shallow` fixtures at its default 1440 by 900,
 in the light theme at the default density, so the positions below are the shipped layout's. A
 stop that cannot find what it expects fails the tour, rather than photographing the wrong
 screen.
@@ -134,9 +134,41 @@ check(all(colour(600, y - 2) != WHITE and colour(600, y + 3) != WHITE for y in f
 check(all(colour(525, y) != WHITE and colour(525, y + 1) != WHITE for y in feet),
       "and the first lane runs through every one")
 
+# The commit box: signed off, and a co-author added as a chip from who has written here.
+SIGN_OFF, CO_AUTHOR, CHIP_CROSS = (1347, 636), (1250, 790), (1191, 790)
+CHIPS = (1098, 782, 90, 16)
+bare = region(*CHIPS)
+click(*SIGN_OFF)
+click(*CO_AUTHOR)
+type_text("Ada Lovelace <ada@fixture.invalid>")
+keys("Return")
+settle()
+check(region(*CHIPS) != bare, "a co-author becomes a chip in the commit box")
+shot("commit-box")
+keys("Escape")
+settle()
+click(*CHIP_CROSS)
+click(*SIGN_OFF)
+move(700, 893)
+settle()
+
 # A commit's own panel: the message boxed in the interface face, its author under it.
 click(700, 152)
 shot("commit-details")
+
+# The same panel comparing a commit with the working copy, asked for from its menu.
+DETAILS_HEAD = (1085, 95, 330, 30)
+own = region(*DETAILS_HEAD)
+click(700, 263, button=3)
+settle()
+click(820, 696)
+move(700, 893)
+settle()
+check(region(*DETAILS_HEAD) != own, "a commit compares with the working tree from its menu")
+shot("compare-worktree")
+click(1135, 218)
+move(700, 893)
+settle()
 
 # The branch panel, its tags opened and folded again.
 move(700, 893)
@@ -192,6 +224,18 @@ settle()
 keys("Control_L", "Tab")
 settle(quiet=2.0)
 shot("conflict")
+
+# The third tab is a shallow clone, which says so in the status bar and offers the rest.
+keys("Control_L", "Tab")
+settle(quiet=2.0)
+MENU_AREA = (1170, 830, 260, 50)
+plain = region(*MENU_AREA)
+click(1252, 888)
+settle()
+check(region(*MENU_AREA) != plain, "a shallow clone offers to fetch more of its history")
+shot("shallow")
+keys("Escape")
+settle()
 
 if failures:
     print("%d failed" % len(failures))

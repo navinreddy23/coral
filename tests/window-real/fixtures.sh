@@ -87,6 +87,9 @@ git clone -q "$D/work" "$D/merging"
     git -c commit.gpgsign=false merge -q review/lanes >/dev/null 2>&1 || true
 )
 
+# A third tab, cut off three commits down, for the status bar's "shallow clone".
+git clone -q --depth 3 --single-branch "file://$D/work" "$D/shallow"
+
 sed -i 's/    open.delete(lane);/&\n    if (open.size === 0) break;/' src/lanes.ts
 git add src/lanes.ts
 sed -i 's/    ctx.lineTo(laneX(lane), rowY(window.last));/    ctx.lineTo(laneX(lane), rowY(window.last) + half);/' src/lanes.ts
