@@ -755,6 +755,36 @@ describe('the shell', () => {
     });
   });
 
+  it('shows the commit a branch is on, not the working copy, when the branch is clicked', async () => {
+    // Going to a commit selected its row and left the staging panel up beside it, with the
+    // working copy's row still marked as the one being looked at.
+    const { container } = await shell({
+      repo_refs: aBranchOnRow(1),
+      repo_status: {
+        entries: [{ path: 'a.txt', staged: null, worktree: 'modified', conflict: null }],
+        conflicted: [],
+      },
+    });
+    const wip = await waitFor(() => {
+      const found = container.querySelector('button.row.wip');
+      if (!found) throw new Error('no working copy row yet');
+      return found as HTMLButtonElement;
+    });
+    await fireEvent.click(wip);
+    await waitFor(() => {
+      if (!container.querySelector('aside.wip-panel')) throw new Error('no staging panel');
+    });
+    const spike = await waitFor(() => {
+      const found = [...container.querySelectorAll('button.ref')].find((b) => b.textContent?.includes('spike'));
+      if (!found) throw new Error('no spike in the sidebar yet');
+      return found as HTMLButtonElement;
+    });
+    await fireEvent.click(spike);
+    await waitFor(() => {
+      if (container.querySelector('aside.wip-panel')) throw new Error('still the working copy');
+    });
+  });
+
   it('draws no pill for a ref that is hidden', async () => {
     // Hiding takes a branch out of the walk, but its commits usually stay: another branch
     // still reaches them. The label must not stay with them, or the graph goes on naming a

@@ -4623,6 +4623,9 @@
    * id, and the selection needs nothing else — only the drawing needs the rows.
    */
   async function revealAt(row: number, oid: string) {
+    // Going to a commit is looking at it, as a click on its row is: the staging panel stayed up
+    // beside a branch picked from the sidebar, with the working copy still marked as chosen.
+    showWip = false;
     scrollToRow(row);
     if (info) void selection.select(info.path, row, oid, listingFor(oid));
     await graph.ensureRows(row, row);
