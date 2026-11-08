@@ -40,7 +40,8 @@
     unpushedMerges,
     type PullRequest,
   } from '../ipc/commands';
-  import type { Ancestry, Verdict } from '../ipc/types';
+  import type { Ancestry, BlobSide, Verdict } from '../ipc/types';
+  import { chooseSavePath, saveBlob } from '../ipc/blob';
   import { ActionsState } from '../state/actions.svelte';
   import { CommitState } from '../state/commit.svelte';
   import MergeTool from './MergeTool.svelte';
@@ -2511,6 +2512,25 @@
   }
 
   /**
+   * Saves a file as one side of a change has it, wherever the dialog says.
+   *
+   * Through the engine, which writes the bytes straight from git: a file at a commit is not on
+   * disk anywhere to copy, and it may be anything, image or archive.
+   */
+  async function saveFileAs(side: BlobSide, file: string) {
+    if (!info) return;
+    const path = info.path;
+    const to = await chooseSavePath(file.slice(file.lastIndexOf('/') + 1)).catch(() => null);
+    if (to === null) return;
+    try {
+      await saveBlob(path, side, file, to);
+      toasts.push('info', 'Saved', to);
+    } catch (e) {
+      toasts.push('error', 'Could not save the file', messageOf(e));
+    }
+  }
+
+  /**
    * Opens the code search on a revision: HEAD from the keyboard and the palette, any commit
    * from its menu. A diff that was open goes, since the search takes the same pane.
    */
@@ -3877,6 +3897,8 @@
         hint: file,
         run: () => void copyName(file),
       },
+      { kind: 'separator' },
+      ...(rev === null ? [] : [{ kind: 'item' as const, label: 'Save as…', run: () => void saveFileAs({ kind: 'commit', rev }, file) }]),
       { kind: 'separator' },
       ...takeItems(file),
       { kind: 'separator' },
@@ -6113,6 +6135,7 @@
         onPart={applyPart}
         onEdit={editHunk}
         onShowCommit={(oid) => void showBlamed(oid)}
+        onSaveAs={(side, file) => void saveFileAs(side, file)}
       />
     {:else if grep.at !== null}
       <Grep

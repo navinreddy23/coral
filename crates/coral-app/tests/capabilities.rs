@@ -35,3 +35,14 @@ fn the_window_may_open_web_and_mail_links() {
         );
     }
 }
+
+/// "Save as…" asks the dialog for a place to write a file as a commit has it, and a dialog the
+/// capability does not name is refused when it is opened, in the built app alone.
+#[test]
+fn the_window_may_ask_where_to_save_a_file() {
+    let granted = permissions();
+    assert!(
+        granted.iter().any(|p| p == "dialog:allow-save"),
+        "dialog:allow-save is missing from {granted:?}"
+    );
+}

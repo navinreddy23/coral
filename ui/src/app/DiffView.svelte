@@ -14,9 +14,11 @@
   import type { SyntaxState } from '../state/syntax.svelte';
   import { grammarOf } from '../syntax/grammar';
   import type { Token } from '../syntax/token';
-  import type { FileDiff, Line } from '../ipc/types';
+  import type { BlobSide, FileDiff, Line } from '../ipc/types';
 
-  const { diff, syntax = null, onClose, onPart, onEdit = () => undefined, onShowCommit = null }: {
+  const {
+    diff, syntax = null, onClose, onPart, onEdit = () => undefined, onShowCommit = null, onSaveAs = null,
+  }: {
     diff: DiffState;
     /** Code colours, or null to draw every line plain. */
     syntax?: SyntaxState | null;
@@ -33,6 +35,8 @@
     onEdit?: (hunk: number, text: string) => void;
     /** Goes to a commit a blame names, in the graph; null where there is no graph to go to. */
     onShowCommit?: ((oid: string) => void) | null;
+    /** Saves the file the file view shows, as it is there; null where saving is not offered. */
+    onSaveAs?: ((side: BlobSide, file: string) => void) | null;
   } = $props();
 
   /**
@@ -737,6 +741,12 @@
 
     {#if diff.view === 'file' && diff.contents !== null && diff.contents.kind !== 'absent' && diff.contents.before}
       <span class="note">As it was: this change deleted it</span>
+    {/if}
+    {#if diff.view === 'file' && onSaveAs !== null && diff.contents !== null && diff.contents.kind !== 'absent' && diff.sides !== null}
+      {@const shown = diff.contents.before ? diff.sides.before : diff.sides.after}
+      <button class="wider" onclick={() => onSaveAs(shown.side, shown.file)} title="Save this file, as it is here, somewhere else"
+        >Save as…</button
+      >
     {/if}
 
     {#if diff.view === 'blame'}

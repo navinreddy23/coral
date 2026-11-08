@@ -203,6 +203,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         bisect::repo_bisection,
         reflog::repo_reflog,
         blob::file_blob,
+        blob::save_blob,
         avatar::author_avatar,
         graph::compare_commits,
         graph::compare_file_diff,

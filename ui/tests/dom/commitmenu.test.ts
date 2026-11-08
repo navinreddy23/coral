@@ -31,7 +31,8 @@ vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 vi.mock('../../src/ipc/invoke', () => ({ invoke, isPreview: () => false }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => undefined }));
-vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
+const saveDialog = vi.hoisted(() => vi.fn());
+vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn(), save: saveDialog }));
 
 import App from '../../src/app/App.svelte';
 import type { PlacedRef } from '../../src/ipc/commands';
@@ -1829,6 +1830,25 @@ describe('taking a file back from a commit', () => {
       from: { kind: 'commit', rev: `${frameOids[0]}^` },
       files: ['a.c'],
     });
+  });
+
+  it('saves a file as the commit has it, wherever the dialog says, and nowhere when cancelled', async () => {
+    const { container } = await shell({ commit_detail: detail('modified'), save_blob: null });
+    saveDialog.mockResolvedValueOnce('/home/me/a.c');
+    await fileMenu(container);
+    await fireEvent.click(itemNamed(container, 'Save as…'));
+    await waitFor(() => {
+      expect(invoke.mock.calls.find(([cmd]) => cmd === 'save_blob')?.[1]).toEqual({
+        path: '/repo', side: { kind: 'commit', rev: frameOids[0] }, file: 'a.c', to: '/home/me/a.c',
+      });
+    });
+    expect(saveDialog.mock.calls[0]?.[0]).toEqual({ defaultPath: 'a.c' });
+
+    saveDialog.mockResolvedValueOnce(null);
+    await fileMenu(container);
+    await fireEvent.click(itemNamed(container, 'Save as…'));
+    await waitFor(() => expect(saveDialog).toHaveBeenCalledTimes(2));
+    expect(invoke.mock.calls.filter(([cmd]) => cmd === 'save_blob')).toHaveLength(1);
   });
 
   it('offers no version a commit does not have', async () => {

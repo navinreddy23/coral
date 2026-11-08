@@ -12,6 +12,7 @@
     "core:window:allow-close",
     "core:window:allow-set-decorations",
     "dialog:allow-open",
+    "dialog:allow-save",
     "opener:allow-open-url",
     "opener:allow-default-urls"
   ]
