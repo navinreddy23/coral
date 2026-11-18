@@ -160,7 +160,8 @@ export class SpellingState {
   #schedule(): void {
     if (this.#timer !== null) clearTimeout(this.#timer);
     this.#timer = null;
-    if (this.#checkedIn === null) {
+    // Off, or nothing written: there is nothing to ask the engine about.
+    if (this.#checkedIn === null || (this.#text.summary === '' && this.#text.body === '')) {
       this.#marks = { summary: [], body: [] };
       return;
     }

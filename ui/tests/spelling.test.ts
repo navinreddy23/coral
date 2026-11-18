@@ -260,6 +260,22 @@ describe('what the user says about a word', () => {
   });
 });
 
+describe('an empty message', () => {
+  it('is not sent to be checked', async () => {
+    engine();
+    const spelling = new SpellingState(new ViewsState());
+    spelling.update('', '');
+    await pause();
+    expect(checks()).toBe(0);
+    spelling.update('Fix teh', '');
+    await pause();
+    spelling.update('', '');
+    expect(spelling.shown('summary')).toEqual([]);
+    await pause();
+    expect(checks()).toBe(1);
+  });
+});
+
 describe('the dialect', () => {
   it('asks nothing of the engine and underlines nothing when checking is off', async () => {
     engine();

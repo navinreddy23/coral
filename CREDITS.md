@@ -50,6 +50,10 @@ paper, it is added here in the same commit with a link and its license.
   <https://wordlist.aspell.net/> — the SCOWL licence, which asks only that its notice is kept.
   The affix files derive from Geoff Kuenning's Ispell and carry his BSD licence; both notices are
   in `THIRD_PARTY_LICENSES.md`.
+- **textarea-caret-position** by Jonathan Ong and Dan Dascalescu — the list of a field's
+  properties that decide where its text falls, which the underline layer copies onto itself so
+  each word lands over the word beneath (`ui/src/app/underline.ts`).
+  <https://github.com/component/textarea-caret-position> — MIT.
 
 ## Not shipped, but recognised
 
