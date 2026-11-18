@@ -59,9 +59,12 @@ tags newest first, stashes, and submodules. Anything can be filtered, and every 
 carries an eye that takes it out of the graph.
 
 **Working with changes.** Stage and unstage by file, by hunk or by line; commit, amend, discard.
-The file panel answers four questions about one file: what changed, who wrote each line, what
-has touched it, and the same again with whitespace discounted. Diffs read inline or side by
-side, and a line that replaced another has the words that actually changed marked on it. A
+The file panel answers five questions about one file: what changed, who wrote each line, what
+has touched it, what the whole of it says, and the same again with whitespace discounted. Diffs
+read inline or side by side, and a line that replaced another has the words that actually
+changed marked on it. Code is coloured by its language in a diff, a blame and a file, and the
+code at any commit can be searched with `Ctrl+Shift+F`. A commit message is spell-checked as it
+is written, in US or British English, with code, paths and git's own words left alone. A
 file's menu ignores it, its kind or its folder, stops tracking one committed by mistake, puts
 it into Git LFS, and locks or unlocks it on the LFS server.
 
@@ -104,7 +107,7 @@ and dark themes.
 
 ## Two front ends, one engine
 
-`coral-cli` is not a demo. It exposes the whole engine — fifty-five commands, from `open` and
+`coral-cli` is not a demo. It exposes the whole engine — seventy-three commands, from `open` and
 `status` through `rebase`, `conflict-resolve`, `blame` and `graph` — and answers in a stable
 JSON envelope with documented exit codes:
 
