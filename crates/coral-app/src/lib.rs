@@ -26,6 +26,7 @@ pub mod scope;
 pub mod search;
 pub mod session;
 pub mod signing;
+pub mod spelling;
 pub mod ssh;
 pub mod tabs;
 pub mod template;

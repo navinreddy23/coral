@@ -261,6 +261,35 @@ describe('drafting with Claude, in Experimental', () => {
   });
 });
 
+describe('spelling in the commit message', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('chooses the English it is checked in under General, or none, and keeps it', async () => {
+    const views = new ViewsState();
+    const { container } = prefs({ views, pane: 'general' });
+    const fieldset = [...container.querySelectorAll('.page fieldset')].find(
+      (f) => f.querySelector('legend')?.textContent === 'Commit messages',
+    );
+    const select = fieldset?.querySelector('select') as HTMLSelectElement;
+    expect(select.value).toBe('en-US');
+    expect([...select.options].map((o) => o.textContent)).toEqual([
+      'English (US)',
+      'English (UK)',
+      'Off',
+    ]);
+
+    await fireEvent.change(select, { target: { value: 'en-GB' } });
+    expect(views.current.spelling).toBe('en-GB');
+    await fireEvent.change(select, { target: { value: 'off' } });
+    expect(views.current.spelling).toBe('off');
+    expect(new ViewsState().current.spelling, 'and it is there next launch').toBe('off');
+
+    // Nothing else is taken, however the select comes to say it.
+    await fireEvent.change(select, { target: { value: 'fr-FR' } });
+    expect(views.current.spelling).toBe('off');
+  });
+});
+
 describe('fetching on a timer', () => {
   beforeEach(() => localStorage.clear());
 

@@ -168,7 +168,7 @@
 
   <div class="page">
   {#if active === 'general'}
-    <General {autoFetch} />
+    <General {autoFetch} {views} />
   {:else if active === 'appearance'}
     <Appearance {theme} {views} {avatars} />
   {:else if active === 'profiles'}

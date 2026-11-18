@@ -261,7 +261,10 @@ count, description textarea, an amend checkbox that fills the message in from th
 would replace and takes it back if it is unticked untouched, a "Sign off" checkbox the repository
 remembers (`coral.signOff`), co-authors as chips — typed as `Name <email>` or picked from who has
 written here lately — each a `Co-authored-by` trailer, and "Commit changes to N files"
-(Ctrl/Cmd+Enter).
+(Ctrl/Cmd+Enter). Misspelt words in the summary and the description get a wavy underline in the
+danger colour; a right-click on one, or the Menu key or Shift+F10 with the caret in it, offers up
+to five suggestions, Add to dictionary and Ignore. Preferences → General picks US or British
+English, or none.
 During an operation the button becomes "Commit and merge" / "Continue rebase" with an Abort
 link.
 

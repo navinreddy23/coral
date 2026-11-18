@@ -203,6 +203,11 @@ recorded: boolean, };
 export type Deepen = { "kind": "by", commits: number, } | { "kind": "all" };
 
 /**
+ * Which English a message is checked against.
+ */
+export type Dialect = "en-US" | "en-GB";
+
+/**
  * The tools git would start, by the names git has for them, or `None` where none is set.
  */
 export type ExternalTools = { diff: string | null, merge: string | null, };
@@ -350,6 +355,17 @@ export type LineKind = "context" | "add" | "remove";
  * Whether a blame looks past the commits a repository lists in `.git-blame-ignore-revs`.
  */
 export type ListedCommits = "skip" | "blame";
+
+/**
+ * The misspellings of a message's summary and of its body, each counted from its own start.
+ */
+export type MessageSpelling = { summary: Array<Misspelling>, body: Array<Misspelling>, };
+
+/**
+ * A word the dictionary does not know, where it is in the text it was found in. Offsets count
+ * UTF-16 code units, which is how a text box counts.
+ */
+export type Misspelling = { word: string, start: number, end: number, };
 
 /**
  * The file mode on each side of a change that touched it.

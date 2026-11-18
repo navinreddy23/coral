@@ -1,0 +1,47 @@
+---
+source: crates/coral-cli/tests/spell.rs
+expression: out.json
+---
+{
+  "schema": 1,
+  "ok": true,
+  "result": {
+    "dialect": "en-GB",
+    "misspellings": [
+      {
+        "word": "teh",
+        "line": 1,
+        "column": 11,
+        "suggestions": [
+          "the",
+          "eh",
+          "tech",
+          "tee",
+          "tea"
+        ]
+      },
+      {
+        "word": "recieves",
+        "line": 3,
+        "column": 4,
+        "suggestions": [
+          "receives",
+          "relieves",
+          "retrieves",
+          "reprieves",
+          "recessives"
+        ]
+      },
+      {
+        "word": "color",
+        "line": 3,
+        "column": 17,
+        "suggestions": [
+          "colour",
+          "colon",
+          "Colo"
+        ]
+      }
+    ]
+  }
+}

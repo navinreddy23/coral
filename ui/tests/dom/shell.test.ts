@@ -114,6 +114,10 @@ function answers(over: Record<string, unknown> = {}): Record<string, unknown> {
     session_get: { tabs: [{ id: 1, path: REPO, group: null }], active: 1, groups: [] },
     tab_open: { tabs: [{ id: 1, path: REPO, group: null }], active: 1, groups: [] },
     tab_activate: { tabs: [{ id: 1, path: REPO, group: null }], active: 1, groups: [] },
+    // The commit box checks what is typed in it; nothing here is misspelt unless a test says so.
+    spelling_check: { summary: [], body: [] },
+    spelling_suggest: [],
+    spelling_learn: null,
     ...over,
   };
 }
@@ -458,6 +462,91 @@ describe('the shell', () => {
       );
       if (!redo) throw new Error('no redo yet');
     });
+  });
+
+  it('leaves Ctrl+Z in the commit message to the message', async () => {
+    // The window's undo fell through to the field, so undoing a typo undid the last commit.
+    const { container } = await shell({
+      repo_status: {
+        entries: [{ path: 'a.txt', staged: 'modified', worktree: null, conflict: null }],
+        conflicted: [],
+      },
+      repo_action: { what: 'undo', message: '', conflicted: false },
+    });
+    await waitFor(() => {
+      if (!container.querySelector('button.row.wip')) throw new Error('no working copy row yet');
+    });
+    await fireEvent.click(container.querySelector('button.row.wip') as HTMLButtonElement);
+    await waitFor(() => {
+      if (!container.querySelector('input.summary')) throw new Error('no staging panel yet');
+    });
+    const summary = container.querySelector('input.summary') as HTMLInputElement;
+    const description = container.querySelector('textarea.description') as HTMLTextAreaElement;
+
+    invoke.mockClear();
+    const keys = [
+      { key: 'z', ctrlKey: true },
+      { key: 'y', ctrlKey: true },
+      { key: 'z', ctrlKey: true, shiftKey: true },
+    ];
+    for (const field of [summary, description]) {
+      for (const key of keys) {
+        const event = new KeyboardEvent('keydown', { ...key, bubbles: true, cancelable: true });
+        field.dispatchEvent(event);
+        expect(event.defaultPrevented, `${key.key} on ${field.className}`).toBe(false);
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(invoke.mock.calls.some((c) => c[0] === 'repo_action')).toBe(false);
+  });
+
+  it('shows a misspelt word\'s menu over everything, and corrects the word from it', async () => {
+    // The menu is the window's, not the panel's: drawn inside the sticky message box it would
+    // sit under the graph.
+    const { container } = await shell({
+      repo_status: {
+        entries: [{ path: 'a.txt', staged: 'modified', worktree: null, conflict: null }],
+        conflicted: [],
+      },
+      spelling_check: (args: { summary: string }) => ({
+        summary: args.summary.includes('teh') ? [{ word: 'teh', start: 4, end: 7 }] : [],
+        body: [],
+      }),
+      spelling_suggest: ['the', 'tech'],
+    });
+    await waitFor(() => {
+      if (!container.querySelector('button.row.wip')) throw new Error('no working copy row yet');
+    });
+    await fireEvent.click(container.querySelector('button.row.wip') as HTMLButtonElement);
+    const summary = await waitFor(() => {
+      const found = container.querySelector('input.summary');
+      if (!found) throw new Error('no staging panel yet');
+      return found as HTMLInputElement;
+    });
+    await fireEvent.input(summary, { target: { value: 'Fix teh watcher' } });
+    await fireEvent.blur(summary);
+    const word = await waitFor(() => {
+      const found = container.querySelector('.misspellings .miss');
+      if (!found) throw new Error('no underline yet');
+      return found as HTMLElement;
+    });
+    expect(word.textContent).toBe('teh');
+
+    // happy-dom lays nothing out, so the word is given a box and the click lands in it.
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 400, 30));
+    vi.spyOn(word, 'getClientRects').mockReturnValue(
+      Object.assign([new DOMRect(40, 5, 30, 20)], { item: () => null }) as unknown as DOMRectList,
+    );
+    summary.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 50, clientY: 15 }));
+    const fix = await waitFor(() => {
+      const found = [...document.querySelectorAll('.menu button.row')].find((b) => b.textContent?.trim() === 'the');
+      if (!found) throw new Error('no menu yet');
+      return found as HTMLElement;
+    });
+    await fireEvent.click(fix);
+    await waitFor(() => expect(summary.value).toBe('Fix the watcher'));
+    expect(document.querySelector('.menu')).toBeNull();
+    vi.restoreAllMocks();
   });
 
   it('gives the whole pane to the merge tool while an operation is stopped', async () => {

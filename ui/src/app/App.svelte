@@ -44,6 +44,7 @@
   import { chooseSavePath, saveBlob } from '../ipc/blob';
   import { ActionsState } from '../state/actions.svelte';
   import { CommitState } from '../state/commit.svelte';
+  import { SpellingState } from '../state/spelling.svelte';
   import MergeTool from './MergeTool.svelte';
   import BisectBar from './BisectBar.svelte';
   import NewRequest from './NewRequest.svelte';
@@ -480,6 +481,11 @@
   const grep = new GrepState();
   const actions = new ActionsState();
   const commitDraft = new CommitState();
+  // A word that cannot be added is said once, where it was asked for; `toasts` is read when
+  // that happens, by which time it exists.
+  const spelling = new SpellingState(views, (message) =>
+    toasts.push('error', 'Could not add the word to the dictionary', message),
+  );
   /**
    * Ticking amend fills the message in from the commit being replaced.
    *
@@ -6496,6 +6502,8 @@
             onWantPeople={() => info && void commitDraft.loadPeople(info.path)}
             locks={lfs.byPath}
             {sections}
+            {spelling}
+            onWordMenu={(at, items) => (menu = { ...at, items })}
           />
         </aside>
       {:else}

@@ -156,6 +156,12 @@ export function tabJump(e: KeyEvent): number | null {
 }
 
 /**
+ * Bindings whose keys a text field already answers: undoing the typing, and moving the caret a
+ * paragraph. Taken by the window, Ctrl+Z in the commit message undid the last commit instead.
+ */
+const FIELD_OWNS = new Set(['undo', 'redo', 'select.first', 'select.last']);
+
+/**
  * The binding an event fires, or null.
  *
  * Typing in the commit message must not stage files because the message contains an "s", so a
@@ -164,7 +170,11 @@ export function tabJump(e: KeyEvent): number | null {
 export function resolve(e: KeyEvent, context: Context): Binding | null {
   return (
     BINDINGS.find((b) => b.context === context && b.match(e)) ??
-    (context === 'global' ? null : BINDINGS.find((b) => b.context === 'global' && primary(e) && b.match(e)) ?? null)
+    (context === 'global'
+      ? null
+      : BINDINGS.find(
+          (b) => b.context === 'global' && primary(e) && !FIELD_OWNS.has(b.id) && b.match(e),
+        ) ?? null)
   );
 }
 

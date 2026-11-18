@@ -247,6 +247,7 @@ const FIXTURES: Record<string, unknown> = {
     more: false,
   },
   stop_grep: false,
+  spelling_learn: null,
   app_version: { number: '1.2.3', commit: 'abc1234', debug: false },
   check_for_update: {
     current: '1.2.3',
@@ -605,6 +606,21 @@ export function previewTerminal(onData: (text: string) => void): () => void {
   return () => clearInterval(timer);
 }
 
+/** Misspellings the fixture engine knows, with what it offers for each. */
+const TYPOS: Record<string, string[]> = {
+  teh: ['the', 'eh', 'tech'],
+  recieve: ['receive', 'relieve'],
+  seperate: ['separate', 'desperate'],
+  untill: ['until'],
+};
+
+/** Each known misspelling in `text`, wherever it stands as a whole word. */
+function misspellings(text: string): { word: string; start: number; end: number }[] {
+  return [...text.matchAll(/\p{L}+/gu)]
+    .filter((m) => m[0].toLowerCase() in TYPOS)
+    .map((m) => ({ word: m[0], start: m.index, end: m.index + m[0].length }));
+}
+
 /** Answers one command with fixture data. */
 export function preview(command: string, args: Record<string, unknown>): unknown {
   switch (command) {
@@ -626,6 +642,13 @@ export function preview(command: string, args: Record<string, unknown>): unknown
       return String(args['sha'] ?? '').startsWith('4')
         ? { state: 'passing', summary: 'all 6 checks passed', url: null }
         : { state: 'running', summary: '2 of 5 checks still running', url: null };
+    case 'spelling_check':
+      return {
+        summary: misspellings(String(args['summary'] ?? '')),
+        body: misspellings(String(args['body'] ?? '')),
+      };
+    case 'spelling_suggest':
+      return TYPOS[String(args['word'] ?? '').toLowerCase()] ?? [];
     case 'terminal_open':
       return { id: 1, shell: '/usr/bin/zsh' };
     case 'terminal_write':

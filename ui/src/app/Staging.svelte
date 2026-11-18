@@ -5,9 +5,12 @@
   import Splitter from './Splitter.svelte';
   import Changes, { kindOf, markOf } from './Changes.svelte';
   import LockMark from './LockMark.svelte';
+  import Misspellings from './Misspellings.svelte';
+  import type { MenuItem } from './Menu.svelte';
   import { buildTree } from '../diff/tree';
-  import type { LfsLock, StatusEntry } from '../ipc/types';
+  import type { LfsLock, Misspelling, StatusEntry } from '../ipc/types';
   import type { CommitState } from '../state/commit.svelte';
+  import type { Field, SpellingState } from '../state/spelling.svelte';
   import type { WorktreeState } from '../state/worktree.svelte';
   import type { Grouping } from '../state/views.svelte';
   import {
@@ -35,6 +38,8 @@
     signsOff = false,
     onSignOff = () => undefined,
     onWantPeople = () => undefined,
+    spelling = null,
+    onWordMenu = null,
   }: {
     worktree: WorktreeState;
     /**
@@ -87,6 +92,15 @@
     onSignOff?: (on: boolean) => void;
     /** Asks for who has written here lately, the first time a co-author is being typed. */
     onWantPeople?: () => void;
+    /** Which words of the message to underline; null leaves the message unchecked. */
+    spelling?: SpellingState | null;
+    /**
+     * Shows what can be done about a misspelt word, at a point on screen.
+     *
+     * The window draws the menu rather than this panel: the message box is a sticky surface
+     * with a stacking context of its own, and a menu inside it would sit under the graph.
+     */
+    onWordMenu?: ((at: { x: number; y: number }, items: MenuItem[]) => void) | null;
   } = $props();
 
   let coAuthor = $state('');
@@ -113,6 +127,118 @@
 
   /** The summary field, so the window can ask for the caret without reaching into the DOM. */
   let summaryField = $state<HTMLInputElement | null>(null);
+  let bodyField = $state<HTMLTextAreaElement | null>(null);
+  let summaryLayer = $state<Misspellings | null>(null);
+  let bodyLayer = $state<Misspellings | null>(null);
+
+  // Whatever changed the message — typing, an amend filling it in, a draft, a template, the
+  // commit clearing it — the spelling follows. The dialect is read here so choosing another
+  // checks again.
+  $effect(() => {
+    const summary = draft.summary;
+    const body = draft.description;
+    void spelling?.dialect;
+    untrack(() => spelling?.update(summary, body));
+  });
+
+  /** What each field tells the spelling about the caret, spread onto it. */
+  function caretOf(which: Field) {
+    const at = (e: Event) => (e.currentTarget as HTMLInputElement).selectionStart ?? 0;
+    return {
+      oninput: (e: Event) => spelling?.typed(which, at(e)),
+      onkeyup: (e: Event) => spelling?.moved(which, at(e)),
+      onpointerup: (e: Event) => spelling?.moved(which, at(e)),
+      onblur: () => spelling?.left(),
+      oncompositionstart: () => spelling?.composing(true),
+      oncompositionend: () => spelling?.composing(false),
+      oncontextmenu: (e: MouseEvent) => wordMenu(e, which),
+      onkeydown: (e: KeyboardEvent) => wordKey(e, which),
+    };
+  }
+
+  function fieldOf(which: Field): HTMLInputElement | HTMLTextAreaElement | null {
+    return which === 'summary' ? summaryField : bodyField;
+  }
+
+  function layerOf(which: Field): Misspellings | null {
+    return which === 'summary' ? summaryLayer : bodyLayer;
+  }
+
+  /** A right-click on a misspelt word offers what to do about it; anywhere else, the usual. */
+  function wordMenu(event: MouseEvent, which: Field): void {
+    const mark = layerOf(which)?.markAt(event.clientX, event.clientY) ?? null;
+    if (mark === null || spelling === null || onWordMenu === null) return;
+    event.preventDefault();
+    void offer(which, mark, { x: event.clientX, y: event.clientY });
+  }
+
+  /** The Menu key, or Shift+F10, with the caret in a misspelt word. */
+  function wordKey(event: KeyboardEvent, which: Field): void {
+    const plain = !event.ctrlKey && !event.altKey && !event.metaKey;
+    const asked =
+      plain && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'));
+    const field = fieldOf(which);
+    if (!asked || !field || spelling === null || onWordMenu === null) return;
+    const caret = field.selectionStart ?? 0;
+    const mark = spelling.shown(which).find((m) => m.start <= caret && caret <= m.end);
+    const at = mark ? layerOf(which)?.placeOf(mark) : null;
+    if (!mark || !at) return;
+    event.preventDefault();
+    void offer(which, mark, at);
+  }
+
+  async function offer(which: Field, mark: Misspelling, at: { x: number; y: number }) {
+    if (spelling === null || onWordMenu === null) return;
+    const suggestions = await spelling.suggest(mark.word);
+    onWordMenu(at, wordItems(which, mark, suggestions));
+  }
+
+  function wordItems(which: Field, mark: Misspelling, suggestions: string[]): MenuItem[] {
+    const offered: MenuItem[] =
+      suggestions.length > 0
+        ? suggestions.map((word) => ({
+            kind: 'item' as const,
+            label: word,
+            run: () => void replace(which, mark, word),
+          }))
+        : [{ kind: 'item', label: t('spelling.none'), disabled: true, run: () => undefined }];
+    return [
+      ...offered,
+      { kind: 'separator' },
+      {
+        kind: 'item',
+        label: t('spelling.learn', { word: mark.word }),
+        run: () => void spelling?.learn(mark.word),
+      },
+      {
+        kind: 'item',
+        label: t('spelling.ignore', { word: mark.word }),
+        run: () => spelling?.ignore(mark.word),
+      },
+    ];
+  }
+
+  /**
+   * Puts `word` where the misspelling was. Typed in rather than assigned, so Ctrl+Z in the
+   * field takes the correction back as it would any other typing; assigning the value would
+   * empty the field's undo history.
+   */
+  async function replace(which: Field, mark: Misspelling, word: string): Promise<void> {
+    const field = fieldOf(which);
+    if (!field) return;
+    // The menu gives focus back as it closes, and the word goes in after that.
+    await tick();
+    field.focus();
+    if (field.value.slice(mark.start, mark.end) !== mark.word) return;
+    field.setSelectionRange(mark.start, mark.end);
+    const typed =
+      typeof document.execCommand === 'function' &&
+      document.execCommand('insertText', false, word);
+    if (!typed) {
+      field.setRangeText(word, mark.start, mark.end, 'end');
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
   // Only when asked. The panel appears whenever the working copy is selected, and taking the
   // caret every time it did would put keystrokes meant for the list into the message.
   let focusedAt = 0;
@@ -497,19 +623,48 @@
       {/if}
     </div>
     <div class="field">
+      <!-- The webview's own checker is off: it would draw a second set of underlines on
+           macOS and Windows, and flag every identifier. -->
       <input
         class="summary"
         placeholder={t('staging.summary')}
+        spellcheck="false"
         bind:this={summaryField}
         bind:value={draft.summary}
+        {...caretOf('summary')}
       />
+      {#if spelling}
+        <Misspellings
+          bind:this={summaryLayer}
+          field={summaryField}
+          text={draft.summary}
+          marks={spelling.shown('summary')}
+        />
+      {/if}
       <!-- Counts down rather than refusing: the commit is the user's to write. -->
       <span class="limit" class:over={draft.summary.length > LIMIT}>
         {LIMIT - draft.summary.length}
       </span>
     </div>
-    <textarea class="description" rows="3" placeholder={t('staging.description')} bind:value={draft.description}
-    ></textarea>
+    <div class="field body">
+      <textarea
+        class="description"
+        rows="3"
+        placeholder={t('staging.description')}
+        spellcheck="false"
+        bind:this={bodyField}
+        bind:value={draft.description}
+        {...caretOf('body')}
+      ></textarea>
+      {#if spelling}
+        <Misspellings
+          bind:this={bodyLayer}
+          field={bodyField}
+          text={draft.description}
+          marks={spelling.shown('body')}
+        />
+      {/if}
+    </div>
     <!-- Co-authors as chips, each a Co-authored-by trailer on the commit. -->
     <div class="coauthors">
       {#each draft.coAuthors as who (who)}
@@ -782,15 +937,17 @@
   /* Given a height, the description is what takes it: that is the field a longer message
      needs room in. */
   .compose.sized .fields, .compose.fill .fields { flex: 1 1 auto; min-height: 0; }
-  .compose.sized .description, .compose.fill .description { flex: 1 1 auto; min-height: 2.6em; }
+  .compose.sized .body, .compose.fill .body { flex: 1 1 auto; min-height: 2.6em; }
   .compose h3 { margin: 0; }
   .summary:focus, .description:focus { border-color: var(--accent); }
   /*
    * Quiet until it matters. A number counting down beside every keystroke is a nag; what the
    * user needs to know is when the summary has grown past what git will show on one line.
    */
+  /* Raised for the same reason as the underlines: WebKitGTK puts a focused field on a layer
+     of its own, which covered the count at the one moment it is meant to show. */
   .limit {
-    position: absolute; right: var(--space-2); top: 50%; transform: translateY(-50%);
+    position: absolute; z-index: 1; right: var(--space-2); top: 50%; transform: translateY(-50%);
     font-size: var(--text-xs); color: var(--fg-2); font-variant-numeric: tabular-nums;
     opacity: 0; transition: opacity var(--fast) var(--ease); pointer-events: none;
   }

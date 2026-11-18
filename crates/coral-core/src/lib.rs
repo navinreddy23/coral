@@ -26,6 +26,7 @@ pub mod ops;
 pub mod patch;
 pub mod process;
 pub mod proposal;
+mod prose;
 pub mod reflog;
 pub mod refs;
 pub mod remote;
@@ -36,6 +37,7 @@ pub mod sequence;
 pub mod signing;
 pub mod signoff;
 pub mod sparse;
+pub mod spelling;
 pub mod ssh;
 pub mod stash;
 pub mod status;
@@ -47,6 +49,7 @@ pub mod tracker;
 pub mod undo;
 pub mod verification;
 pub mod watch;
+pub mod wordlist;
 pub mod worktree;
 
 #[cfg(any(test, feature = "testutil"))]

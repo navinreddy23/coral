@@ -33,6 +33,22 @@ describe('the preview engine', () => {
     }
   });
 
+  it('flags the misspellings it knows in each field, where they are', () => {
+    const found = preview('spelling_check', {
+      summary: 'Fix teh watcher',
+      body: 'It will recieve\nthem seperately, teh end.',
+      dialect: 'en-US',
+    }) as { summary: unknown[]; body: unknown[] };
+    expect(found.summary).toEqual([{ word: 'teh', start: 4, end: 7 }]);
+    expect(found.body).toEqual([
+      { word: 'recieve', start: 8, end: 15 },
+      { word: 'teh', start: 33, end: 36 },
+    ]);
+    expect(preview('spelling_suggest', { word: 'Teh', dialect: 'en-US' })).toContain('the');
+    expect(preview('spelling_suggest', { word: 'fine', dialect: 'en-US' })).toEqual([]);
+    expect(preview('spelling_learn', { word: 'teh' })).toBeNull();
+  });
+
   it('answers the scope with both of its fields, since the sidebar reads them', () => {
     const scope = preview('graph_scope', {}) as { solo: unknown; hidden: unknown };
     expect(scope.solo).toBeNull();
