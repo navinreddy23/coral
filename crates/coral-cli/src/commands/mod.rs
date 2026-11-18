@@ -15,6 +15,7 @@ pub mod refs;
 pub mod remote;
 pub mod rewrite;
 pub mod signing;
+pub mod spell;
 pub mod stage;
 pub mod status;
 pub mod submodule;

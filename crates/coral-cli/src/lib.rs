@@ -603,6 +603,24 @@ pub enum Command {
     },
     /// Report the git binary coral will drive.
     Version,
+    /// Check a commit message's spelling as the commit box does, or add words to the list it
+    /// accepts. The message is the argument, the file given to -F, or stdin.
+    Spell {
+        message: Option<String>,
+        /// Read the message from a file, `-` for stdin, with git's comment lines and anything
+        /// below the scissors line left out: a commit-msg hook can pass its file as it is.
+        #[arg(short = 'F', long, value_name = "FILE", conflicts_with = "message")]
+        file: Option<PathBuf>,
+        /// en-US or en-GB.
+        #[arg(long, default_value = "en-US")]
+        dialect: coral_core::spelling::Dialect,
+        /// The list of known words to read and add to, instead of the window's.
+        #[arg(long, value_name = "FILE")]
+        words: Option<PathBuf>,
+        /// Add these words to the list instead of checking a message.
+        #[arg(long, value_name = "WORD", num_args = 1.., conflicts_with_all = ["message", "file"])]
+        add: Vec<String>,
+    },
 }
 
 /// Runs one CLI invocation and returns the envelope plus the exit code.
@@ -787,8 +805,34 @@ async fn dispatch(command: Command, repo: &std::path::Path) -> output::Rendered 
             &commands::graph::run(repo, limit, from, first_paint, solo, hidden).await,
         ),
         Command::Version => output::render(&commands::version::run().await),
+        command @ Command::Spell { .. } => dispatch_spell(command),
         other => dispatch_write(other, repo).await,
     }
+}
+
+/// The spelling check, which needs no repository.
+fn dispatch_spell(command: Command) -> output::Rendered {
+    use commands::spell::{self, Source};
+    let Command::Spell {
+        message,
+        file,
+        dialect,
+        words,
+        add,
+    } = command
+    else {
+        unreachable!("routed by `dispatch`")
+    };
+    let list = words.or_else(coral_core::wordlist::file);
+    if !add.is_empty() {
+        return output::render(&spell::add(&add, list.as_deref()));
+    }
+    let source = match (message, file) {
+        (Some(text), _) => Source::Text(text),
+        (None, Some(path)) => Source::File(path),
+        (None, None) => Source::Stdin,
+    };
+    output::render(&spell::check(source, dialect, list.as_deref()))
 }
 
 /// Remote-facing commands, split out so each dispatcher stays readable.
