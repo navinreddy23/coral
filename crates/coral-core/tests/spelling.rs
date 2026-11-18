@@ -70,7 +70,7 @@ fn suggests_the_word_that_was_meant_first() {
         spelling::suggest(Dialect::American, "untill").unwrap()[0],
         "until"
     );
-    for word in ["untill", "Untill", "occured", "Wether"] {
+    for word in ["untill", "Untill", "occured", "Wether", "colour"] {
         let suggestions = spelling::suggest(Dialect::American, word).unwrap();
         assert!(
             suggestions.iter().all(|s| !s.contains([' ', '-'])),

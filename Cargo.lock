@@ -883,6 +883,7 @@ version = "1.6.0"
 dependencies = [
  "bstr",
  "dirs",
+ "foldhash",
  "getrandom 0.3.4",
  "gix",
  "insta",

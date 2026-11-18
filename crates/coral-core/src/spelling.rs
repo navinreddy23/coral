@@ -8,8 +8,6 @@ use std::collections::HashSet;
 use std::str::FromStr;
 use std::sync::{LazyLock, OnceLock};
 
-use spellbook::Dictionary;
-
 use crate::error::CoralError;
 use crate::prose::{self, Word};
 use crate::wordlist::{self, WordList};
@@ -45,6 +43,12 @@ pub struct MessageSpelling {
     pub body: Vec<Misspelling>,
 }
 
+// Seeded, so that suggestions which score the same come out in the same order every time;
+// spellbook's own default is seeded at random per process. Nothing is inserted from user
+// input, so a fixed seed opens no door to colliding keys.
+type Hasher = foldhash::fast::FixedState;
+type Dictionary = spellbook::Dictionary<Hasher>;
+
 static AMERICAN: OnceLock<Result<Dictionary, String>> = OnceLock::new();
 static BRITISH: OnceLock<Result<Dictionary, String>> = OnceLock::new();
 
@@ -76,12 +80,14 @@ impl Dialect {
                 include_str!("../dictionaries/en_GB-ise.dic"),
             ),
         };
-        cell.get_or_init(|| Dictionary::new(aff, dic).map_err(|e| e.to_string()))
-            .as_ref()
-            .map_err(|e| CoralError::Refused {
-                label: "check spelling",
-                detail: format!("the {} dictionary could not be read: {e}", self.tag()),
-            })
+        cell.get_or_init(|| {
+            Dictionary::new_with_hasher(aff, dic, Hasher::with_seed(0)).map_err(|e| e.to_string())
+        })
+        .as_ref()
+        .map_err(|e| CoralError::Refused {
+            label: "check spelling",
+            detail: format!("the {} dictionary could not be read: {e}", self.tag()),
+        })
     }
 }
 
@@ -162,20 +168,19 @@ fn capitalised(word: &str) -> String {
     })
 }
 
-/// A suggestion that splits the word in two where one side is a stray letter or an ending
-/// rather than a word: Hunspell offers "until l" for "untill" and "occur ed" for "occured".
-/// A split into real words, "a lot" for "alot", is kept.
+/// A suggestion that only puts a space or a hyphen into the word. Hunspell offers "co lour"
+/// and "col-our" for "colour" and "until l" for "untill", which are the same misspelling
+/// broken in two. A split around "a" is kept: "a lot" is what "alot" means.
 fn is_torn(suggestion: &str, word: &str) -> bool {
-    const ENDINGS: &[&str] = &["d", "s", "ed", "es", "er", "ly", "ing"];
     let split = |c: char| c == ' ' || c == '-';
     if !suggestion.contains(split) || word.contains(split) {
         return false;
     }
-    suggestion.split(split).any(|part| {
-        let lower = part.to_lowercase();
-        (part.chars().count() == 1 && !matches!(part, "a" | "A" | "I"))
-            || ENDINGS.contains(&lower.as_str())
-    })
+    let joined: String = suggestion.chars().filter(|c| !split(*c)).collect();
+    joined.to_lowercase() == word.to_lowercase()
+        && !suggestion
+            .split(split)
+            .any(|part| part.eq_ignore_ascii_case("a"))
 }
 
 fn known(dictionary: &Dictionary, words: &WordList, word: &str) -> bool {
@@ -275,14 +280,17 @@ mod tests {
     }
 
     #[test]
-    fn drops_a_split_into_a_word_and_a_scrap() {
+    fn drops_a_suggestion_that_only_breaks_the_word_in_two() {
         assert!(is_torn("until l", "untill"));
         assert!(is_torn("occur ed", "occured"));
         assert!(is_torn("occur-ed", "occured"));
         assert!(is_torn("W ether", "Wether"));
+        assert!(is_torn("co lour", "colour"));
+        assert!(is_torn("Col-our", "colour"));
         assert!(!is_torn("a lot", "alot"));
-        assert!(!is_torn("no one", "noone"));
         assert!(!is_torn("until", "untill"));
+        // A split that changes the letters is a different suggestion, not a torn one.
+        assert!(!is_torn("on the", "onteh"));
     }
 
     #[test]

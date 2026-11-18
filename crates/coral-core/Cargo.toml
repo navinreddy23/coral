@@ -24,6 +24,7 @@ notify    = { workspace = true }
 tempfile  = { workspace = true }
 dirs      = { workspace = true }
 spellbook = { workspace = true }
+foldhash  = { workspace = true }
 ts-rs     = { workspace = true, optional = true }
 
 # One keyring backend per platform, rather than every backend on every platform.
