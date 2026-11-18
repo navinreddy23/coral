@@ -190,6 +190,13 @@ describe('the staging panel', () => {
     expect(onCommit).toHaveBeenCalledTimes(1);
   });
 
+  it('raises the count over the summary, where a focused field would cover it', () => {
+    // WebKitGTK puts a focused text field on a compositing layer of its own, which painted over
+    // the count — and the count is only meant to show while the field has focus.
+    const css = readFileSync(resolve(process.cwd(), 'src/app/Staging.svelte'), 'utf8');
+    expect(css).toMatch(/\.limit \{[^}]*position: absolute; z-index: 1;/u);
+  });
+
   it('counts down to the summary limit rather than refusing a long one', async () => {
     const { container } = await panel();
     const field = container.querySelector('.summary') as HTMLInputElement;

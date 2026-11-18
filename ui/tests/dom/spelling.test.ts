@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { cleanup, render } from '@testing-library/svelte';
 import { fireEvent, waitFor } from '@testing-library/dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -156,6 +158,11 @@ describe('misspelt words in the commit box', () => {
       expect(getComputedStyle(layer).pointerEvents).toBe('none');
     }
     expect(container.querySelector('.miss')?.getAttribute('data-start')).toBe('4');
+  });
+
+  it('are drawn above the field, which WebKitGTK raises while it has the caret', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/app/Misspellings.svelte'), 'utf8');
+    expect(css).toMatch(/\.misspellings \{[^}]*position: absolute; inset: 0; z-index: 1;/u);
   });
 
   it('leaves the webview to check nothing, so there is one set of underlines', async () => {

@@ -944,8 +944,10 @@
    * Quiet until it matters. A number counting down beside every keystroke is a nag; what the
    * user needs to know is when the summary has grown past what git will show on one line.
    */
+  /* Raised for the same reason as the underlines: WebKitGTK puts a focused field on a layer
+     of its own, which covered the count at the one moment it is meant to show. */
   .limit {
-    position: absolute; right: var(--space-2); top: 50%; transform: translateY(-50%);
+    position: absolute; z-index: 1; right: var(--space-2); top: 50%; transform: translateY(-50%);
     font-size: var(--text-xs); color: var(--fg-2); font-variant-numeric: tabular-nums;
     opacity: 0; transition: opacity var(--fast) var(--ease); pointer-events: none;
   }
