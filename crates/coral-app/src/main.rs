@@ -4,7 +4,7 @@
 use coral_app_lib::{
     actions, activity, assist, avatar, bisect, blob, commands, conflicts, experimental, gitignore,
     graph, grep, hosting, lfs, notes, profile, recent, reflog, remotes, repoconfig, scope, search,
-    signing, ssh, tabs, template, terminal, tool, transfer, update, version, watcher,
+    signing, spelling, ssh, tabs, template, terminal, tool, transfer, update, version, watcher,
 };
 
 fn main() {
@@ -200,6 +200,9 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         search::stop_search,
         grep::grep_code,
         grep::stop_grep,
+        spelling::spelling_check,
+        spelling::spelling_suggest,
+        spelling::spelling_learn,
         bisect::repo_bisection,
         reflog::repo_reflog,
         blob::file_blob,
