@@ -41,6 +41,16 @@ paper, it is added here in the same commit with a link and its license.
   a blame and a file. Only its core and twenty-five grammars ship, in a worker of their own.
   <https://highlightjs.org/> — BSD-3-Clause.
 
+## Spelling
+
+- **spellbook** (the Helix editor's contributors) — Hunspell's checking and suggestions, for the
+  commit box's spelling check. <https://github.com/helix-editor/spellbook> — MPL-2.0.
+- **SCOWL** by Kevin Atkinson — the US and British English Hunspell dictionaries, bundled as they
+  are released in `crates/coral-core/dictionaries`, with their READMEs.
+  <https://wordlist.aspell.net/> — the SCOWL licence, which asks only that its notice is kept.
+  The affix files derive from Geoff Kuenning's Ispell and carry his BSD licence; both notices are
+  in `THIRD_PARTY_LICENSES.md`.
+
 ## Not shipped, but recognised
 
 - **git** — GPL-2.0-only. No build of Coral ships a copy. The application will run an
@@ -52,5 +62,5 @@ paper, it is added here in the same commit with a link and its license.
 ## Rust libraries
 
 tokio, notify, reqwest, rustls, serde, thiserror, clap, keyring, secrecy, bstr, similar, insta,
-tracing, ts-rs, tempfile, url, smallvec. Full license texts are generated into
+tracing, ts-rs, tempfile, url, smallvec, spellbook. Full license texts are generated into
 `THIRD_PARTY_LICENSES.md` by `cargo about`.
