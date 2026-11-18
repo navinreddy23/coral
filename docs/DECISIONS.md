@@ -574,3 +574,32 @@ A configured list that does not exist is the opposite case: git refuses the whol
 "could not open object name list". `--no-ignore-revs-file` clears what the configuration added
 before the command line gives back the files that are there, so the blame still answers and the
 header says which file was missing.
+
+## Spelling is checked in Rust, not by the webview
+
+Each webview has a checker of its own, and none of them would do. WebKitGTK's is off unless the
+application turns it on, and then needs enchant and a Hunspell dictionary installed; WebKit on
+macOS and WebView2 on Windows check with the system's dictionaries. All three flag every
+identifier and path in a commit message, offer suggestions only in a native menu, and cannot be
+asked from a test what they flagged. So `coral-core` checks the message itself, against SCOWL's
+en_US and en_GB-ise Hunspell dictionaries built into the binary and matched by spellbook, and
+`spellcheck="false"` keeps the webview's own underlines out of the two fields.
+
+Measured on a release build: each dictionary is read in about 5 ms, the first time a message is
+checked, and holds 2.3 to 2.8 MB. A two-kilobyte message is checked in 62 µs, so a check runs
+whenever typing pauses for a quarter of a second rather than on a word boundary. Suggestions
+take 4 to 14 ms and are asked for only when a menu opens. The command-line binary grew by
+1.5 MB, the two dictionaries being 1 MB of it.
+
+spellbook seeds its hasher at random per process, and suggestions that scored the same came out
+in a different order on every run. The dictionaries are built with a fixed seed: nothing is
+inserted into them from user input, so there are no colliding keys to defend against.
+
+The underlines are drawn on a copy of the field's text laid over it, raised above the field
+because WebKitGTK puts a focused text field on a compositing layer of its own, which painted
+over anything positioned beside it. The summary's character count had been hidden that way
+whenever the summary had focus, which is the only time it was meant to show.
+
+A suggestion is put in with `execCommand('insertText')` so that a field that keeps an undo
+history keeps it. WebKitGTK keeps none for a text field here, so on Linux Ctrl+Z cannot take a
+correction back; it at least no longer undoes the last commit, which it did before.

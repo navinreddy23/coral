@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.6.1
+
+### Added
+
+- **Spelling in the commit message.** Words the dictionary does not know are underlined in the
+  summary and the description as you write, once typing pauses, and never the word still being
+  typed. A right-click on one, or the Menu key with the caret in it, offers what it might have
+  been, Add to dictionary and Ignore. Code in backticks, indented and fenced blocks, paths, file
+  names, identifiers, mixed case, the `core:` prefix and the trailers at the end are left alone,
+  and so are git's own words — rebase, worktree, reflog, fixup. US English unless Preferences →
+  General says British English, or off. Nothing is ever refused for its spelling. The
+  dictionaries are built in, so it works the same on every platform, and added words are kept in
+  `words.txt` beside Coral's settings. On the command line, `coral spell` checks a message from an
+  argument, a file or stdin — a commit-msg hook can hand it `.git/COMMIT_EDITMSG` as it is — and
+  `coral spell --add` adds a word to the same list.
+
+### Fixed
+
+- **Ctrl+Z in a text field no longer undoes the last commit.** Undo, redo and Ctrl+↑/↓ are left to
+  the field being typed in.
+- **The summary's character count shows while the summary is being typed in** on Linux, where
+  WebKitGTK painted the focused field over it.
+
 ## 1.6.0
 
 ### Added

@@ -319,6 +319,13 @@ pathspec is ANDed with both; they run together rather than in sequence, since ea
 the whole repository and eleven seconds on the kernel. Matches are resolved to rows in Rust and
 sorted by row, so stepping through them moves down the list rather than about it.
 
+**Spelling in the commit box is checked in Rust**, against SCOWL's US or British Hunspell
+dictionary built into `coral-core` and matched with spellbook, so the window and `coral spell`
+agree on every platform. `prose.rs` decides what is prose: code spans, paths, identifiers, the
+area prefix and a closing trailer paragraph are not. Offsets come back in UTF-16 units, as a text
+box counts them. The window draws the underlines on a copy of the text laid over each field, and
+between checks carries them through each edit, so they never lag the typing.
+
 **Every surface carrying text paints its own opaque background.** WebKit antialiases text on a
 composited layer with subpixel precision only where it knows what is behind it; `background:
 none` leaves it guessing and it drops to grayscale, which reads as soft. The giveaway is that
