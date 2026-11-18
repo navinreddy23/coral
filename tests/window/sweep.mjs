@@ -34,6 +34,32 @@ const STOPS = [
   { name: 'details', at: APP, go: (b) => b.click('li.row', 3) },
   { name: 'staging', at: APP, go: (b) => b.press('button.row.wip') },
   {
+    // Misspellings underlined in the commit box, over a copy of the text in the field's own
+    // type. The fixture engine flags a handful of known typos, wherever they are.
+    name: 'spelling',
+    at: APP,
+    go: async (b) => {
+      await b.press('button.row.wip');
+      await b.eval(`(() => {
+        const write = (selector, value) => {
+          const field = document.querySelector(selector);
+          field.value = value;
+          field.dispatchEvent(new Event('input', { bubbles: true }));
+          field.dispatchEvent(new Event('blur'));
+        };
+        write('input.summary', 'core: Fix teh watcher');
+        write('textarea.description', 'It will recieve events, and keep them seperate untill the build is quiet.');
+      })()`);
+      await pause(800);
+      const marked = await b.eval(
+        "[...document.querySelectorAll('.misspellings .miss')].map((m) => m.textContent).join(' ')",
+      );
+      if (marked !== 'teh recieve seperate untill') {
+        throw new Error(`underlined "${marked}" rather than the four typos`);
+      }
+    },
+  },
+  {
     name: 'diff',
     at: APP,
     go: async (b) => {

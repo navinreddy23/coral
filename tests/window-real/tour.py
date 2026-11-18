@@ -168,6 +168,78 @@ click(*SIGN_OFF)
 move(700, 893)
 settle()
 
+# The spelling check: a misspelt word in the summary is underlined, a right-click on it offers
+# the word that was meant, and choosing that puts it in and takes the underline away.
+#
+# Nothing here trusts a coordinate to land on the word. A right-click a few pixels off opens
+# GTK's own menu instead, which changes the picture just as much, and once passed every check
+# while photographing Cut, Copy and Paste. So the word is found by its underline, and the menu
+# that opens has to be Coral's, which is drawn in the page rather than as a window of its own.
+SUMMARY, SUMMARY_TEXT = (1250, 669), (1100, 658, 290, 24)
+MENU_FIRST_ROW = (40, 19)
+
+
+def is_danger(data, i):
+    """The danger red a misspelling is underlined in. The field is white, its text near black,
+    and the count beside it amber, whose green is well above its blue."""
+    return (
+        data[i + 2] > data[i + 1] + 60
+        and data[i + 2] > data[i] + 60
+        and abs(data[i + 1] - data[i]) < 40
+    )
+
+
+def underline_at(px, py, w, h):
+    """The leftmost point of a misspelling's underline in the region, or None."""
+    data = region(px, py, w, h)
+    found = [i // 4 for i in range(0, len(data) - 3, 4) if is_danger(data, i)]
+    if not found:
+        return None
+    left = min(found, key=lambda n: n % w)
+    return px + left % w, py + left // w
+
+
+def popups():
+    """Windows mapped on their own over the window, which a GTK menu is and Coral's is not."""
+    return sum(
+        1
+        for w in screen.root.query_tree().children
+        if w.get_attributes().override_redirect and w.get_attributes().map_state == 2
+    )
+
+
+check(underline_at(*SUMMARY_TEXT) is None, "an empty summary has nothing underlined")
+click(*SUMMARY)
+type_text("Fix teh watcher")
+keys("Tab")
+keys("Escape")
+move(700, 893)
+settle(quiet=1.0)
+mark = underline_at(*SUMMARY_TEXT)
+check(mark is not None, "a misspelt word in the commit summary is underlined")
+shot("spelling")
+if mark is not None:
+    misspelt = region(*SUMMARY_TEXT)
+    windows = popups()
+    word = (mark[0] + 6, mark[1] - 7)
+    click(*word, button=3)
+    settle()
+    check(popups() == windows, "the right-click opened Coral's menu for the word, not GTK's")
+    shot("spelling-menu")
+    click(word[0] + MENU_FIRST_ROW[0], word[1] + MENU_FIRST_ROW[1])
+    move(700, 893)
+    settle(quiet=1.0)
+    check(region(*SUMMARY_TEXT) != misspelt, "choosing a suggestion changes the word")
+    check(underline_at(*SUMMARY_TEXT) is None, "and the corrected summary has nothing underlined")
+    keys("Escape")
+click(*SUMMARY)
+keys("Control_L", "a")
+keys("BackSpace")
+keys("Tab")
+keys("Escape")
+move(700, 893)
+settle()
+
 # A commit's own panel: the message boxed in the interface face, its author under it.
 click(700, 152)
 shot("commit-details")

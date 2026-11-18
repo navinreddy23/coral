@@ -44,6 +44,8 @@ PUNCTUATION = {
     "]": ("bracketright",),
     "^": ("Shift_L", "6"),
     "$": ("Shift_L", "4"),
+    # And what a commit message marks code with.
+    "`": ("grave",),
 }
 
 
