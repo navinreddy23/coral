@@ -15,6 +15,7 @@ pub mod engine;
 pub mod error;
 pub mod gitignore;
 pub mod graph;
+pub mod grep;
 pub mod history;
 pub mod identity;
 pub mod index;

@@ -215,13 +215,13 @@ describe('the diff viewer', () => {
     };
     const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
 
-    const numbers = view.container.querySelectorAll('table.blame td.no');
+    const numbers = view.container.querySelectorAll('.file-sheet.blame .no');
     // Not `.pick`: that is the line-staging button's class, and its full width pushed the
     // code column a quarter of the pane to the right in the real window.
     expect(numbers[0]?.classList.contains('pick')).toBe(false);
     await fireEvent.click(numbers[2] as HTMLElement);
     await fireEvent.click(numbers[0] as HTMLElement, { shiftKey: true });
-    expect(view.container.querySelectorAll('tr.ranged')).toHaveLength(3);
+    expect(view.container.querySelectorAll('.file-line.ranged')).toHaveLength(3);
     expect(view.container.querySelector('.line-range')?.textContent).toContain('lines 1–3 picked');
 
     const go = view.container.querySelector('.line-range .go') as HTMLButtonElement;
@@ -237,6 +237,261 @@ describe('the diff viewer', () => {
     // The bar stays, saying how to pick, so nothing below it moves.
     expect(view.container.querySelector('.line-range .go')).toBeNull();
     expect(view.container.querySelector('.line-range')?.textContent).toContain('Pick a line number');
+  });
+
+  it('builds only the lines on screen of a long blame', () => {
+    // Every line was a table row, and on the kernel's MAINTAINERS that was a hundred thousand
+    // cells before the first paint.
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'MAINTAINERS';
+    diff.file = fileDiff();
+    diff.setView('blame');
+    diff.blame = {
+      chunks: [{ oid: 'a'.repeat(40), finalLine: 1, origLine: 1, lines: 5000 }],
+      commits: {
+        ['a'.repeat(40)]: {
+          oid: 'a'.repeat(40),
+          author: { name: 'Ada', email: 'ada@example.com', time: 1_700_000_000, offset: 0 },
+          summary: 'first',
+          filename: 'MAINTAINERS',
+        },
+      },
+    } as unknown as NonNullable<typeof diff.blame>;
+    diff.text = Array.from({ length: 5000 }, (_, i) => `line ${i + 1}`).join('\n') + '\n';
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+
+    const sheet = view.container.querySelector('.file-sheet.blame') as HTMLElement;
+    expect(sheet.style.height).toBe(`${5000 * 17}px`);
+    const built = view.container.querySelectorAll('.file-line');
+    expect(built.length).toBeGreaterThan(0);
+    expect(built.length).toBeLessThan(100);
+    // The chip is on the first line of its run and nowhere else.
+    expect(view.container.querySelectorAll('.chip')).toHaveLength(1);
+  });
+
+  it('shows the file a line at a time, with nobody beside it', () => {
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'a.c';
+    diff.file = fileDiff();
+    diff.setView('file');
+    diff.contents = { kind: 'text', text: 'one\n\ttwo\nthree\n', before: false };
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+
+    const sheet = view.container.querySelector('.file-sheet') as HTMLElement;
+    expect(sheet.classList.contains('blame')).toBe(false);
+    expect([...sheet.querySelectorAll('.no')].map((n) => n.textContent)).toEqual(['1', '2', '3']);
+    expect([...sheet.querySelectorAll('.text')].map((n) => n.textContent)).toEqual(['one', '\ttwo', 'three']);
+    expect(sheet.querySelector('.author')).toBeNull();
+    // Wide enough for its widest line, with a tab counted at the eight columns it is drawn at.
+    expect(sheet.style.minWidth).toContain(' 11ch');
+    expect(view.container.querySelector('header .note')).toBeNull();
+  });
+
+  it('says when the file shown is how it was before the change deleted it', () => {
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'gone.c';
+    diff.file = { ...fileDiff(), change: 'deleted' };
+    diff.setView('file');
+    diff.contents = { kind: 'text', text: 'gone\n', before: true };
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+    expect(view.container.querySelector('header .note')?.textContent).toContain('this change deleted it');
+  });
+
+  it('offers the file itself where the change has nothing to show for it', async () => {
+    // "View all files" is mostly files the commit did not touch, and the pane said so and
+    // stopped there.
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'README';
+    diff.empty = 'This commit did not change that file.';
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+    const show = [...view.container.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Show the file',
+    ) as HTMLButtonElement;
+    await fireEvent.click(show);
+    expect(diff.view).toBe('file');
+  });
+
+  it('opens side by side on the first change only once the whole file is on screen', async () => {
+    // Switching layout keeps the inline answer up while the whole file is read. Placed on that,
+    // the view stayed where its few rows put it once the real answer came.
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'a.c';
+    diff.file = fileDiff();
+    diff.setMode('split');
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+    const scroller = view.container.querySelector('.scroll') as HTMLElement;
+    await Promise.resolve();
+    expect(scroller.scrollTop).toBe(0);
+
+    const long = Array.from({ length: 400 }, (_, i) => line('context', `l${i + 1}`, i + 1, i + 1));
+    long.splice(300, 0, line('add', 'new', null, 301));
+    diff.file = { ...fileDiff(), hunks: [{ header: '@@', oldStart: 1, oldLines: 400, newStart: 1, newLines: 401, lines: long }] };
+    diff.readWhole = true;
+    await vi.waitFor(() => expect(scroller.scrollTop).toBeGreaterThan(200 * 17));
+  });
+
+  it('opens the unchanged lines between hunks a step at a time, numbered on both sides', async () => {
+    // Fifty lines; three changed at 10 and two lines added at 40.
+    const text = Array.from({ length: 52 }, (_, i) => `line ${i + 1}`).join('\n') + '\n';
+    const file: FileDiff = {
+      ...fileDiff(),
+      hunks: [
+        {
+          header: '@@ -10,1 +10,1 @@', oldStart: 10, oldLines: 1, newStart: 10, newLines: 1,
+          lines: [line('remove', 'old 10', 10, null), line('add', 'line 10', null, 10)],
+        },
+        {
+          header: '@@ -39,0 +40,2 @@', oldStart: 39, oldLines: 0, newStart: 40, newLines: 2,
+          lines: [line('add', 'line 40', null, 40), line('add', 'line 41', null, 41)],
+        },
+      ],
+    };
+    const parts: [string, number, number[]][] = [];
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'a.c';
+    diff.source = 'unstaged';
+    diff.file = file;
+    diff.setMode('inline');
+    diff.readSides = async () => {};
+    const view = render(DiffView, {
+      props: { diff, onClose: () => {}, onPart: (p: string, h: number, l: number[]) => parts.push([p, h, l]) },
+    });
+    // Nothing to open until the new side is read, and only the new side of this answer.
+    expect(view.container.querySelector('tr.gap')).toBeNull();
+    diff.sideTexts = { file: { ...file }, before: null, after: text };
+    await Promise.resolve();
+    expect(view.container.querySelector('tr.gap')).toBeNull();
+    diff.sideTexts = { file: diff.file as FileDiff, before: null, after: text };
+    await vi.waitFor(() => expect(view.container.querySelectorAll('tr.gap')).toHaveLength(3));
+
+    const bars = () => [...view.container.querySelectorAll('tr.gap')];
+    const named = (bar: Element | undefined, words: string) =>
+      [...(bar?.querySelectorAll('button') ?? [])].find((b) => b.textContent?.includes(words)) as HTMLElement;
+    // Before the first hunk, nine lines: one button for all of them.
+    expect(bars()[0]?.textContent).toContain('All 9 unchanged lines');
+    // Between the two, 11 to 39: twenty under the first change, then the other nine.
+    await fireEvent.click(named(bars()[1], '20 more'));
+    const opened = () => [...view.container.querySelectorAll('tr.opened')];
+    expect(opened()).toHaveLength(20);
+    expect([...(opened()[0]?.querySelectorAll('td.no') ?? [])].map((n) => n.textContent)).toEqual(['11', '11']);
+    expect(bars()[1]?.textContent).toContain('All 9 unchanged lines');
+    await fireEvent.click(named(bars()[1], 'All 9'));
+    expect(opened()).toHaveLength(29);
+    // After the last: 42 to 52 on the new side are 40 to 50 on the old, two lines having been added.
+    await fireEvent.click(named(bars().at(-1), 'All 11'));
+    const last = opened().at(-1);
+    expect([...(last?.querySelectorAll('td.no') ?? [])].map((n) => n.textContent)).toEqual(['50', '52']);
+    expect(last?.textContent).toContain('line 52');
+
+    // Opened lines are not part of any hunk, so staging still names the hunk's own lines.
+    const added = [...view.container.querySelectorAll('tr.add button.pick')];
+    await fireEvent.click(added[1] as HTMLElement);
+    const stage = [...view.container.querySelectorAll('.hunk-acts button')].find((b) =>
+      b.textContent?.includes('Stage 1 line'),
+    ) as HTMLElement;
+    await fireEvent.click(stage);
+    expect(parts).toEqual([['stage', 1, [0]]]);
+    // A later test finds its "Stage 1 line" anywhere on the page.
+    view.unmount();
+  });
+
+  it('steps inline from one change to the next, a change that only removes lines included', async () => {
+    // It looked for `tr.delete`, which no row is, and centred each row it found below the line
+    // it measured from, so the next press found the same row again.
+    const lines = [
+      line('context', 'a', 1, 1), line('context', 'b', 2, 2),
+      line('add', 'new 1', null, 3), line('add', 'new 2', null, 4),
+      ...['c', 'd', 'e', 'f', 'g', 'h'].map((t, i) => line('context', t, 3 + i, 5 + i)),
+      line('remove', 'gone 1', 9, null), line('remove', 'gone 2', 10, null),
+      line('context', 'i', 11, 11),
+    ];
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'a.c';
+    diff.file = { ...fileDiff(), hunks: [{ header: '@@', oldStart: 1, oldLines: 11, newStart: 1, newLines: 11, lines }] };
+    diff.setMode('inline');
+    const view = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
+
+    // A pane 90 pixels tall at 100, and every row 17 pixels below the one before it.
+    const scroller = view.container.querySelector('.scroll') as HTMLElement;
+    Object.defineProperty(scroller, 'clientHeight', { value: 90 });
+    scroller.getBoundingClientRect = () => ({ top: 100 }) as DOMRect;
+    [...view.container.querySelectorAll('tr')].forEach((row, i) => {
+      row.getBoundingClientRect = () => ({ top: 100 + i * 17 - scroller.scrollTop }) as DOMRect;
+    });
+
+    const next = view.container.querySelector('button[title="Next change"]') as HTMLElement;
+    const previous = view.container.querySelector('button[title="Previous change"]') as HTMLElement;
+    const went: number[] = [];
+    for (const button of [next, next, next, previous]) {
+      await fireEvent.click(button);
+      went.push(scroller.scrollTop);
+    }
+    // Each run's first line a third of the way down: the additions, the removals, nothing
+    // further, and back to the additions.
+    expect(went).toEqual([21, 157, 157, 21]);
+  });
+
+  it('offers to go to a blamed commit, blame before it, or copy it, from its chip', async () => {
+    const diff = new DiffState(new ViewsState());
+    diff.path = 'a.c';
+    diff.file = fileDiff();
+    diff.setView('blame');
+    const commit = (oid: string, summary: string, previous: { oid: string; filename: string } | null, boundary: boolean) => ({
+      oid,
+      author: { name: 'Ada', email: 'ada@example.com', time: 1_700_000_000, offset: 0 },
+      summary,
+      filename: 'a.c',
+      previous,
+      boundary,
+    });
+    diff.blame = {
+      chunks: [
+        { oid: 'a'.repeat(40), finalLine: 1, origLine: 1, lines: 2 },
+        { oid: 'b'.repeat(40), finalLine: 3, origLine: 5, lines: 1 },
+      ],
+      commits: {
+        ['a'.repeat(40)]: commit('a'.repeat(40), 'root', null, true),
+        ['b'.repeat(40)]: commit('b'.repeat(40), 'rename', { oid: 'c'.repeat(40), filename: 'old.c' }, false),
+      },
+      skipping: { kind: 'listed', count: 2 },
+    } as unknown as NonNullable<typeof diff.blame>;
+    diff.text = 'one\ntwo\nthree\n';
+    const steps: unknown[] = [];
+    diff.blameBefore = async (step) => {
+      steps.push(step);
+    };
+    let skip: boolean | null = null;
+    diff.setSkipListed = async (on) => {
+      skip = on;
+    };
+    const shown: string[] = [];
+    const view = render(DiffView, {
+      props: { diff, onClose: () => {}, onPart: () => {}, onShowCommit: (oid: string) => shown.push(oid) },
+    });
+    const item = (label: string) =>
+      [...document.querySelectorAll('[role="menuitem"], .menu button')].find((b) =>
+        b.textContent?.includes(label),
+      ) as HTMLButtonElement | undefined;
+
+    // A root commit is a boundary: there is nothing before it to blame.
+    const chips = view.container.querySelectorAll('.chip');
+    await fireEvent.click(chips[0] as HTMLElement);
+    expect(item('Blame before this commit')?.disabled).toBe(true);
+    await fireEvent.click(item('Show commit in graph') as HTMLElement);
+    expect(shown).toEqual(['a'.repeat(40)]);
+
+    // The other came from another name, and the reader's line goes with them.
+    await fireEvent.click(chips[1] as HTMLElement);
+    await fireEvent.click(item('Blame before this commit') as HTMLElement);
+    expect(steps).toEqual([{ rev: 'c'.repeat(40), path: 'old.c', past: 'rename', line: 5, back: 3 }]);
+
+    // What is skipped says so, and a click names those commits instead.
+    const toggle = [...view.container.querySelectorAll('header button')].find((b) =>
+      b.textContent?.includes('Skipping 2 listed'),
+    ) as HTMLElement;
+    await fireEvent.click(toggle);
+    expect(skip).toBe(false);
+    view.unmount();
   });
 
   it('keeps the picked-lines bar one height, hint or pick', () => {
@@ -425,7 +680,7 @@ describe('a comparison of two commits', () => {
     expect(diff.view).toBe('diff');
     const { container } = render(DiffView, { props: { diff, onClose: () => {}, onPart: () => {} } });
     expect(container.querySelector('table.lines')).not.toBeNull();
-    expect(container.querySelector('table.lines.blame')).toBeNull();
+    expect(container.querySelector('.file-sheet.blame')).toBeNull();
   });
 
   it('offers no blame or history tab for it', () => {

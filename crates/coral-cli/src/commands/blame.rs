@@ -2,7 +2,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use coral_core::CoralError;
-use coral_core::blame::Blame;
+use coral_core::blame::{Blame, ListedCommits};
 use coral_core::process::GitRunner;
 use coral_core::repo::RepoLocation;
 
@@ -10,10 +10,15 @@ use coral_core::repo::RepoLocation;
 ///
 /// # Errors
 /// [`CoralError::NotARepository`] when `path` is not in a repository, or any git failure.
-pub async fn run(path: &Path, rev: &str, file: &str) -> Result<Blame, CoralError> {
+pub async fn run(
+    path: &Path,
+    rev: &str,
+    file: &str,
+    listed: ListedCommits,
+) -> Result<Blame, CoralError> {
     let runner = GitRunner::discover().await?;
     let loc = RepoLocation::discover(&runner, path).await?;
-    loc.blame(&runner, rev, file, None).await
+    loc.blame(&runner, rev, file, None, listed).await
 }
 
 impl crate::output::Human for Blame {

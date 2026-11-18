@@ -2,16 +2,26 @@
   import ImageDiff, { isImage } from './ImageDiff.svelte';
   import Icon from './Icon.svelte';
   import { firstChangedRow, marksOf, onScreen, splitRows, windowAround } from '../diff/split';
+  import { gapsOf, type Gap } from '../diff/gap';
   import { wordMarks } from '../diff/word';
   import CodeLine from './CodeLine.svelte';
+  import Menu, { type MenuItem } from './Menu.svelte';
+  import { copyText } from './clipboard';
   import { elidePath } from './path';
   import { shortAge } from './age';
   import { initialsOf } from '../graph/initials';
   import type { DiffState } from '../state/diff.svelte';
-  import type { FileDiff } from '../ipc/types';
+  import type { SyntaxState } from '../state/syntax.svelte';
+  import { grammarOf } from '../syntax/grammar';
+  import type { Token } from '../syntax/token';
+  import type { BlobSide, FileDiff, Line } from '../ipc/types';
 
-  const { diff, onClose, onPart, onEdit = () => undefined }: {
+  const {
+    diff, syntax = null, onClose, onPart, onEdit = () => undefined, onShowCommit = null, onSaveAs = null,
+  }: {
     diff: DiffState;
+    /** Code colours, or null to draw every line plain. */
+    syntax?: SyntaxState | null;
     onClose: () => void;
     /**
      * Stages, unstages or discards part of a file.
@@ -23,6 +33,10 @@
     onPart: (part: 'stage' | 'unstage' | 'discard', hunk: number, lines: number[]) => void;
     /** Stage a hunk as rewritten: its new side, context and added lines, as text to edit. */
     onEdit?: (hunk: number, text: string) => void;
+    /** Goes to a commit a blame names, in the graph; null where there is no graph to go to. */
+    onShowCommit?: ((oid: string) => void) | null;
+    /** Saves the file the file view shows, as it is there; null where saving is not offered. */
+    onSaveAs?: ((side: BlobSide, file: string) => void) | null;
   } = $props();
 
   /**
@@ -92,6 +106,43 @@
    * the same map, and side by side re-renders its rows on every scroll frame.
    */
   const words = $derived(wordMarks(diff.file?.hunks ?? []));
+
+  /**
+   * Colours, asked for as each view needs them and drawn once they are back.
+   *
+   * The diff is coloured from the two whole files, a line at a time by its number on its own
+   * side; a line whose text is not that side's line — a context line git printed from the other
+   * side under ignored whitespace — is left plain rather than coloured from the wrong text.
+   */
+  const grammar = $derived(diff.path === null ? null : grammarOf(diff.path));
+  // Both whole sides, for the colours and for the lines between hunks, whichever is wanted.
+  $effect(() => {
+    if (diff.view === 'diff' || diff.view === 'history') void diff.readSides();
+  });
+  $effect(() => {
+    if (syntax === null || !syntax.on || grammar === null) return;
+    if (diff.view === 'blame') syntax.want(grammar, diff.text);
+    else if (diff.view === 'file') syntax.want(grammar, diff.contents?.kind === 'text' ? diff.contents.text : null);
+    else {
+      syntax.want(grammar, diff.sideTexts?.before ?? null);
+      syntax.want(grammar, diff.sideTexts?.after ?? null);
+    }
+  });
+  const before = $derived(sideOf(diff.sideTexts?.before ?? null));
+  const after = $derived(sideOf(diff.sideTexts?.after ?? null));
+
+  function sideOf(text: string | null): { lines: string[]; tokens: Token[][] } | null {
+    const tokens = syntax?.tokens(grammar, text) ?? null;
+    return text === null || tokens === null ? null : { lines: text.split('\n'), tokens };
+  }
+
+  /** A diff line's colours, from the side it is on, or null to draw it plain. */
+  function coloursOf(line: Line | null, side: 'before' | 'after'): Token[] | null {
+    const from = side === 'before' ? before : after;
+    const no = side === 'before' ? line?.oldNo : line?.newNo;
+    if (line === null || from === null || no === null || no === undefined) return null;
+    return from.lines[no - 1] === line.text ? (from.tokens[no - 1] ?? null) : null;
+  }
 
   /** Height of one row, matching `--diff-row` in the stylesheet below. */
   const ROW = 17;
@@ -173,8 +224,64 @@
       pickedOn = file;
       picked = new Set();
       anchor = null;
+      opened = {};
     }
   });
+
+  /** Lines a gap opens by, from either end. */
+  const STEP = 20;
+
+  /**
+   * How much of each gap between hunks has been opened, from its top and from its bottom,
+   * keyed by the hunk it sits above.
+   *
+   * Drawn as rows of their own between the hunks, never put into a hunk's lines: staging part
+   * of a hunk names its lines by their place in it, and a line opened above them would move
+   * every one.
+   */
+  let opened = $state<Record<number, { top: number; bottom: number }>>({});
+
+  /**
+   * The gaps the inline view can open, by the hunk each sits above.
+   *
+   * Measured against the new side as it stood for this answer from git, and only once that has
+   * been read: the old one after a reload would open onto the wrong lines. None when the whole
+   * file is already on screen, or the hunks were cut short at the line budget.
+   */
+  const gaps = $derived.by(() => {
+    const sides = diff.sideTexts;
+    const none = new Map<number, Gap>();
+    if (diff.mode !== 'inline' || diff.expanded || total > LIMIT) return none;
+    if (sides === null || sides.file !== diff.file || sides.after === null) return none;
+    const lines = linesOf(sides.after);
+    return new Map(gapsOf(hunks, lines.length).map((gap) => [gap.below, gap]));
+  });
+  const trailingGap = $derived(gaps.get(hunks.length));
+  const afterText = $derived(
+    diff.sideTexts !== null && diff.sideTexts.after !== null ? linesOf(diff.sideTexts.after) : [],
+  );
+
+  function openGap(gap: Gap, how: 'top' | 'bottom' | 'all') {
+    const now = opened[gap.below] ?? { top: 0, bottom: 0 };
+    const size = gap.last - gap.first + 1;
+    const next =
+      how === 'all'
+        ? { top: size, bottom: 0 }
+        : how === 'top'
+          ? { ...now, top: now.top + STEP }
+          : { ...now, bottom: now.bottom + STEP };
+    opened = { ...opened, [gap.below]: next };
+  }
+
+  /** The new-side numbers from `from` to `to`, both included; none when `to` is before `from`. */
+  function numbers(from: number, to: number): number[] {
+    return Array.from({ length: Math.max(0, to - from + 1) }, (_, i) => from + i);
+  }
+
+  /** An opened line of a gap, as the line it is on both sides. */
+  function gapLine(no: number, shift: number): Line {
+    return { kind: 'context', text: afterText[no - 1] ?? '', oldNo: no + shift, newNo: no, noNewline: false };
+  }
 
   /** The line last clicked, which a Shift-click picks from. */
   let anchor: { hunk: number; line: number } | null = null;
@@ -227,7 +334,7 @@
     const key = `${diff.path ?? ''}\u0000${diff.mode}\u0000${diff.atCommit ?? ''}`;
     const rows = split.rows;
     const el = scroller;
-    if (diff.mode !== 'split' || el === null || rows.length === 0 || placed === key) return;
+    if (diff.mode !== 'split' || !diff.readWhole || el === null || rows.length === 0 || placed === key) return;
     placed = key;
     const at = firstChangedRow(rows);
     if (at < 0) return;
@@ -286,23 +393,37 @@
    *
    * By the rows themselves rather than by arithmetic: this table is not virtualised and its
    * rows are not a uniform height once a line wraps, so where a change actually sits is a
-   * question only the rendered row can answer.
+   * question only the rendered row can answer. A change is a run of added and removed lines,
+   * and the step goes to the first line of the next run, set a third of the way down as side by
+   * side sets it: centred, it sat below the line it was measured from and the next press found
+   * the same row again.
    */
   function stepInline(direction: 1 | -1) {
     const root = table;
-    if (root === null) return;
-    const rows = [...root.querySelectorAll('tr.add, tr.delete')] as HTMLElement[];
-    if (rows.length === 0) return;
+    const el = scroller;
+    if (root === null || el === null) return;
+    const all = [...root.querySelectorAll('tr')] as HTMLElement[];
+    const changed = (row: HTMLElement | undefined) =>
+      row !== undefined && (row.classList.contains('add') || row.classList.contains('remove'));
+    const starts = all.filter((row, i) => changed(row) && !changed(all[i - 1]));
+    if (starts.length === 0) return;
 
-    // A third of the way down, matching the split view: a change half off the bottom is the
-    // next one, not one already passed.
-    const box = root.getBoundingClientRect();
-    const line = box.top + root.clientHeight / 3;
+    // A third of the way down the pane, matching the split view: a change half off the bottom
+    // is the next one, not one already passed.
+    const line = el.getBoundingClientRect().top + el.clientHeight / 3;
     const next =
       direction === 1
-        ? rows.find((row) => row.getBoundingClientRect().top > line + 1)
-        : [...rows].reverse().find((row) => row.getBoundingClientRect().top < line - 1);
-    next?.scrollIntoView({ block: 'center' });
+        ? starts.find((row) => row.getBoundingClientRect().top > line + 1)
+        : [...starts].reverse().find((row) => row.getBoundingClientRect().top < line - 1);
+    if (next === undefined) return;
+    el.scrollTop += next.getBoundingClientRect().top - line;
+  }
+
+  /** A file's text as lines, without the empty one after its last newline. */
+  function linesOf(text: string): string[] {
+    const lines = text.split('\n');
+    if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+    return lines;
   }
 
   /** The file's lines paired with the commit that last changed each. */
@@ -314,9 +435,7 @@
     const by = new Map<number, (typeof blame.chunks)[number]>();
     for (const chunk of blame.chunks) by.set(chunk.finalLine, chunk);
 
-    const lines = text.split('\n');
-    if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
-    return lines.map((content, i) => {
+    return linesOf(text).map((content, i) => {
       const chunk = by.get(i + 1);
       const commit = chunk === undefined ? undefined : blame.commits[chunk.oid];
       return {
@@ -325,12 +444,73 @@
         // Only the first line of a run carries the chip; a column repeating one name down
         // twenty lines is what makes a blame unreadable.
         oid: chunk?.oid ?? null,
+        orig: chunk?.origLine ?? 0,
         who: commit?.author.name ?? '',
         when: commit?.author.time ?? 0,
         summary: commit?.summary ?? '',
       };
     });
   });
+
+  /** The file view's lines: the file alone, with nobody beside them. */
+  const fileLines = $derived.by(() => {
+    const contents = diff.contents;
+    if (contents?.kind !== 'text') return [];
+    return linesOf(contents.text).map((content, i) => ({
+      no: i + 1, content, oid: null, orig: 0, who: '', when: 0, summary: '',
+    }));
+  });
+
+  /** Colours for the sheet's lines, which are the file's own and numbered as it is. */
+  const sheetColours = $derived(
+    diff.view === 'blame'
+      ? (syntax?.tokens(grammar, diff.text) ?? null)
+      : diff.view === 'file' && diff.contents?.kind === 'text'
+        ? (syntax?.tokens(grammar, diff.contents.text) ?? null)
+        : null,
+  );
+
+  /** Whether the scroller holds the file a line at a time rather than a diff. */
+  const sheeted = $derived(diff.view === 'blame' || diff.view === 'file');
+  const sheetLines = $derived(diff.view === 'blame' ? blamed : diff.view === 'file' ? fileLines : []);
+
+  /** Height of the picked-lines bar above a blame, matching `.line-range` below. */
+  const RANGE_BAR = 30;
+
+  /**
+   * Only the lines on screen are built, as side by side builds only its rows.
+   *
+   * Blame drew every line of the file as a table row, and the kernel's MAINTAINERS is thirty
+   * thousand of them: a hundred thousand cells laid out before the first paint, for the forty
+   * lines anyone can see. Measured from under the picked-lines bar, which blame keeps at the
+   * top of the same scroller.
+   */
+  const firstLine = $derived(
+    Math.max(0, Math.floor(Math.max(0, scrolled - (diff.view === 'blame' ? RANGE_BAR : 0)) / ROW) - OVERSCAN),
+  );
+  const shownLines = $derived(
+    sheetLines.slice(firstLine, firstLine + Math.ceil(viewport / ROW) + OVERSCAN * 2),
+  );
+
+  /**
+   * The columns of the sheet, sized from the whole file rather than from the lines built.
+   *
+   * With only some lines in the document, a column fitted to its content would change width as
+   * longer names or lines scrolled into it, and the code would step sideways under the reader.
+   * The longest line is counted with tabs at the eight columns `white-space: pre` gives them,
+   * so the sheet is as wide as its widest line and scrolls sideways to it.
+   */
+  const sheetDigits = $derived(Math.max(3, String(sheetLines.length).length));
+  const widest = $derived(sheetLines.reduce((n, line) => Math.max(n, columnsOf(line.content)), 0));
+  const authorChars = $derived(
+    Math.min(24, Object.values(diff.blame?.commits ?? {}).reduce((n, c) => Math.max(n, c.author.name.length), 0)),
+  );
+
+  function columnsOf(text: string): number {
+    let n = 0;
+    for (const c of text) n = c === '\t' ? n + 8 - (n % 8) : n + 1;
+    return n;
+  }
 
   /**
    * The run of blame lines picked for a history of their own, by clicking a number and
@@ -352,6 +532,56 @@
     rangeAnchor = no;
     range = { from: no, to: no };
   }
+
+  /** The menu a blame chip opens, where it was clicked. */
+  let chipMenu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
+
+  /**
+   * What a commit named in a blame offers: going to it, blaming the file as it was before it,
+   * and its id.
+   *
+   * Before it is where git says its lines came from, under the name the file had there; a
+   * boundary — a root commit, or the edge of a shallow clone — has nothing before it to blame.
+   */
+  function openChip(event: MouseEvent, oid: string, line: number, orig: number) {
+    const commit = diff.blame?.commits[oid];
+    const previous = commit?.previous ?? null;
+    const items: MenuItem[] = [];
+    if (onShowCommit !== null) {
+      items.push({ kind: 'item', label: 'Show commit in graph', run: () => onShowCommit(oid) });
+    }
+    items.push({
+      kind: 'item',
+      label: 'Blame before this commit',
+      hint: previous === null ? 'nothing before it' : undefined,
+      disabled: previous === null,
+      run: () => {
+        if (previous === null) return;
+        void diff.blameBefore({
+          rev: previous.oid, path: previous.filename, past: commit?.summary ?? oid.slice(0, 7), line: orig, back: line,
+        });
+      },
+    });
+    items.push({ kind: 'separator' });
+    items.push({ kind: 'item', label: 'Copy commit id', run: () => void copyText(oid) });
+    chipMenu = { x: event.clientX, y: event.clientY, items };
+  }
+
+  /**
+   * Brings the reader's line into view once the sheet's text lands: a blame reached by going
+   * back or coming back, where the same line is somewhere else in another revision, or a file
+   * opened where a code search found something.
+   */
+  let placedSheet: unknown = null;
+  $effect(() => {
+    const landed = diff.view === 'blame' ? diff.blame : diff.view === 'file' ? diff.contents : null;
+    const line = diff.sheetLine;
+    const el = scroller;
+    if (landed === null || line === null || el === null || placedSheet === landed) return;
+    placedSheet = landed;
+    const above = diff.view === 'blame' ? RANGE_BAR : 0;
+    el.scrollTop = Math.max(0, above + (line - 1) * ROW - el.clientHeight / 3);
+  });
 
   /** A new file, or a new revision of it, numbers its lines afresh. */
   $effect(() => {
@@ -379,6 +609,94 @@
 
 </script>
 
+{#snippet gapLineRow(line: Line)}
+  <tr class="context opened">
+    <td class="no">{line.oldNo}</td>
+    <td class="no">{line.newNo}</td>
+    <td class="text"
+      ><span class="sign"> </span><CodeLine text={line.text} spans={null} tokens={coloursOf(line, 'after')} /></td
+    >
+  </tr>
+{/snippet}
+
+{#snippet gapRows(gap: Gap)}
+  {@const now = opened[gap.below] ?? { top: 0, bottom: 0 }}
+  {@const hidden = Math.max(0, gap.last - gap.first + 1 - now.top - now.bottom)}
+  {#each numbers(gap.first, hidden === 0 ? gap.last : gap.first + now.top - 1) as no (no)}
+    {@render gapLineRow(gapLine(no, gap.shift))}
+  {/each}
+  {#if hidden > 0}
+    <tr class="gap">
+      <td colspan="3">
+        <div class="gap-bar">
+          {#if gap.below > 0 && hidden > STEP}
+            <button onclick={() => openGap(gap, 'top')} title="Show {STEP} more lines under the change above"
+              ><Icon name="chevronDown" size={12} /> {STEP} more</button
+            >
+          {/if}
+          <button onclick={() => openGap(gap, 'all')} title="Show every unchanged line here"
+            >{hidden === 1 ? 'The 1 unchanged line' : `All ${hidden.toLocaleString()} unchanged lines`}</button
+          >
+          {#if gap.below < hunks.length && hidden > STEP}
+            <button onclick={() => openGap(gap, 'bottom')} title="Show {STEP} more lines over the change below"
+              ><Icon name="chevronUp" size={12} /> {STEP} more</button
+            >
+          {/if}
+        </div>
+      </td>
+    </tr>
+    {#each numbers(gap.last - now.bottom + 1, gap.last) as no (no)}
+      {@render gapLineRow(gapLine(no, gap.shift))}
+    {/each}
+  {/if}
+{/snippet}
+
+{#snippet sheet(blaming: boolean)}
+  <div
+    class="file-sheet"
+    class:blame={blaming}
+    style:height="{sheetLines.length * ROW}px"
+    style:--gutter="calc({sheetDigits}ch + var(--space-3) + var(--space-2))"
+    style:--aside={blaming ? `calc(${authorChars + 12}ch + 3 * var(--space-2))` : '0px'}
+    style:min-width="calc(var(--aside) + var(--gutter) + {widest}ch + 2 * var(--space-2))"
+  >
+    <div class="window" style:transform="translateY({firstLine * ROW}px)">
+      {#each shownLines as line (line.no)}
+        <div
+          class="file-line"
+          class:ranged={blaming && range !== null && line.no >= range.from && line.no <= range.to}
+          class:wanted={!blaming && diff.sheetLine === line.no}
+        >
+          {#if blaming}
+            <span class="author">
+              {#if line.oid !== null}
+                {@const oid = line.oid}
+                <button
+                  class="chip"
+                  title="{line.summary}&#10;{line.who}"
+                  onclick={(e) => openChip(e, oid, line.no, line.orig)}
+                >
+                  <span class="name">{line.who}</span>
+                  <span class="mono">{line.oid.slice(0, 7)}</span>
+                  <span class="when">{shortAge(line.when)}</span>
+                </button>
+              {/if}
+            </span>
+            <button
+              class="no line-pick"
+              onclick={(e) => pickLine(line.no, e)}
+              title="Pick this line; Shift-click another to pick the lines between"
+            >{line.no}</button>
+          {:else}
+            <span class="no">{line.no}</span>
+          {/if}
+          <span class="text"><CodeLine text={line.content} spans={null} tokens={sheetColours?.[line.no - 1] ?? null} /></span>
+        </div>
+      {/each}
+    </div>
+  </div>
+{/snippet}
+
 <section class="diff">
   <header>
     <span class="path mono" title={diff.path ?? ''}>{elidePath(diff.path ?? '', 72)}</span>
@@ -404,6 +722,12 @@
         <button class:on={diff.view === 'history'} onclick={() => diff.setView('history')}>
           History
         </button>
+        <button
+          class:on={diff.view === 'file'}
+          disabled={diff.file?.binary === true}
+          title={diff.file?.binary === true ? 'A binary file has no lines to show' : 'The whole file as this change leaves it'}
+          onclick={() => diff.setView('file')}>File</button
+        >
       </div>
     {/if}
 
@@ -414,6 +738,48 @@
       header to the right, out from under the pointer that had just chosen one of them.
     -->
     <span class="spread"></span>
+
+    {#if diff.view === 'file' && diff.contents !== null && diff.contents.kind !== 'absent' && diff.contents.before}
+      <span class="note">As it was: this change deleted it</span>
+    {/if}
+    {#if diff.view === 'file' && onSaveAs !== null && diff.contents !== null && diff.contents.kind !== 'absent' && diff.sides !== null}
+      {@const shown = diff.contents.before ? diff.sides.before : diff.sides.after}
+      <button class="wider" onclick={() => onSaveAs(shown.side, shown.file)} title="Save this file, as it is here, somewhere else"
+        >Save as…</button
+      >
+    {/if}
+
+    {#if diff.view === 'blame'}
+      {@const step = diff.blameTrail.at(-1)}
+      {@const skipping = diff.blame?.skipping}
+      {#if step !== undefined}
+        <!-- The file blamed is named when it is not the one in the header: going back past a
+             rename blames the file under the name it had then. -->
+        <span class="note" title={step.path}
+          >{step.path === diff.path ? 'Before' : `${step.path}, before`} “{step.past}”</span
+        >
+        <button class="wider" onclick={() => void diff.blameBack()} title="Back to the blame this came from">Back</button>
+      {/if}
+      {#if skipping?.kind === 'listed'}
+        <button
+          class="wider"
+          onclick={() => void diff.setSkipListed(false)}
+          title="Looking past the commits .git-blame-ignore-revs lists, reformats mostly. Click to name them too."
+        >Skipping {skipping.count} listed</button>
+      {:else if skipping?.kind === 'offered'}
+        <button
+          class="wider"
+          onclick={() => void diff.setSkipListed(true)}
+          title="Look past the commits .git-blame-ignore-revs lists, reformats mostly"
+        >Skip {skipping.count} listed</button>
+      {:else if skipping?.kind === 'configured'}
+        <span class="note" title="blame.ignoreRevsFile in your git configuration">Skipping what {skipping.file} lists</span>
+      {:else if skipping?.kind === 'missing'}
+        <span class="note warn" title="blame.ignoreRevsFile in your git configuration"
+          >{skipping.file} is not there, so it skips nothing</span
+        >
+      {/if}
+    {/if}
 
     {#if diff.view === 'diff'}
       <div class="toggle" role="group" aria-label="Diff layout">
@@ -549,37 +915,35 @@
             </button>
           {/if}
         </div>
-        <table class="lines blame">
-          <tbody>
-            {#each blamed as line (line.no)}
-              <tr class:ranged={range !== null && line.no >= range.from && line.no <= range.to}>
-                <td class="author">
-                  {#if line.oid !== null}
-                    <span class="chip" title="{line.summary}&#10;{line.who}">
-                      {line.who}
-                      <span class="mono">{line.oid.slice(0, 7)}</span>
-                      <span class="when">{shortAge(line.when)}</span>
-                    </span>
-                  {/if}
-                </td>
-                <td
-                  class="no line-pick"
-                  onclick={(e) => pickLine(line.no, e)}
-                  title="Pick this line; Shift-click another to pick the lines between"
-                >{line.no}</td>
-                <td class="text">{line.content}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        {@render sheet(true)}
+      {/if}
+    {:else if diff.view === 'file'}
+      {#if diff.sideError}
+        <p class="error">{diff.sideError}</p>
+      {:else if diff.contents === null}
+        <p class="muted">Reading the file…</p>
+      {:else if diff.contents.kind === 'absent'}
+        <p class="muted">There is no file here to show.</p>
+      {:else if diff.contents.kind === 'binary'}
+        <p class="muted">A binary file has no lines to show.</p>
+      {:else if fileLines.length === 0}
+        <p class="muted">The file is empty.</p>
+      {:else}
+        {@render sheet(false)}
       {/if}
     {:else if diff.loading}
       <p class="muted">Loading…</p>
     {:else if diff.error}
       <p class="error">{diff.error}</p>
     {:else if diff.empty}
-      <!-- Not red: the file is simply not part of this change, which is an answer. -->
-      <p class="muted">{diff.empty}</p>
+      <!-- Not red: the file is simply not part of this change, which is an answer. The file
+           itself is still there to read, which is what a click in "view all files" is after. -->
+      <p class="muted">
+        {diff.empty}
+        {#if diff.source !== 'compare'}
+          <button class="anyway" onclick={() => diff.setView('file')}>Show the file</button>
+        {/if}
+      </p>
     {:else if !diff.file}
       <p class="muted">Nothing to show.</p>
     {:else if diff.file.binary}
@@ -628,6 +992,8 @@
       <table class="lines" bind:this={table}>
         <tbody>
           {#each hunks as hunk, h (hunk.header + hunk.newStart)}
+            {@const gap = gaps.get(h)}
+            {#if gap !== undefined}{@render gapRows(gap)}{/if}
             <tr class="hunk">
               <td colspan="3">
                 <div class="hunk-bar">
@@ -668,6 +1034,7 @@
                       ><span class="sign">{sign[line.kind]}</span><CodeLine
                         text={line.text}
                         spans={words.get(line) ?? null}
+                        tokens={coloursOf(line, line.kind === 'remove' ? 'before' : 'after')}
                       />{#if line.noNewline}<span class="nonl" title={NO_NEWLINE}
                         >no newline</span
                       >{/if}</button
@@ -678,6 +1045,7 @@
                     ><span class="sign">{sign[line.kind]}</span><CodeLine
                       text={line.text}
                       spans={words.get(line) ?? null}
+                      tokens={coloursOf(line, line.kind === 'remove' ? 'before' : 'after')}
                     />{#if line.noNewline}<span class="nonl" title={NO_NEWLINE}>no newline</span
                       >{/if}</td
                   >
@@ -685,6 +1053,7 @@
               </tr>
             {/each}
           {/each}
+          {#if trailingGap !== undefined}{@render gapRows(trailingGap)}{/if}
         </tbody>
       </table>
     {:else}
@@ -701,6 +1070,7 @@
                 ><CodeLine
                   text={row.left?.text ?? ''}
                   spans={row.left ? words.get(row.left) ?? null : null}
+                  tokens={coloursOf(row.left ?? null, 'before')}
                 />{#if row.left?.noNewline}<span class="nonl" title={NO_NEWLINE}>no newline</span
                   >{/if}</span
               >
@@ -709,6 +1079,7 @@
                 ><CodeLine
                   text={row.right?.text ?? ''}
                   spans={row.right ? words.get(row.right) ?? null : null}
+                  tokens={coloursOf(row.right ?? null, 'after')}
                 />{#if row.right?.noNewline}<span class="nonl" title={NO_NEWLINE}>no newline</span
                   >{/if}</span
               >
@@ -718,7 +1089,9 @@
       </div>
     {/if}
 
-    {#if diff.mode === 'split' && split.total > split.rows.length}
+    {#if sheeted}
+      <!-- The sheet is the whole file, so there is no window of it to explain. -->
+    {:else if diff.mode === 'split' && split.total > split.rows.length}
       <p class="muted">
         Showing lines {(split.from + 1).toLocaleString()} to
         {(split.from + split.rows.length).toLocaleString()} of {split.total.toLocaleString()},
@@ -731,9 +1104,9 @@
     {/if}
   </div>
 
-  <!-- Not in blame: the marks, the band and the jump below all measure against the diff's
-       rows, and blame puts the whole file in this same scroller instead. -->
-  {#if diff.mode === 'split' && diff.view !== 'blame' && marks.length > 0}
+  <!-- Not in blame or the file: the marks, the band and the jump below all measure against the
+       diff's rows, and those put the whole file in this same scroller instead. -->
+  {#if diff.mode === 'split' && !sheeted && marks.length > 0}
     <button
       class="overview"
       onclick={jump}
@@ -754,6 +1127,10 @@
   {/if}
   </div>
 </section>
+
+{#if chipMenu !== null}
+  <Menu x={chipMenu.x} y={chipMenu.y} items={chipMenu.items} onClose={() => (chipMenu = null)} />
+{/if}
 
 <style>
   .diff {
@@ -886,8 +1263,10 @@
     border-radius: var(--radius-0); padding: 0 var(--space-2); line-height: 18px;
   }
   .scope button:hover, .line-range button:hover { background: var(--bg-2); color: var(--fg-0); }
+  /* Held at the left as well as the top: the sheet under it is as wide as the file's widest
+     line and scrolls sideways, and the way on should not scroll out of view with it. */
   .line-range {
-    position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: var(--space-2);
+    position: sticky; top: 0; left: 0; z-index: 2; display: flex; align-items: center; gap: var(--space-2);
     padding: var(--space-1) var(--space-2); background: var(--bg-1);
     border-bottom: 1px solid var(--border); color: var(--fg-1); font-size: var(--text-sm);
   }
@@ -897,10 +1276,11 @@
   .line-range { box-sizing: border-box; height: 30px; flex-wrap: nowrap; }
   .line-range > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .line-range .muted { color: var(--fg-2); margin: 0; padding: 0; }
-  td.no.line-pick { cursor: pointer; }
-  td.no.line-pick:hover { color: var(--fg-0); }
-  tr.ranged td.no { background: var(--accent-soft); color: var(--fg-0); box-shadow: inset 2px 0 0 var(--accent-line); }
-  tr.ranged td.text { background: var(--accent-soft); }
+  /* The line a code search found, marked as a picked range is. */
+  .file-line.wanted .no { background: var(--accent-soft); color: var(--fg-0); box-shadow: inset 2px 0 0 var(--accent-line); }
+  .file-line.wanted .text { background: var(--accent-soft); }
+  .file-line.ranged .no { background: var(--accent-soft); color: var(--fg-0); box-shadow: inset 2px 0 0 var(--accent-line); }
+  .file-line.ranged .text { background: var(--accent-soft); }
 
   .modes code {
     font-family: var(--font-mono); font-size: var(--text-sm);
@@ -923,17 +1303,42 @@
   }
   .anyway:hover { background: var(--bg-3); color: var(--fg-0); }
 
+  /*
+   * Blame and the file, a line at a time: a spacer as tall as the file with only the lines on
+   * screen inside it, as side by side is drawn. The window is the same rule as that sheet's.
+   */
+  .file-sheet {
+    position: relative;
+    font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-sm); font-weight: var(--weight-regular); line-height: 17px;
+  }
+  .file-line { display: grid; height: 17px; grid-template-columns: var(--gutter) minmax(0, 1fr); }
+  .file-sheet.blame .file-line { grid-template-columns: var(--aside) var(--gutter) minmax(0, 1fr); }
+  .file-line .no {
+    text-align: right; user-select: none; padding: 0 var(--space-2) 0 var(--space-3);
+    color: var(--fg-2); background: var(--bg-2); box-sizing: border-box;
+    border: 0; border-right: 1px solid var(--border);
+    font: inherit; font-variant-numeric: tabular-nums;
+  }
+  button.no.line-pick { cursor: pointer; }
+  button.no.line-pick:hover { color: var(--fg-0); }
+
   /* Who wrote each line, named once per run rather than once per line. */
   .blame .author {
-    width: 1%; white-space: nowrap; user-select: none; vertical-align: top;
+    min-width: 0; white-space: nowrap; user-select: none;
     padding: 0 var(--space-2); background: var(--bg-1);
     border-right: 1px solid var(--border);
   }
   .chip {
-    display: inline-flex; gap: var(--space-2); align-items: baseline;
+    display: flex; gap: var(--space-2); align-items: baseline; min-width: 0; width: 100%;
     font-family: var(--font-ui); font-size: var(--text-sm); color: var(--fg-1);
+    background: none; border: 0; padding: 0; cursor: pointer; text-align: left; line-height: 17px;
   }
+  .chip:hover .name { color: var(--fg-0); text-decoration: underline; }
+  .note.warn { color: var(--warn); }
+  .chip .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .chip .mono, .chip .when { flex: 0 0 auto; }
   .chip .when { color: var(--fg-2); }
+  .note { flex: 0 1 auto; min-width: 0; color: var(--fg-2); font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--bg-1); }
   .scroll { flex: 1; min-width: 0; overflow: auto; }
 
   /*
@@ -1081,6 +1486,17 @@
     box-shadow: inset 4px 0 0 var(--accent);
   }
   tr.picked .sign { font-weight: var(--weight-bold); }
+
+  /* The way into a gap: quieter than a hunk's header, since it is not a change. */
+  tr.gap td { padding: 2px var(--space-2); background: var(--bg-1); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .gap-bar { display: flex; gap: var(--space-2); align-items: center; font-family: var(--font-ui); }
+  .gap-bar button {
+    display: inline-flex; align-items: center; gap: 4px;
+    font: inherit; font-size: var(--text-sm); cursor: pointer; line-height: 17px;
+    background: var(--bg-0); border: 1px solid var(--border); border-radius: var(--radius-0);
+    color: var(--fg-1); padding: 0 6px;
+  }
+  .gap-bar button:hover { background: var(--bg-3); color: var(--fg-0); }
 
   tr.hunk td {
     background: var(--bg-2); color: var(--fg-2); padding: 3px var(--space-2);

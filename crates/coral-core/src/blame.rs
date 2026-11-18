@@ -4,6 +4,8 @@ use bstr::{BString, ByteSlice};
 
 use crate::commit::Signature;
 use crate::error::CoralError;
+use crate::process::{GitCommand, GitRunner};
+use crate::repo::RepoLocation;
 
 /// A run of consecutive lines attributed to one commit.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
@@ -32,6 +34,24 @@ pub struct BlameCommit {
     #[serde(serialize_with = "crate::bytes::as_str")]
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub filename: BString,
+    /// Where this commit's lines were before it, which is where blaming further back starts.
+    /// None for a commit that created them.
+    pub previous: Option<BlamePrevious>,
+    /// Whether the walk stopped here rather than finding who wrote these lines: the root of a
+    /// shallow clone, or a commit outside the range asked about. Nothing is before it to blame.
+    pub boundary: bool,
+}
+
+/// The commit and path a blamed commit's lines came from.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "types.ts"))]
+#[serde(rename_all = "camelCase")]
+pub struct BlamePrevious {
+    pub oid: String,
+    /// Different from the blamed commit's own after a rename.
+    #[serde(serialize_with = "crate::bytes::as_str")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub filename: BString,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize)]
@@ -42,6 +62,117 @@ pub struct Blame {
     /// Keyed by oid. Git sends a commit's details once and then refers back to it, so this is
     /// far smaller than one entry per chunk on a file with a long history.
     pub commits: HashMap<String, BlameCommit>,
+    /// Which commits were looked past, so the reader knows a reformat is not who they see.
+    pub skipping: Skipping,
+}
+
+/// Whether a blame looks past the commits a repository lists in `.git-blame-ignore-revs`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "types.ts"))]
+#[serde(rename_all = "camelCase")]
+pub enum ListedCommits {
+    Skip,
+    Blame,
+}
+
+/// Which commits a blame looked past, and why.
+///
+/// <https://git-scm.com/docs/git-blame#Documentation/git-blame.txt---ignore-revs-fileltfilegt>
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "types.ts"))]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum Skipping {
+    /// None: every commit is named.
+    #[default]
+    Nothing,
+    /// The repository's `.git-blame-ignore-revs`, which lists `count` commits.
+    Listed { count: u32 },
+    /// The same list, offered and turned down.
+    Offered { count: u32 },
+    /// The list `blame.ignoreRevsFile` names in the user's own configuration.
+    Configured { file: String },
+    /// `blame.ignoreRevsFile` names a file that is not there. git refuses the whole blame over
+    /// it, so that file is left out rather than the blame failing.
+    Missing { file: String },
+}
+
+/// The list a repository keeps of commits blame should look past: reformats, mostly.
+const LISTED: &str = ".git-blame-ignore-revs";
+
+impl RepoLocation {
+    /// What a blame looks past, and the arguments that make it do so.
+    ///
+    /// The user's own `blame.ignoreRevsFile` wins, as it would in a terminal. Without one, the
+    /// repository's list is used unless the reader has turned it down; git itself only reads
+    /// it when configured to, which most clones never are.
+    ///
+    /// # Errors
+    /// Propagates git failures.
+    pub(crate) async fn skips(
+        &self,
+        runner: &GitRunner,
+        listed: ListedCommits,
+    ) -> Result<(Vec<String>, Skipping), CoralError> {
+        let Some(root) = self.workdir.clone() else {
+            return Ok((Vec::new(), Skipping::Nothing));
+        };
+        let out = runner
+            .output_allowing(
+                GitCommand::read("config", self.display_path()).args([
+                    "config",
+                    "--type=path",
+                    "--get-all",
+                    "blame.ignoreRevsFile",
+                ]),
+                &[1],
+            )
+            .await?;
+        let configured: Vec<String> = String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .filter(|l| !l.is_empty())
+            .map(str::to_owned)
+            .collect();
+        if let Some(first) = configured.first() {
+            let (there, gone): (Vec<String>, Vec<String>) = configured
+                .iter()
+                .cloned()
+                .partition(|f| root.join(f).is_file());
+            let Some(missing) = gone.into_iter().next() else {
+                return Ok((
+                    Vec::new(),
+                    Skipping::Configured {
+                        file: first.clone(),
+                    },
+                ));
+            };
+            // `--no-ignore-revs-file` clears what the configuration added, which git reads
+            // before the command line; the files that are there are given back after it.
+            let mut args = vec!["--no-ignore-revs-file".to_owned()];
+            for file in there {
+                args.push("--ignore-revs-file".to_owned());
+                args.push(file);
+            }
+            return Ok((args, Skipping::Missing { file: missing }));
+        }
+        let Ok(list) = std::fs::read_to_string(root.join(LISTED)) else {
+            return Ok((Vec::new(), Skipping::Nothing));
+        };
+        let count = u32::try_from(
+            list.lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                .count(),
+        )
+        .unwrap_or(u32::MAX);
+        Ok(match (count, listed) {
+            (0, _) => (Vec::new(), Skipping::Nothing),
+            (_, ListedCommits::Skip) => (
+                vec!["--ignore-revs-file".to_owned(), LISTED.to_owned()],
+                Skipping::Listed { count },
+            ),
+            (_, ListedCommits::Blame) => (Vec::new(), Skipping::Offered { count }),
+        })
+    }
 }
 
 impl Blame {
@@ -77,6 +208,8 @@ struct Pending {
     time: Option<i64>,
     summary: Option<BString>,
     filename: Option<BString>,
+    previous: Option<BlamePrevious>,
+    boundary: bool,
 }
 
 impl BlameParser {
@@ -113,6 +246,15 @@ impl BlameParser {
             b"author-time" => p.time = value.to_str().ok().and_then(|s| s.parse().ok()),
             b"summary" => p.summary = Some(BString::from(value)),
             b"filename" => p.filename = Some(BString::from(value)),
+            b"boundary" => p.boundary = true,
+            // "<oid> <path>", and the path runs to the end of the line, spaces and all.
+            b"previous" => {
+                let (oid, filename) = split_kv(value);
+                p.previous = Some(BlamePrevious {
+                    oid: String::from_utf8_lossy(oid).into_owned(),
+                    filename: BString::from(filename),
+                });
+            }
             _ => {}
         }
         Ok(())
@@ -147,6 +289,8 @@ impl BlameParser {
                     author: Signature { name, email, time },
                     summary,
                     filename: p.filename.unwrap_or_default(),
+                    previous: p.previous,
+                    boundary: p.boundary,
                 },
             );
         }

@@ -134,6 +134,22 @@
     <p class="hint">On its own, since a shell is often read from further away than a list.</p>
   </fieldset>
 
+  <fieldset>
+    <legend>Code</legend>
+    <label class="switch">
+      <input
+        type="checkbox"
+        checked={views.current.syntax}
+        onchange={(e) => views.set('syntax', e.currentTarget.checked)}
+      />
+      Syntax colours
+    </label>
+    <p class="hint">
+      Keywords, strings, comments, numbers, names and markup each in a colour of their own, in a
+      diff, a blame and a file. A file over a megabyte or twenty thousand lines is left plain.
+    </p>
+  </fieldset>
+
   {#if avatars !== null}
     <fieldset>
       <legend>Authors</legend>

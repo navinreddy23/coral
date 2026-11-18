@@ -269,9 +269,44 @@ link.
 
 Inline and side-by-side toggle, word-level marking inside a replaced line, hunk headers with stage/unstage/discard
 hunk, line selection to stage/unstage/discard lines, whitespace toggle, file history and blame
-tabs, and next/previous change in both layouts. The unified view can be widened from the hunks
-to the whole file; side by side always shows the whole of it. Large and binary files render as a placeholder
+tabs, and next/previous change in both layouts, a change being a run of added and removed
+lines. The unified view can be widened from the hunks to the whole file; side by side always
+shows the whole of it. Between hunks, and before the first and after the last, the unchanged
+lines are a bar that opens them twenty at a time from either end or all at once, numbered on
+both sides and coloured like the rest; they are rows of their own, so staging part of a hunk
+names the same lines whatever is open around it. Large and binary files render as a placeholder
 with an explicit load action.
+
+In Blame, a commit's chip opens a menu: show it in the graph (asking first to show every branch
+when it is only on hidden ones), blame the file as it was before it — under the name it had
+there, at the reader's line, with Back in the header to return — and copy its id. Before a root
+commit, or the edge of a shallow clone, there is nothing, and the item says so. A repository's
+`.git-blame-ignore-revs` is looked past unless your own configuration names a list, and the
+header says how many commits that skips, with a click to name them after all; a configured list
+that is not there is noted in the header instead of failing the blame.
+
+Beside Diff, Blame and History, **File** shows the whole file as the change leaves it: as the
+commit has it, as the index has it for a staged change, and as it is on disk for an unstaged one,
+read again when it changes there. A change that deleted the file shows it as it was, and says
+so. A file the commit did not touch, which is most of "View all files", offers "Show the file"
+where it says so. Blame and File draw only the lines on screen, so the kernel's MAINTAINERS opens
+as quickly as a file of ten lines; both are refused past 32 MB.
+
+Code is coloured by what it is — keywords, strings, comments, numbers and constants, names and
+types, and markup — in six muted colours, each at least 4.5:1 on every ground code sits on, in
+the diff, the blame and the file alike. The grammar comes from the file's name, among twenty-five
+languages; anything else is drawn plain. A diff is coloured from both whole files, so the
+middle of a block comment is a comment, and colours arrive after the text rather than holding
+it up. A file over a megabyte or twenty thousand lines stays plain, and Appearance turns colours
+off.
+
+**Search the code** (Ctrl+Shift+F, the palette, or "Search code at this commit…" on a commit's
+menu) takes the main pane: what to find, as text or as an expression and with case or without,
+and the paths to look under. It searches every file as that revision has it, binary ones left
+out, a moment after the typing stops, and lists the lines found under their files with the
+match marked — up to five thousand, then saying to narrow it. A line opens the file view there,
+with the line marked, and closing that returns to the list. "Save as…" in the file view and on a
+file in a commit writes the file as it is there, from git, wherever the dialog says.
 
 A binary file that is an image is drawn instead: before and after side by side, each captioned
 with its dimensions and size, on a checkerboard so transparency shows. A side the file is

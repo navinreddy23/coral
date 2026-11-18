@@ -70,6 +70,15 @@ describe.each(THEMES)('the %s palette', (theme) => {
     }
   });
 
+  it('keeps every syntax colour readable on every ground code is drawn on', () => {
+    const grounds = ['bg-0', 'add-bg', 'remove-bg', 'add-word', 'remove-word', 'accent-soft'];
+    for (const kind of ['keyword', 'string', 'comment', 'constant', 'type', 'meta']) {
+      for (const ground of grounds) {
+        expect(on(`syn-${kind}`, ground), `syn-${kind} on ${ground}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
   it('leaves code on a diff tint as readable as code anywhere else', () => {
     for (const tint of ['add-bg', 'remove-bg', 'add-word', 'remove-word']) {
       expect(on('fg-0', tint), `fg-0 on ${tint}`).toBeGreaterThanOrEqual(7);

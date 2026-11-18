@@ -13,6 +13,7 @@ pub mod credentials;
 pub mod experimental;
 pub mod gitignore;
 pub mod graph;
+pub mod grep;
 pub mod hosting;
 pub mod lfs;
 pub mod notes;

@@ -98,6 +98,20 @@
   --remove-word: #f9bcbc;
 
   /*
+   * Code by what it is: six colours, kept dark and muted so code still reads as text and a
+   * diff's tints stay the loudest thing on a line.
+   *
+   * Each holds 4.5:1 against every ground code is drawn on — the page, both line tints, both
+   * word marks and a selection — and the removed word's pink is the one that decides it.
+   */
+  --syn-keyword: #7b2fa8;
+  --syn-string: #1d6233;
+  --syn-comment: #47505d;
+  --syn-constant: #874000;
+  --syn-type: #16538b;
+  --syn-meta: #085b5c;
+
+  /*
    * The eight lane colours. Each is computed to reach 5.5:1 against white, because a lane
    * stroke needs more contrast than body text, not less. Not the dark set darkened: an
    * earlier attempt averaged 4.2:1 where the dark theme averages 7.7:1, and that reads as
@@ -238,6 +252,14 @@
   --remove-bg: #2f1c1c;
   --add-word: #1f5c34;
   --remove-word: #6b2f34;
+
+  /* Here the added word's green decides it. */
+  --syn-keyword: #e0b3ff;
+  --syn-string: #b5e8a8;
+  --syn-comment: #c2c9d4;
+  --syn-constant: #ffc58a;
+  --syn-type: #a6cbff;
+  --syn-meta: #8ee3e3;
 
   --lane-1: #4aaef7;
   --lane-2: #e878ba;

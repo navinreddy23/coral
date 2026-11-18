@@ -37,6 +37,9 @@ paper, it is added here in the same commit with a link and its license.
   <https://www.jetbrains.com/lp/mono/> — SIL Open Font License 1.1, delivered through
   `@fontsource/jetbrains-mono`.
 - **xterm.js** — the terminal pane. <https://xtermjs.org/> — MIT.
+- **highlight.js** by Ivan Sagalaev and contributors — the grammars that colour code in a diff,
+  a blame and a file. Only its core and twenty-five grammars ship, in a worker of their own.
+  <https://highlightjs.org/> — BSD-3-Clause.
 
 ## Not shipped, but recognised
 

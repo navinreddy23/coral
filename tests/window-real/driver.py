@@ -34,6 +34,16 @@ PUNCTUATION = {
     "@": ("Shift_L", "2"),
     "(": ("Shift_L", "9"),
     ")": ("Shift_L", "0"),
+    # And what a regular expression is written with.
+    "|": ("Shift_L", "backslash"),
+    "\\": ("backslash",),
+    "*": ("Shift_L", "8"),
+    "+": ("Shift_L", "equal"),
+    "?": ("Shift_L", "slash"),
+    "[": ("bracketleft",),
+    "]": ("bracketright",),
+    "^": ("Shift_L", "6"),
+    "$": ("Shift_L", "4"),
 }
 
 

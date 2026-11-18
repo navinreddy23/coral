@@ -238,6 +238,15 @@ const REMOTES = [
 
 const FIXTURES: Record<string, unknown> = {
   initial_repo: REPO,
+  grep_code: {
+    matches: [
+      { path: 'ui/src/graph/lanes.ts', line: 12, column: 17, text: 'export function assignLanes(rows) {' },
+      { path: 'ui/src/graph/lanes.ts', line: 48, column: 10, text: '  return assignLanes(rest);' },
+      { path: 'crates/coral-core/src/graph.rs', line: 203, column: 8, text: '    // assignLanes in the window mirrors this' },
+    ],
+    more: false,
+  },
+  stop_grep: false,
   app_version: { number: '1.2.3', commit: 'abc1234', debug: false },
   check_for_update: {
     current: '1.2.3',

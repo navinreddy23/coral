@@ -61,7 +61,11 @@ export type Blame = { chunks: Array<BlameChunk>,
  * Keyed by oid. Git sends a commit's details once and then refers back to it, so this is
  * far smaller than one entry per chunk on a file with a long history.
  */
-commits: { [key in string]: BlameCommit }, };
+commits: { [key in string]: BlameCommit }, 
+/**
+ * Which commits were looked past, so the reader knows a reformat is not who they see.
+ */
+skipping: Skipping, };
 
 /**
  * A run of consecutive lines attributed to one commit.
@@ -82,6 +86,25 @@ origLine: number, lines: number, };
 export type BlameCommit = { oid: string, author: Signature, summary: string, 
 /**
  * The path the content had at this commit, which differs after a rename.
+ */
+filename: string, 
+/**
+ * Where this commit's lines were before it, which is where blaming further back starts.
+ * None for a commit that created them.
+ */
+previous: BlamePrevious | null, 
+/**
+ * Whether the walk stopped here rather than finding who wrote these lines: the root of a
+ * shallow clone, or a commit outside the range asked about. Nothing is before it to blame.
+ */
+boundary: boolean, };
+
+/**
+ * The commit and path a blamed commit's lines came from.
+ */
+export type BlamePrevious = { oid: string, 
+/**
+ * Different from the blamed commit's own after a rename.
  */
 filename: string, };
 
@@ -244,6 +267,35 @@ peeled: string | null, upstream: string | null, ahead: number, behind: number,
 gone: boolean, };
 
 /**
+ * One line a search found.
+ */
+export type GrepMatch = { path: string, line: number, 
+/**
+ * Where the first match on the line starts, in bytes from one.
+ */
+column: number, text: string, };
+
+/**
+ * How the pattern is read.
+ */
+export type GrepPattern = "fixed" | "regex";
+
+/**
+ * What to look for, and where.
+ */
+export type GrepQuery = { pattern: string, how: GrepPattern, ignoreCase: boolean, 
+/**
+ * Pathspecs to look under; empty for the whole tree.
+ */
+paths: Array<string>, };
+
+export type GrepResult = { matches: Array<GrepMatch>, 
+/**
+ * Whether it stopped at [`MOST`] with more still to find.
+ */
+more: boolean, };
+
+/**
  * Where HEAD points.
  */
 export type Head = { "kind": "branch", name: string, } | { "kind": "detached", oid: string, } | { "kind": "unborn", name: string, };
@@ -293,6 +345,11 @@ export type Line = { kind: LineKind, text: string, oldNo: number | null, newNo: 
 noNewline: boolean, };
 
 export type LineKind = "context" | "add" | "remove";
+
+/**
+ * Whether a blame looks past the commits a repository lists in `.git-blame-ignore-revs`.
+ */
+export type ListedCommits = "skip" | "blame";
 
 /**
  * The file mode on each side of a change that touched it.
@@ -579,6 +636,13 @@ global: SigningConfig,
  * What this repository sets for itself.
  */
 local: SigningOverrides, };
+
+/**
+ * Which commits a blame looked past, and why.
+ *
+ * <https://git-scm.com/docs/git-blame#Documentation/git-blame.txt---ignore-revs-fileltfilegt>
+ */
+export type Skipping = { "kind": "nothing" } | { "kind": "listed", count: number, } | { "kind": "offered", count: number, } | { "kind": "configured", file: string, } | { "kind": "missing", file: string, };
 
 /**
  * Whether the working tree is sparse, and what it holds.

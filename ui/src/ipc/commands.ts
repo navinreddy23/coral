@@ -7,6 +7,7 @@ import type {
   Ancestry,
   AutoFetch,
   Blame,
+  ListedCommits,
   Person,
   Deepen,
   Blocks,
@@ -242,8 +243,9 @@ export function fileBlame(
   rev: string,
   file: string,
   oldFile: string | null = null,
+  listed: ListedCommits = 'skip',
 ): Promise<Blame> {
-  return invoke<Blame>('file_blame', { path, rev, file, oldFile });
+  return invoke<Blame>('file_blame', { path, rev, file, oldFile, listed });
 }
 
 /** What to do with part of a file's changes. */

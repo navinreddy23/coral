@@ -5,6 +5,7 @@ pub mod credential;
 pub mod diff;
 pub mod find;
 pub mod graph;
+pub mod grep;
 pub mod hosting;
 pub mod log;
 pub mod open;

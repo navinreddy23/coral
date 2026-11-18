@@ -697,12 +697,15 @@ pub async fn file_blame(
     rev: String,
     file: String,
     old_file: Option<String>,
+    listed: coral_core::blame::ListedCommits,
 ) -> Result<coral_core::blame::Blame, crate::commands::IpcError> {
     tracing::info!(path, rev, file, "file_blame");
     let runner = coral_core::process::GitRunner::discover().await?;
     let loc =
         coral_core::repo::RepoLocation::discover(&runner, std::path::Path::new(&path)).await?;
-    Ok(loc.blame(&runner, &rev, &file, old_file.as_deref()).await?)
+    Ok(loc
+        .blame(&runner, &rev, &file, old_file.as_deref(), listed)
+        .await?)
 }
 
 /// What to do with part of a file's changes.

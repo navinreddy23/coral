@@ -18,8 +18,8 @@ export type Grouping = 'path' | 'tree';
 /** How a diff is laid out. */
 export type DiffMode = 'inline' | 'split';
 
-/** What the file panel is showing: the change, who wrote each line, or what touched it. */
-export type FileView = 'diff' | 'blame' | 'history';
+/** What the file panel is showing: the change, who wrote each line, what touched it, or the file. */
+export type FileView = 'diff' | 'blame' | 'history' | 'file';
 
 /** Where the terminal sits. */
 export type Dock = 'bottom' | 'right';
@@ -52,6 +52,8 @@ export interface Views {
   fileView: FileView;
   /** Whether a change that is only whitespace counts as a change. */
   ignoreWhitespace: boolean;
+  /** Whether code in a diff, a blame and a file is coloured by what it is. */
+  syntax: boolean;
   /** How much of the left panel is showing, and whether the other two are. */
   sidebar: PanelState;
   details: boolean;
@@ -96,6 +98,7 @@ function defaults(): Views {
     diff: 'inline',
     fileView: 'diff',
     ignoreWhitespace: false,
+    syntax: true,
     sidebar: 'open',
     details: true,
     toolbar: true,
@@ -158,9 +161,10 @@ function read(): Views {
     }
     if (stored.changes === 'path' || stored.changes === 'tree') out.changes = stored.changes;
     if (stored.diff === 'inline' || stored.diff === 'split') out.diff = stored.diff;
-    // `fileView` is deliberately not restored. Blame and history are things you go and look
-    // at, not a way you want every file opened from the next launch onwards.
+    // `fileView` is deliberately not restored. Blame, history and the file are things you go
+    // and look at, not a way you want every file opened from the next launch onwards.
     if (typeof stored.ignoreWhitespace === 'boolean') out.ignoreWhitespace = stored.ignoreWhitespace;
+    if (typeof stored.syntax === 'boolean') out.syntax = stored.syntax;
     // Written as a boolean until the rail existed, and a release that has been used has that
     // in storage: `false` there means the panel was deliberately put away, and losing that is
     // worse than the panel being a state behind.

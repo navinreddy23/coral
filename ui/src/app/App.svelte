@@ -17,6 +17,9 @@
   import DiffView from './DiffView.svelte';
   import { inTheWay } from './overwrite';
   import { DiffState } from '../state/diff.svelte';
+  import { SyntaxState } from '../state/syntax.svelte';
+  import { GrepState } from '../state/grep.svelte';
+  import Grep from './Grep.svelte';
   import { HostingState } from '../state/hosting.svelte';
   import {
     commitDetail,
@@ -37,7 +40,8 @@
     unpushedMerges,
     type PullRequest,
   } from '../ipc/commands';
-  import type { Ancestry, Verdict } from '../ipc/types';
+  import type { Ancestry, BlobSide, Verdict } from '../ipc/types';
+  import { chooseSavePath, saveBlob } from '../ipc/blob';
   import { ActionsState } from '../state/actions.svelte';
   import { CommitState } from '../state/commit.svelte';
   import MergeTool from './MergeTool.svelte';
@@ -259,7 +263,7 @@
   const LIVE = new Set([
     'select.next', 'select.previous', 'select.first', 'select.last', 'select.menu',
     'stage.all', 'unstage.all', 'tab.new', 'tab.close', 'tab.next', 'tab.previous',
-    'palette', 'repo.open', 'terminal', 'search.commits',
+    'palette', 'repo.open', 'terminal', 'search.commits', 'search.code',
     'panel.left', 'panel.detail', 'help', 'undo', 'redo',
     'commit', 'commit.stageAll', 'commit.focus', 'stage.file', 'unstage.file',
     'branch.create', 'fetch.all', 'toolbar', 'filter.focus', 'preferences',
@@ -365,6 +369,7 @@
       case 'preferences': openPreferences(); break;
       case 'palette': showPalette = !showPalette; break;
       case 'search.commits': openFind(); break;
+      case 'search.code': searchCode('HEAD', headName ?? 'HEAD'); break;
       // The same two the toolbar runs. They were listed and rebindable but did nothing, which
       // for Ctrl+Z of all keys is worse than not offering it: the journal is what makes an
       // action on somebody's history safe to try, and the key everyone reaches for to undo one
@@ -471,6 +476,8 @@
   const panes = new PanesState();
   const sections = new SectionsState();
   const diff = new DiffState(views);
+  const syntax = new SyntaxState(views);
+  const grep = new GrepState();
   const actions = new ActionsState();
   const commitDraft = new CommitState();
   /**
@@ -2505,6 +2512,65 @@
   }
 
   /**
+   * Saves a file as one side of a change has it, wherever the dialog says.
+   *
+   * Through the engine, which writes the bytes straight from git: a file at a commit is not on
+   * disk anywhere to copy, and it may be anything, image or archive.
+   */
+  async function saveFileAs(side: BlobSide, file: string) {
+    if (!info) return;
+    const path = info.path;
+    const to = await chooseSavePath(file.slice(file.lastIndexOf('/') + 1)).catch(() => null);
+    if (to === null) return;
+    try {
+      await saveBlob(path, side, file, to);
+      toasts.push('info', 'Saved', to);
+    } catch (e) {
+      toasts.push('error', 'Could not save the file', messageOf(e));
+    }
+  }
+
+  /**
+   * Opens the code search on a revision: HEAD from the keyboard and the palette, any commit
+   * from its menu. A diff that was open goes, since the search takes the same pane.
+   */
+  function searchCode(rev: string, label: string) {
+    if (!info) return;
+    diff.close();
+    grep.open({ repo: info.path, rev, label });
+  }
+
+  /**
+   * Goes to a commit a blame names, closing the diff to show the graph it is in.
+   *
+   * A branch hidden or soloed away can leave it outside the walk, with no row to go to.
+   * Widening undoes what somebody chose to hide, so it is asked rather than done.
+   */
+  async function showBlamed(oid: string) {
+    if (!info) return;
+    const path = info.path;
+    diff.close();
+    let row = await graphRowOf(path, oid).catch(() => null);
+    if (row === null && (scope.solo !== null || scope.hidden.length > 0)) {
+      const { choice } = await ask({
+        title: 'That commit is outside what the graph shows',
+        detail:
+          'It is only on branches that are hidden, or not on the one shown on its own. Showing ' +
+          'every branch puts it back in the graph.',
+        asksText: false,
+        placeholder: '',
+        initial: '',
+        choices: [{ id: 'everything', label: 'Show every branch', primary: true }],
+      });
+      if (choice !== 'everything') return;
+      await showEverything();
+      row = await graphRowOf(path, oid).catch(() => null);
+    }
+    if (row !== null) await revealAt(row, oid);
+    else toasts.push('info', 'That commit is not in the graph', 'It is not reachable from any branch or tag shown.');
+  }
+
+  /**
    * What right-clicking a commit offers.
    *
    * Grouped as the reference groups them: where to go, what to bring in, what to make here,
@@ -2645,6 +2711,7 @@
           label: 'Compare with working tree',
           run: () => info && void selection.compareWithWorktree(info.path, { oid, name: short }),
         },
+        { kind: 'item', label: 'Search code at this commit…', run: () => searchCode(oid, short) },
         { kind: 'item', label: 'Copy commit sha', hint: short, run: () => void copySha(oid) },
         { kind: 'item', label: 'Copy link to this commit', run: () => void copyLink(oid) },
         ...(hosting.view?.host
@@ -3831,6 +3898,8 @@
         run: () => void copyName(file),
       },
       { kind: 'separator' },
+      ...(rev === null ? [] : [{ kind: 'item' as const, label: 'Save as…', run: () => void saveFileAs({ kind: 'commit', rev }, file) }]),
+      { kind: 'separator' },
       ...takeItems(file),
       { kind: 'separator' },
       ...toolItems(file, rev === null ? null : { kind: 'commit', rev }),
@@ -4261,6 +4330,7 @@
         : []),
       { id: 'fetch', label: 'Fetch', group: 'Remote', run: () => void act({ kind: 'fetch', remote: null }) },
       { id: 'cleanup', label: 'Clean up branches…', group: 'Branch', run: () => void openCleanup() },
+      { id: 'grep', label: 'Search the code…', group: 'Repository', run: () => searchCode('HEAD', headName ?? 'HEAD') },
       ...(info?.shallow
         ? [
             {
@@ -4591,6 +4661,9 @@
    * id, and the selection needs nothing else — only the drawing needs the rows.
    */
   async function revealAt(row: number, oid: string) {
+    // Going to a commit is looking at it, as a click on its row is: the staging panel stayed up
+    // beside a branch picked from the sidebar, with the working copy still marked as chosen.
+    showWip = false;
     scrollToRow(row);
     if (info) void selection.select(info.path, row, oid, listingFor(oid));
     await graph.ensureRows(row, row);
@@ -4776,6 +4849,7 @@
   function forgetTheLastRepository() {
     selection.clear();
     diff.close();
+    grep.close();
     rebase.close();
     merge.close();
     actions.clear();
@@ -6054,9 +6128,23 @@
         onMessageUsed={() => commitDraft.clear()}
       />
     {:else if diff.path !== null}
-      <DiffView {diff} onClose={() => diff.close()} onPart={applyPart} onEdit={editHunk} />
+      <DiffView
+        {diff}
+        {syntax}
+        onClose={() => diff.close()}
+        onPart={applyPart}
+        onEdit={editHunk}
+        onShowCommit={(oid) => void showBlamed(oid)}
+        onSaveAs={(side, file) => void saveFileAs(side, file)}
+      />
+    {:else if grep.at !== null}
+      <Grep
+        {grep}
+        onOpen={(match) => grep.at !== null && void diff.openLine(grep.at.repo, grep.at.rev, match.path, match.line)}
+        onClose={() => grep.close()}
+      />
     {/if}
-    <div class="plot" class:hidden={diff.path !== null || merge.inProgress}>
+    <div class="plot" class:hidden={diff.path !== null || merge.inProgress || grep.at !== null}>
       <!-- Above the list it is about, and above the column handles, which run full height. -->
       <BisectBar
         {bisect}

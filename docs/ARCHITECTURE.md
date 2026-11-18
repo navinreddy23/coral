@@ -49,6 +49,7 @@ including reclaimable file-backed mappings.
 | Status refresh | 1 s |
 | Select a commit to details shown | 100 ms |
 | Open the conflict tool for a file | 200 ms |
+| Open a file's diff, `kernel/sched/core.c` | plain in 100 ms, coloured in 300 ms |
 | Graph scrolling | 60 fps |
 | Resident memory with the kernel graph loaded | < 600 MB |
 

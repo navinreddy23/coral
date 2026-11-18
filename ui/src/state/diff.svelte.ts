@@ -1,3 +1,4 @@
+import { fileBlob } from '../ipc/blob';
 import {
   compareFileDiff,
   fileBlame,
@@ -41,6 +42,30 @@ interface Request {
   oldPath: string | null;
 }
 
+/**
+ * What the file view draws: the file's text, or why there is none.
+ *
+ * `before` is set when the change took the file away, so what is drawn is how it was.
+ */
+export type Contents =
+  | { kind: 'text'; text: string; before: boolean }
+  | { kind: 'binary'; before: boolean }
+  | { kind: 'absent' };
+
+/**
+ * A blame reached by going back past a commit.
+ *
+ * The revision and name blamed, the summary of the commit gone past, the line to bring into
+ * view there, and the line to come back to in the blame left behind.
+ */
+export interface BlameStep {
+  rev: string;
+  path: string;
+  past: string;
+  line: number;
+  back: number;
+}
+
 /** One side of the change on screen: where its bytes are, and under which name. */
 export interface Side {
   side: BlobSide;
@@ -71,6 +96,20 @@ export class DiffState {
   blame = $state<Blame | null>(null);
   /** The file itself at the revision the blame was taken at, so the two line up. */
   text = $state<string | null>(null);
+  /** The file as the change leaves it, once the file view has asked for it. */
+  contents = $state<Contents | null>(null);
+  /**
+   * Both sides of the change in full, and the answer from git they were read beside.
+   *
+   * For colouring, which is done from the whole files rather than from the lines the hunks
+   * show — three lines from the middle of a block comment look like code on their own — and
+   * for the unchanged lines between hunks, which a reader can open. `file` says which answer
+   * they belong to: after a reload the old texts stay up until the new ones land, and gaps
+   * measured against the old file would open onto the wrong lines.
+   */
+  sideTexts = $state.raw<{ file: FileDiff; before: string | null; after: string | null } | null>(null);
+  /** The diff `sideTexts` were read for, so a reload reads them again. */
+  #sidesFor: FileDiff | null = null;
   /**
    * The commits that touched this file, newest first, once the history view has asked.
    *
@@ -85,9 +124,27 @@ export class DiffState {
   atCommit = $state<string | null>(null);
   /**
    * The lines whose history the history view holds instead of the file's, numbered as the
-   * file stands at `rev`, or null for the whole file.
+   * file stands at `rev` under `path`, or null for the whole file.
    */
-  lines = $state<{ from: number; to: number; rev: string } | null>(null);
+  lines = $state<{ from: number; to: number; rev: string; path: string } | null>(null);
+
+  /**
+   * Whether blame looks past the commits `.git-blame-ignore-revs` lists.
+   *
+   * On unless the reader says otherwise, and not remembered: the list is the repository's
+   * statement of which commits say nothing about who wrote a line, and seeing past it is the
+   * exception asked for one file at a time.
+   */
+  skipListed = $state(true);
+
+  /** Blames reached by going back past a commit, the latest last; empty for the file as opened. */
+  blameTrail = $state<BlameStep[]>([]);
+
+  /**
+   * The line to bring into view once the blame or the file on its way lands, or null to leave
+   * the view where it is.
+   */
+  sheetLine = $state<number | null>(null);
 
   /**
    * The commit the panel was opened on, null for the working tree or a comparison.
@@ -208,6 +265,16 @@ export class DiffState {
    */
   expanded = $state(false);
 
+  /**
+   * Whether the answer on screen was asked for end to end.
+   *
+   * Changing the layout keeps the old answer up while the new one is read, so for a moment side
+   * by side is drawing an inline answer's few rows. Placing the view on its first change then
+   * placed it on those, and once placed it stays put: switching to side by side opened a file
+   * at line 4,500 with its only change at 6,000.
+   */
+  readWhole = $state(false);
+
   /** Shows the whole file in the unified view, or goes back to the hunks. */
   setExpanded(expanded: boolean): void {
     const before = this.wholeFile;
@@ -231,7 +298,8 @@ export class DiffState {
   get view(): FileView {
     if (this.source === 'compare') return 'diff';
     const remembered = this.#views.current.fileView;
-    return remembered === 'blame' && this.file?.binary === true ? 'diff' : remembered;
+    const lined = remembered === 'blame' || remembered === 'file';
+    return lined && this.file?.binary === true ? 'diff' : remembered;
   }
 
   setView(view: FileView): void {
@@ -282,7 +350,8 @@ export class DiffState {
   async historyOfLines(a: number, b: number): Promise<void> {
     const request = this.#request;
     if (request === null) return;
-    this.lines = { from: Math.min(a, b), to: Math.max(a, b), rev: revisionOf(request) };
+    const at = this.#blamed(request);
+    this.lines = { from: Math.min(a, b), to: Math.max(a, b), rev: at.rev, path: at.path };
     this.#historyLimit = HISTORY_PAGE;
     this.#views.set('fileView', 'history');
     await this.#loadHistory();
@@ -312,6 +381,47 @@ export class DiffState {
     this.sideError = null;
     if (this.view === 'blame') await this.#loadBlame();
     else if (this.view === 'history') await this.#loadHistory();
+    else if (this.view === 'file') await this.#loadContents();
+  }
+
+  /** Reads both sides of the change on screen in full, once per answer from git. */
+  async readSides(): Promise<void> {
+    const file = this.file;
+    const sides = this.sides;
+    if (file === null || sides === null || file.binary || this.#sidesFor === file) return;
+    this.#sidesFor = file;
+    try {
+      const [before, after] = await Promise.all([
+        fileBlob(sides.repo, sides.before.side, sides.before.file),
+        fileBlob(sides.repo, sides.after.side, sides.after.file),
+      ]);
+      if (this.file !== file) return;
+      this.sideTexts = { file, before: textOf(before), after: textOf(after) };
+    } catch {
+      // Too large to read, most likely: drawn plain, as it was before there were colours.
+    }
+  }
+
+  /**
+   * Reads the file as the change leaves it, for the file view.
+   *
+   * By side rather than by revision, so the working copy's file is the one on disk and a staged
+   * one is what the index holds. A change that deleted the file has nothing after it, and the
+   * view shows it as it was.
+   */
+  async #loadContents(keep = false): Promise<void> {
+    const sides = this.sides;
+    if (sides === null) return;
+    const side = ++this.#side;
+    if (!keep) this.contents = null;
+    try {
+      const after = await fileBlob(sides.repo, sides.after.side, sides.after.file);
+      const bytes = after ?? (await fileBlob(sides.repo, sides.before.side, sides.before.file));
+      if (side !== this.#side) return;
+      this.contents = contentsOf(bytes, after === null);
+    } catch (e) {
+      if (side === this.#side) this.sideError = messageOf(e);
+    }
   }
 
   async #loadBlame(): Promise<void> {
@@ -321,13 +431,12 @@ export class DiffState {
     this.blame = null;
     this.text = null;
     this.sideError = null;
-    // A commit's blame is of the file as that commit left it; the working tree's is of HEAD,
-    // since a line nobody has committed has nobody to attribute it to.
-    const rev = revisionOf(request);
+    const { rev, path, was } = this.#blamed(request);
+    const listed = this.skipListed ? 'skip' : 'blame';
     try {
       const [blame, text] = await Promise.all([
-        fileBlame(request.repo, rev, request.path, request.oldPath),
-        fileText(request.repo, rev, request.path, request.oldPath),
+        fileBlame(request.repo, rev, path, was, listed),
+        fileText(request.repo, rev, path, was),
       ]);
       if (side !== this.#side) return;
       this.blame = blame;
@@ -335,6 +444,42 @@ export class DiffState {
     } catch (e) {
       if (side === this.#side) this.sideError = messageOf(e);
     }
+  }
+
+  /**
+   * Which revision and name a blame is of.
+   *
+   * A commit's blame is of the file as that commit left it; the working tree's is of HEAD,
+   * since a line nobody has committed has nobody to attribute it to. Gone back past a commit,
+   * it is of the revision and name that commit's lines came from, which git has said exactly.
+   */
+  #blamed(request: Request): { rev: string; path: string; was: string | null } {
+    const step = this.blameTrail.at(-1);
+    if (step !== undefined) return { rev: step.rev, path: step.path, was: null };
+    return { rev: revisionOf(request), path: request.path, was: request.oldPath };
+  }
+
+  /** Blames the file as it was before a commit, keeping the way back. */
+  async blameBefore(step: BlameStep): Promise<void> {
+    this.blameTrail = [...this.blameTrail, step];
+    this.sheetLine = step.line;
+    await this.#loadBlame();
+  }
+
+  /** Back to the blame before the last step back, at the line the reader left it from. */
+  async blameBack(): Promise<void> {
+    const left = this.blameTrail.at(-1);
+    if (left === undefined) return;
+    this.blameTrail = this.blameTrail.slice(0, -1);
+    this.sheetLine = left.back;
+    await this.#loadBlame();
+  }
+
+  /** Looks past the repository's listed commits, or names them, and blames again. */
+  async setSkipListed(skip: boolean): Promise<void> {
+    if (skip === this.skipListed) return;
+    this.skipListed = skip;
+    await this.#loadBlame();
   }
 
   async #loadHistory(): Promise<void> {
@@ -348,7 +493,7 @@ export class DiffState {
       const got = lines === null
         ? await fileHistory(request.repo, revisionOf(request), request.path, this.#historyLimit)
         : await lineHistory(
-          request.repo, lines.rev, request.path, lines.from, lines.to, this.#historyLimit,
+          request.repo, lines.rev, lines.path, lines.from, lines.to, this.#historyLimit,
         );
       if (side !== this.#side) return;
       this.history = got;
@@ -379,6 +524,19 @@ export class DiffState {
     await this.#load(
       { repo, source: 'commit', rev, to: '', path, oldPath },
       'This commit did not change that file.',
+    );
+  }
+
+  /**
+   * Opens a file as a revision has it, in the file view, with one line brought into view: where
+   * a code search found something.
+   */
+  async openLine(repo: string, rev: string, path: string, line: number): Promise<void> {
+    this.#views.set('fileView', 'file');
+    await this.#load(
+      { repo, source: 'commit', rev, to: '', path, oldPath: null },
+      'This commit did not change that file.',
+      line,
     );
   }
 
@@ -428,6 +586,7 @@ export class DiffState {
     const request = this.#request;
     if (request === null || request.source === 'commit') return;
     await this.#reread({ ...request, repo });
+    if (this.view === 'file') await this.#loadContents(true);
   }
 
   /** Reads the open file again, leaving what is on screen up until the answer arrives. */
@@ -435,10 +594,12 @@ export class DiffState {
     if (request === null) return;
     this.#request = request;
     const token = ++this.#token;
+    const reading = this.reading;
     try {
-      const got = await read(request, this.reading);
+      const got = await read(request, reading);
       if (token !== this.#token) return;
       this.file = got;
+      this.readWhole = reading.wholeFile;
       this.empty = got === null ? absentFor(request.source) : null;
       this.error = null;
     } catch (e) {
@@ -448,7 +609,7 @@ export class DiffState {
     }
   }
 
-  async #load(request: Request, absent: string): Promise<void> {
+  async #load(request: Request, absent: string, line: number | null = null): Promise<void> {
     const token = ++this.#token;
     this.#request = request;
     this.#opened = request;
@@ -456,9 +617,15 @@ export class DiffState {
     this.unguarded = false;
     this.atCommit = null;
     this.lines = null;
-    this.openedAt = request.source === 'commit' ? request.rev : null;
+    this.blameTrail = [];
+    this.sheetLine = line;
+    // A file opened where a code search found something belongs to the search, not to the
+    // selected commit, and selecting another must not close it.
+    this.openedAt = request.source === 'commit' && line === null ? request.rev : null;
     this.blame = null;
     this.text = null;
+    this.contents = null;
+    this.sideTexts = null;
     this.history = null;
     this.moreHistory = false;
     this.source = request.source;
@@ -467,11 +634,13 @@ export class DiffState {
     this.error = null;
     this.empty = null;
     this.loading = true;
+    const reading = this.reading;
     try {
-      const got = await read(request, this.reading);
+      const got = await read(request, reading);
       // Clicking down a long file list must not let an earlier, slower read win.
       if (token !== this.#token) return;
       this.file = got;
+      this.readWhole = reading.wholeFile;
       if (got === null) {
         this.empty = absent;
       } else if (got.change === 'unmerged') {
@@ -503,13 +672,19 @@ export class DiffState {
     this.#opened = null;
     this.blame = null;
     this.text = null;
+    this.contents = null;
+    this.sideTexts = null;
+    this.#sidesFor = null;
     this.history = null;
     this.moreHistory = false;
     this.atCommit = null;
     this.lines = null;
+    this.blameTrail = [];
+    this.sheetLine = null;
     this.openedAt = null;
     this.expanded = false;
     this.unguarded = false;
+    this.readWhole = false;
   }
 }
 
@@ -522,6 +697,26 @@ export class DiffState {
 function revisionOf(request: Request): string {
   if (request.source === 'compare') return request.to;
   return request.source === 'commit' ? request.rev : 'HEAD';
+}
+
+/**
+ * A file's bytes as the file view draws them.
+ *
+ * Binary by git's own test, a NUL in the first eight thousand bytes, so the view and the diff
+ * agree about which files have lines. Decoded as the engine decodes text, with what is not UTF-8
+ * replaced rather than refused.
+ */
+function contentsOf(bytes: ArrayBuffer | null, before: boolean): Contents {
+  if (bytes === null) return { kind: 'absent' };
+  const head = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 8000));
+  if (head.includes(0)) return { kind: 'binary', before };
+  return { kind: 'text', text: new TextDecoder().decode(bytes), before };
+}
+
+/** A side's bytes as text, or null where it has none or is binary. */
+function textOf(bytes: ArrayBuffer | null): string | null {
+  const contents = contentsOf(bytes, false);
+  return contents.kind === 'text' ? contents.text : null;
 }
 
 /** Side by side shows the file end to end; inline shows the hunks. */
