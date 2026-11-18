@@ -1,9 +1,21 @@
 <script lang="ts">
   import { t } from '../state/locale.svelte';
   import { INTERVALS, intervalWords, type AutoFetchState } from '../state/autofetch.svelte';
+  import type { ViewsState } from '../state/views.svelte';
 
   /** What Coral does for every repository, as opposed to what one repository asks for. */
-  const { autoFetch }: { autoFetch: AutoFetchState } = $props();
+  const { autoFetch, views }: { autoFetch: AutoFetchState; views: ViewsState } = $props();
+
+  const DIALECTS = [
+    { value: 'en-US', label: 'English (US)' },
+    { value: 'en-GB', label: 'English (UK)' },
+    { value: 'off', label: 'Off' },
+  ] as const;
+
+  function setSpelling(value: string): void {
+    const chosen = DIALECTS.find((d) => d.value === value);
+    if (chosen) views.set('spelling', chosen.value);
+  }
 </script>
 
 <section class="pane">
@@ -26,6 +38,24 @@
       The repository in front of you, while the window has focus, so what the graph says about
       its remotes is never older than this. A fetch that runs on its own is not added to undo and
       says nothing unless it fails. A repository can ask for something else under Repository.
+    </p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Commit messages</legend>
+    <label class="field">
+      <span class="name">Check spelling in</span>
+      <select value={views.current.spelling} onchange={(e) => setSpelling(e.currentTarget.value)}>
+        {#each DIALECTS as dialect (dialect.value)}
+          <option value={dialect.value}>{dialect.label}</option>
+        {/each}
+      </select>
+    </label>
+    <p class="hint">
+      Words the dictionary does not know are underlined as you write, and a right-click on one
+      offers what it might have been. Code in backticks, paths, names and trailers are left alone.
+      Words you add are kept in words.txt beside Coral's settings, which <code>coral spell</code>
+      reads too.
     </p>
   </fieldset>
 </section>
