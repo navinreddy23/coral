@@ -15,6 +15,37 @@
   `words.txt` beside Coral's settings. On the command line, `coral spell` checks a message from an
   argument, a file or stdin — a commit-msg hook can hand it `.git/COMMIT_EDITMSG` as it is — and
   `coral spell --add` adds a word to the same list.
+- **Code in colour.** A diff, a blame and a file are coloured by what the code is — keywords,
+  strings, comments, numbers and constants, names and types, markup — in six muted colours, so a
+  diff's own tints are still what the eye goes to. Each holds 4.5:1 on every background code is
+  drawn on, in both themes. The language comes from the file's name, among twenty-five, and the
+  colours from the whole file rather than the lines a hunk shows, so three lines from inside a
+  block comment read as a comment. A file over a megabyte or twenty thousand lines stays plain,
+  and Appearance → Syntax colours turns them off.
+- **The whole file.** A File tab beside Diff, Blame and History shows the file as the commit has
+  it, as the index has it for a staged change, and as it is on disk for an unstaged one, read
+  again when it changes there. A file the commit did not touch offers "Show the file" where it
+  used to stop. "Save as…" there, and on a file in a commit's list, writes it out byte for byte
+  as git has it.
+- **Search the code at a commit.** Ctrl+Shift+F, the palette, or "Search code at this commit…" on
+  a commit's menu: as text or as an expression, with case or without, under the paths given. The
+  lines found are listed under their files with the match marked, and one opens the file at that
+  line, with closing it going back to the list. A search stops at five thousand lines and says
+  there were more. `coral grep <pattern> [--rev] [-E] [-i] [-- paths]`.
+- **The lines between hunks.** Each gap in a diff — before the first change, between two, after
+  the last — opens twenty lines at a time from either end, or all at once, numbered and coloured
+  like the rest.
+- **Blame goes back.** A commit's chip in Blame shows it in the graph, blames the file as it was
+  before that commit, or copies its id. Before it is where git says the lines came from, under
+  the name the file had there, with your line kept in view and Back to return. A repository's
+  `.git-blame-ignore-revs` is looked past without any setting, and the header says how many
+  commits that skips and names them on a click. `coral blame --every-commit`.
+
+### Changed
+
+- Blame builds only the lines on screen, as side by side does, rather than a table row for every
+  line of the file. The kernel's MAINTAINERS, 31,031 lines, is drawn a third of a second after
+  git's own blame finishes.
 
 ### Fixed
 
@@ -22,6 +53,16 @@
   the field being typed in.
 - **The summary's character count shows while the summary is being typed in** on Linux, where
   WebKitGTK painted the focused field over it.
+- Next and previous change in the inline diff never stopped at a change that only removed lines,
+  and could stay on one added line for good.
+- Switching a diff to side by side opened it away from its change: a file changed only at line
+  6,000 opened at 4,500.
+- Going to a commit from a branch in the sidebar, from a ref's "Show it in the graph" or from a
+  blame left the staging panel up when the working copy had been selected.
+- A blame of a file of a few hundred megabytes read it whole into memory, twice, before drawing
+  anything. A file past 32 MB is refused first, as the image view already did.
+- A `blame.ignoreRevsFile` configured but missing failed the whole blame with "could not open
+  object name list". The blame goes ahead and the header says the list is missing.
 
 ## 1.6.0
 
