@@ -460,6 +460,42 @@ describe('the shell', () => {
     });
   });
 
+  it('leaves Ctrl+Z in the commit message to the message', async () => {
+    // The window's undo fell through to the field, so undoing a typo undid the last commit.
+    const { container } = await shell({
+      repo_status: {
+        entries: [{ path: 'a.txt', staged: 'modified', worktree: null, conflict: null }],
+        conflicted: [],
+      },
+      repo_action: { what: 'undo', message: '', conflicted: false },
+    });
+    await waitFor(() => {
+      if (!container.querySelector('button.row.wip')) throw new Error('no working copy row yet');
+    });
+    await fireEvent.click(container.querySelector('button.row.wip') as HTMLButtonElement);
+    await waitFor(() => {
+      if (!container.querySelector('input.summary')) throw new Error('no staging panel yet');
+    });
+    const summary = container.querySelector('input.summary') as HTMLInputElement;
+    const description = container.querySelector('textarea.description') as HTMLTextAreaElement;
+
+    invoke.mockClear();
+    const keys = [
+      { key: 'z', ctrlKey: true },
+      { key: 'y', ctrlKey: true },
+      { key: 'z', ctrlKey: true, shiftKey: true },
+    ];
+    for (const field of [summary, description]) {
+      for (const key of keys) {
+        const event = new KeyboardEvent('keydown', { ...key, bubbles: true, cancelable: true });
+        field.dispatchEvent(event);
+        expect(event.defaultPrevented, `${key.key} on ${field.className}`).toBe(false);
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(invoke.mock.calls.some((c) => c[0] === 'repo_action')).toBe(false);
+  });
+
   it('gives the whole pane to the merge tool while an operation is stopped', async () => {
     // The panel beside it can only offer a commit to select, so it spent half the window
     // saying so while the two sides being merged were squeezed into a column too narrow to

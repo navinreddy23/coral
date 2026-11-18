@@ -57,6 +57,17 @@ describe('shortcuts', () => {
     expect(resolve(key('t', { ctrl: true }), 'message')?.id).toBe('tab.new');
   });
 
+  /* Ctrl+Z in the message box undid the last commit rather than the last word typed. */
+  it('leaves undo, redo and paragraph moves to the text field they are typed in', () => {
+    expect(resolve(key('z', { ctrl: true }), 'message')).toBeNull();
+    expect(resolve(key('y', { ctrl: true }), 'message')).toBeNull();
+    expect(resolve(key('z', { ctrl: true, shift: true }), 'message')).toBeNull();
+    expect(resolve(key('ArrowUp', { ctrl: true }), 'message')).toBeNull();
+    expect(resolve(key('ArrowDown', { ctrl: true }), 'message')).toBeNull();
+    expect(resolve(key('z', { ctrl: true }), 'global')?.id).toBe('undo');
+    expect(resolve(key('ArrowDown', { ctrl: true }), 'global')?.id).toBe('select.last');
+  });
+
   it('reads Ctrl 1 to 9 as a tab jump and nothing else', () => {
     expect(tabJump(key('1', { ctrl: true }))).toBe(1);
     expect(tabJump(key('9', { ctrl: true }))).toBe(9);
