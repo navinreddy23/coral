@@ -50,6 +50,21 @@ describe('remembered view choices', () => {
     expect(views.current.sidebar).toBe('open');
   });
 
+  it('checks spelling in US English unless told otherwise, and remembers the choice', () => {
+    expect(new ViewsState().current.spelling).toBe('en-US');
+    new ViewsState().set('spelling', 'en-GB');
+    expect(new ViewsState().current.spelling).toBe('en-GB');
+    new ViewsState().set('spelling', 'off');
+    expect(new ViewsState().current.spelling).toBe('off');
+  });
+
+  it('forgets a spelling dialect it has no dictionary for', () => {
+    localStorage.setItem('coral.views', JSON.stringify({ spelling: 'fr-FR' }));
+    expect(new ViewsState().current.spelling).toBe('en-US');
+    localStorage.setItem('coral.views', JSON.stringify({ spelling: false }));
+    expect(new ViewsState().current.spelling).toBe('en-US');
+  });
+
   it('clamps a stored terminal size into the range the splitter allows', () => {
     localStorage.setItem('coral.views', JSON.stringify({ terminalSize: 9000 }));
     expect(new ViewsState().current.terminalSize).toBe(900);

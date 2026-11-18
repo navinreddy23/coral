@@ -1,5 +1,6 @@
 import { TERMINAL_FONT, ZOOMS } from '../app/zoom';
 import type { Density } from '../graph/layout';
+import type { Dialect } from '../ipc/types';
 
 /**
  * The choices a user makes about how to look at things, remembered across launches.
@@ -86,6 +87,8 @@ export interface Views {
   terminalFontSize: number;
   /** The window's language: one with a catalogue, or `system` for the desktop's. */
   language: string;
+  /** Which English the commit message is checked against, or `off` for no checking at all. */
+  spelling: Dialect | 'off';
 }
 
 const KEY = 'coral.views';
@@ -113,6 +116,7 @@ function defaults(): Views {
     zoom: 1,
     terminalFontSize: TERMINAL_FONT.usual,
     language: 'system',
+    spelling: 'en-US',
   };
 }
 
@@ -189,6 +193,9 @@ function read(): Views {
     }
     if (typeof stored.language === 'string' && /^(?:system|[a-z]{2})$/u.test(stored.language)) {
       out.language = stored.language;
+    }
+    if (stored.spelling === 'en-US' || stored.spelling === 'en-GB' || stored.spelling === 'off') {
+      out.spelling = stored.spelling;
     }
     const zoom = stored.zoom;
     if (typeof zoom === 'number' && ZOOMS.some((z) => Math.abs(z - zoom) < 0.001)) out.zoom = zoom;
