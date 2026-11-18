@@ -47,6 +47,7 @@ pub mod tracker;
 pub mod undo;
 pub mod verification;
 pub mod watch;
+pub mod wordlist;
 pub mod worktree;
 
 #[cfg(any(test, feature = "testutil"))]
