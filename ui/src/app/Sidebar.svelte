@@ -36,6 +36,7 @@
     onStashMenu,
     onInitAllSubmodules,
     onSubmodulesMenu,
+    onAddSubmodule,
     onSubmoduleMenu,
     onWorktreeMenu,
     collapsed,
@@ -103,6 +104,8 @@
     onInitAllSubmodules: () => void;
     /** The dots, or a right-click, on the Submodules section itself: add one, initialise all. */
     onSubmodulesMenu: (event: MouseEvent) => void;
+    /** "Add one", where there are none: the form itself, since nothing else on the menu applies. */
+    onAddSubmodule: () => void;
     /** Open it, or take it away. Asked for at the dots or by right-clicking. */
     onWorktreeMenu: (event: MouseEvent, worktree: Worktree) => void;
     /** The dots, or a right-click, on one submodule. */
@@ -776,7 +779,7 @@
       {#if !collapsed['submodules']}
         {#if submodules.length === 0}
           <p class="none">
-            No submodules. <button class="link" onclick={onSubmodulesMenu}>Add one</button>
+            No submodules. <button class="link" onclick={onAddSubmodule}>Add one</button>
           </p>
         {:else if absentSubmodules > 0}
           <button class="more" onclick={onInitAllSubmodules}>

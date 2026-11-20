@@ -1394,6 +1394,15 @@
   }
 
   /**
+   * What the last action failed with, for the form that asked for it.
+   *
+   * Not `actions.report`: the reload after a failure reads the status, and starting that
+   * clears the line along the bottom, so a form reading the report showed nothing by the time
+   * the failure could have been read.
+   */
+  let failure = $state<string | null>(null);
+
+  /**
    * Runs an action and reloads whatever it could have changed.
    *
    * Refs and status always, the graph only when a ref actually moved: rewalking 1.4M commits
@@ -1403,8 +1412,10 @@
     if (!info) return false;
     const path = info.path;
     const before = refSignature();
+    failure = null;
     const outcome = await actions.run(path, action);
     if (!outcome) {
+      failure = actions.report?.text ?? null;
       // A pull that cannot fast-forward is not a failure, it is a question. Answering it with
       // git's own four lines of hints, in a toast, was the worst of both.
       if (action.kind === 'pull' && action.mode === 'ffOnly' && hasDiverged(actions.report?.text)) {
@@ -5410,7 +5421,7 @@
 
   function openNewSubmodule() {
     // A failure left over from something else would read as this form's own.
-    actions.clear();
+    failure = null;
     // The keys are on this machine rather than in the repository; see `openSubmodulePanel`.
     void ssh.loadKeys();
     showNewSubmodule = true;
@@ -5650,6 +5661,7 @@
     submoduleAt = null;
     submoduleKey = null;
     submoduleOnKey = onKey;
+    failure = null;
     // The keys are on this machine rather than in the repository, so nothing has read them
     // unless a settings pane has been opened.
     void ssh.loadKeys();
@@ -6118,6 +6130,7 @@
         onRefMenu={refMenu}
         onInitAllSubmodules={() => void initSubmodules(absentSubmodules, false)}
         onSubmodulesMenu={submodulesMenu}
+        onAddSubmodule={openNewSubmodule}
         onSubmoduleMenu={submoduleMenu}
         onWorktreeMenu={worktreeMenu}
         onDropRef={dropRef}
@@ -6156,7 +6169,7 @@
         sshKeys={ssh.keys}
         focusKey={submoduleOnKey}
         busy={actions.busy}
-        error={actions.report?.tone === 'error' ? actions.report.text : null}
+        error={failure}
         onClose={() => (showSubmodule = null)}
         onSetUrl={(url) => void setSubmoduleUrl(url)}
         onSetSshKey={(key) => void setSubmoduleSshKey(key)}
@@ -6176,7 +6189,7 @@
       <NewSubmodule
         sshKeys={ssh.keys}
         busy={actions.busy}
-        error={actions.report?.tone === 'error' ? actions.report.text : null}
+        error={failure}
         onClose={() => (showNewSubmodule = false)}
         onAdd={(request) => void addSubmodule(request)}
       />

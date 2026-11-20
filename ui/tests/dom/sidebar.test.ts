@@ -80,6 +80,7 @@ function mount(over: Record<string, unknown> = {}) {
       onCollapse: () => {},
       onInitAllSubmodules: () => {},
       onSubmodulesMenu: () => {},
+      onAddSubmodule: () => {},
       onSubmoduleMenu: () => {},
       onWorktreeMenu: () => {},
       onStashMenu: () => {},
@@ -157,14 +158,18 @@ describe('the sidebar', () => {
     cleanup();
 
     const asked: string[] = [];
-    const { container } = mount({ onSubmodulesMenu: () => asked.push('menu') });
+    const { container } = mount({
+      onSubmodulesMenu: () => asked.push('menu'),
+      onAddSubmodule: () => asked.push('add'),
+    });
     const section = container.querySelector('[data-section="submodules"]') as HTMLElement;
     expect(section.textContent).toContain('No submodules.');
 
+    // "Add one" goes straight to the form: everything else the menu offers needs a submodule.
     await fireEvent.click(section.querySelector('button.link') as HTMLElement);
     await fireEvent.click(section.querySelector('.head-row .dots') as HTMLElement);
     await fireEvent.contextMenu(section.querySelector('.head-row') as HTMLElement);
-    expect(asked).toEqual(['menu', 'menu', 'menu']);
+    expect(asked).toEqual(['add', 'menu', 'menu']);
   });
 
   it('lists submodules, marks one not cloned, and opens none on a click', async () => {
