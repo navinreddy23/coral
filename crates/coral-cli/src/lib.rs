@@ -411,6 +411,26 @@ pub enum Command {
     },
     /// List submodules.
     Submodules,
+    /// Add a submodule, cloned and staged, with any submodules inside it cloned too.
+    SubmoduleAdd {
+        url: String,
+        /// Where it goes in this repository. Derived from the URL, as git does, when absent.
+        path: Option<String>,
+        /// The branch to check out and to record for updates to its tip.
+        #[arg(long)]
+        branch: Option<String>,
+        /// A private key to reach it with, rather than this repository's.
+        #[arg(long)]
+        ssh_key: Option<String>,
+    },
+    /// Clone a submodule's working copy, or every one's, and the submodules inside them.
+    SubmoduleInit {
+        /// One submodule's path. Every submodule when absent.
+        path: Option<String>,
+        /// Move to the tip of each one's configured branch instead, without going deeper.
+        #[arg(long)]
+        remote: bool,
+    },
     /// Show the diff and merge tools git has configured here.
     Tools,
     /// Open one file's change in git's configured diff tool. Returns once it has started.
@@ -1136,6 +1156,23 @@ async fn dispatch_tree(command: Command, repo: &std::path::Path) -> output::Rend
         }
         Command::WorktreeRemove { path, force } => {
             output::render(&commands::worktree::remove(repo, &path, force).await)
+        }
+        Command::SubmoduleAdd {
+            url,
+            path,
+            branch,
+            ssh_key,
+        } => {
+            let new = commands::submodule::NewSubmodule {
+                url,
+                path,
+                branch,
+                ssh_key,
+            };
+            output::render(&commands::submodule::add(repo, &new).await)
+        }
+        Command::SubmoduleInit { path, remote } => {
+            output::render(&commands::submodule::init(repo, path.as_deref(), remote).await)
         }
         Command::Patch { rev, from, out } => {
             output::render(&commands::patch::write(repo, &rev, from.as_deref(), &out).await)
