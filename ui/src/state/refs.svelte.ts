@@ -57,8 +57,19 @@ export class RefsState {
       this.error = messageOf(e);
       this.all = [];
     }
-    // Submodules are a separate read and a separate failure: a repository whose .gitmodules
-    // is unreadable should still show its branches.
+    await this.loadSubmodules(path);
+  }
+
+  /**
+   * Reads the submodules again, and nothing else.
+   *
+   * A separate read and a separate failure: a repository whose .gitmodules is unreadable should
+   * still show its branches. Separate as well because whether one is cloned is a fact about the
+   * working tree rather than the refs, so a `git submodule update --init` in a terminal moves no
+   * ref and has to be noticed as a change to the files.
+   */
+  async loadSubmodules(path: string): Promise<void> {
+    if (this.#path !== path) return;
     try {
       const submodules = await repoSubmodules(path);
       if (this.#path !== path) return;

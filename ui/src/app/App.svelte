@@ -5144,6 +5144,10 @@
 
     if (change.index || change.worktree) {
       await worktree.load(path);
+      // A submodule cloned or emptied from a terminal, or a `.gitmodules` edited by hand, is a
+      // change to the files and moves no ref; without this the window went on saying a
+      // submodule had no working copy after one had been made.
+      void refs.loadSubmodules(path);
       // The diff on screen is of a file in that working tree, and a diff of what a file used
       // to say is worse than no diff at all.
       await reloadDiff(path);
