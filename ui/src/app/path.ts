@@ -80,3 +80,22 @@ export function baseName(path: string): string {
   const trimmed = path.replace(/[/\\]+$/u, '');
   return trimmed.slice(Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\')) + 1);
 }
+
+/**
+ * Where `git submodule add` puts a submodule when it is given no path: the URL's last
+ * component, without `.git`.
+ *
+ * Follows `git_url_basename` in git's `dir.c`, so the path the form fills in is the one git
+ * would have chosen: the scheme and any `user@` are skipped, trailing slashes and a `/.git`
+ * are dropped, and a colon separates components as a slash does, for `host:repo.git`.
+ */
+export function submodulePath(url: string): string {
+  let rest = url.trim();
+  const scheme = rest.indexOf('://');
+  if (scheme >= 0) rest = rest.slice(scheme + 3);
+  const stop = rest.search(/[/\\@]/u);
+  if (stop >= 0 && rest[stop] === '@') rest = rest.slice(stop + 1);
+  rest = rest.replace(/[/\\\s]+$/u, '').replace(/[/\\]\.git$/u, '').replace(/[/\\]+$/u, '');
+  const last = Math.max(rest.lastIndexOf('/'), rest.lastIndexOf('\\'), rest.lastIndexOf(':'));
+  return rest.slice(last + 1).replace(/\.git$/u, '');
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { beside, elidePath, elideRef } from '../src/app/path';
+import { beside, elidePath, elideRef, submodulePath } from '../src/app/path';
 
 describe('elidePath', () => {
   it('leaves a path that fits alone', () => {
@@ -127,5 +127,33 @@ describe('the name at the end of a path', () => {
     // What a Windows file dialog returns; splitting on `/` alone showed the whole path.
     expect(baseName('C:\\Users\\Dev\\Documents\\keys\\work')).toBe('work');
     expect(baseName('C:/Users/Dev/keys/')).toBe('keys');
+  });
+});
+
+describe('submodulePath', () => {
+  it('is the last component of the URL, as git chooses it', () => {
+    expect(submodulePath('https://github.com/owner/lib.git')).toBe('lib');
+    expect(submodulePath('https://github.com/owner/lib')).toBe('lib');
+    expect(submodulePath('ssh://git@host:2222/owner/lib.git')).toBe('lib');
+  });
+
+  it('treats the colon of a scp-style URL as a separator', () => {
+    expect(submodulePath('git@github.com:owner/lib.git')).toBe('lib');
+    expect(submodulePath('host:lib.git')).toBe('lib');
+  });
+
+  it('drops trailing slashes and a trailing .git directory', () => {
+    expect(submodulePath('/srv/git/lib.git/')).toBe('lib');
+    expect(submodulePath('/srv/git/lib/.git')).toBe('lib');
+    expect(submodulePath('C:\\repos\\lib.git')).toBe('lib');
+  });
+
+  it('follows a relative URL to its last step', () => {
+    expect(submodulePath('../lib.git')).toBe('lib');
+  });
+
+  it('is empty for nothing yet typed', () => {
+    expect(submodulePath('')).toBe('');
+    expect(submodulePath('   ')).toBe('');
   });
 });

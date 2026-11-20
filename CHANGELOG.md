@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.6.2
+
+### Added
+
+- **Add a submodule.** The Submodules section is now in every repository with a working tree,
+  not only in one that has submodules already, and its dots — or "Add one" when it is empty, or
+  the palette — open a form for the URL, the path, a branch and the ssh key to reach it with.
+  The path fills itself in from the URL as git would choose it, until one is typed. The
+  submodule is cloned, any submodules inside it are cloned too, and `.gitmodules` and the
+  submodule are staged for the commit that records them. A path on this machine is warned about
+  before git refuses it: git keeps the file transport from submodules unless
+  `protocol.file.allow` says otherwise, and Coral leaves that as git sets it.
+  `coral submodule-add <url> [path] [--branch] [--ssh-key]`.
+- **Initialise submodules, and the ones inside them.** A repository cloned without its
+  submodules says so in the status bar — "2 submodules not initialised" — and one click clones
+  them. The section, a row's menu, the submodule's own panel and the palette offer the same,
+  named "Initialise" rather than "Fetch a working copy". Initialising takes nested submodules
+  with it, as `git clone --recurse-submodules` does, and touches only the submodules it names:
+  one already cloned and moved on purpose is left where it is. "Update every submodule" is
+  still there for moving them all back to the commits this repository records.
+  `coral submodule-init [paths…] [--remote]`.
+
+### Fixed
+
+- **A submodule that cannot be cloned no longer leaves the others empty.** git clones every
+  submodule it is asked to update before it checks any out, and one failed clone abandoned the
+  rest: a submodule that only needed checking out was left with nothing in it and every file
+  staged as deleted, and no later update put the files back. Each is now updated on its own,
+  and the one that failed is reported once the rest are done.
+- A submodule cloned or emptied from a terminal shows as such without reopening the repository.
+- The submodule panel says why git refused a change in the panel itself, as well as in the
+  toast; the line was cleared by the reload that followed the failure before it could be read.
+- Choosing another tab while a repository was still opening could leave the new tab blank,
+  saying only "Cannot read properties of null".
+
 ## 1.6.1
 
 ### Added

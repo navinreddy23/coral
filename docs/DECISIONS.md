@@ -439,9 +439,26 @@ A submodule may also be given a key of its own, for the repository whose vendore
 lives on another host. That is recorded in the superproject, as `coral.submodule.<name>.sshKey`
 — it has to be, because the clone that needs it is the one that does not exist yet — and keyed
 by name rather than path, which is what git does with everything else about a submodule.
-Updating them all is then one command per key rather than one command, since one environment
-cannot carry two; with nothing overridden, which is the ordinary case, it stays the single
-command git would run anyway.
+
+## One `git submodule update` per submodule
+
+Updating several submodules used to be one `git submodule update --init` naming them all, split
+only where two needed different keys. git clones every submodule it is given before it checks
+any of them out, and one clone that fails ends the whole command:
+
+```
+git submodule update --init -- vendor/tools lib     lib's clone refused
+  → "Failed to clone 'lib' a second time, aborting"
+  → vendor/tools registered, its working copy empty, every file staged as deleted
+git submodule update --init -- vendor/tools         HEAD is already the recorded commit
+  → nothing checked out; the files stay deleted
+```
+
+The second line is what makes it worth avoiding rather than retrying: the submodule that only
+needed checking out is left in a state no later update repairs. So each submodule gets a
+command of its own, the rest are still tried when one fails, and the first failure is what is
+reported. It is also what lets each carry its own key, since one environment cannot carry two.
+The cost is a process per submodule, which against a clone or a checkout is nothing.
 
 ## Undoing a commit keeps the work; undoing anything else does not
 

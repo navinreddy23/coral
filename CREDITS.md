@@ -7,8 +7,9 @@ paper, it is added here in the same commit with a link and its license.
 ## The engine
 
 - **Git** and its contributors — the engine Coral drives. The porcelain v2 format, the diff3
-  hunking, and the credential helper protocol are all git's designs.
-  <https://git-scm.com/> — GPL-2.0.
+  hunking, and the credential helper protocol are all git's designs, and the path the add-a-
+  submodule form fills in from a URL follows `git_url_basename` in git's `dir.c`, so it is the
+  one git would have chosen. <https://git-scm.com/> — GPL-2.0.
 - **gitoxide** (Sebastian Thiel and contributors) — in-process object and graph reads.
   <https://github.com/GitoxideLabs/gitoxide> — MIT OR Apache-2.0.
 

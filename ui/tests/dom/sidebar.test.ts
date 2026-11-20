@@ -79,6 +79,8 @@ function mount(over: Record<string, unknown> = {}) {
       collapsed: {},
       onCollapse: () => {},
       onInitAllSubmodules: () => {},
+      onSubmodulesMenu: () => {},
+      onAddSubmodule: () => {},
       onSubmoduleMenu: () => {},
       onWorktreeMenu: () => {},
       onStashMenu: () => {},
@@ -149,9 +151,28 @@ describe('the sidebar', () => {
     expect(section?.querySelectorAll('button.ref')).toHaveLength(944);
   });
 
-  it('shows submodules only when there are some, and opens an initialised one', async () => {
-    expect(mount().container.textContent).not.toContain('Submodules');
+  it('offers to add a submodule in a repository that has none, but not in a bare one', async () => {
+    // The section is where one is added, so hiding it until there was one left nowhere to
+    // start. A bare repository has no working tree to put one in.
+    expect(mount({ bare: true }).container.textContent).not.toContain('Submodules');
+    cleanup();
 
+    const asked: string[] = [];
+    const { container } = mount({
+      onSubmodulesMenu: () => asked.push('menu'),
+      onAddSubmodule: () => asked.push('add'),
+    });
+    const section = container.querySelector('[data-section="submodules"]') as HTMLElement;
+    expect(section.textContent).toContain('No submodules.');
+
+    // "Add one" goes straight to the form: everything else the menu offers needs a submodule.
+    await fireEvent.click(section.querySelector('button.link') as HTMLElement);
+    await fireEvent.click(section.querySelector('.head-row .dots') as HTMLElement);
+    await fireEvent.contextMenu(section.querySelector('.head-row') as HTMLElement);
+    expect(asked).toEqual(['add', 'menu', 'menu']);
+  });
+
+  it('lists submodules, marks one not cloned, and opens none on a click', async () => {
     const opened: string[] = [];
     const submodules: Submodule[] = [
       { name: 'dev-scripts', path: 'external/dev-scripts', url: 'g://x', pinned: 'abc', initialised: true },
@@ -162,10 +183,13 @@ describe('the sidebar', () => {
     const section = [...container.querySelectorAll('section')].find((s) =>
       s.textContent?.includes('Submodules'),
     );
-    const rows = [...(section?.querySelectorAll('.row') ?? [])] as HTMLElement[];
+    const rows = [...(section?.querySelectorAll('li .row') ?? [])] as HTMLElement[];
     expect(rows).toHaveLength(2);
     // One that has never been cloned is marked, but the mark is all it is.
     expect(rows[1]?.querySelector('.ref')?.className).toContain('absent');
+    expect(section?.querySelector('button.more')?.textContent).toContain(
+      'Initialise the one not cloned yet',
+    );
 
     // The row is not a control. Opening is one of four things that can be done with a
     // submodule, and making it the one a click performs hides the other three.
@@ -183,12 +207,12 @@ describe('the sidebar', () => {
       onSubmoduleMenu: (_e: MouseEvent, s: Submodule) => asked.push(s.path),
     });
 
-    // Scoped to the submodules section. Remotes grew rows of their own, and an unscoped
-    // `section .row` finds the remote section's header first.
+    // Scoped to the submodules' own rows. The remote section and this one's header are rows
+    // too, and an unscoped `section .row` finds one of them first.
     const section = [...container.querySelectorAll('section')].find((el) =>
       el.textContent?.includes('Submodules'),
     );
-    const row = section?.querySelector('.row') as HTMLElement;
+    const row = section?.querySelector('li .row') as HTMLElement;
     await fireEvent.click(row.querySelector('.dots') as HTMLElement);
     expect(asked).toEqual(['external/dev-scripts']);
 

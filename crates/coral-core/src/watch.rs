@@ -219,6 +219,20 @@ impl RepoLocation {
                 .await?;
             bytes.extend_from_slice(&diff.stdout);
         }
+        // Whether each submodule is cloned. Status reports a gitlink only when its commit
+        // differs, so emptying one or cloning it from a terminal hashed the same, and the
+        // window went on offering to initialise a submodule that had just been initialised.
+        // Nothing at all to read in a repository without `.gitmodules`, which is most of them.
+        if self
+            .workdir
+            .as_ref()
+            .is_some_and(|w| w.join(".gitmodules").exists())
+        {
+            for s in self.submodules(runner).await? {
+                bytes.extend_from_slice(s.path.as_bytes());
+                bytes.push(u8::from(s.initialised));
+            }
+        }
         Ok(hash(&bytes))
     }
 

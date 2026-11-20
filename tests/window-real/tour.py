@@ -324,6 +324,22 @@ type_text("light")
 keys("Return")
 settle()
 
+# Adding a submodule, from the palette: the form covers the panes, and the path fills itself in
+# from the URL as git would choose it. Escape leaves it without adding anything.
+SHEET = (270, 60, 700, 200)
+before = region(*SHEET)
+keys("Control_L", "p")
+settle()
+type_text("add a submodule")
+keys("Return")
+settle()
+type_text("git@example.com:team/dev-scripts.git")
+settle()
+check(region(*SHEET) != before, "the palette opens the form that adds a submodule")
+shot("submodule-add")
+keys("Escape")
+settle()
+
 # The second tab is stopped in a merge, which puts the conflict tool in the main pane.
 keys("Control_L", "Tab")
 settle(quiet=2.0)

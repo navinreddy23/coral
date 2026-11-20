@@ -256,15 +256,13 @@ describe('two repositories in two tabs', () => {
     // records. A second tab loses that relationship and leaves two entries in the bar with no
     // way to tell which came from which.
     const { container } = await shell();
-    const section = await waitFor(() => {
-      const found = [...container.querySelectorAll('section')].find((s) =>
-        s.textContent?.includes('Submodules'),
-      );
-      if (!found) throw new Error('no submodules section');
-      return found;
+    // The section is there in every repository, so it is the rows that say the list has been
+    // read. The header is a row as well; the submodules are the ones in the list.
+    const rows = await waitFor(() => {
+      const found = [...container.querySelectorAll('[data-section="submodules"] li .row')];
+      if (found.length === 0) throw new Error('no submodules listed');
+      return found as HTMLElement[];
     });
-
-    const rows = [...section.querySelectorAll('.row')] as HTMLElement[];
     expect(rows).toHaveLength(2);
 
     // Through the menu, since the row itself is not a control.

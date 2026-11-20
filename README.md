@@ -56,7 +56,9 @@ out of the walk, and either choice is remembered for that repository.
 
 **The panel.** Local branches, remotes with their branches nested, pull and merge requests,
 tags newest first, stashes, and submodules. Anything can be filtered, and every branch and tag
-carries an eye that takes it out of the graph.
+carries an eye that takes it out of the graph. A submodule is added from its section — URL,
+path, branch, and the ssh key that reaches it — and one that has not been cloned yet is said so
+in the status bar and initialised in a click, with the submodules inside it.
 
 **Working with changes.** Stage and unstage by file, by hunk or by line; commit, amend, discard.
 The file panel answers five questions about one file: what changed, who wrote each line, what

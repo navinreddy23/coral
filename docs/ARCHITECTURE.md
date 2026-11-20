@@ -243,8 +243,9 @@ a path read back out of the command that differed from the dialog's would list a
 that submodule's own configuration, so the pinned `core.sshCommand` is not read and a `-c` does
 not survive the way in. The key is passed in the environment, as a clone passes it, and then
 written into the submodule's own clone so a fetch from inside it finds the same one. A
-submodule that needs a different key is recorded in the superproject under its name, which is
-also what makes updating several of them one command per key.
+submodule that needs a different key is recorded in the superproject under its name. Each
+submodule is updated by a `git submodule update` of its own, which lets each carry its own key
+and keeps one failed clone from abandoning the rest (see `docs/DECISIONS.md`).
 
 Both halves are tested without a server: `ssh -G` resolves the identity list for a host with
 every config rule applied and then exits, so `coral-core/tests/ssh.rs` can assert that a pinned

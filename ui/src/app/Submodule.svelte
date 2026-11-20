@@ -144,7 +144,8 @@
 
     {#if !submodule.initialised}
       <p class="state absent">
-        This submodule has no working copy yet. Update it to clone one.
+        This submodule is not initialised: it has no working copy yet. Initialise it to clone
+        one, with any submodules inside.
       </p>
     {:else if revision === null}
       <p class="state">Reading the current revision…</p>
@@ -173,7 +174,7 @@
     <div class="row">
       <button disabled={!submodule.initialised} onclick={onOpen}>Open this submodule</button>
       <button disabled={busy} onclick={() => onUpdate(false)}>
-        {submodule.initialised ? 'Update to the recorded commit' : 'Fetch a working copy'}
+        {submodule.initialised ? 'Update to the recorded commit' : 'Initialise this submodule'}
       </button>
       <button disabled={busy} onclick={() => onUpdate(true)}>Update to the branch tip</button>
       <button class="danger" disabled={busy} onclick={onRemove}>Delete this submodule</button>

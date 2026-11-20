@@ -91,6 +91,7 @@
   import type { PlacedStash } from '../ipc/stash';
   import { ExperimentalState } from '../state/experimental.svelte';
   import SubmodulePanel from './Submodule.svelte';
+  import NewSubmodule, { type SubmoduleRequest } from './NewSubmodule.svelte';
   import { RemotesState } from '../state/remotes.svelte';
   import { outcomeToast, ToastsState } from '../state/toasts.svelte';
   import { copyText } from './clipboard';
@@ -687,6 +688,8 @@
   let submoduleAt = $state<SubmoduleRevision | null>(null);
   /** Which key that submodule is reached with, once that has been read. */
   let submoduleKey = $state<SubmoduleSsh | null>(null);
+  /** The form that adds a submodule is open. */
+  let showNewSubmodule = $state(false);
   /** True when the panel was opened to choose a key, so it opens on the key. */
   let submoduleOnKey = $state(false);
   /** The context menu on screen, if any. */
@@ -1391,6 +1394,15 @@
   }
 
   /**
+   * What the last action failed with, for the form that asked for it.
+   *
+   * Not `actions.report`: the reload after a failure reads the status, and starting that
+   * clears the line along the bottom, so a form reading the report showed nothing by the time
+   * the failure could have been read.
+   */
+  let failure = $state<string | null>(null);
+
+  /**
    * Runs an action and reloads whatever it could have changed.
    *
    * Refs and status always, the graph only when a ref actually moved: rewalking 1.4M commits
@@ -1400,8 +1412,10 @@
     if (!info) return false;
     const path = info.path;
     const before = refSignature();
+    failure = null;
     const outcome = await actions.run(path, action);
     if (!outcome) {
+      failure = actions.report?.text ?? null;
       // A pull that cannot fast-forward is not a failure, it is a question. Answering it with
       // git's own four lines of hints, in a toast, was the worst of both.
       if (action.kind === 'pull' && action.mode === 'ffOnly' && hasDiverged(actions.report?.text)) {
@@ -4337,6 +4351,12 @@
       { id: 'fetch', label: 'Fetch', group: 'Remote', run: () => void act({ kind: 'fetch', remote: null }) },
       { id: 'cleanup', label: 'Clean up branches…', group: 'Branch', run: () => void openCleanup() },
       { id: 'grep', label: 'Search the code…', group: 'Repository', run: () => searchCode('HEAD', headName ?? 'HEAD') },
+      ...(info && !info.isBare
+        ? [{ id: 'submodule-add', label: 'Add a submodule…', group: 'Repository', run: () => openNewSubmodule() } satisfies Command]
+        : []),
+      ...(absentSubmodules.length > 0
+        ? [{ id: 'submodule-init', label: 'Initialise the submodules not cloned yet', group: 'Repository', run: () => void initSubmodules(absentSubmodules, false) } satisfies Command]
+        : []),
       ...(info?.shallow
         ? [
             {
@@ -4796,40 +4816,45 @@
     error = null;
     forgetTheLastRepository();
     try {
-      info = await open(path);
+      const opened = await open(path);
+      info = opened;
+      // Read once, here. Every await below is a turn in which another tab can be chosen, and
+      // choosing one empties `info`: its path read after an await threw, and the throw landed
+      // in the catch below and blanked the tab that had just been chosen.
+      const at = opened.path;
       // Deliberately not awaited. The engine holds the scope and walks by it, so a repository
       // left soloed is already narrowed by the time the rows arrive; this is only what the
       // panel draws with — which row carries the struck eye, and whether the banner is up.
-      void scope.load(info.path);
-      void readJournal(info.path);
+      void scope.load(at);
+      void readJournal(at);
       // Before the walk rather than after it. The branch list needs a row per ref, and the
       // engine answers from whatever walk it has, so this fills the panel in a moment instead
       // of leaving it saying the kernel has no branches for the six seconds the real walk
       // takes. It is asked again below, once the rows are the real ones.
-      void refs.load(info.path);
+      void refs.load(at);
       // Beside the walk rather than after it. It needs nothing the walk gives, and read after
       // it the toolbar greyed out and "Working…" came and went as the kernel's last seconds of
       // walking ended: the first screen kept changing for a reason that had nothing to do
       // with it.
-      const status = worktree.load(info.path);
-      await graph.open(info.path);
-      await refs.load(info.path);
-      await stashes.load(info.path);
+      const status = worktree.load(at);
+      await graph.open(at);
+      await refs.load(at);
+      await stashes.load(at);
       await status;
-      void worktrees.load(info.path);
+      void worktrees.load(at);
       // A repository can be opened mid-merge, so the tool has to be there on arrival rather
       // than only after an action of ours stopped.
-      await merge.load(info.path);
-      void bisect.load(info.path);
-      void remotes.load(info.path);
+      await merge.load(at);
+      void bisect.load(at);
+      void remotes.load(at);
       // Deliberately not awaited: a host that is slow or unreachable must not hold up the
       // window, and the section simply appears when the answer arrives.
-      void hosting.load(info.path);
+      void hosting.load(at);
       // For the file and commit menus, which offer the diff tool and the user's own actions
       // only when they exist. A few config reads, and nothing waits on them.
-      void tools.load(info.path);
+      void tools.load(at);
       // Its tracker is what an `ABC-123` in a message links to.
-      void repoConfig.load(info.path);
+      void repoConfig.load(at);
     } catch (e) {
       // Nothing is open. The tab is named for the path that failed, and the last repository's
       // rows under that name are worse than an empty pane with the reason across the top:
@@ -4884,6 +4909,7 @@
     showSubmodule = null;
     submoduleAt = null;
     submoduleKey = null;
+    showNewSubmodule = false;
     showWip = false;
     scrollTop = 0;
     if (scroller) scroller.scrollTop = 0;
@@ -5129,6 +5155,10 @@
 
     if (change.index || change.worktree) {
       await worktree.load(path);
+      // A submodule cloned or emptied from a terminal, or a `.gitmodules` edited by hand, is a
+      // change to the files and moves no ref; without this the window went on saying a
+      // submodule had no working copy after one had been made.
+      void refs.loadSubmodules(path);
       // The diff on screen is of a file in that working tree, and a diff of what a file used
       // to say is worse than no diff at all.
       await reloadDiff(path);
@@ -5303,39 +5333,102 @@
     // One that has never been checked out has nothing to open; the menu offers to fetch it.
     const known = refs.submodules.find((s) => s.path === relative);
     if (known && !known.initialised) {
-      await initSubmodule(relative, false);
+      await initSubmodules([relative], false);
       return;
     }
     if (tab.submodule === relative) await tabs.leaveSubmodule(tab.id);
     else await tabs.enterSubmodule(tab.id, relative);
   }
 
+  /** The submodules with no working copy, which is what "initialise" is offered for. */
+  const absentSubmodules = $derived(
+    refs.submodules.filter((s) => !s.initialised).map((s) => s.path),
+  );
+
   /**
-   * Updates one submodule, or all of them when `relative` is null.
+   * Initialises or updates the submodules at `paths`, or every one of them when it is empty.
    *
    * `remote` is a different operation, not a variation: without it the working copy moves to
    * the commit the superproject records, with it git fetches the configured branch and moves
    * to its tip — which changes what the superproject will record next.
+   *
+   * The submodules inside are taken along, as `git clone --recurse-submodules` takes them:
+   * a working copy whose own submodules are missing is not one anybody can build. Not with
+   * `remote`, though, which would move each nested one off the commit its own superproject
+   * records, and nobody asked for that.
    */
-  async function initSubmodule(relative: string | null, remote: boolean) {
+  async function initSubmodules(paths: string[], remote: boolean) {
     if (!info) return;
-    const what = relative ?? 'every submodule';
+    const what = paths.length === 0
+      ? 'every submodule'
+      : paths.length === 1 ? (paths[0] ?? '') : `${paths.length} submodules`;
+    const initialising = !remote && paths.length > 0 && paths.every((p) => absentSubmodules.includes(p));
     const { choice } = await ask({
-      title: remote ? `Update ${what} to its branch tip?` : `Update ${what}?`,
+      title: remote
+        ? `Update ${what} to ${paths.length === 1 ? 'its' : 'their'} branch tip?`
+        : initialising ? `Initialise ${what}?` : `Update ${what}?`,
       detail: remote
         ? 'git fetches the configured branch and checks out its tip. That is a change the ' +
           'repository will record on the next commit.'
-        : 'The working copy is cloned or moved to the commit the repository records. This ' +
-          'reaches the network.',
+        : initialising
+          ? 'Cloned at the commit this repository records, with any submodules inside. This ' +
+            'reaches the network.'
+          : 'Cloned or moved to the commit this repository records, and so is every submodule ' +
+            'inside. This reaches the network.',
       asksText: false,
       placeholder: '',
       initial: '',
-      choices: [{ id: 'go', label: 'Update it', primary: true }],
+      choices: [{ id: 'go', label: initialising ? 'Initialise' : 'Update', primary: true }],
     });
     if (choice === null) return;
-    await act({ kind: 'submoduleInit', path: relative, recursive: false, remote });
+    await act({ kind: 'submoduleInit', paths, recursive: !remote, remote });
     await refs.load(info.path);
     await refreshSubmodule();
+  }
+
+  /** What the dots on the Submodules section offer, and what a right-click on its header does. */
+  function submodulesMenu(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    const at = event.currentTarget instanceof HTMLElement
+      ? event.currentTarget.getBoundingClientRect()
+      : null;
+    menu = {
+      x: at && event.type === 'click' ? at.right : event.clientX,
+      y: at && event.type === 'click' ? at.bottom + 2 : event.clientY,
+      items: [
+        { kind: 'item', label: 'Add a submodule…', run: () => openNewSubmodule() },
+        { kind: 'separator' },
+        {
+          kind: 'item',
+          label: absentSubmodules.length === 0
+            ? 'Initialise submodules'
+            : `Initialise ${absentSubmodules.length === 1 ? 'the one' : `the ${absentSubmodules.length}`} not cloned yet`,
+          hint: 'nested ones too',
+          disabled: absentSubmodules.length === 0,
+          run: () => void initSubmodules(absentSubmodules, false),
+        },
+        {
+          kind: 'item',
+          label: 'Update every submodule',
+          hint: 'to the recorded commits',
+          disabled: refs.submodules.length === 0,
+          run: () => void initSubmodules([], false),
+        },
+      ],
+    };
+  }
+
+  function openNewSubmodule() {
+    // A failure left over from something else would read as this form's own.
+    failure = null;
+    // The keys are on this machine rather than in the repository; see `openSubmodulePanel`.
+    void ssh.loadKeys();
+    showNewSubmodule = true;
+  }
+
+  async function addSubmodule(request: SubmoduleRequest) {
+    if (await act({ kind: 'submoduleAdd', ...request })) showNewSubmodule = false;
   }
 
   /**
@@ -5364,30 +5457,40 @@
           label: 'Choose an ssh key…',
           run: () => void openSubmodulePanel(submodule, true),
         },
-        {
-          kind: 'item',
-          label: 'Open this submodule',
-          disabled: !submodule.initialised,
-          run: () => void openSubmodule(submodule.path),
-        },
-        {
-          kind: 'submenu',
-          label: 'Update this submodule',
-          items: [
-            {
-              kind: 'item',
-              label: submodule.initialised
-                ? 'To the commit this repository records'
-                : 'Fetch a working copy',
-              run: () => void initSubmodule(submodule.path, false),
-            },
-            {
-              kind: 'item',
-              label: 'To the tip of its branch',
-              run: () => void initSubmodule(submodule.path, true),
-            },
-          ],
-        },
+        // One with no working copy has nothing to open and nothing to update: what it needs
+        // is cloning, so that is what it is offered, in so many words.
+        ...(submodule.initialised
+          ? ([
+              {
+                kind: 'item',
+                label: 'Open this submodule',
+                run: () => void openSubmodule(submodule.path),
+              },
+              {
+                kind: 'submenu',
+                label: 'Update this submodule',
+                items: [
+                  {
+                    kind: 'item',
+                    label: 'To the commit this repository records',
+                    run: () => void initSubmodules([submodule.path], false),
+                  },
+                  {
+                    kind: 'item',
+                    label: 'To the tip of its branch',
+                    run: () => void initSubmodules([submodule.path], true),
+                  },
+                ],
+              },
+            ] satisfies MenuItem[])
+          : ([
+              {
+                kind: 'item',
+                label: 'Initialise this submodule',
+                hint: 'nested ones too',
+                run: () => void initSubmodules([submodule.path], false),
+              },
+            ] satisfies MenuItem[])),
         { kind: 'separator' },
         {
           kind: 'item',
@@ -5558,6 +5661,7 @@
     submoduleAt = null;
     submoduleKey = null;
     submoduleOnKey = onKey;
+    failure = null;
     // The keys are on this machine rather than in the repository, so nothing has read them
     // unless a settings pane has been opened.
     void ssh.loadKeys();
@@ -6015,6 +6119,7 @@
           : null}
         stashes={stashes.list}
         submodules={refs.submodules}
+        bare={info?.isBare ?? false}
         worktrees={worktrees.linked}
         remotes={remotes.list}
         openSubmodule={tabs.active?.submodule ?? null}
@@ -6023,7 +6128,9 @@
         onRemoteMenu={remoteMenu}
         onStashMenu={stashMenu}
         onRefMenu={refMenu}
-        onInitAllSubmodules={() => void initSubmodule(null, false)}
+        onInitAllSubmodules={() => void initSubmodules(absentSubmodules, false)}
+        onSubmodulesMenu={submodulesMenu}
+        onAddSubmodule={openNewSubmodule}
         onSubmoduleMenu={submoduleMenu}
         onWorktreeMenu={worktreeMenu}
         onDropRef={dropRef}
@@ -6062,7 +6169,7 @@
         sshKeys={ssh.keys}
         focusKey={submoduleOnKey}
         busy={actions.busy}
-        error={actions.report?.tone === 'error' ? actions.report.text : null}
+        error={failure}
         onClose={() => (showSubmodule = null)}
         onSetUrl={(url) => void setSubmoduleUrl(url)}
         onSetSshKey={(key) => void setSubmoduleSshKey(key)}
@@ -6071,8 +6178,20 @@
           showSubmodule = null;
           if (at) void openSubmodule(at);
         }}
-        onUpdate={(remote) => void initSubmodule(showSubmodule?.path ?? null, remote)}
+        onUpdate={(remote) => {
+          const at = showSubmodule?.path;
+          if (at) void initSubmodules([at], remote);
+        }}
         onRemove={() => void removeSubmodule()}
+      />
+    {/if}
+    {#if showNewSubmodule && info}
+      <NewSubmodule
+        sshKeys={ssh.keys}
+        busy={actions.busy}
+        error={failure}
+        onClose={() => (showNewSubmodule = false)}
+        onAdd={(request) => void addSubmodule(request)}
       />
     {/if}
     {#if reviewing !== null && info}
@@ -6599,6 +6718,8 @@
       onUpdate={() => openPreferences('about')}
       shallow={info.shallow}
       onShallow={(event) => deepenMenu(event)}
+      uninitialised={absentSubmodules.length}
+      onInitialise={() => void initSubmodules(absentSubmodules, false)}
       fetching={transfer.quietly !== null && transfer.quietly.key === info.path}
       onStopFetching={() => void transfer.cancelQuiet()}
       report={actions.report}

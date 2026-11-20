@@ -440,7 +440,15 @@ export type Action =
   | { kind: 'rewrite'; rev: string; how: RewriteKind; message: string | null }
   | { kind: 'worktreeAdd'; path: string; rev: string; branch: string | null }
   | { kind: 'worktreeRemove'; path: string; force: boolean }
-  | { kind: 'submoduleInit'; path: string | null; recursive: boolean; remote: boolean }
+  | {
+      kind: 'submoduleAdd';
+      url: string;
+      path: string | null;
+      branch: string | null;
+      key: string | null;
+    }
+  /** Every submodule when `paths` is empty. */
+  | { kind: 'submoduleInit'; paths: string[]; recursive: boolean; remote: boolean }
   | { kind: 'submoduleSetUrl'; path: string; url: string }
   | { kind: 'submoduleSetSshKey'; path: string; key: string | null }
   | { kind: 'submoduleRemove'; path: string; force: boolean }

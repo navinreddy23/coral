@@ -418,15 +418,85 @@ impl RepoLocation {
         Ok(())
     }
 
+    /// Adds a submodule: cloned, declared in `.gitmodules`, staged, and with any submodules of
+    /// its own cloned as well.
+    ///
+    /// git derives the path from the URL when none is given, so the one added is found as the
+    /// entry that is new afterwards rather than by repeating git's rule here.
+    ///
+    /// The key goes in the environment, for the reason given on [`Self::submodule_init`]: the
+    /// clone runs in the new submodule's own configuration. `git submodule add` stops at the top
+    /// level, so the update that follows clones the nested ones and records the key in the new
+    /// clone. It checks out the commit that was just cloned, so a `branch` stays checked out.
+    ///
+    /// # Errors
+    /// Refuses a bare repository. Propagates git failures: a URL that cannot be reached, a path
+    /// already in the index, and a local path while `protocol.file.allow` keeps the file
+    /// transport from submodules, which Coral leaves as git sets it (CVE-2022-39253).
+    pub async fn submodule_add(
+        &self,
+        runner: &GitRunner,
+        url: &str,
+        path: Option<&str>,
+        branch: Option<&str>,
+        key: Option<&str>,
+    ) -> Result<Submodule, CoralError> {
+        if self.workdir.is_none() {
+            return Err(CoralError::Refused {
+                label: "add a submodule",
+                detail: "a bare repository has no working tree to check one out into".to_owned(),
+            });
+        }
+        let before = self.submodules(runner).await?;
+        let key = key.map(str::trim).filter(|k| !k.is_empty());
+        let reaches = match key {
+            Some(k) => Some(k.to_owned()),
+            None => self.own_key(runner).await?,
+        };
+        let branch = branch.map(str::trim).filter(|b| !b.is_empty());
+        let path = path.map(str::trim).filter(|p| !p.is_empty());
+        let cmd = add_command(
+            self.display_path(),
+            url.trim(),
+            path,
+            branch,
+            reaches.as_deref(),
+        );
+        runner.output(cmd).await?;
+
+        let added = self
+            .submodules(runner)
+            .await?
+            .into_iter()
+            .find(|s| !before.iter().any(|b| b.path == s.path))
+            .ok_or_else(|| CoralError::Protocol {
+                label: "submodule add",
+                detail: "git succeeded but declared no new submodule".to_owned(),
+            })?;
+        if let Some(k) = key {
+            self.config_put(
+                runner,
+                Scope::Repository,
+                &key_setting(&added.name),
+                Some(k),
+            )
+            .await?;
+        }
+        self.submodule_init(runner, std::slice::from_ref(&added.path), true, false)
+            .await?;
+        Ok(added)
+    }
+
     /// Clones and checks out a submodule's working copy.
     ///
     /// `git submodule update --init` rather than a bare `clone`: the URL, the branch and the
     /// commit to check out all come from the parent's configuration and its gitlink, and
     /// cloning by hand would have to reproduce every one of them.
     ///
-    /// A submodule with no path given initialises all of them, which is what the reference
-    /// offers on the section itself. `remote` moves it to the tip of its configured branch
-    /// rather than to the commit the superproject records.
+    /// No paths at all updates every submodule, which is what the reference offers on the
+    /// section itself; naming some leaves the rest where they are, so cloning the ones with no
+    /// working copy does not also move one the user moved on purpose. `remote` moves each to the
+    /// tip of its configured branch rather than to the commit the superproject records.
     ///
     /// **The key goes in the environment.** git runs each submodule's clone and fetch as a
     /// child process in that submodule's own configuration, so the `core.sshCommand` this
@@ -438,55 +508,67 @@ impl RepoLocation {
     /// and the host answers that the repository does not exist — the failure
     /// `docs/DECISIONS.md` describes, arriving where nothing mentions a key.
     ///
+    /// **One `git submodule update` per submodule**, rather than one naming them all. git clones
+    /// every submodule it is given before it checks any out, and a single failed clone aborts
+    /// the lot: a submodule that only needed checking out was left registered with nothing in
+    /// it and every file staged as deleted, and no later update put the files back, because its
+    /// HEAD was already the commit recorded. One each also lets each carry its own key.
+    ///
     /// # Errors
-    /// Propagates git failures, including a URL that cannot be reached.
+    /// Propagates git failures, including a URL that cannot be reached: the first, once every
+    /// other submodule named has been tried.
     pub async fn submodule_init(
         &self,
         runner: &GitRunner,
-        path: Option<&str>,
+        paths: &[String],
         recursive: bool,
         remote: bool,
     ) -> Result<(), CoralError> {
         let inherited = self.own_key(runner).await?;
-        for (only, key) in self.update_runs(runner, path, inherited.as_deref()).await? {
-            let cmd = self.update_command(only.as_deref(), recursive, remote, key.as_deref());
-            runner.output(cmd).await?;
+        let mut failed = None;
+        for (only, key) in self
+            .update_runs(runner, paths, inherited.as_deref())
+            .await?
+        {
+            let cmd = self.update_command(&only, recursive, remote, key.as_deref());
+            if let Err(e) = runner.output(cmd).await {
+                failed.get_or_insert(e);
+            }
         }
         self.record_keys(runner, inherited.as_deref()).await;
-        Ok(())
+        failed.map_or(Ok(()), Err)
     }
 
-    /// One update per key, as `(pathspec, key)`.
-    ///
-    /// With nothing pinned to a key of its own — which is every repository until somebody says
-    /// otherwise — that is the single command git would run anyway, pathspec and all. Only a
-    /// submodule given its own key splits them, because one environment cannot carry two.
+    /// Each submodule to update, with the key that reaches it; every one when `paths` is empty.
     async fn update_runs(
         &self,
         runner: &GitRunner,
-        path: Option<&str>,
+        paths: &[String],
         inherited: Option<&str>,
-    ) -> Result<Vec<(Option<String>, Option<String>)>, CoralError> {
-        if let Some(p) = path {
-            let name = self.submodule_name(runner, p).await?;
-            let key = self.key_for(runner, &name, inherited).await?;
-            return Ok(vec![(Some(p.to_owned()), key)]);
+    ) -> Result<Vec<(String, Option<String>)>, CoralError> {
+        let declared = self.submodules(runner).await?;
+        if let Some(unknown) = paths
+            .iter()
+            .find(|p| !declared.iter().any(|s| &s.path == *p))
+        {
+            return Err(CoralError::Refused {
+                label: "submodule",
+                detail: format!("{unknown} is not a submodule of this repository"),
+            });
         }
-
         let mut runs = Vec::new();
-        for s in self.submodules(runner).await? {
-            let key = self.key_for(runner, &s.name, inherited).await?;
-            runs.push((Some(s.path), key));
-        }
-        if runs.iter().all(|(_, key)| key.as_deref() == inherited) {
-            return Ok(vec![(None, inherited.map(str::to_owned))]);
+        for s in declared {
+            if paths.is_empty() || paths.contains(&s.path) {
+                let key = self.key_for(runner, &s.name, inherited).await?;
+                runs.push((s.path, key));
+            }
         }
         Ok(runs)
     }
 
     fn update_command(
         &self,
-        only: Option<&str>,
+        only: &str,
         recursive: bool,
         remote: bool,
         key: Option<&str>,
@@ -507,10 +589,8 @@ impl RepoLocation {
         if remote {
             cmd = cmd.arg("--remote");
         }
-        if let Some(p) = only {
-            // `--` so a submodule whose path starts with a dash is not read as a flag.
-            cmd = cmd.arg("--").arg(p);
-        }
+        // `--` so a submodule whose path starts with a dash is not read as a flag.
+        cmd = cmd.arg("--").arg(only);
         if let Some((name, value)) = ssh_env(key) {
             cmd = cmd.env(name, value);
         }
@@ -573,6 +653,28 @@ impl RepoLocation {
     }
 }
 
+fn add_command(
+    at: &Path,
+    url: &str,
+    path: Option<&str>,
+    branch: Option<&str>,
+    key: Option<&str>,
+) -> GitCommand {
+    let mut cmd = GitCommand::network("submodule", at).args(["submodule", "add"]);
+    if let Some(b) = branch {
+        cmd = cmd.arg("-b").arg(b);
+    }
+    // `--` so a URL or a path starting with a dash is not read as a flag.
+    cmd = cmd.arg("--").arg(url);
+    if let Some(p) = path {
+        cmd = cmd.arg(p);
+    }
+    if let Some((name, value)) = ssh_env(key) {
+        cmd = cmd.env(name, value);
+    }
+    cmd
+}
+
 /// Where a submodule's own clone lives, or `None` if the path does not name somewhere under
 /// `.git/modules`.
 ///
@@ -590,7 +692,34 @@ fn module_dir(modules: &Path, path: &str) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Path, PathBuf, key_setting, module_dir, ssh_env};
+    use super::{Path, PathBuf, add_command, key_setting, module_dir, ssh_env};
+
+    fn after_git(cmd: &crate::process::GitCommand) -> Vec<String> {
+        let argv = cmd.redacted_argv(Path::new("git"));
+        let at = argv
+            .iter()
+            .position(|a| a == "submodule")
+            .expect("a submodule command");
+        argv[at..].to_vec()
+    }
+
+    #[test]
+    fn an_add_puts_the_url_after_a_double_dash() {
+        let cmd = add_command(Path::new("/r"), "-u", Some("-p"), Some("dev"), None);
+        assert_eq!(
+            after_git(&cmd),
+            ["submodule", "add", "-b", "dev", "--", "-u", "-p"]
+        );
+    }
+
+    #[test]
+    fn an_add_leaves_the_branch_and_path_to_git_when_none_is_given() {
+        let cmd = add_command(Path::new("/r"), "https://e.x/lib.git", None, None, None);
+        assert_eq!(
+            after_git(&cmd),
+            ["submodule", "add", "--", "https://e.x/lib.git"]
+        );
+    }
 
     #[test]
     fn the_key_is_handed_over_in_the_environment() {

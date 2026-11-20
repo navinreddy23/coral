@@ -40,3 +40,80 @@ impl crate::output::Human for SubmoduleList {
         out
     }
 }
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Added {
+    pub submodule: Submodule,
+}
+
+impl crate::output::Human for Added {
+    fn human(&self) -> String {
+        let s = &self.submodule;
+        let pinned = s.pinned.as_deref().unwrap_or("(not in index)");
+        format!(
+            "added {} at {pinned:.8}\ncommit .gitmodules and {} to record it",
+            s.path, s.path
+        )
+    }
+}
+
+/// What to add: where from, where to, and how to reach it.
+pub struct NewSubmodule {
+    pub url: String,
+    /// Derived from the URL by git when absent.
+    pub path: Option<String>,
+    pub branch: Option<String>,
+    /// A private key of its own; absent takes the repository's.
+    pub ssh_key: Option<String>,
+}
+
+/// Adds a submodule, cloned and staged, with any nested ones cloned too.
+///
+/// # Errors
+/// Refuses a bare repository; propagates git failures, including a URL that cannot be reached.
+pub async fn add(path: &Path, new: &NewSubmodule) -> Result<Added, CoralError> {
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, path).await?;
+    let submodule = loc
+        .submodule_add(
+            &runner,
+            &new.url,
+            new.path.as_deref(),
+            new.branch.as_deref(),
+            new.ssh_key.as_deref(),
+        )
+        .await?;
+    Ok(Added { submodule })
+}
+
+/// Clones the working copies of the submodules named, or of every one, and of the ones inside.
+///
+/// `remote` moves each to the tip of its configured branch instead, and then only at the top
+/// level: carrying that into the nested ones would move them off the commits their own
+/// superproject records, which nobody asked for.
+///
+/// # Errors
+/// Propagates git failures, and refuses a path that declares no submodule.
+pub async fn init(
+    path: &Path,
+    only: &[String],
+    remote: bool,
+) -> Result<crate::commands::write::Done, CoralError> {
+    let runner = GitRunner::discover().await?;
+    let loc = RepoLocation::discover(&runner, path).await?;
+    loc.submodule_init(&runner, only, !remote, remote).await?;
+    let which = match only {
+        [] => "every submodule".to_owned(),
+        [one] => one.clone(),
+        many => format!("{} submodules", many.len()),
+    };
+    Ok(crate::commands::write::Done {
+        what: if remote {
+            format!("updated {which} to its branch tip")
+        } else {
+            format!("initialised {which}")
+        },
+        oid: None,
+    })
+}
