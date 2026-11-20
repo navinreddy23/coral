@@ -367,3 +367,39 @@ async fn every_edit_of_an_already_modified_file_is_news() {
         "writing the same bytes again is not a change"
     );
 }
+
+#[tokio::test]
+async fn a_submodule_cloned_or_emptied_is_news_though_status_is_unchanged() {
+    // Status reports a gitlink only when its commit differs, so emptying a submodule's working
+    // copy, or cloning it again from a terminal, hashed the same and was dropped here — and the
+    // window went on offering to initialise a submodule that had just been initialised.
+    let inner = TestRepo::new().write("lib.txt", "v1").commit("inner");
+    let repo = TestRepo::new().write("a.txt", "a").commit("first");
+    repo.git([
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "add",
+        inner.path().to_str().unwrap(),
+        "lib",
+    ]);
+    let repo = repo.commit("add lib");
+    let (runner, loc) = runner_at(&repo).await;
+    let mut seen = loc.fingerprint(&runner).await.unwrap();
+    let claimed = RepoChanged {
+        worktree: true,
+        ..RepoChanged::default()
+    };
+
+    repo.git(["submodule", "deinit", "--force", "lib"]);
+    let emptied = loc.narrow(&runner, &mut seen, claimed).await.unwrap();
+    assert_eq!(emptied.map(|c| c.worktree), Some(true), "emptied");
+
+    // The clone under .git/modules is still there, so this reaches no transport.
+    repo.git(["submodule", "update", "--init", "lib"]);
+    let cloned = loc.narrow(&runner, &mut seen, claimed).await.unwrap();
+    assert_eq!(cloned.map(|c| c.worktree), Some(true), "cloned again");
+
+    let again = loc.narrow(&runner, &mut seen, claimed).await.unwrap();
+    assert_eq!(again, None, "and then nothing further");
+}
