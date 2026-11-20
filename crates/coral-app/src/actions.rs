@@ -176,6 +176,15 @@ pub enum Action {
         /// Remove it even though it has changes in it that are recorded nowhere else.
         force: bool,
     },
+    /// Add a submodule, cloned and staged, with any submodules inside it cloned too.
+    SubmoduleAdd {
+        url: String,
+        /// Where it goes. Derived from the URL, as git derives it, when absent.
+        path: Option<String>,
+        branch: Option<String>,
+        /// A private key of its own. Absent means the key the superproject itself uses.
+        key: Option<String>,
+    },
     /// Clone and check out a submodule's working copy, or move it to its branch tip.
     SubmoduleInit {
         /// The submodule's path within the repository. All of them when absent.
@@ -450,6 +459,8 @@ impl Action {
             },
             Self::WorktreeAdd { path, .. } => format!("worktree at {path}"),
             Self::WorktreeRemove { path, .. } => format!("remove the worktree at {path}"),
+            Self::SubmoduleAdd { path: Some(p), .. } => format!("add the submodule {p}"),
+            Self::SubmoduleAdd { url, .. } => format!("add the submodule {url}"),
             Self::SubmoduleInit {
                 path: Some(p),
                 remote: true,
@@ -1004,6 +1015,28 @@ async fn run_tree(
         Action::WorktreeRemove { path, force } => {
             loc.worktree_remove(runner, std::path::Path::new(&path), force)
                 .await?;
+        }
+        Action::SubmoduleAdd {
+            url,
+            path,
+            branch,
+            key,
+        } => {
+            let added = loc
+                .submodule_add(
+                    runner,
+                    &url,
+                    path.as_deref(),
+                    branch.as_deref(),
+                    key.as_deref(),
+                )
+                .await?;
+            // Staged rather than committed, as git leaves it: the commit that records it is the
+            // user's to write, and the toast is where they learn there is one to write.
+            return Ok(Done {
+                conflicted: false,
+                message: format!("Commit .gitmodules and {} to record it.", added.path),
+            });
         }
         Action::SubmoduleInit {
             path,
