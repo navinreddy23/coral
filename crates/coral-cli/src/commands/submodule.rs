@@ -87,7 +87,7 @@ pub async fn add(path: &Path, new: &NewSubmodule) -> Result<Added, CoralError> {
     Ok(Added { submodule })
 }
 
-/// Clones the working copy of one submodule, or of every one, and of the ones inside them.
+/// Clones the working copies of the submodules named, or of every one, and of the ones inside.
 ///
 /// `remote` moves each to the tip of its configured branch instead, and then only at the top
 /// level: carrying that into the nested ones would move them off the commits their own
@@ -97,13 +97,17 @@ pub async fn add(path: &Path, new: &NewSubmodule) -> Result<Added, CoralError> {
 /// Propagates git failures, and refuses a path that declares no submodule.
 pub async fn init(
     path: &Path,
-    only: Option<&str>,
+    only: &[String],
     remote: bool,
 ) -> Result<crate::commands::write::Done, CoralError> {
     let runner = GitRunner::discover().await?;
     let loc = RepoLocation::discover(&runner, path).await?;
     loc.submodule_init(&runner, only, !remote, remote).await?;
-    let which = only.unwrap_or("every submodule");
+    let which = match only {
+        [] => "every submodule".to_owned(),
+        [one] => one.clone(),
+        many => format!("{} submodules", many.len()),
+    };
     Ok(crate::commands::write::Done {
         what: if remote {
             format!("updated {which} to its branch tip")

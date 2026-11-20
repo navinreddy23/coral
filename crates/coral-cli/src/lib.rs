@@ -423,10 +423,10 @@ pub enum Command {
         #[arg(long)]
         ssh_key: Option<String>,
     },
-    /// Clone a submodule's working copy, or every one's, and the submodules inside them.
+    /// Clone submodules' working copies, and the submodules inside them.
     SubmoduleInit {
-        /// One submodule's path. Every submodule when absent.
-        path: Option<String>,
+        /// The submodules' paths. Every submodule when none is given.
+        paths: Vec<String>,
         /// Move to the tip of each one's configured branch instead, without going deeper.
         #[arg(long)]
         remote: bool,
@@ -1171,8 +1171,8 @@ async fn dispatch_tree(command: Command, repo: &std::path::Path) -> output::Rend
             };
             output::render(&commands::submodule::add(repo, &new).await)
         }
-        Command::SubmoduleInit { path, remote } => {
-            output::render(&commands::submodule::init(repo, path.as_deref(), remote).await)
+        Command::SubmoduleInit { paths, remote } => {
+            output::render(&commands::submodule::init(repo, &paths, remote).await)
         }
         Command::Patch { rev, from, out } => {
             output::render(&commands::patch::write(repo, &rev, from.as_deref(), &out).await)

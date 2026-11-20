@@ -287,7 +287,7 @@ fn an_update_to_the_branch_tip_is_a_different_operation_from_one_to_the_recorded
 
     run(async {
         let (runner, loc) = located(&repo).await;
-        loc.submodule_init(&runner, Some("external/dev-scripts"), false, false)
+        loc.submodule_init(&runner, &["external/dev-scripts".to_owned()], false, false)
             .await
             .unwrap();
         let at = loc
@@ -301,7 +301,7 @@ fn an_update_to_the_branch_tip_is_a_different_operation_from_one_to_the_recorded
             "without --remote it stays on the recorded commit"
         );
 
-        loc.submodule_init(&runner, Some("external/dev-scripts"), false, true)
+        loc.submodule_init(&runner, &["external/dev-scripts".to_owned()], false, true)
             .await
             .unwrap();
         let moved = loc
@@ -369,7 +369,7 @@ fn a_submodule_is_reached_with_the_key_the_superproject_is_pinned_to() {
 
     run(async {
         let (runner, loc) = located(&repo).await;
-        loc.submodule_init(&runner, Some("external/dev-scripts"), false, false)
+        loc.submodule_init(&runner, &["external/dev-scripts".to_owned()], false, false)
             .await
             .unwrap();
     });
@@ -395,7 +395,7 @@ fn a_submodule_given_a_key_of_its_own_is_reached_with_that_one() {
         loc.set_submodule_ssh(&runner, "vendor/tool", Some(&own_key))
             .await
             .unwrap();
-        loc.submodule_init(&runner, None, false, false)
+        loc.submodule_init(&runner, &[], false, false)
             .await
             .unwrap();
     });
@@ -420,7 +420,7 @@ fn a_repository_on_the_agent_leaves_its_submodules_on_the_agent() {
 
     run(async {
         let (runner, loc) = located(&repo).await;
-        loc.submodule_init(&runner, Some("external/dev-scripts"), false, false)
+        loc.submodule_init(&runner, &["external/dev-scripts".to_owned()], false, false)
             .await
             .unwrap();
     });
@@ -437,7 +437,7 @@ fn a_key_the_repository_no_longer_uses_is_cleared_from_the_submodule() {
     pin(&repo, Some(&key));
     run(async {
         let (runner, loc) = located(&repo).await;
-        loc.submodule_init(&runner, Some("external/dev-scripts"), false, false)
+        loc.submodule_init(&runner, &["external/dev-scripts".to_owned()], false, false)
             .await
             .unwrap();
     });
@@ -449,7 +449,7 @@ fn a_key_the_repository_no_longer_uses_is_cleared_from_the_submodule() {
     pin(&repo, None);
     run(async {
         let (runner, loc) = located(&repo).await;
-        loc.submodule_init(&runner, Some("external/dev-scripts"), false, false)
+        loc.submodule_init(&runner, &["external/dev-scripts".to_owned()], false, false)
             .await
             .unwrap();
     });
@@ -555,6 +555,63 @@ fn a_bare_repository_has_nowhere_to_add_a_submodule() {
         let loc = RepoLocation::discover(&runner, &bare).await.unwrap();
         let err = loc
             .submodule_add(&runner, source.path().to_str().unwrap(), None, None, None)
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "refused", "{err}");
+    });
+}
+
+#[test]
+fn initialising_some_submodules_leaves_the_others_where_they_are() {
+    // Cloning the ones with no working copy is not a request to move the ones that have one: a
+    // submodule moved on purpose stays where it was put.
+    let (repo, _one, _two) = with_two_submodules();
+    std::fs::write(repo.path().join("external/dev-scripts/lib.txt"), "v2").unwrap();
+    let moved = repo
+        .command([
+            "-C",
+            "external/dev-scripts",
+            "commit",
+            "--quiet",
+            "-am",
+            "moved on purpose",
+        ])
+        .status()
+        .unwrap();
+    assert!(moved.success());
+    repo.git(["submodule", "deinit", "--force", "vendor/tool"]);
+
+    run(async {
+        let (runner, loc) = located(&repo).await;
+        loc.submodule_init(&runner, &["vendor/tool".to_owned()], true, false)
+            .await
+            .unwrap();
+        let tool = loc
+            .submodule_revision(&runner, "vendor/tool")
+            .await
+            .unwrap();
+        assert!(tool.is_some_and(|t| t.in_sync), "the absent one is cloned");
+        let scripts = loc
+            .submodule_revision(&runner, "external/dev-scripts")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(scripts.summary, "moved on purpose");
+    });
+}
+
+#[test]
+fn a_path_among_several_that_is_no_submodule_is_refused() {
+    let (repo, _one, _two) = with_two_submodules();
+    run(async {
+        let (runner, loc) = located(&repo).await;
+        let err = loc
+            .submodule_init(
+                &runner,
+                &["vendor/tool".to_owned(), "nowhere".to_owned()],
+                true,
+                false,
+            )
             .await
             .unwrap_err();
         assert_eq!(err.code(), "refused", "{err}");

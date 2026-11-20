@@ -185,10 +185,10 @@ pub enum Action {
         /// A private key of its own. Absent means the key the superproject itself uses.
         key: Option<String>,
     },
-    /// Clone and check out a submodule's working copy, or move it to its branch tip.
+    /// Clone and check out submodules' working copies, or move them to their branch tips.
     SubmoduleInit {
-        /// The submodule's path within the repository. All of them when absent.
-        path: Option<String>,
+        /// The submodules' paths within the repository. Every one of them when empty.
+        paths: Vec<String>,
         recursive: bool,
         /// Move it to the tip of its configured branch rather than to the recorded commit.
         remote: bool,
@@ -321,6 +321,19 @@ impl Done {
             conflicted: !outcome.conflicts.is_empty(),
             message: outcome.message.clone(),
         }
+    }
+}
+
+fn submodule_update_label(paths: &[String], remote: bool) -> String {
+    let which = match paths {
+        [] => "the submodules".to_owned(),
+        [one] => one.clone(),
+        many => format!("{} submodules", many.len()),
+    };
+    match (remote, paths.len()) {
+        (false, _) => format!("update {which}"),
+        (true, 1) => format!("update {which} to its branch tip"),
+        (true, _) => format!("update {which} to their branch tips"),
     }
 }
 
@@ -461,13 +474,7 @@ impl Action {
             Self::WorktreeRemove { path, .. } => format!("remove the worktree at {path}"),
             Self::SubmoduleAdd { path: Some(p), .. } => format!("add the submodule {p}"),
             Self::SubmoduleAdd { url, .. } => format!("add the submodule {url}"),
-            Self::SubmoduleInit {
-                path: Some(p),
-                remote: true,
-                ..
-            } => format!("update {p} to its branch tip"),
-            Self::SubmoduleInit { path: Some(p), .. } => format!("update {p}"),
-            Self::SubmoduleInit { path: None, .. } => "update the submodules".to_owned(),
+            Self::SubmoduleInit { paths, remote, .. } => submodule_update_label(paths, *remote),
             Self::SubmoduleSetUrl { path, .. } => format!("re-point {path}"),
             Self::SubmoduleSetSshKey { path, key: Some(_) } => format!("pin a key for {path}"),
             Self::SubmoduleSetSshKey { path, .. } => {
@@ -1039,11 +1046,11 @@ async fn run_tree(
             });
         }
         Action::SubmoduleInit {
-            path,
+            paths,
             recursive,
             remote,
         } => {
-            loc.submodule_init(runner, path.as_deref(), recursive, remote)
+            loc.submodule_init(runner, &paths, recursive, remote)
                 .await?;
         }
         Action::SubmoduleSetUrl { path, url } => {

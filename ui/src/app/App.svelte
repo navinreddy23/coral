@@ -5333,7 +5333,7 @@
       choices: [{ id: 'go', label: 'Update it', primary: true }],
     });
     if (choice === null) return;
-    await act({ kind: 'submoduleInit', path: relative, recursive: false, remote });
+    await act({ kind: 'submoduleInit', paths: relative === null ? [] : [relative], recursive: false, remote });
     await refs.load(info.path);
     await refreshSubmodule();
   }

@@ -482,7 +482,7 @@ impl RepoLocation {
             )
             .await?;
         }
-        self.submodule_init(runner, Some(&added.path), true, false)
+        self.submodule_init(runner, std::slice::from_ref(&added.path), true, false)
             .await?;
         Ok(added)
     }
@@ -493,9 +493,10 @@ impl RepoLocation {
     /// commit to check out all come from the parent's configuration and its gitlink, and
     /// cloning by hand would have to reproduce every one of them.
     ///
-    /// A submodule with no path given initialises all of them, which is what the reference
-    /// offers on the section itself. `remote` moves it to the tip of its configured branch
-    /// rather than to the commit the superproject records.
+    /// No paths at all updates every submodule, which is what the reference offers on the
+    /// section itself; naming some leaves the rest where they are, so cloning the ones with no
+    /// working copy does not also move one the user moved on purpose. `remote` moves each to the
+    /// tip of its configured branch rather than to the commit the superproject records.
     ///
     /// **The key goes in the environment.** git runs each submodule's clone and fetch as a
     /// child process in that submodule's own configuration, so the `core.sshCommand` this
@@ -512,50 +513,59 @@ impl RepoLocation {
     pub async fn submodule_init(
         &self,
         runner: &GitRunner,
-        path: Option<&str>,
+        paths: &[String],
         recursive: bool,
         remote: bool,
     ) -> Result<(), CoralError> {
         let inherited = self.own_key(runner).await?;
-        for (only, key) in self.update_runs(runner, path, inherited.as_deref()).await? {
-            let cmd = self.update_command(only.as_deref(), recursive, remote, key.as_deref());
+        for (only, key) in self
+            .update_runs(runner, paths, inherited.as_deref())
+            .await?
+        {
+            let cmd = self.update_command(&only, recursive, remote, key.as_deref());
             runner.output(cmd).await?;
         }
         self.record_keys(runner, inherited.as_deref()).await;
         Ok(())
     }
 
-    /// One update per key, as `(pathspec, key)`.
+    /// One update per key, as `(pathspecs, key)`; no pathspecs means every submodule.
     ///
     /// With nothing pinned to a key of its own — which is every repository until somebody says
-    /// otherwise — that is the single command git would run anyway, pathspec and all. Only a
+    /// otherwise — that is the single command git would run anyway, pathspecs and all. Only a
     /// submodule given its own key splits them, because one environment cannot carry two.
     async fn update_runs(
         &self,
         runner: &GitRunner,
-        path: Option<&str>,
+        paths: &[String],
         inherited: Option<&str>,
-    ) -> Result<Vec<(Option<String>, Option<String>)>, CoralError> {
-        if let Some(p) = path {
-            let name = self.submodule_name(runner, p).await?;
-            let key = self.key_for(runner, &name, inherited).await?;
-            return Ok(vec![(Some(p.to_owned()), key)]);
-        }
-
+    ) -> Result<Vec<(Vec<String>, Option<String>)>, CoralError> {
+        let declared = self.submodules(runner).await?;
         let mut runs = Vec::new();
-        for s in self.submodules(runner).await? {
-            let key = self.key_for(runner, &s.name, inherited).await?;
-            runs.push((Some(s.path), key));
+        for s in &declared {
+            if paths.is_empty() || paths.contains(&s.path) {
+                let key = self.key_for(runner, &s.name, inherited).await?;
+                runs.push((vec![s.path.clone()], key));
+            }
+        }
+        if let Some(unknown) = paths
+            .iter()
+            .find(|p| !declared.iter().any(|s| &s.path == *p))
+        {
+            return Err(CoralError::Refused {
+                label: "submodule",
+                detail: format!("{unknown} is not a submodule of this repository"),
+            });
         }
         if runs.iter().all(|(_, key)| key.as_deref() == inherited) {
-            return Ok(vec![(None, inherited.map(str::to_owned))]);
+            return Ok(vec![(paths.to_vec(), inherited.map(str::to_owned))]);
         }
         Ok(runs)
     }
 
     fn update_command(
         &self,
-        only: Option<&str>,
+        only: &[String],
         recursive: bool,
         remote: bool,
         key: Option<&str>,
@@ -576,9 +586,9 @@ impl RepoLocation {
         if remote {
             cmd = cmd.arg("--remote");
         }
-        if let Some(p) = only {
+        if !only.is_empty() {
             // `--` so a submodule whose path starts with a dash is not read as a flag.
-            cmd = cmd.arg("--").arg(p);
+            cmd = cmd.arg("--").args(only);
         }
         if let Some((name, value)) = ssh_env(key) {
             cmd = cmd.env(name, value);
