@@ -4805,40 +4805,45 @@
     error = null;
     forgetTheLastRepository();
     try {
-      info = await open(path);
+      const opened = await open(path);
+      info = opened;
+      // Read once, here. Every await below is a turn in which another tab can be chosen, and
+      // choosing one empties `info`: its path read after an await threw, and the throw landed
+      // in the catch below and blanked the tab that had just been chosen.
+      const at = opened.path;
       // Deliberately not awaited. The engine holds the scope and walks by it, so a repository
       // left soloed is already narrowed by the time the rows arrive; this is only what the
       // panel draws with — which row carries the struck eye, and whether the banner is up.
-      void scope.load(info.path);
-      void readJournal(info.path);
+      void scope.load(at);
+      void readJournal(at);
       // Before the walk rather than after it. The branch list needs a row per ref, and the
       // engine answers from whatever walk it has, so this fills the panel in a moment instead
       // of leaving it saying the kernel has no branches for the six seconds the real walk
       // takes. It is asked again below, once the rows are the real ones.
-      void refs.load(info.path);
+      void refs.load(at);
       // Beside the walk rather than after it. It needs nothing the walk gives, and read after
       // it the toolbar greyed out and "Working…" came and went as the kernel's last seconds of
       // walking ended: the first screen kept changing for a reason that had nothing to do
       // with it.
-      const status = worktree.load(info.path);
-      await graph.open(info.path);
-      await refs.load(info.path);
-      await stashes.load(info.path);
+      const status = worktree.load(at);
+      await graph.open(at);
+      await refs.load(at);
+      await stashes.load(at);
       await status;
-      void worktrees.load(info.path);
+      void worktrees.load(at);
       // A repository can be opened mid-merge, so the tool has to be there on arrival rather
       // than only after an action of ours stopped.
-      await merge.load(info.path);
-      void bisect.load(info.path);
-      void remotes.load(info.path);
+      await merge.load(at);
+      void bisect.load(at);
+      void remotes.load(at);
       // Deliberately not awaited: a host that is slow or unreachable must not hold up the
       // window, and the section simply appears when the answer arrives.
-      void hosting.load(info.path);
+      void hosting.load(at);
       // For the file and commit menus, which offer the diff tool and the user's own actions
       // only when they exist. A few config reads, and nothing waits on them.
-      void tools.load(info.path);
+      void tools.load(at);
       // Its tracker is what an `ABC-123` in a message links to.
-      void repoConfig.load(info.path);
+      void repoConfig.load(at);
     } catch (e) {
       // Nothing is open. The tab is named for the path that failed, and the last repository's
       // rows under that name are worse than an empty pane with the reason across the top:
