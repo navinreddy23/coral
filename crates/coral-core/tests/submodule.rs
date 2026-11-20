@@ -514,3 +514,49 @@ fn a_submodules_own_key_reads_back_and_clears() {
         assert_eq!(err.code(), "refused");
     });
 }
+
+#[test]
+fn a_url_that_cannot_be_reached_adds_nothing() {
+    // git clones before it writes anything, so a failed add leaves no stanza, no gitlink and no
+    // clone behind — any of which would make the next attempt at the same path fail for a
+    // reason that has nothing to do with the URL.
+    let repo = TestRepo::new().write("a.txt", "a").commit("first");
+    let missing = repo.path().join("no-such-repository");
+    run(async {
+        let (runner, loc) = located(&repo).await;
+        let err = loc
+            .submodule_add(
+                &runner,
+                missing.to_str().unwrap(),
+                Some("vendor/lib"),
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "git_error", "{err}");
+        let listed = loc.submodules(&runner).await.unwrap();
+        assert!(listed.is_empty(), "{listed:?}");
+    });
+
+    assert!(!repo.path().join(".gitmodules").exists());
+    assert!(!repo.path().join("vendor/lib").exists());
+    assert!(!repo.path().join(".git/modules/vendor/lib").exists());
+    assert_eq!(repo.git(["status", "--porcelain"]), "", "nothing staged");
+}
+
+#[test]
+fn a_bare_repository_has_nowhere_to_add_a_submodule() {
+    let source = TestRepo::new().write("a.txt", "a").commit("first");
+    let bare = source.path().join("bare.git");
+    source.git(["clone", "--quiet", "--bare", ".", bare.to_str().unwrap()]);
+    run(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, &bare).await.unwrap();
+        let err = loc
+            .submodule_add(&runner, source.path().to_str().unwrap(), None, None, None)
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "refused", "{err}");
+    });
+}
