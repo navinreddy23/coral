@@ -23,6 +23,8 @@
     onUpdate = () => {},
     shallow = false,
     onShallow = () => undefined,
+    uninitialised = 0,
+    onInitialise = () => undefined,
     fetching = false,
     onStopFetching = () => undefined,
   }: {
@@ -50,6 +52,9 @@
     shallow?: boolean;
     /** Offers to fetch more of that history. */
     onShallow?: (event: MouseEvent) => void;
+    /** How many submodules have no working copy yet. */
+    uninitialised?: number;
+    onInitialise?: () => void;
     /** A fetch the window started on its own is running. */
     fetching?: boolean;
     onStopFetching?: () => void;
@@ -132,6 +137,14 @@
          them; saying so is the way in to fetching the rest. -->
     <button class="host" onclick={onShallow} title="History stops short here. Fetch more of it">
       shallow clone
+    </button>
+  {/if}
+  {#if uninitialised > 0}
+    <!-- The one place an open repository says some of it is missing. A fresh clone without
+         `--recurse-submodules` is the usual way to get here, and the sidebar section that says
+         so may be folded or scrolled out of sight. -->
+    <button class="host" onclick={onInitialise} title="Clone their working copies, and the submodules inside them">
+      {uninitialised === 1 ? '1 submodule' : `${uninitialised} submodules`} not initialised
     </button>
   {/if}
   <span class="muted">git {gitVersion}</span>

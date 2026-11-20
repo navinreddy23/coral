@@ -182,6 +182,9 @@ describe('the sidebar', () => {
     expect(rows).toHaveLength(2);
     // One that has never been cloned is marked, but the mark is all it is.
     expect(rows[1]?.querySelector('.ref')?.className).toContain('absent');
+    expect(section?.querySelector('button.more')?.textContent).toContain(
+      'Initialise the one not cloned yet',
+    );
 
     // The row is not a control. Opening is one of four things that can be done with a
     // submodule, and making it the one a click performs hides the other three.

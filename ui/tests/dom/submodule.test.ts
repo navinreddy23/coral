@@ -131,3 +131,33 @@ describe('which ssh key a submodule is reached with', () => {
     expect(note).toContain('passphrase');
   });
 });
+
+describe('a submodule with no working copy', () => {
+  it('is called not initialised, and offers to initialise it', async () => {
+    const updates: boolean[] = [];
+    const view = render(Submodule, {
+      props: {
+        submodule: { ...SUB, initialised: false },
+        revision: null,
+        ssh: null,
+        sshKeys: KEYS,
+        focusKey: false,
+        busy: false,
+        error: null,
+        onClose: () => {},
+        onSetUrl: () => {},
+        onSetSshKey: () => {},
+        onOpen: () => {},
+        onUpdate: (remote: boolean) => updates.push(remote),
+        onRemove: () => {},
+      },
+    });
+    expect(view.container.textContent).toContain('not initialised');
+    const initialise = [...view.container.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Initialise this submodule',
+    );
+    expect(initialise, 'named for what it does').toBeDefined();
+    await fireEvent.click(initialise as HTMLElement);
+    expect(updates).toEqual([false]);
+  });
+});

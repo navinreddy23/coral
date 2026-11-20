@@ -60,6 +60,20 @@ describe('the status bar', () => {
     expect(opened).toEqual(['about']);
   });
 
+  it('says when submodules are not initialised, and initialises them from there', async () => {
+    expect(bar().container.textContent).not.toContain('not initialised');
+    expect(bar({ uninitialised: 1 }).container.textContent).toContain('1 submodule not initialised');
+
+    const asked: string[] = [];
+    const { container } = bar({ uninitialised: 3, onInitialise: () => asked.push('init') });
+    const chip = [...container.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('3 submodules not initialised'),
+    );
+    expect(chip, 'a chip counting them').toBeDefined();
+    await fireEvent.click(chip as HTMLElement);
+    expect(asked).toEqual(['init']);
+  });
+
   it('names the branch and the commit count', () => {
     const { container } = bar();
     expect(container.textContent).toContain('master');

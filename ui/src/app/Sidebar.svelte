@@ -99,7 +99,7 @@
     onPullRequestMenu?: (event: MouseEvent, pr: PullRequest) => void;
     /** Right-click on a remote, or on the section itself when `remote` is null. */
     onRemoteMenu: (event: MouseEvent, remote: string | null) => void;
-    /** Initialises every submodule, and the submodules inside them. */
+    /** Initialises every submodule not cloned yet, and the submodules inside them. */
     onInitAllSubmodules: () => void;
     /** The dots, or a right-click, on the Submodules section itself: add one, initialise all. */
     onSubmodulesMenu: (event: MouseEvent) => void;
@@ -780,7 +780,7 @@
           </p>
         {:else if absentSubmodules > 0}
           <button class="more" onclick={onInitAllSubmodules}>
-            Fetch every missing working copy
+            Initialise {absentSubmodules === 1 ? 'the one' : `the ${absentSubmodules}`} not cloned yet
           </button>
         {/if}
         <ul>

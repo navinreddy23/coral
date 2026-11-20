@@ -4343,6 +4343,9 @@
       ...(info && !info.isBare
         ? [{ id: 'submodule-add', label: 'Add a submodule…', group: 'Repository', run: () => openNewSubmodule() } satisfies Command]
         : []),
+      ...(absentSubmodules.length > 0
+        ? [{ id: 'submodule-init', label: 'Initialise the submodules not cloned yet', group: 'Repository', run: () => void initSubmodules(absentSubmodules, false) } satisfies Command]
+        : []),
       ...(info?.shallow
         ? [
             {
@@ -5310,37 +5313,55 @@
     // One that has never been checked out has nothing to open; the menu offers to fetch it.
     const known = refs.submodules.find((s) => s.path === relative);
     if (known && !known.initialised) {
-      await initSubmodule(relative, false);
+      await initSubmodules([relative], false);
       return;
     }
     if (tab.submodule === relative) await tabs.leaveSubmodule(tab.id);
     else await tabs.enterSubmodule(tab.id, relative);
   }
 
+  /** The submodules with no working copy, which is what "initialise" is offered for. */
+  const absentSubmodules = $derived(
+    refs.submodules.filter((s) => !s.initialised).map((s) => s.path),
+  );
+
   /**
-   * Updates one submodule, or all of them when `relative` is null.
+   * Initialises or updates the submodules at `paths`, or every one of them when it is empty.
    *
    * `remote` is a different operation, not a variation: without it the working copy moves to
    * the commit the superproject records, with it git fetches the configured branch and moves
    * to its tip — which changes what the superproject will record next.
+   *
+   * The submodules inside are taken along, as `git clone --recurse-submodules` takes them:
+   * a working copy whose own submodules are missing is not one anybody can build. Not with
+   * `remote`, though, which would move each nested one off the commit its own superproject
+   * records, and nobody asked for that.
    */
-  async function initSubmodule(relative: string | null, remote: boolean) {
+  async function initSubmodules(paths: string[], remote: boolean) {
     if (!info) return;
-    const what = relative ?? 'every submodule';
+    const what = paths.length === 0
+      ? 'every submodule'
+      : paths.length === 1 ? (paths[0] ?? '') : `${paths.length} submodules`;
+    const initialising = !remote && paths.length > 0 && paths.every((p) => absentSubmodules.includes(p));
     const { choice } = await ask({
-      title: remote ? `Update ${what} to its branch tip?` : `Update ${what}?`,
+      title: remote
+        ? `Update ${what} to ${paths.length === 1 ? 'its' : 'their'} branch tip?`
+        : initialising ? `Initialise ${what}?` : `Update ${what}?`,
       detail: remote
         ? 'git fetches the configured branch and checks out its tip. That is a change the ' +
           'repository will record on the next commit.'
-        : 'The working copy is cloned or moved to the commit the repository records. This ' +
-          'reaches the network.',
+        : initialising
+          ? 'Cloned at the commit this repository records, with any submodules inside. This ' +
+            'reaches the network.'
+          : 'Cloned or moved to the commit this repository records, and so is every submodule ' +
+            'inside. This reaches the network.',
       asksText: false,
       placeholder: '',
       initial: '',
-      choices: [{ id: 'go', label: 'Update it', primary: true }],
+      choices: [{ id: 'go', label: initialising ? 'Initialise' : 'Update', primary: true }],
     });
     if (choice === null) return;
-    await act({ kind: 'submoduleInit', paths: relative === null ? [] : [relative], recursive: false, remote });
+    await act({ kind: 'submoduleInit', paths, recursive: !remote, remote });
     await refs.load(info.path);
     await refreshSubmodule();
   }
@@ -5360,10 +5381,19 @@
         { kind: 'separator' },
         {
           kind: 'item',
-          label: 'Initialise every submodule',
+          label: absentSubmodules.length === 0
+            ? 'Initialise submodules'
+            : `Initialise ${absentSubmodules.length === 1 ? 'the one' : `the ${absentSubmodules.length}`} not cloned yet`,
           hint: 'nested ones too',
+          disabled: absentSubmodules.length === 0,
+          run: () => void initSubmodules(absentSubmodules, false),
+        },
+        {
+          kind: 'item',
+          label: 'Update every submodule',
+          hint: 'to the recorded commits',
           disabled: refs.submodules.length === 0,
-          run: () => void initSubmodule(null, false),
+          run: () => void initSubmodules([], false),
         },
       ],
     };
@@ -5407,30 +5437,40 @@
           label: 'Choose an ssh key…',
           run: () => void openSubmodulePanel(submodule, true),
         },
-        {
-          kind: 'item',
-          label: 'Open this submodule',
-          disabled: !submodule.initialised,
-          run: () => void openSubmodule(submodule.path),
-        },
-        {
-          kind: 'submenu',
-          label: 'Update this submodule',
-          items: [
-            {
-              kind: 'item',
-              label: submodule.initialised
-                ? 'To the commit this repository records'
-                : 'Fetch a working copy',
-              run: () => void initSubmodule(submodule.path, false),
-            },
-            {
-              kind: 'item',
-              label: 'To the tip of its branch',
-              run: () => void initSubmodule(submodule.path, true),
-            },
-          ],
-        },
+        // One with no working copy has nothing to open and nothing to update: what it needs
+        // is cloning, so that is what it is offered, in so many words.
+        ...(submodule.initialised
+          ? ([
+              {
+                kind: 'item',
+                label: 'Open this submodule',
+                run: () => void openSubmodule(submodule.path),
+              },
+              {
+                kind: 'submenu',
+                label: 'Update this submodule',
+                items: [
+                  {
+                    kind: 'item',
+                    label: 'To the commit this repository records',
+                    run: () => void initSubmodules([submodule.path], false),
+                  },
+                  {
+                    kind: 'item',
+                    label: 'To the tip of its branch',
+                    run: () => void initSubmodules([submodule.path], true),
+                  },
+                ],
+              },
+            ] satisfies MenuItem[])
+          : ([
+              {
+                kind: 'item',
+                label: 'Initialise this submodule',
+                hint: 'nested ones too',
+                run: () => void initSubmodules([submodule.path], false),
+              },
+            ] satisfies MenuItem[])),
         { kind: 'separator' },
         {
           kind: 'item',
@@ -6067,7 +6107,7 @@
         onRemoteMenu={remoteMenu}
         onStashMenu={stashMenu}
         onRefMenu={refMenu}
-        onInitAllSubmodules={() => void initSubmodule(null, false)}
+        onInitAllSubmodules={() => void initSubmodules(absentSubmodules, false)}
         onSubmodulesMenu={submodulesMenu}
         onSubmoduleMenu={submoduleMenu}
         onWorktreeMenu={worktreeMenu}
@@ -6116,7 +6156,10 @@
           showSubmodule = null;
           if (at) void openSubmodule(at);
         }}
-        onUpdate={(remote) => void initSubmodule(showSubmodule?.path ?? null, remote)}
+        onUpdate={(remote) => {
+          const at = showSubmodule?.path;
+          if (at) void initSubmodules([at], remote);
+        }}
         onRemove={() => void removeSubmodule()}
       />
     {/if}
@@ -6653,6 +6696,8 @@
       onUpdate={() => openPreferences('about')}
       shallow={info.shallow}
       onShallow={(event) => deepenMenu(event)}
+      uninitialised={absentSubmodules.length}
+      onInitialise={() => void initSubmodules(absentSubmodules, false)}
       fetching={transfer.quietly !== null && transfer.quietly.key === info.path}
       onStopFetching={() => void transfer.cancelQuiet()}
       report={actions.report}
