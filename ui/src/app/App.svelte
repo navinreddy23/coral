@@ -91,6 +91,7 @@
   import type { PlacedStash } from '../ipc/stash';
   import { ExperimentalState } from '../state/experimental.svelte';
   import SubmodulePanel from './Submodule.svelte';
+  import NewSubmodule, { type SubmoduleRequest } from './NewSubmodule.svelte';
   import { RemotesState } from '../state/remotes.svelte';
   import { outcomeToast, ToastsState } from '../state/toasts.svelte';
   import { copyText } from './clipboard';
@@ -687,6 +688,8 @@
   let submoduleAt = $state<SubmoduleRevision | null>(null);
   /** Which key that submodule is reached with, once that has been read. */
   let submoduleKey = $state<SubmoduleSsh | null>(null);
+  /** The form that adds a submodule is open. */
+  let showNewSubmodule = $state(false);
   /** True when the panel was opened to choose a key, so it opens on the key. */
   let submoduleOnKey = $state(false);
   /** The context menu on screen, if any. */
@@ -4337,6 +4340,9 @@
       { id: 'fetch', label: 'Fetch', group: 'Remote', run: () => void act({ kind: 'fetch', remote: null }) },
       { id: 'cleanup', label: 'Clean up branches…', group: 'Branch', run: () => void openCleanup() },
       { id: 'grep', label: 'Search the code…', group: 'Repository', run: () => searchCode('HEAD', headName ?? 'HEAD') },
+      ...(info && !info.isBare
+        ? [{ id: 'submodule-add', label: 'Add a submodule…', group: 'Repository', run: () => openNewSubmodule() } satisfies Command]
+        : []),
       ...(info?.shallow
         ? [
             {
@@ -4884,6 +4890,7 @@
     showSubmodule = null;
     submoduleAt = null;
     submoduleKey = null;
+    showNewSubmodule = false;
     showWip = false;
     scrollTop = 0;
     if (scroller) scroller.scrollTop = 0;
@@ -5336,6 +5343,42 @@
     await act({ kind: 'submoduleInit', paths: relative === null ? [] : [relative], recursive: false, remote });
     await refs.load(info.path);
     await refreshSubmodule();
+  }
+
+  /** What the dots on the Submodules section offer, and what a right-click on its header does. */
+  function submodulesMenu(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    const at = event.currentTarget instanceof HTMLElement
+      ? event.currentTarget.getBoundingClientRect()
+      : null;
+    menu = {
+      x: at && event.type === 'click' ? at.right : event.clientX,
+      y: at && event.type === 'click' ? at.bottom + 2 : event.clientY,
+      items: [
+        { kind: 'item', label: 'Add a submodule…', run: () => openNewSubmodule() },
+        { kind: 'separator' },
+        {
+          kind: 'item',
+          label: 'Initialise every submodule',
+          hint: 'nested ones too',
+          disabled: refs.submodules.length === 0,
+          run: () => void initSubmodule(null, false),
+        },
+      ],
+    };
+  }
+
+  function openNewSubmodule() {
+    // A failure left over from something else would read as this form's own.
+    actions.clear();
+    // The keys are on this machine rather than in the repository; see `openSubmodulePanel`.
+    void ssh.loadKeys();
+    showNewSubmodule = true;
+  }
+
+  async function addSubmodule(request: SubmoduleRequest) {
+    if (await act({ kind: 'submoduleAdd', ...request })) showNewSubmodule = false;
   }
 
   /**
@@ -6015,6 +6058,7 @@
           : null}
         stashes={stashes.list}
         submodules={refs.submodules}
+        bare={info?.isBare ?? false}
         worktrees={worktrees.linked}
         remotes={remotes.list}
         openSubmodule={tabs.active?.submodule ?? null}
@@ -6024,6 +6068,7 @@
         onStashMenu={stashMenu}
         onRefMenu={refMenu}
         onInitAllSubmodules={() => void initSubmodule(null, false)}
+        onSubmodulesMenu={submodulesMenu}
         onSubmoduleMenu={submoduleMenu}
         onWorktreeMenu={worktreeMenu}
         onDropRef={dropRef}
@@ -6073,6 +6118,15 @@
         }}
         onUpdate={(remote) => void initSubmodule(showSubmodule?.path ?? null, remote)}
         onRemove={() => void removeSubmodule()}
+      />
+    {/if}
+    {#if showNewSubmodule && info}
+      <NewSubmodule
+        sshKeys={ssh.keys}
+        busy={actions.busy}
+        error={actions.report?.tone === 'error' ? actions.report.text : null}
+        onClose={() => (showNewSubmodule = false)}
+        onAdd={(request) => void addSubmodule(request)}
       />
     {/if}
     {#if reviewing !== null && info}

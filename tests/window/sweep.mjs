@@ -106,7 +106,7 @@ const STOPS = [
     name: 'submodule',
     at: APP,
     go: async (b) => {
-      await b.press('[data-section="submodules"] .dots', 0);
+      await b.press('[data-section="submodules"] li .dots', 0);
       await b.press('.menu .row', 0);
     },
   },

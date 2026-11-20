@@ -16,6 +16,7 @@
     detachedHead,
     stashes,
     submodules,
+    bare = false,
     worktrees,
     remotes,
     openSubmodule,
@@ -34,6 +35,7 @@
     onRefMenu,
     onStashMenu,
     onInitAllSubmodules,
+    onSubmodulesMenu,
     onSubmoduleMenu,
     onWorktreeMenu,
     collapsed,
@@ -59,6 +61,8 @@
     /** The stash stack. Listed on its own, because `refs/stash` is only ever the top of it. */
     stashes: PlacedStash[];
     submodules: Submodule[];
+    /** A bare repository, which has no working tree to add a submodule to. */
+    bare?: boolean;
     /**
      * Working trees other than this one.
      *
@@ -95,8 +99,10 @@
     onPullRequestMenu?: (event: MouseEvent, pr: PullRequest) => void;
     /** Right-click on a remote, or on the section itself when `remote` is null. */
     onRemoteMenu: (event: MouseEvent, remote: string | null) => void;
-    /** Fetches a working copy for every submodule that has none. */
+    /** Initialises every submodule, and the submodules inside them. */
     onInitAllSubmodules: () => void;
+    /** The dots, or a right-click, on the Submodules section itself: add one, initialise all. */
+    onSubmodulesMenu: (event: MouseEvent) => void;
     /** Open it, or take it away. Asked for at the dots or by right-clicking. */
     onWorktreeMenu: (event: MouseEvent, worktree: Worktree) => void;
     /** The dots, or a right-click, on one submodule. */
@@ -223,6 +229,7 @@
     return q ? refs.filter((r) => r.short.toLowerCase().includes(q)) : refs;
   }
 
+  const absentSubmodules = $derived(submodules.filter((s) => !s.initialised).length);
   const matchingSubmodules = $derived.by(() => {
     const q = filter.trim().toLowerCase();
     return q ? submodules.filter((s) => s.path.toLowerCase().includes(q)) : submodules;
@@ -745,22 +752,37 @@
     </section>
   {/if}
 
-  {#if submodules.length > 0}
+  <!--
+    Shown in every repository with a working tree, not only one that has submodules already:
+    the section is where one is added, so hiding it until there was one left nowhere to start.
+  -->
+  {#if !bare}
     <section data-section="submodules">
-      <button class="head" onclick={() => onCollapse('submodules', !collapsed['submodules'])}>
-        <span class="caret">
-          <Icon name={collapsed['submodules'] ? 'chevronRight' : 'chevronDown'} size={13} />
-        </span>
-        <span class="icon"><Icon name="folder" size={13} /></span>
-        Submodules
-        <span class="count">{matchingSubmodules.length}</span>
-      </button>
-      {#if !collapsed['submodules'] && submodules.some((s) => !s.initialised)}
-        <button class="more" onclick={onInitAllSubmodules}>
-          Fetch every missing working copy
+      <div class="row head-row" oncontextmenu={onSubmodulesMenu} role="presentation">
+        <button class="head" onclick={() => onCollapse('submodules', !collapsed['submodules'])}>
+          <span class="caret">
+            <Icon name={collapsed['submodules'] ? 'chevronRight' : 'chevronDown'} size={13} />
+          </span>
+          <span class="icon"><Icon name="folder" size={13} /></span>
+          Submodules
+          <span class="count">{matchingSubmodules.length}</span>
         </button>
-      {/if}
+        <button
+          class="dots"
+          title="Add a submodule, or initialise them"
+          onclick={onSubmodulesMenu}
+        ><Icon name="more" size={13} /></button>
+      </div>
       {#if !collapsed['submodules']}
+        {#if submodules.length === 0}
+          <p class="none">
+            No submodules. <button class="link" onclick={onSubmodulesMenu}>Add one</button>
+          </p>
+        {:else if absentSubmodules > 0}
+          <button class="more" onclick={onInitAllSubmodules}>
+            Fetch every missing working copy
+          </button>
+        {/if}
         <ul>
           {#each matchingSubmodules as sub (sub.path)}
             <li oncontextmenu={(e) => onSubmoduleMenu(e, sub)}>
@@ -774,7 +796,7 @@
                 <span class="ref static" class:absent={!sub.initialised}
                   title={sub.initialised
                     ? `${sub.url || sub.name}\nRight-click, or use the dots, for what can be done with it`
-                    : `${sub.url || sub.name}\nNo working copy yet`}
+                    : `${sub.url || sub.name}\nNot initialised: no working copy yet`}
                 >
                   <span class="tick"><Icon name={sub.initialised ? 'check' : 'arrowDown'} size={12} /></span>
                   <span class="text">{sub.path}</span>
