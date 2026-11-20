@@ -508,8 +508,15 @@ impl RepoLocation {
     /// and the host answers that the repository does not exist — the failure
     /// `docs/DECISIONS.md` describes, arriving where nothing mentions a key.
     ///
+    /// **One `git submodule update` per submodule**, rather than one naming them all. git clones
+    /// every submodule it is given before it checks any out, and a single failed clone aborts
+    /// the lot: a submodule that only needed checking out was left registered with nothing in
+    /// it and every file staged as deleted, and no later update put the files back, because its
+    /// HEAD was already the commit recorded. One each also lets each carry its own key.
+    ///
     /// # Errors
-    /// Propagates git failures, including a URL that cannot be reached.
+    /// Propagates git failures, including a URL that cannot be reached: the first, once every
+    /// other submodule named has been tried.
     pub async fn submodule_init(
         &self,
         runner: &GitRunner,
@@ -518,36 +525,28 @@ impl RepoLocation {
         remote: bool,
     ) -> Result<(), CoralError> {
         let inherited = self.own_key(runner).await?;
+        let mut failed = None;
         for (only, key) in self
             .update_runs(runner, paths, inherited.as_deref())
             .await?
         {
             let cmd = self.update_command(&only, recursive, remote, key.as_deref());
-            runner.output(cmd).await?;
+            if let Err(e) = runner.output(cmd).await {
+                failed.get_or_insert(e);
+            }
         }
         self.record_keys(runner, inherited.as_deref()).await;
-        Ok(())
+        failed.map_or(Ok(()), Err)
     }
 
-    /// One update per key, as `(pathspecs, key)`; no pathspecs means every submodule.
-    ///
-    /// With nothing pinned to a key of its own — which is every repository until somebody says
-    /// otherwise — that is the single command git would run anyway, pathspecs and all. Only a
-    /// submodule given its own key splits them, because one environment cannot carry two.
+    /// Each submodule to update, with the key that reaches it; every one when `paths` is empty.
     async fn update_runs(
         &self,
         runner: &GitRunner,
         paths: &[String],
         inherited: Option<&str>,
-    ) -> Result<Vec<(Vec<String>, Option<String>)>, CoralError> {
+    ) -> Result<Vec<(String, Option<String>)>, CoralError> {
         let declared = self.submodules(runner).await?;
-        let mut runs = Vec::new();
-        for s in &declared {
-            if paths.is_empty() || paths.contains(&s.path) {
-                let key = self.key_for(runner, &s.name, inherited).await?;
-                runs.push((vec![s.path.clone()], key));
-            }
-        }
         if let Some(unknown) = paths
             .iter()
             .find(|p| !declared.iter().any(|s| &s.path == *p))
@@ -557,15 +556,19 @@ impl RepoLocation {
                 detail: format!("{unknown} is not a submodule of this repository"),
             });
         }
-        if runs.iter().all(|(_, key)| key.as_deref() == inherited) {
-            return Ok(vec![(paths.to_vec(), inherited.map(str::to_owned))]);
+        let mut runs = Vec::new();
+        for s in declared {
+            if paths.is_empty() || paths.contains(&s.path) {
+                let key = self.key_for(runner, &s.name, inherited).await?;
+                runs.push((s.path, key));
+            }
         }
         Ok(runs)
     }
 
     fn update_command(
         &self,
-        only: &[String],
+        only: &str,
         recursive: bool,
         remote: bool,
         key: Option<&str>,
@@ -586,10 +589,8 @@ impl RepoLocation {
         if remote {
             cmd = cmd.arg("--remote");
         }
-        if !only.is_empty() {
-            // `--` so a submodule whose path starts with a dash is not read as a flag.
-            cmd = cmd.arg("--").args(only);
-        }
+        // `--` so a submodule whose path starts with a dash is not read as a flag.
+        cmd = cmd.arg("--").arg(only);
         if let Some((name, value)) = ssh_env(key) {
             cmd = cmd.env(name, value);
         }

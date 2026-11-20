@@ -617,3 +617,48 @@ fn a_path_among_several_that_is_no_submodule_is_refused() {
         assert_eq!(err.code(), "refused", "{err}");
     });
 }
+
+#[test]
+fn a_submodule_that_cannot_be_cloned_does_not_leave_the_others_empty() {
+    // git clones every submodule it is given before it checks any of them out, and one failed
+    // clone aborts the rest. A submodule that only needed checking out was left registered with
+    // nothing in it and every file staged as deleted — and no later update put the files back,
+    // since its HEAD was already the commit recorded.
+    let (repo, _one, _two) = with_two_submodules();
+    repo.git(["submodule", "deinit", "--force", "--all"]);
+    // dev-scripts comes back from the clone kept under .git/modules; tool has to be cloned
+    // again, from somewhere that is not there.
+    std::fs::remove_dir_all(repo.path().join(".git/modules/vendor/tool")).unwrap();
+    let missing = repo.path().join("no-such-repository");
+    repo.git([
+        "config",
+        "-f",
+        ".gitmodules",
+        "submodule.vendor/tool.url",
+        missing.to_str().unwrap(),
+    ]);
+
+    run(async {
+        let (runner, loc) = located(&repo).await;
+        let paths = ["external/dev-scripts".to_owned(), "vendor/tool".to_owned()];
+        let err = loc
+            .submodule_init(&runner, &paths, true, false)
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "git_error", "the clone that failed is reported");
+    });
+
+    assert!(
+        repo.path().join("external/dev-scripts/lib.txt").exists(),
+        "the one that could be checked out is"
+    );
+    let inside = repo
+        .command(["-C", "external/dev-scripts", "status", "--porcelain"])
+        .output()
+        .unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&inside.stdout),
+        "",
+        "with nothing staged in it"
+    );
+}
