@@ -2914,7 +2914,7 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `form_urlencoded 1.2.2`
+Used by: `form_urlencoded 1.2.3`
 
 ```
 Copyright (c) 2013-2016 The rust-url developers
@@ -2947,7 +2947,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `idna 1.1.0`, `percent-encoding 2.3.2`, `url 2.5.8`
+Used by: `idna 1.1.0`, `percent-encoding 2.3.2`, `url 2.5.9`
 
 ```
 Copyright (c) 2013-2025 The rust-url developers
@@ -4549,7 +4549,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `cookie 0.18.2`
+Used by: `cookie 0.18.3`
 
 ```
 Copyright (c) 2017 Sergio Benitez
