@@ -39,11 +39,14 @@ struct Err_ {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct ErrorBody {
     code: &'static str,
     message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     git: Option<GitBody>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    host_key: Option<coral_core::hostkey::HostKey>,
 }
 
 #[derive(Serialize)]
@@ -90,6 +93,13 @@ pub fn render<T: Serialize + Human>(result: &Result<T, CoralError>) -> Rendered 
     let (json, code) = envelope(result);
     let text = match result {
         Ok(v) => v.human(),
+        Err(e @ CoralError::UnknownHostKey { host_key, .. }) => format!(
+            "error [{}]: {e}\nIf that is the host's key, run the command again with \
+             --trust-host-key '{}={}'",
+            e.code(),
+            host_key.host,
+            host_key.fingerprint
+        ),
         Err(e) => format!("error [{}]: {e}", e.code()),
     };
     Rendered { json, text, code }
@@ -116,6 +126,10 @@ fn envelope<T: Serialize>(result: &Result<T, CoralError>) -> (serde_json::Value,
                     code: e.code(),
                     message: e.to_string(),
                     git: git_body(e),
+                    host_key: match e {
+                        CoralError::UnknownHostKey { host_key, .. } => Some(host_key.clone()),
+                        _ => None,
+                    },
                 },
             };
             let value = serde_json::to_value(body).unwrap_or_else(|e| fallback(&e));
