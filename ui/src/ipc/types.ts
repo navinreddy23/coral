@@ -239,6 +239,11 @@ mode: ModeChange | null,
 tooLarge: boolean, };
 
 /**
+ * A host key's fingerprint as ssh prints it: `SHA256:…`, or `MD5:…` under `FingerprintHash md5`.
+ */
+export type Fingerprint = string;
+
+/**
  * How a commit is folded in. `git commit --fixup` and `--squash`.
  */
 export type Fold = "fixup" | "squash";
@@ -304,6 +309,19 @@ more: boolean, };
  * Where HEAD points.
  */
 export type Head = { "kind": "branch", name: string, } | { "kind": "detached", oid: string, } | { "kind": "unborn", name: string, };
+
+/**
+ * A key a host presented that ssh has no record of.
+ */
+export type HostKey = { 
+/**
+ * As ssh names it: `gitlab.com`, or `[git.example.com]:2222` off port 22.
+ */
+host: string, 
+/**
+ * `ED25519`, `ECDSA`, `RSA`.
+ */
+kind: string, fingerprint: Fingerprint, };
 
 export type Hunk = { 
 /**

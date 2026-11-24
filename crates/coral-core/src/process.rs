@@ -235,6 +235,11 @@ impl GitCommand {
         {
             v.extend(args.into_iter().map(OsString::from));
         }
+        if matches!(self.class, GitClass::Network)
+            && let Some(args) = crate::hostkey::askpass_args()
+        {
+            v.extend(args.into_iter().map(OsString::from));
+        }
         v
     }
 }
@@ -828,17 +833,18 @@ impl GitRunner {
             return Ok(());
         }
         Err(match status.code() {
-            Some(code) => CoralError::GitExit {
-                label: cmd.label,
+            // Through the same reading the buffered path gets. Everything streamed is a network
+            // command, which writes its progress to stderr and its reason at the end — the case
+            // `why_it_failed` exists for, and the one path that was not asking it: a pull
+            // refused over local changes reported three lines of counting objects and never
+            // said which file was in the way.
+            Some(code) => exited(
+                cmd.label,
                 code,
                 argv,
-                // Through the same reading the buffered path gets. Everything streamed is a
-                // network command, which writes its progress to stderr and its reason at the
-                // end — the case `why_it_failed` exists for, and the one path that was not
-                // asking it: a pull refused over local changes reported three lines of
-                // counting objects and never said which file was in the way.
-                stderr: scrubbed(&why_it_failed(&tail)),
-            },
+                &tail,
+                scrubbed(&why_it_failed(&tail)),
+            ),
             None => CoralError::GitSignal {
                 label: cmd.label,
                 signal: signal_of(status),
@@ -869,10 +875,13 @@ impl GitRunner {
             Some(path) => c.env("GIT_TEMPLATE_DIR", path),
             None => c.env_remove("GIT_TEMPLATE_DIR"),
         };
-        if matches!(cmd.class, GitClass::Network)
-            && let Some((_, session)) = crate::credential::helper_config()
-        {
-            c.env(crate::credential::SESSION_VAR, session);
+        if matches!(cmd.class, GitClass::Network) {
+            if let Some((_, session)) = crate::credential::helper_config() {
+                c.env(crate::credential::SESSION_VAR, session);
+            }
+            for (key, value) in crate::hostkey::askpass_env() {
+                c.env(key, value);
+            }
         }
         for (key, value) in &cmd.env {
             c.env(key, value);
@@ -1050,18 +1059,44 @@ impl GitRunner {
             )));
         }
         match out.status.code() {
-            Some(code) => CoralError::GitExit {
+            Some(code) => exited(
                 label,
                 code,
                 argv,
+                &String::from_utf8_lossy(&out.stderr),
                 stderr,
-            },
+            ),
             None => CoralError::GitSignal {
                 label,
                 signal: signal_of(out.status),
                 argv,
             },
         }
+    }
+}
+
+// The declined host key is looked for in everything git wrote, since `shown` keeps only what
+// explains the failure to a person.
+fn exited(
+    label: &'static str,
+    code: i32,
+    argv: Vec<String>,
+    stderr: &str,
+    shown: String,
+) -> CoralError {
+    match crate::hostkey::declined_in(stderr) {
+        Some(host_key) => CoralError::UnknownHostKey {
+            label,
+            argv,
+            host_key,
+            stderr: shown,
+        },
+        None => CoralError::GitExit {
+            label,
+            code,
+            argv,
+            stderr: shown,
+        },
     }
 }
 
@@ -1505,6 +1540,10 @@ fn named_failures<'a>(lines: &[&'a str]) -> Vec<&'a str> {
         if names_a_failure(line) {
             listing = line.trim_end().ends_with(':');
             out.push(line);
+        } else if ssh_says(line) {
+            listing = false;
+            // ssh frames its loudest warnings in a banner of `@`.
+            out.push(line.trim_matches(|c| c == '@' || c == ' '));
         } else if listing && line.starts_with([' ', '\t']) && !line.trim().is_empty() {
             out.push(line);
         } else {
@@ -1517,6 +1556,38 @@ fn named_failures<'a>(lines: &[&'a str]) -> Vec<&'a str> {
 fn names_a_failure(line: &str) -> bool {
     let bare = line.trim().strip_prefix("remote:").unwrap_or(line).trim();
     bare.starts_with("fatal:") || bare.starts_with("error:") || bare.starts_with("ERROR:")
+}
+
+/// ssh writes why a connection failed with none of git's prefixes, and git's line after it says
+/// only "Could not read from remote repository" — the same for a host never seen, a key
+/// refused and a name that does not resolve.
+fn ssh_says(line: &str) -> bool {
+    const STARTS: [&str; 14] = [
+        "ssh:",
+        "Host key verification failed",
+        "Host key for ",
+        "Offending ",
+        "Load key ",
+        "Warning: Identity file ",
+        "no such identity:",
+        "Unable to negotiate with ",
+        "kex_exchange_identification:",
+        "Bad owner or permissions on ",
+        "Connection closed by ",
+        "Connection reset by ",
+        "Connection timed out",
+        "Received disconnect from ",
+    ];
+    const ANYWHERE: [&str; 5] = [
+        "Permission denied (",
+        "host key is known for",
+        "REMOTE HOST IDENTIFICATION HAS CHANGED",
+        "UNPROTECTED PRIVATE KEY FILE",
+        "are too open",
+    ];
+    let line = line.trim();
+    !line.starts_with("remote:")
+        && (STARTS.iter().any(|s| line.starts_with(s)) || ANYWHERE.iter().any(|s| line.contains(s)))
 }
 
 /// A line git writes to say it is still going.
@@ -1633,6 +1704,120 @@ mod failure_tests {
         assert_eq!(
             why_it_failed(stderr),
             "remote: ERROR: The project could not be found"
+        );
+    }
+
+    /// What a clone of a host ssh has never seen writes when nothing can answer its question.
+    /// git's own line says only that the remote could not be read.
+    #[test]
+    fn keeps_why_ssh_gave_up_on_a_host_it_has_not_seen() {
+        let stderr = "Cloning into 'project'...\n\
+                      Host key verification failed.\n\
+                      fatal: Could not read from remote repository.\n\
+                      \n\
+                      Please make sure you have the correct access rights\n\
+                      and the repository exists.";
+        assert_eq!(
+            why_it_failed(stderr),
+            "Host key verification failed.\nfatal: Could not read from remote repository."
+        );
+    }
+
+    #[test]
+    fn keeps_why_ssh_could_not_sign_in() {
+        let stderr = "git@gitlab.com: Permission denied (publickey).\n\
+                      fatal: Could not read from remote repository.\n\
+                      \n\
+                      Please make sure you have the correct access rights\n\
+                      and the repository exists.";
+        assert_eq!(
+            why_it_failed(stderr),
+            "git@gitlab.com: Permission denied (publickey).\n\
+             fatal: Could not read from remote repository."
+        );
+    }
+
+    #[test]
+    fn keeps_why_ssh_could_not_connect_or_load_a_key() {
+        for said in [
+            "ssh: Could not resolve hostname gitlab.invalid: Name or service not known",
+            "ssh: connect to host 127.0.0.1 port 2222: Connection refused",
+            "Load key \"C:\\\\Users\\\\dev\\\\.ssh\\\\id_ed25519\": invalid format",
+            "Warning: Identity file /home/dev/.ssh/gone not accessible: No such file or directory.",
+            "no such identity: /home/dev/.ssh/gone: No such file or directory",
+            "Unable to negotiate with 10.0.0.2 port 22: no matching host key type found. \
+             Their offer: ssh-rsa",
+            "kex_exchange_identification: read: Connection reset by peer",
+            "Connection closed by 10.0.0.2 port 22",
+            "Received disconnect from 10.0.0.2 port 22:2: Too many authentication failures",
+            "No ED25519 host key is known for [127.0.0.1]:2222 and you have requested strict \
+             checking.",
+        ] {
+            let stderr = format!("{said}\nfatal: Could not read from remote repository.");
+            assert_eq!(
+                why_it_failed(&stderr),
+                format!("{said}\nfatal: Could not read from remote repository."),
+                "{said}"
+            );
+        }
+    }
+
+    /// ssh frames a changed host key in a banner of `@`; the sentence inside it is what is kept.
+    #[test]
+    fn keeps_a_changed_host_key_without_its_frame() {
+        let stderr = "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n\
+                      @    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @\n\
+                      @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n\
+                      IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!\n\
+                      The fingerprint for the ED25519 key sent by the remote host is\n\
+                      SHA256:aDIVrzG4M+mFkSJjlVuzTna1QcVzJ4oRyqElnLEWsGQ.\n\
+                      Please contact your system administrator.\n\
+                      Offending ED25519 key in /home/dev/.ssh/known_hosts:3\n  \
+                        remove with:\n  \
+                        ssh-keygen -f '/home/dev/.ssh/known_hosts' -R 'gitlab.com'\n\
+                      Host key for gitlab.com has changed and you have requested strict checking.\n\
+                      Host key verification failed.\n\
+                      fatal: Could not read from remote repository.";
+        assert_eq!(
+            why_it_failed(stderr),
+            "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!\n\
+             Offending ED25519 key in /home/dev/.ssh/known_hosts:3\n\
+             Host key for gitlab.com has changed and you have requested strict checking.\n\
+             Host key verification failed.\n\
+             fatal: Could not read from remote repository."
+        );
+    }
+
+    #[test]
+    fn keeps_a_key_ssh_ignored_for_being_readable_by_others() {
+        let stderr = "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n\
+                      @         WARNING: UNPROTECTED PRIVATE KEY FILE!          @\n\
+                      @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n\
+                      Permissions 0644 for '/home/dev/key' are too open.\n\
+                      It is required that your private key files are NOT accessible by others.\n\
+                      This private key will be ignored.\n\
+                      Load key \"/home/dev/key\": bad permissions\n\
+                      git@host: Permission denied (publickey).\n\
+                      fatal: Could not read from remote repository.";
+        assert_eq!(
+            why_it_failed(stderr),
+            "WARNING: UNPROTECTED PRIVATE KEY FILE!\n\
+             Permissions 0644 for '/home/dev/key' are too open.\n\
+             Load key \"/home/dev/key\": bad permissions\n\
+             git@host: Permission denied (publickey).\n\
+             fatal: Could not read from remote repository."
+        );
+    }
+
+    /// A host's own words reach the reader only when they say ERROR; a line of its that happens
+    /// to read like ssh's is still the host talking.
+    #[test]
+    fn does_not_take_a_hosts_line_for_ssh() {
+        let stderr = "remote: Permission denied (publickey) is what ssh would say\n\
+                      fatal: the remote end hung up unexpectedly";
+        assert_eq!(
+            why_it_failed(stderr),
+            "fatal: the remote end hung up unexpectedly"
         );
     }
 

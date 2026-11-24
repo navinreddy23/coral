@@ -102,3 +102,23 @@ pub async fn ssh_public_key(path: String) -> Result<String, IpcError> {
     let text = std::fs::read_to_string(&path).map_err(coral_core::CoralError::Io)?;
     Ok(text.trim().to_owned())
 }
+
+/// Lets ssh accept this key for this host the next time it asks, for as long as the app runs.
+///
+/// ssh records the key in its own `known_hosts` once it has accepted it, so the trust outlasts
+/// this process without Coral writing anything itself.
+///
+/// # Errors
+/// [`coral_core::CoralError::Refused`] when the fingerprint is not one ssh prints.
+#[tauri::command]
+#[allow(clippy::unused_async)]
+pub async fn ssh_trust_host_key(host: String, fingerprint: String) -> Result<(), IpcError> {
+    let fingerprint = coral_core::hostkey::Fingerprint::parse(&fingerprint).ok_or_else(|| {
+        coral_core::CoralError::Refused {
+            label: "trust that host",
+            detail: format!("{fingerprint} is not a fingerprint ssh prints"),
+        }
+    })?;
+    coral_core::hostkey::trust(&host, fingerprint);
+    Ok(())
+}

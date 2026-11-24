@@ -23,6 +23,11 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub json: bool,
 
+    /// Trust this key for this host if ssh asks about it: `HOST=FINGERPRINT`, as an
+    /// `unknown_host_key` error names them. Repeat for more than one.
+    #[arg(long, global = true, value_name = "HOST=FINGERPRINT", value_parser = trusted_host_key)]
+    pub trust_host_key: Vec<(String, coral_core::hostkey::Fingerprint)>,
+
     #[command(subcommand)]
     pub command: Command,
 }
@@ -643,6 +648,16 @@ pub enum Command {
     },
 }
 
+fn trusted_host_key(value: &str) -> Result<(String, coral_core::hostkey::Fingerprint), String> {
+    let (host, fingerprint) = value
+        .split_once('=')
+        .filter(|(host, _)| !host.is_empty())
+        .ok_or("expected HOST=FINGERPRINT")?;
+    let fingerprint = coral_core::hostkey::Fingerprint::parse(fingerprint)
+        .ok_or("the fingerprint is not one ssh prints, such as SHA256:…")?;
+    Ok((host.to_owned(), fingerprint))
+}
+
 /// Runs one CLI invocation and returns the envelope plus the exit code.
 ///
 /// Returning rather than printing is what lets the snapshot tests run in-process instead of
@@ -679,6 +694,15 @@ pub async fn run(argv: Vec<OsString>) -> output::Rendered {
         coral_core::credential::new_session(),
     ) {
         coral_core::credential::configure(binary, session);
+    }
+    if let (Ok(binary), Some(session)) = (
+        std::env::current_exe(),
+        coral_core::credential::new_session(),
+    ) {
+        coral_core::hostkey::configure(binary, session);
+    }
+    for (host, fingerprint) in &cli.trust_host_key {
+        coral_core::hostkey::trust(host, fingerprint.clone());
     }
 
     // The sequence editor answers git, not a person. It writes nothing at all: git reads the

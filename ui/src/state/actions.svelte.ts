@@ -1,5 +1,6 @@
 import { runAction, type Action, type ActionOutcome } from '../ipc/commands';
 import { messageOf, whatFailed } from '../ipc/error';
+import { neverTrust, retryAfterTrust, type AskTrust } from './hosttrust';
 import { outcomeToast, type ToastKind } from './toasts.svelte';
 
 /** What the status line is showing about the last thing that ran. */
@@ -28,6 +29,12 @@ export class ActionsState {
   /** True while something the window started on its own is running. */
   quiet = $state(false);
   #quiet: Promise<unknown> | null = null;
+  #askTrust: AskTrust;
+
+  /** `askTrust` is put to the user when a fetch, pull or push meets a host ssh has not seen. */
+  constructor(askTrust: AskTrust = neverTrust) {
+    this.#askTrust = askTrust;
+  }
 
   /**
    * Runs `action`, then hands back whether anything changed so the caller can reload.
@@ -44,7 +51,12 @@ export class ActionsState {
       // same refs. It is on the transfer bar meanwhile, with the button that stops it. Only
       // awaited when there is one: an await of nothing still defers the call a turn.
       if (this.#quiet !== null) await this.#quiet;
-      const outcome = await runAction(path, action);
+      let outcome: ActionOutcome;
+      try {
+        outcome = await runAction(path, action);
+      } catch (e) {
+        outcome = await retryAfterTrust(e, () => runAction(path, action), this.#askTrust);
+      }
       // The same wording as the toast, from the module that owns it. Phrased here as well,
       // the line said "push v1.0 stopped on conflicts" for a rejected push while the toast
       // beside it said "was rejected", which is what actually happened.

@@ -3,6 +3,12 @@ use std::process::ExitCode;
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    let argv: Vec<std::ffi::OsString> = std::env::args_os().collect();
+    // ssh runs this binary with the prompt as its one argument, and reads the reply on stdout.
+    if let Some(prompt) = coral_core::hostkey::prompt_in(&argv) {
+        return askpass(&prompt);
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_env("CORAL_LOG")
@@ -11,7 +17,6 @@ async fn main() -> ExitCode {
         .with_writer(std::io::stderr)
         .init();
 
-    let argv: Vec<std::ffi::OsString> = std::env::args_os().collect();
     let json = argv.iter().any(|a| a == "--json");
 
     let helper = argv.iter().any(|a| a == "credential-helper");
@@ -41,4 +46,17 @@ async fn main() -> ExitCode {
         Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
         Err(_) => ExitCode::from(coral_cli::output::exit::GIT),
     }
+}
+
+fn askpass(prompt: &str) -> ExitCode {
+    use coral_core::hostkey::Answer;
+    match coral_core::hostkey::answer(prompt) {
+        Answer::Accept(fingerprint) => println!("{fingerprint}"),
+        Answer::Decline { report } => {
+            eprintln!("{report}");
+            println!("no");
+        }
+        Answer::NotOurs => return ExitCode::FAILURE,
+    }
+    ExitCode::SUCCESS
 }
