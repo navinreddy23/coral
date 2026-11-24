@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.6.3
+
+### Fixed
+
+- **A host ssh has never connected to is asked about, not refused.** Coral runs ssh with no
+  terminal, so the question ssh asks the first time it meets a host, "Are you sure you want to
+  continue connecting?", could not be asked. A clone, fetch, pull or push to a new host failed
+  with only "Could not read from remote repository", whichever key was chosen. It showed as a
+  clone that failed and a later pull with the same key that worked, once something else had
+  connected to the host. Coral now names the host and the fingerprint of the key it presented,
+  and asks whether to trust it. On Trust, ssh itself checks that fingerprint against the key the
+  host presents and records it in its own `known_hosts`, and the operation goes ahead. A host
+  whose key has *changed* is never offered: ssh refuses it, as before, and now says why. A fetch
+  the window starts on its own never asks. From the command line, `unknown_host_key` names the
+  host and the fingerprint, and `coral --trust-host-key 'HOST=FINGERPRINT' <command>` trusts it.
+- **ssh's own reason reaches the message.** git reports every ssh failure as "Could not read
+  from remote repository", and the line ssh wrote before it was dropped: "Host key verification
+  failed", "Permission denied (publickey)", a host name that does not resolve, a key file that
+  will not load, a host key that has changed. It is now shown above git's.
+
+### Security
+
+- **url is 2.5.9**, for RUSTSEC-2026-0592: `Url::origin()` on a deeply nested `blob:` URL
+  overflowed the stack.
+- **cookie is 0.18.3**, for RUSTSEC-2026-0594: private cookie nonces could repeat across
+  processes that fork. It comes in with tauri.
+
 ## 1.6.2
 
 ### Added
