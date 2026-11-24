@@ -247,6 +247,18 @@ submodule that needs a different key is recorded in the superproject under its n
 submodule is updated by a `git submodule update` of its own, which lets each carry its own key
 and keeps one failed clone from abandoning the rest (see `docs/DECISIONS.md`).
 
+**A host ssh has never seen is asked about, not refused.** With no terminal, ssh cannot ask
+"continue connecting?", so it gave up with "Host key verification failed" and git reported only
+"Could not read from remote repository". Every network command now names the running binary as
+ssh's `SSH_ASKPASS` (`hostkey.rs`). It declines that one question, stamped with a per-process
+nonce so a server's banner cannot pass for it, and the command fails with `unknown_host_key`
+and the fingerprint ssh was shown. Once the user trusts it, the same question is answered with
+that fingerprint. ssh checks it against the key the host actually presented and writes it to
+its own `known_hosts`, so Coral never guesses where that file is (Windows' `HOME` rules
+differ). A changed key is never asked about; ssh refuses it outright, and its warning reaches
+the message. Every other prompt (a passphrase, an https user name) is left unanswered, as
+before; `GIT_ASKPASS` and `core.askPass` are emptied so git does not ask the helper for one.
+
 Both halves are tested without a server: `ssh -G` resolves the identity list for a host with
 every config rule applied and then exits, so `coral-core/tests/ssh.rs` can assert that a pinned
 key is the only entry and that the agent default leaves the file alone. `just ssh-test` goes
@@ -254,7 +266,9 @@ the other way and stands an sshd up on a high port with two generated keys, two 
 repositories and an agent of its own, because the failure being guarded against is not a wrong
 identity list — it is a clone that succeeds as the wrong account and reports the repository as
 missing. It asserts the submodule case there too, since a submodule reading none of the
-superproject's command is not visible any other way.
+superproject's command is not visible any other way. Its second half keeps strict host checking
+and an empty `known_hosts`, then follows one key through first contact, clone, fetch, pull,
+push and both submodule paths.
 
 Coral is its own **git credential helper**, so tokens never appear in a remote URL, a config
 file, or an argument list. Any process on the machine can run the coral binary, so the helper
