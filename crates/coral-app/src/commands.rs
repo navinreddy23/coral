@@ -14,6 +14,9 @@ pub struct IpcError {
     /// reads the way a success does.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub what: Option<String>,
+    /// The key of a host ssh has not connected to before, for the window to ask about.
+    #[serde(rename = "hostKey", skip_serializing_if = "Option::is_none")]
+    pub host_key: Option<coral_core::hostkey::HostKey>,
 }
 
 impl IpcError {
@@ -39,10 +42,15 @@ impl std::fmt::Display for IpcError {
 
 impl From<coral_core::CoralError> for IpcError {
     fn from(e: coral_core::CoralError) -> Self {
+        let host_key = match &e {
+            coral_core::CoralError::UnknownHostKey { host_key, .. } => Some(host_key.clone()),
+            _ => None,
+        };
         Self {
             code: e.code(),
             message: e.to_string(),
             what: None,
+            host_key,
         }
     }
 }

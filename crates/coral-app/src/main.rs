@@ -8,6 +8,11 @@ use coral_app_lib::{
 };
 
 fn main() {
+    // ssh runs this binary with the prompt as its one argument when it meets a host it has no
+    // record of, and reads the reply on stdout.
+    if let Some(prompt) = coral_core::hostkey::prompt_in(&std::env::args_os().collect::<Vec<_>>()) {
+        std::process::exit(askpass(&prompt));
+    }
     // git invokes the running binary as its sequence editor during an interactive rebase, so
     // this has to be answered before anything else starts: no window, no logging, no Tauri.
     // Handled here rather than by shelling out to the CLI, which a packaged application has no
@@ -59,6 +64,14 @@ fn main() {
         coral_core::credential::configure(binary, session);
     } else {
         tracing::warn!("no credential helper; git will use whatever the user configured");
+    }
+    if let (Ok(binary), Some(session)) = (
+        std::env::current_exe(),
+        coral_core::credential::new_session(),
+    ) {
+        coral_core::hostkey::configure(binary, session);
+    } else {
+        tracing::warn!("no askpass; ssh will refuse a host it has not connected to before");
     }
 
     window();
@@ -261,6 +274,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         ssh::ssh_directory,
         ssh::ssh_generate,
         ssh::ssh_public_key,
+        ssh::ssh_trust_host_key,
         terminal::terminal_open,
         terminal::terminal_defaults,
         terminal::terminal_write,
@@ -341,6 +355,19 @@ fn credential_helper() -> Option<i32> {
             Some(1)
         }
     }
+}
+
+fn askpass(prompt: &str) -> i32 {
+    use coral_core::hostkey::Answer;
+    match coral_core::hostkey::answer(prompt) {
+        Answer::Accept(fingerprint) => println!("{fingerprint}"),
+        Answer::Decline { report } => {
+            eprintln!("{report}");
+            println!("no");
+        }
+        Answer::NotOurs => return 1,
+    }
+    0
 }
 
 /// Installs a prepared rebase todo list, when invoked as git's sequence editor.
