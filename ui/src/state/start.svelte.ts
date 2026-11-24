@@ -9,6 +9,8 @@ import {
   type Recent,
 } from '../ipc/start';
 import { messageOf } from '../ipc/error';
+import type { CloneOutcome } from '../ipc/types';
+import { neverTrust, retryAfterTrust, type AskTrust } from './hosttrust';
 
 /** Which form the start page is showing, if any. */
 export type StartForm = 'none' | 'clone' | 'create';
@@ -24,6 +26,12 @@ export class StartState {
   notice = $state<string | null>(null);
   /** Null until asked, so the tick box is not offered before the answer arrives. */
   lfs = $state<boolean | null>(null);
+  #askTrust: AskTrust;
+
+  /** `askTrust` is put to the user when a clone meets a host ssh has not seen. */
+  constructor(askTrust: AskTrust = neverTrust) {
+    this.#askTrust = askTrust;
+  }
 
   /** The recents that match the filter, which is matched against the name and the path. */
   shown = $derived.by(() => {
@@ -75,7 +83,12 @@ export class StartState {
   async clone(wanted: CloneWanted): Promise<string | null> {
     this.notice = null;
     const made = await this.#run(async () => {
-      const outcome = await repoClone(wanted);
+      let outcome: CloneOutcome;
+      try {
+        outcome = await repoClone(wanted);
+      } catch (e) {
+        outcome = await retryAfterTrust(e, () => repoClone(wanted), this.#askTrust);
+      }
       // git exits 0 on a clone that checked nothing out and only warns. Without this the
       // window opened a repository with no files in it and said nothing at all.
       if (outcome.notes.length > 0) this.notice = outcome.notes.join('\n');

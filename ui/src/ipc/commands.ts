@@ -1021,6 +1021,11 @@ export function sshKeyAt(path: string): Promise<SshKey> {
   return invoke<SshKey>('ssh_key_at', { path });
 }
 
+/** Lets ssh accept this key for this host the next time it asks, for as long as the app runs. */
+export function sshTrustHostKey(host: string, fingerprint: string): Promise<void> {
+  return invoke<void>('ssh_trust_host_key', { host, fingerprint });
+}
+
 /** The folder ssh keys are kept in, which is where the key picker opens. */
 export function sshDirectory(): Promise<string> {
   return invoke<string>('ssh_directory');

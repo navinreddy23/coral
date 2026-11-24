@@ -1,3 +1,5 @@
+import type { HostKey } from './types';
+
 /**
  * What went wrong, in words a person can act on.
  *
@@ -69,4 +71,17 @@ export function whatFailed(cause: unknown): string | null {
   if (typeof cause !== 'object' || cause === null) return null;
   const shape = cause as { what?: unknown };
   return typeof shape.what === 'string' && shape.what !== '' ? shape.what : null;
+}
+
+/** The key of a host ssh has not connected to before, when that is what stopped the command. */
+export function hostKeyOf(cause: unknown): HostKey | null {
+  if (codeOf(cause) !== 'unknown_host_key' || typeof cause !== 'object' || cause === null) {
+    return null;
+  }
+  const { hostKey } = cause as { hostKey?: Partial<HostKey> };
+  const { host, kind, fingerprint } = hostKey ?? {};
+  if (typeof host !== 'string' || typeof kind !== 'string' || typeof fingerprint !== 'string') {
+    return null;
+  }
+  return { host, kind, fingerprint };
 }

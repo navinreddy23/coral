@@ -71,7 +71,7 @@
   import { onTransfer } from '../ipc/transfer';
   import { ProfilesState } from '../state/profiles.svelte';
   import { repoIdentity } from '../ipc/profiles';
-  import type { IdentityScopes } from '../ipc/types';
+  import type { HostKey, IdentityScopes } from '../ipc/types';
   import Menu, { type MenuItem } from './Menu.svelte';
   import HostMark, { hostOf, type HostMarkKind } from './HostMark.svelte';
   import RefMark from './RefMark.svelte';
@@ -480,7 +480,7 @@
   const diff = new DiffState(views);
   const syntax = new SyntaxState(views);
   const grep = new GrepState();
-  const actions = new ActionsState();
+  const actions = new ActionsState(trustHost);
   const commitDraft = new CommitState();
   // A word that cannot be added is said once, where it was asked for; `toasts` is read when
   // that happens, by which time it exists.
@@ -664,7 +664,7 @@
   });
   const remotes = new RemotesState();
   const stashes = new StashesState();
-  const startPage = new StartState();
+  const startPage = new StartState(trustHost);
   const find = new FindState();
   const bisect = new BisectState();
   const avatars = new AvatarState();
@@ -769,6 +769,28 @@
       placeholder: '',
       initial: '',
       choices: [{ id: 'yes', label: 'Yes', primary: true }],
+    });
+    return choice !== null;
+  }
+
+  /**
+   * Asks whether to trust a host ssh has not connected to before.
+   *
+   * ssh would ask this in a terminal; Coral runs it without one. The fingerprint is the one ssh
+   * was shown, and trusting it lets ssh record that key and no other.
+   */
+  async function trustHost(key: HostKey): Promise<boolean> {
+    const { choice } = await ask({
+      title: `Trust ${key.host}?`,
+      detail:
+        `Coral has not connected to ${key.host} before. Its ${key.kind} key fingerprint is\n` +
+        `${key.fingerprint}\n` +
+        'Check it against the fingerprint your host publishes. Trusting adds it to ' +
+        'known_hosts, as ssh would, and the connection goes ahead.',
+      asksText: false,
+      placeholder: '',
+      initial: '',
+      choices: [{ id: 'trust', label: 'Trust', primary: true }],
     });
     return choice !== null;
   }
