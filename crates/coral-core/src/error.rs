@@ -26,6 +26,18 @@ pub enum CoralError {
         stderr: String,
     },
 
+    /// ssh was shown a key for a host it has no record of, and nobody has trusted it yet.
+    #[error(
+        "ssh has not connected to {} before; its {} key fingerprint is {}",
+        .host_key.host, .host_key.kind, .host_key.fingerprint
+    )]
+    UnknownHostKey {
+        label: &'static str,
+        argv: Vec<String>,
+        host_key: crate::hostkey::HostKey,
+        stderr: String,
+    },
+
     #[error("git {label} was killed by signal {signal}")]
     GitSignal {
         label: &'static str,
@@ -78,6 +90,7 @@ impl CoralError {
             Self::GitTooOld { .. } => "git_too_old",
             Self::GitVersionUnparsable { .. } => "git_version_unparsable",
             Self::GitExit { .. } | Self::GitSignal { .. } => "git_error",
+            Self::UnknownHostKey { .. } => "unknown_host_key",
             Self::GitSpawn { .. } => "git_spawn_failed",
             Self::NotARepository(_) => "not_a_repository",
             Self::AlreadyARepository(_) => "already_a_repository",
@@ -93,6 +106,7 @@ impl CoralError {
     pub fn argv(&self) -> Option<&[String]> {
         match self {
             Self::GitExit { argv, .. }
+            | Self::UnknownHostKey { argv, .. }
             | Self::GitSignal { argv, .. }
             | Self::GitSpawn { argv, .. } => Some(argv),
             _ => None,
@@ -103,7 +117,7 @@ impl CoralError {
     #[must_use]
     pub fn stderr(&self) -> Option<&str> {
         match self {
-            Self::GitExit { stderr, .. } => Some(stderr),
+            Self::GitExit { stderr, .. } | Self::UnknownHostKey { stderr, .. } => Some(stderr),
             _ => None,
         }
     }

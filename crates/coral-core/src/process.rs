@@ -235,6 +235,11 @@ impl GitCommand {
         {
             v.extend(args.into_iter().map(OsString::from));
         }
+        if matches!(self.class, GitClass::Network)
+            && let Some(args) = crate::hostkey::askpass_args()
+        {
+            v.extend(args.into_iter().map(OsString::from));
+        }
         v
     }
 }
@@ -828,17 +833,18 @@ impl GitRunner {
             return Ok(());
         }
         Err(match status.code() {
-            Some(code) => CoralError::GitExit {
-                label: cmd.label,
+            // Through the same reading the buffered path gets. Everything streamed is a network
+            // command, which writes its progress to stderr and its reason at the end — the case
+            // `why_it_failed` exists for, and the one path that was not asking it: a pull
+            // refused over local changes reported three lines of counting objects and never
+            // said which file was in the way.
+            Some(code) => exited(
+                cmd.label,
                 code,
                 argv,
-                // Through the same reading the buffered path gets. Everything streamed is a
-                // network command, which writes its progress to stderr and its reason at the
-                // end — the case `why_it_failed` exists for, and the one path that was not
-                // asking it: a pull refused over local changes reported three lines of
-                // counting objects and never said which file was in the way.
-                stderr: scrubbed(&why_it_failed(&tail)),
-            },
+                &tail,
+                scrubbed(&why_it_failed(&tail)),
+            ),
             None => CoralError::GitSignal {
                 label: cmd.label,
                 signal: signal_of(status),
@@ -869,10 +875,13 @@ impl GitRunner {
             Some(path) => c.env("GIT_TEMPLATE_DIR", path),
             None => c.env_remove("GIT_TEMPLATE_DIR"),
         };
-        if matches!(cmd.class, GitClass::Network)
-            && let Some((_, session)) = crate::credential::helper_config()
-        {
-            c.env(crate::credential::SESSION_VAR, session);
+        if matches!(cmd.class, GitClass::Network) {
+            if let Some((_, session)) = crate::credential::helper_config() {
+                c.env(crate::credential::SESSION_VAR, session);
+            }
+            for (key, value) in crate::hostkey::askpass_env() {
+                c.env(key, value);
+            }
         }
         for (key, value) in &cmd.env {
             c.env(key, value);
@@ -1050,18 +1059,44 @@ impl GitRunner {
             )));
         }
         match out.status.code() {
-            Some(code) => CoralError::GitExit {
+            Some(code) => exited(
                 label,
                 code,
                 argv,
+                &String::from_utf8_lossy(&out.stderr),
                 stderr,
-            },
+            ),
             None => CoralError::GitSignal {
                 label,
                 signal: signal_of(out.status),
                 argv,
             },
         }
+    }
+}
+
+// The declined host key is looked for in everything git wrote, since `shown` keeps only what
+// explains the failure to a person.
+fn exited(
+    label: &'static str,
+    code: i32,
+    argv: Vec<String>,
+    stderr: &str,
+    shown: String,
+) -> CoralError {
+    match crate::hostkey::declined_in(stderr) {
+        Some(host_key) => CoralError::UnknownHostKey {
+            label,
+            argv,
+            host_key,
+            stderr: shown,
+        },
+        None => CoralError::GitExit {
+            label,
+            code,
+            argv,
+            stderr: shown,
+        },
     }
 }
 
