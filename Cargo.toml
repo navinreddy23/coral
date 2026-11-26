@@ -29,7 +29,6 @@ thiserror = "2.0.20"
 clap      = { version = "4.6.6", features = ["derive", "env", "wrap_help"] }
 bstr      = { version = "1.13.1", features = ["serde"] }
 smallvec  = { version = "1.16.0", features = ["union", "const_generics"] }
-similar   = "3.2.0"
 tracing   = "0.1.44"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 insta     = { version = "1.48.0", features = ["json", "redactions", "filters"] }
