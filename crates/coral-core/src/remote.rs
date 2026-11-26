@@ -323,6 +323,10 @@ impl RepoLocation {
     /// fetched, and the commits behind them. Only the branches the clone already fetches get
     /// deeper; a single-branch clone stays single-branch, which was a choice made at cloning.
     ///
+    /// With no remote named, from `origin`, or the first remote when there is none of that
+    /// name. Not `--all`: once there are two remotes, git passes neither `--deepen` nor
+    /// `--unshallow` on to the fetches it starts, and they succeed having fetched nothing.
+    ///
     /// # Errors
     /// Propagates git failures, including asking a clone that is not shallow to unshallow.
     pub async fn deepen<F>(
@@ -339,7 +343,17 @@ impl RepoLocation {
             Deepen::By { commits } => format!("--deepen={commits}"),
             Deepen::All => "--unshallow".to_owned(),
         };
-        self.fetch_with(runner, remote, &[flag.as_str()], on_progress)
+        let remote = if let Some(named) = remote {
+            Some(named.to_owned())
+        } else {
+            let remotes = self.remotes(runner).await?;
+            remotes
+                .iter()
+                .find(|r| r.name == "origin")
+                .or_else(|| remotes.first())
+                .map(|r| r.name.clone())
+        };
+        self.fetch_with(runner, remote.as_deref(), &[flag.as_str()], on_progress)
             .await
     }
 
