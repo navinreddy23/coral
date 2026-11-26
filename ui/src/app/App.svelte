@@ -5588,19 +5588,26 @@
           label: 'Copy its path',
           run: () => void copyUrl(tree.path),
         },
-        { kind: 'separator' },
-        {
-          kind: 'item',
-          label: 'Remove this working tree…',
-          danger: true,
-          // git refuses while another process holds it, and saying so here beats letting the
-          // refusal come back as a git error under a button that looked available.
-          disabled: tree.locked,
-          hint: tree.locked ? 'git is using it' : undefined,
-          run: () => void removeWorktree(tree),
-        },
+        // The main tree is listed only from a tab on a linked one, and git will not remove it.
+        ...(tree.main ? [] : removeWorktreeItems(tree)),
       ],
     };
+  }
+
+  function removeWorktreeItems(tree: Worktree): MenuItem[] {
+    return [
+      { kind: 'separator' },
+      {
+        kind: 'item',
+        label: 'Remove this working tree…',
+        danger: true,
+        // git refuses while another process holds it, and saying so here beats letting the
+        // refusal come back as a git error under a button that looked available.
+        disabled: tree.locked,
+        hint: tree.locked ? 'git is using it' : undefined,
+        run: () => void removeWorktree(tree),
+      },
+    ];
   }
 
   /**
@@ -6165,7 +6172,7 @@
         stashes={stashes.list}
         submodules={refs.submodules}
         bare={info?.isBare ?? false}
-        worktrees={worktrees.linked}
+        worktrees={worktrees.others}
         remotes={remotes.list}
         openSubmodule={tabs.active?.submodule ?? null}
         onSelect={reveal}
