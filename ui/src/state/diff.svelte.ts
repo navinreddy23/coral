@@ -488,10 +488,12 @@ export class DiffState {
     const side = ++this.#side;
     this.history = null;
     try {
-      // From the commit being looked at, so the list holds the change on screen.
+      // From the change the panel was opened on, so the list holds it. Not from a commit picked
+      // out of the list since, which left out everything newer than that one.
       const lines = this.lines;
+      const from = this.#opened ?? request;
       const got = lines === null
-        ? await fileHistory(request.repo, revisionOf(request), request.path, this.#historyLimit)
+        ? await fileHistory(from.repo, revisionOf(from), from.path, this.#historyLimit)
         : await lineHistory(
           request.repo, lines.rev, lines.path, lines.from, lines.to, this.#historyLimit,
         );

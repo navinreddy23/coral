@@ -85,6 +85,22 @@ describe('the file panel', () => {
     expect(diff.lines).toBeNull();
   });
 
+  it('goes back to the whole file\'s history from the change it was opened on', async () => {
+    // A commit picked from the lines' history became where "Whole file" read from, so the list
+    // came back without everything newer than it: the change on screen among them.
+    answering({ line_history: [], file_history: [] });
+    const diff = new DiffState(new ViewsState());
+    await diff.open('/repo', 'deadbeef', 'a.c');
+    diff.setView('blame');
+    await vi.waitFor(() => expect(diff.blame).not.toBeNull());
+    await diff.historyOfLines(2, 3);
+    await diff.showCommit('c0ffee');
+
+    await diff.historyOfFile();
+
+    expect(called('file_history').at(-1)?.[1]).toMatchObject({ rev: 'deadbeef', file: 'a.c' });
+  });
+
   it('asks for nothing beyond the diff until a view that needs it is chosen', async () => {
     answering();
     const diff = new DiffState(new ViewsState());
