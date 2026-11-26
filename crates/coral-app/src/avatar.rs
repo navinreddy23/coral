@@ -16,8 +16,8 @@ use tokio::sync::Semaphore;
 
 use crate::commands::IpcError;
 
-const KEEP_PICTURE: Duration = Duration::from_secs(7 * 24 * 60 * 60);
-const KEEP_NONE: Duration = Duration::from_secs(24 * 60 * 60);
+const KEEP_PICTURE: Duration = Duration::from_hours(7 * 24);
+const KEEP_NONE: Duration = Duration::from_hours(24);
 /// A screen of rows asks for every author on it at once; the host should see a handful.
 const AT_ONCE: usize = 4;
 

@@ -134,7 +134,7 @@ CLI cannot disagree about what an operation did.
 
 ## Getting started
 
-Rust 1.88 or newer, git 2.40 or newer, and **Node 24** — the interface is Vite and Svelte, so
+Rust 1.95 or newer, git 2.40 or newer, and **Node 24** — the interface is Vite and Svelte, so
 `just build` runs `npm ci` and the build needs npm on the PATH. Nothing cargo installs brings
 it; take it from your platform.
 
