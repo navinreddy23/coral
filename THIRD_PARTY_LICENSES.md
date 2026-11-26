@@ -512,7 +512,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## Apache License 2.0
 
-Used by: `ar_archive_writer 0.5.3`
+Used by: `ar_archive_writer 0.5.5`
 
 ```
                                  Apache License
@@ -1732,7 +1732,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS &quot;AS IS&
 
 ## Creative Commons Zero v1.0 Universal
 
-Used by: `notify 8.2.1`
+Used by: `notify 8.2.2`
 
 ```
 Creative Commons CC0 1.0 Universal
@@ -1780,7 +1780,7 @@ For these and/or other purposes and motivations, and without any expectation of 
 
 ## Community Data License Agreement Permissive 2.0
 
-Used by: `webpki-root-certs 1.0.11`
+Used by: `webpki-root-certs 1.0.12`
 
 ```
 # Community Data License Agreement - Permissive - Version 2.0
@@ -2431,7 +2431,7 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ## ISC License
 
-Used by: `rustls-webpki 0.103.16`
+Used by: `rustls-webpki 0.103.17`
 
 ```
 Except as otherwise noted, this project is licensed under the following
@@ -2884,7 +2884,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `cc 1.11.0`, `cfg-if 1.0.5`, `cmake 0.1.58`, `filetime 0.2.29`, `find-msvc-tools 0.1.15`, `jobserver 0.1.35`, `js-sys 0.3.107`, `openssl-probe 0.2.2`, `pkg-config 0.3.34`, `socket2 0.6.5`, `stacker 0.1.25`, `toml_datetime 0.6.3`, `wasm-bindgen-futures 0.4.80`, `wasm-bindgen-macro-support 0.2.130`, `wasm-bindgen-macro 0.2.130`, `wasm-bindgen-shared 0.2.130`, `wasm-bindgen 0.2.130`, `web-sys 0.3.107`
+Used by: `cc 1.11.3`, `cfg-if 1.0.5`, `cmake 0.1.58`, `filetime 0.2.30`, `find-msvc-tools 0.1.15`, `jobserver 0.1.35`, `js-sys 0.3.107`, `openssl-probe 0.2.2`, `pkg-config 0.3.34`, `socket2 0.6.5`, `stacker 0.1.25`, `toml_datetime 0.6.3`, `wasm-bindgen-futures 0.4.80`, `wasm-bindgen-macro-support 0.2.130`, `wasm-bindgen-macro 0.2.130`, `wasm-bindgen-shared 0.2.130`, `wasm-bindgen 0.2.130`, `web-sys 0.3.107`
 
 ```
 Copyright (c) 2014 Alex Crichton
@@ -2917,7 +2917,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `mio 1.2.4`
+Used by: `mio 1.2.5`
 
 ```
 Copyright (c) 2014 Carl Lerche and other MIO contributors
@@ -2944,7 +2944,7 @@ THE SOFTWARE.
 
 ## MIT License
 
-Used by: `errno 0.3.14`
+Used by: `errno 0.3.15`
 
 ```
 Copyright (c) 2014 Chris Wong
@@ -2977,7 +2977,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `mime 0.3.17`
+Used by: `mime 0.3.18`
 
 ```
 Copyright (c) 2014 Sean McArthur
@@ -3005,7 +3005,7 @@ THE SOFTWARE.
 
 ## MIT License
 
-Used by: `bitflags 1.3.2`, `bitflags 2.13.2`, `glob 0.3.4`, `log 0.4.35`, `num-bigint 0.4.8`, `num-complex 0.4.6`, `num-integer 0.1.47`, `num-iter 0.1.46`, `num-rational 0.4.2`, `num-traits 0.2.19`, `num 0.4.3`, `regex-automata 0.4.18`, `regex-syntax 0.8.11`, `regex 1.13.1`
+Used by: `bitflags 1.3.2`, `bitflags 2.13.2`, `glob 0.3.4`, `log 0.4.35`, `num-bigint 0.4.8`, `num-complex 0.4.6`, `num-integer 0.1.47`, `num-iter 0.1.46`, `num-rational 0.4.2`, `num-traits 0.2.19`, `num 0.4.3`, `regex-automata 0.4.19`, `regex-syntax 0.8.12`, `regex 1.13.2`
 
 ```
 Copyright (c) 2014 The Rust Project Developers
@@ -3038,7 +3038,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `uuid 1.26.1`
+Used by: `uuid 1.29.3`
 
 ```
 Copyright (c) 2014 The Rust Project Developers
@@ -3131,7 +3131,7 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `flate2 1.1.10`
+Used by: `flate2 1.1.11`
 
 ```
 Copyright (c) 2014-2026 Alex Crichton
@@ -3164,7 +3164,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `hyper 1.12.0`
+Used by: `hyper 1.13.0`
 
 ```
 Copyright (c) 2014-2026 Sean McArthur
@@ -3191,7 +3191,7 @@ THE SOFTWARE.
 
 ## MIT License
 
-Used by: `serde_with 3.24.0`, `serde_with_macros 3.24.0`
+Used by: `serde_with 3.25.0`, `serde_with_macros 3.25.0`
 
 ```
 Copyright (c) 2015
@@ -3224,7 +3224,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `plist 1.10.3`
+Used by: `plist 1.10.4`
 
 ```
 Copyright (c) 2015 Edward Barnard
@@ -3667,7 +3667,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `hashbrown 0.12.3`, `hashbrown 0.14.5`, `hashbrown 0.16.1`, `hashbrown 0.17.1`
+Used by: `hashbrown 0.12.3`, `hashbrown 0.14.5`, `hashbrown 0.16.1`, `hashbrown 0.17.2`
 
 ```
 Copyright (c) 2016 Amanieu d&#x27;Antras
@@ -3913,7 +3913,7 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `apple-native-keyring-store 1.0.2`, `keyring-core 1.0.1`, `keyring 4.2.0`, `zbus-secret-service-keyring-store 1.0.1`
+Used by: `apple-native-keyring-store 1.0.3`, `keyring-core 1.1.0`, `keyring 4.2.0`, `zbus-secret-service-keyring-store 1.0.1`
 
 ```
 Copyright (c) 2016 keyring Developers
@@ -4139,7 +4139,7 @@ THE SOFTWARE.
 
 ## MIT License
 
-Used by: `sha2 0.11.1`
+Used by: `sha2 0.11.2`
 
 ```
 Copyright (c) 2016-2026 The RustCrypto Project Developers
@@ -4545,7 +4545,7 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `arc-swap 1.9.3`
+Used by: `arc-swap 1.9.5`
 
 ```
 Copyright (c) 2017 arc-swap developers
@@ -4578,7 +4578,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `h2 0.4.20`
+Used by: `h2 0.4.21`
 
 ```
 Copyright (c) 2017 h2 authors
@@ -4777,7 +4777,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `bytes 1.12.1`
+Used by: `bytes 1.12.2`
 
 ```
 Copyright (c) 2018 Carl Lerche
@@ -4876,7 +4876,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `smallvec 1.16.4`
+Used by: `smallvec 1.16.6`
 
 ```
 Copyright (c) 2018 The Servo Project Developers
@@ -4970,7 +4970,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `dirs-sys 0.5.0`, `dirs 6.0.0`, `dirs 7.0.0`
+Used by: `dirs-sys 0.5.0`, `dirs 7.0.0`
 
 ```
 Copyright (c) 2018-2019 dirs-rs contributors
@@ -5060,7 +5060,7 @@ THE SOFTWARE.
 
 ## MIT License
 
-Used by: `aes 0.9.2`
+Used by: `aes 0.9.4`
 
 ```
 Copyright (c) 2018-2024 The RustCrypto Project Developers
@@ -5195,7 +5195,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `zeroize 1.9.1`
+Used by: `zeroize 1.9.2`
 
 ```
 Copyright (c) 2018-2026 The RustCrypto Project Developers
@@ -5409,7 +5409,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `bumpalo 3.20.3`
+Used by: `bumpalo 3.20.4`
 
 ```
 Copyright (c) 2019 Nick Fitzgerald
@@ -5701,7 +5701,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `const-oid 0.10.2`, `cpufeatures 0.3.1`
+Used by: `const-oid 0.10.3`, `cpufeatures 0.3.1`
 
 ```
 Copyright (c) 2020-2026 The RustCrypto Project Developers
@@ -5800,7 +5800,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `inout 0.2.5`
+Used by: `inout 0.2.6`
 
 ```
 Copyright (c) 2022-2025 The RustCrypto Project Developers
@@ -5867,7 +5867,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `rustls-pki-types 1.15.1`
+Used by: `rustls-pki-types 1.16.0`
 
 ```
 Copyright (c) 2023 Dirkjan Ochtman &lt;dirkjan@ochtman.nl&gt;
@@ -5927,7 +5927,7 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `notify-types 2.2.0`
+Used by: `notify-types 2.3.1`
 
 ```
 Copyright (c) 2023 Notify Contributors
@@ -6239,7 +6239,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `zcheapstr 1.2.0`
+Used by: `zcheapstr 1.4.0`
 
 ```
 Copyright (c) 2026 Zeeshan Ali Khan &amp; zcheapstr contributors
@@ -6272,7 +6272,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `anstream 1.0.0`, `anstyle-parse 1.0.0`, `anstyle-query 1.1.5`, `anstyle-wincon 3.0.11`, `anstyle 1.0.14`, `clap 4.6.7`, `clap_builder 4.6.7`, `clap_derive 4.6.7`, `clap_lex 1.1.1`, `colorchoice 1.0.5`, `is_terminal_polyfill 1.70.2`, `once_cell_polyfill 1.70.2`, `serde_spanned 0.6.9`, `serde_spanned 1.1.2`, `toml 0.8.2`, `toml 1.1.8+spec-1.1.0`, `toml_datetime 1.1.2+spec-1.1.0`, `toml_edit 0.19.15`, `toml_edit 0.20.2`, `toml_edit 0.25.17+spec-1.1.0`, `toml_parser 1.1.5+spec-1.1.0`, `toml_writer 1.1.3+spec-1.1.0`
+Used by: `anstream 1.0.0`, `anstyle-parse 1.0.0`, `anstyle-query 1.1.5`, `anstyle-wincon 3.0.11`, `anstyle 1.0.14`, `clap 4.6.10`, `clap_builder 4.6.10`, `clap_derive 4.6.9`, `clap_lex 1.1.2`, `colorchoice 1.0.5`, `is_terminal_polyfill 1.70.2`, `once_cell_polyfill 1.70.2`, `serde_spanned 0.6.9`, `serde_spanned 1.1.3`, `toml 0.8.2`, `toml 1.2.3+spec-1.1.0`, `toml_datetime 1.1.3+spec-1.1.0`, `toml_edit 0.19.15`, `toml_edit 0.20.2`, `toml_edit 0.25.21+spec-1.1.0`, `toml_parser 1.1.7+spec-1.1.0`, `toml_writer 1.2.0+spec-1.1.0`
 
 ```
 Copyright (c) Individual contributors
@@ -6912,7 +6912,7 @@ Their copyright and permission notices are included with this distribution:
 
 ## MIT License
 
-Used by: `crc32fast 1.5.4`
+Used by: `crc32fast 1.5.6`
 
 ```
 MIT License
@@ -7959,7 +7959,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `adler2 2.0.1`, `anyhow 1.0.104`, `async-channel 2.5.0`, `async-executor 1.14.1`, `async-io 2.6.0`, `async-lock 3.5.0`, `async-process 2.5.0`, `async-signal 0.2.14`, `async-task 4.7.1`, `async-trait 0.1.92`, `atomic-waker 1.1.2`, `blocking 1.7.0`, `camino 1.2.6`, `cargo-platform 0.1.9`, `cargo_metadata 0.19.2`, `concurrent-queue 2.5.0`, `displaydoc 0.2.7`, `dtoa 1.0.11`, `dyn-clone 1.0.20`, `endi 1.1.1`, `erased-serde 0.4.11`, `event-listener-strategy 0.5.4`, `event-listener 5.4.2`, `fastrand 2.5.0`, `futures-lite 2.6.1`, `hermit-abi 0.5.3`, `itoa 1.0.18`, `lazy_static 1.5.1`, `linux-raw-sys 0.12.1`, `num_enum 0.7.6`, `num_enum_derive 0.7.6`, `once_cell 1.21.4`, `ordered-stream 0.2.0`, `parking 2.2.1`, `pest 2.9.5`, `pest_derive 2.9.5`, `pest_generator 2.9.5`, `pest_meta 2.9.5`, `pest_stack_guard 1.0.1`, `pin-project-lite 0.2.17`, `piper 0.2.5`, `polling 3.11.0`, `portable-atomic-util 0.2.8`, `portable-atomic 1.15.0`, `proc-macro-crate 1.3.1`, `proc-macro-crate 2.0.2`, `proc-macro-crate 3.5.0`, `proc-macro2 1.0.107`, `quote 1.0.47`, `rustix 1.1.6`, `rustversion 1.0.23`, `semver 1.0.28`, `serde-untagged 0.1.9`, `serde 1.0.229`, `serde_core 1.0.229`, `serde_derive 1.0.229`, `serde_derive_internals 0.29.1`, `serde_json 1.0.154`, `serde_repr 0.1.21`, `servo_arc 0.4.3`, `servo_arc 0.5.0`, `simd_cesu8 1.2.0`, `syn 1.0.109`, `syn 2.0.119`, `syn 3.0.10`, `system-deps 6.2.2`, `thiserror-impl 1.0.69`, `thiserror-impl 2.0.21`, `thiserror 1.0.69`, `thiserror 2.0.21`, `typeid 1.0.3`, `unicode-ident 1.0.27`, `wasi 0.11.1+wasi-snapshot-preview1`, `wasip2 1.0.4+wasi-0.2.12`, `wasm-streams 0.5.0`, `wit-bindgen 0.57.1`, `x11-dl 2.21.0`, `x11 2.21.0`, `zmij 1.0.23`, `zvariant_utils 4.2.0`
+Used by: `adler2 2.0.1`, `anyhow 1.0.105`, `async-channel 2.5.0`, `async-executor 1.14.1`, `async-io 2.6.0`, `async-lock 3.5.0`, `async-process 2.5.0`, `async-signal 0.2.14`, `async-task 4.7.1`, `async-trait 0.1.92`, `atomic-waker 1.1.2`, `blocking 1.7.0`, `camino 1.2.6`, `cargo-platform 0.1.9`, `cargo_metadata 0.19.2`, `concurrent-queue 2.5.0`, `displaydoc 0.2.7`, `dtoa 1.0.11`, `dyn-clone 1.0.20`, `endi 1.1.1`, `erased-serde 0.4.11`, `event-listener-strategy 0.5.4`, `event-listener 5.4.2`, `fastrand 2.5.0`, `futures-lite 2.6.1`, `hermit-abi 0.5.3`, `itoa 1.0.19`, `lazy_static 1.5.1`, `linux-raw-sys 0.12.1`, `num_enum 0.7.6`, `num_enum_derive 0.7.6`, `once_cell 1.21.4`, `ordered-stream 0.2.0`, `parking 2.2.1`, `pest 2.9.7`, `pest_derive 2.9.7`, `pest_generator 2.9.7`, `pest_meta 2.9.7`, `pest_stack_guard 1.0.1`, `pin-project-lite 0.2.18`, `piper 0.2.5`, `polling 3.11.0`, `portable-atomic-util 0.2.8`, `portable-atomic 1.15.0`, `proc-macro-crate 1.3.1`, `proc-macro-crate 2.0.2`, `proc-macro-crate 3.5.0`, `proc-macro2 1.0.107`, `quote 1.0.47`, `rustix 1.1.6`, `rustversion 1.0.23`, `semver 1.0.28`, `serde-untagged 0.1.9`, `serde 1.0.229`, `serde_core 1.0.229`, `serde_derive 1.0.229`, `serde_derive_internals 0.29.1`, `serde_json 1.0.154`, `serde_repr 0.1.21`, `servo_arc 0.4.3`, `servo_arc 0.5.0`, `simd_cesu8 1.2.0`, `syn 1.0.109`, `syn 2.0.119`, `syn 3.0.10`, `system-deps 6.2.2`, `thiserror-impl 1.0.69`, `thiserror-impl 2.0.21`, `thiserror 1.0.69`, `thiserror 2.0.21`, `typeid 1.0.3`, `unicode-ident 1.0.27`, `wasi 0.11.1+wasi-snapshot-preview1`, `wasip2 1.0.4+wasi-0.2.12`, `wasm-streams 0.5.0`, `wit-bindgen 0.57.1`, `x11-dl 2.21.0`, `x11 2.21.0`, `zmij 1.0.23`, `zvariant_utils 4.2.0`
 
 ```
 Permission is hereby granted, free of charge, to any
@@ -8020,7 +8020,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `allocator-api2 0.2.21`
+Used by: `allocator-api2 0.2.22`
 
 ```
 Permission is hereby granted, free of charge, to any
@@ -8051,7 +8051,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `winnow 0.5.40`, `winnow 1.0.4`
+Used by: `winnow 0.5.40`, `winnow 1.0.5`
 
 ```
 Permission is hereby granted, free of charge, to any person obtaining
@@ -8354,7 +8354,7 @@ THE SOFTWARE.
 
 ## MIT License
 
-Used by: `aho-corasick 1.1.5`, `byteorder 1.5.0`, `jiff-core 1.0.2`, `jiff-tzdb-platform 1.0.0`, `jiff-tzdb 1.0.0`, `jiff 1.0.3`, `memchr 2.8.3`, `ucd-trie 0.1.7`, `walkdir 2.5.0`
+Used by: `aho-corasick 1.1.5`, `byteorder 1.5.0`, `jiff-core 1.0.2`, `jiff-tzdb-platform 1.0.0`, `jiff-tzdb 1.0.0`, `jiff 1.0.3`, `memchr 2.8.3`, `ucd-trie 0.1.8`, `walkdir 2.5.1`
 
 ```
 The MIT License (MIT)
@@ -8767,7 +8767,7 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `async-compression 0.4.52`, `compression-codecs 0.4.47`, `compression-core 0.4.34`
+Used by: `async-compression 0.4.54`, `compression-codecs 0.4.49`, `compression-core 0.4.34`
 
 ```
 The MIT License (MIT)
@@ -8796,7 +8796,7 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `bstr 1.13.1`
+Used by: `bstr 1.14.0`
 
 ```
 The MIT License (MIT)
@@ -10791,7 +10791,7 @@ ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation a
 
 ## zlib License
 
-Used by: `zlib-rs 0.6.8`
+Used by: `zlib-rs 0.6.9`
 
 ```
 (C) 2024 Trifecta Tech Foundation 

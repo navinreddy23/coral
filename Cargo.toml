@@ -39,10 +39,10 @@ secrecy   = { version = "0.10.3", features = ["serde"] }
 reqwest   = { version = "0.13.4", default-features = false, features = ["json", "rustls", "gzip", "http2"] }
 # The version already in the graph through another dependency, so hashing an email for
 # Gravatar builds nothing new.
-sha2      = "0.10.9"
+sha2      = "0.11.2"
 # The version Tauri resolves its own config directory with, so the credential helper finds the
 # profiles file where the window wrote it.
-dirs      = "6.0.0"
+dirs      = "7.0.0"
 url       = "2"
 # Hunspell's matching in Rust, for the commit box's spelling check. Pinned to the patch: it calls
 # itself alpha, and the CLI's snapshots hold the suggestions it makes.
