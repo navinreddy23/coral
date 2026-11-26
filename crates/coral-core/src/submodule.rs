@@ -158,6 +158,16 @@ pub fn parse_gitlinks(bytes: &[u8]) -> BTreeMap<String, String> {
     out
 }
 
+/// Which submodules the local config switches on, as `is_submodule_active` reads it.
+#[derive(Default)]
+struct Switches {
+    with_url: HashSet<String>,
+    /// Set to `active = false` by name.
+    off: HashSet<String>,
+    /// Whether `submodule.active` itself is set, which `git submodule init` follows.
+    pathspec: bool,
+}
+
 /// A submodule's recorded commit, read from inside the submodule itself.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "types.ts"))]
@@ -564,7 +574,7 @@ impl RepoLocation {
             });
         }
         let every = if paths.is_empty() {
-            Some(self.active_submodules(runner).await?)
+            Some(self.active_submodules(runner, &declared).await?)
         } else {
             None
         };
@@ -588,39 +598,66 @@ impl RepoLocation {
     /// `submodule.active` says, so "every submodule" asks `git submodule init` first, which
     /// does follow it, and then takes the ones it left with a URL and not switched off. The
     /// rule is git's `is_submodule_active`.
-    async fn active_submodules(&self, runner: &GitRunner) -> Result<HashSet<String>, CoralError> {
-        runner
-            .output(GitCommand::write("submodule", self.display_path()).args(["submodule", "init"]))
-            .await?;
+    ///
+    /// Without a `submodule.active` pathspec, a bare `git submodule init` initialises every
+    /// declared submodule and switches one set to `active = false` back on, so it is named the
+    /// others instead.
+    async fn active_submodules(
+        &self,
+        runner: &GitRunner,
+        declared: &[Submodule],
+    ) -> Result<HashSet<String>, CoralError> {
+        let before = self.switches(runner).await?;
+        let init = GitCommand::write("submodule", self.display_path()).args(["submodule", "init"]);
+        let init = if before.off.is_empty() || before.pathspec {
+            Some(init)
+        } else {
+            let on: Vec<&str> = declared
+                .iter()
+                .filter(|s| !before.off.contains(&s.name))
+                .map(|s| s.path.as_str())
+                .collect();
+            (!on.is_empty()).then(|| init.literal_paths(on))
+        };
+        if let Some(init) = init {
+            runner.output(init).await?;
+        }
+        let after = self.switches(runner).await?;
+        Ok(&after.with_url - &after.off)
+    }
+
+    /// What the local config says about which submodules are on.
+    async fn switches(&self, runner: &GitRunner) -> Result<Switches, CoralError> {
         let cmd = GitCommand::read("config", self.display_path()).args([
             "config",
             "--local",
             "-z",
             "--get-regexp",
-            r"^submodule\..*\.(url|active)$",
+            r"^submodule\.(active|.*\.(url|active))$",
         ]);
         let out = match runner.output(cmd).await {
             Ok(out) => out.stdout,
             Err(CoralError::GitExit { code: 1, .. }) => Vec::new(),
             Err(e) => return Err(e),
         };
-        let mut with_url = HashSet::new();
-        let mut off = HashSet::new();
+        let mut switches = Switches::default();
         for record in out.split(|b| *b == 0).filter(|r| !r.is_empty()) {
             let record = String::from_utf8_lossy(record);
             let (key, value) = record.split_once('\n').unwrap_or((&record, ""));
             let Some(rest) = key.strip_prefix("submodule.") else {
                 continue;
             };
-            if let Some(name) = rest.strip_suffix(".url") {
-                with_url.insert(name.to_owned());
+            if rest == "active" {
+                switches.pathspec = true;
+            } else if let Some(name) = rest.strip_suffix(".url") {
+                switches.with_url.insert(name.to_owned());
             } else if let Some(name) = rest.strip_suffix(".active")
                 && value.trim() == "false"
             {
-                off.insert(name.to_owned());
+                switches.off.insert(name.to_owned());
             }
         }
-        Ok(&with_url - &off)
+        Ok(switches)
     }
 
     fn update_command(

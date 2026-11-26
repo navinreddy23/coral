@@ -707,3 +707,38 @@ fn updating_every_submodule_keeps_to_the_ones_submodule_active_names() {
         .unwrap();
     assert!(!switched_on.status.success(), "and was marked active");
 }
+
+#[test]
+fn updating_every_submodule_leaves_one_switched_off_alone() {
+    // With no `submodule.active` in the config, `git submodule init` initialises every declared
+    // submodule and switches back on one marked `submodule.<name>.active=false`: the update then
+    // moved it to the recorded commit, and the config said it was on again.
+    let (repo, _one, _two) = with_two_submodules();
+    repo.git(["config", "submodule.vendor/tool.active", "false"]);
+    repo.git([
+        "-C",
+        "vendor/tool",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "--allow-empty",
+        "-m",
+        "drift",
+    ]);
+    let drifted = repo.git(["-C", "vendor/tool", "rev-parse", "HEAD"]);
+
+    run(async {
+        let (runner, loc) = located(&repo).await;
+        loc.submodule_init(&runner, &[], true, false).await.unwrap();
+    });
+    assert_eq!(
+        repo.git(["-C", "vendor/tool", "rev-parse", "HEAD"]),
+        drifted,
+        "a submodule switched off was moved"
+    );
+    assert_eq!(
+        repo.git(["config", "--get", "submodule.vendor/tool.active"]),
+        "false",
+        "and switched back on"
+    );
+}
