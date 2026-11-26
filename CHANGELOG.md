@@ -1,5 +1,80 @@
 # Changelog
 
+## 1.7.0
+
+### Changed
+
+- **Building Coral needs Rust 1.95 or newer**, and the toolchain the gate runs on is 1.100.0.
+- **Tauri is 2.12 and gix 0.91.** The graph's walk was timed against the kernel before and after
+  the move and is unchanged, as are the updater, link opening and the window itself under
+  WebKitGTK. dirs is 7 and sha2 0.11, and the interface's build takes svelte 5.59, vite 8.4 and
+  vitest 5.
+
+### Fixed
+
+- **A file the window names is that file, not a pattern.** git read every path Coral handed it as
+  a glob, so `pages/[id].tsx` also meant `pages/d.tsx`: discarding the route file threw away
+  changes to its sibling, deleting it as new deleted an untracked file beside it, and marking it
+  resolved staged a sibling still full of conflict markers. Staging, stopping tracking, taking a
+  version, the diff and the file's history reached the sibling too.
+- **A keyboard menu shows which row has focus.** Opened with the Menu key or Shift+F10, or
+  stepped through with the arrows, the focused row had no mark in WebKitGTK, and Enter ran an
+  item nobody could see was chosen.
+- **The window keeps noticing files changed outside it.** Edits from a terminal could stop
+  showing until the tab was opened again: a read still answering when its tab closed left the
+  window ignoring the watcher, and a change that came during a read was dropped.
+- **"Read it anyway" on a huge file no longer freezes the window.** A 900,000-line diff held it
+  for minutes; it draws in under two seconds.
+- **A click during a fetch on the timer goes ahead.** It waited for the fetch, which has no
+  timeout, so a host that never answered held every click; the fetch is stopped instead. Undoing a
+  pull no longer refuses because a later fetch moved `origin/main`.
+- **Stopping a fetch, pull or push is not reported as a failure**, and closing the window stops
+  one still running, where a fetch to a host that never answered outlived the window with its ssh
+  connected.
+- **A rebasing pull over uncommitted work offers to stash around it**, as a merging pull already
+  did. git refuses a rebase over any uncommitted change, in words that name no file, and the
+  pull ended in git's message.
+- **"Fetching…" in the status bar keeps its mark beside the word.** The mark took a line of its
+  own and pushed the word half off the bottom of the window.
+- **Clean up branches deletes a branch merged here even when its upstream lacks it**, rather than
+  stopping on it with the rest undone, and one undo brings back what each branch followed as
+  well as the branch. A merged branch named like a tag is listed by its own name.
+- **Updating every submodule keeps to the ones git would update.** A clone made with
+  `--recurse-submodules` for one had the others cloned and switched on as well, one switched off
+  with `submodule.<name>.active = false` was moved and switched back on, and a `.gitmodules`
+  entry whose submodule was gone failed the whole update.
+- **A submodule added where `.gitmodules` still names one is added**, with its key and the
+  submodules inside it, rather than reported as nothing new.
+- **Fetching more of a shallow clone works with two remotes.** git passed neither the depth nor
+  `--unshallow` on to the fetch of each remote, so both succeeded and fetched nothing.
+- **A moved tag stays annotated, with its message.** Fast-forwarding a tag made it lightweight,
+  and under `tag.gpgSign` sent a plain tag to be signed.
+- **Undoing a mixed reset over a commit that added a file works**, rather than being refused for
+  changes that were the commit's own.
+- **One short id in `.git-blame-ignore-revs` no longer stops every blame** with "invalid object
+  name".
+- **Before the first commit, amend is off and discarding a staged file deletes it.** Amend ended
+  in git's "You have nothing to amend", and discarding stopped with "could not resolve HEAD".
+  The file menu offers no stash there, as the toolbar already did not.
+- **A tab on a linked working tree lists the main one, not itself**, so its own tab no longer
+  offers to remove the folder it is showing.
+- **"Whole file" in a file's history brings back the history it opened with**, not the commits
+  older than one picked from the lines' history.
+- **A file past the size guard leaves the files beside it whole.** One generated file in a commit
+  or a range made every file in it "too large" with nothing shown, in `coral diff`.
+- **Ctrl+Shift+Tab goes to the previous tab on Linux**, where WebKitGTK reports the key as
+  "Unidentified".
+- **"Viewing N refs" leaves out the refs hidden from the graph**, and says "1 ref".
+- **A tab whose remote is on no host says so plainly** on the Start page, rather than "remote URL
+  could not be parsed".
+- **Skipping 1 listed** stays on one line in the blame header beside a long "Before …".
+- **Spelling keeps every word added at once**, and a word list with a stray non-UTF-8 byte no
+  longer fails every check.
+- **A long failed transfer with non-ASCII in its output no longer crashes**, and two transfers of
+  one repository, one stopped as the next began, no longer stop each other.
+- **`coral --help` says what take and discard do.** Take carried discard's description, which
+  said the opposite of what take does.
+
 ## 1.6.3
 
 ### Fixed
