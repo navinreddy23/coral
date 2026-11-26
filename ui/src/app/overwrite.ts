@@ -13,3 +13,15 @@ export function inTheWay(message: string | undefined): string[] | null {
     .filter((l) => l !== '');
   return files.length > 0 ? files : null;
 }
+
+/**
+ * Whether a pull stopped because git will not rebase over uncommitted work, which it refuses
+ * whatever the pull would change, naming no file.
+ */
+export function refusedToRebase(message: string | undefined): boolean {
+  return (
+    message?.match(
+      /cannot pull with rebase: (?:You have unstaged changes|Your index contains uncommitted changes)/u,
+    ) != null
+  );
+}

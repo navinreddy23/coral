@@ -15,7 +15,7 @@
   import { fitColumns, fitPanels, PANE_LIMITS, PanesState } from '../state/panes.svelte';
   import { SectionsState } from '../state/sections.svelte';
   import DiffView from './DiffView.svelte';
-  import { inTheWay } from './overwrite';
+  import { inTheWay, refusedToRebase } from './overwrite';
   import { DiffState } from '../state/diff.svelte';
   import { SyntaxState } from '../state/syntax.svelte';
   import { GrepState } from '../state/grep.svelte';
@@ -1442,6 +1442,7 @@
       if (action.kind === 'pull' && action.autostash !== true) {
         const files = inTheWay(actions.report?.text);
         if (files !== null) return offerToStashAround(action, files);
+        if (refusedToRebase(actions.report?.text)) return offerToStashAround(action, null);
       }
       if (action.kind === 'checkout' || (action.kind === 'branchCreate' && action.checkout)) {
         const files = inTheWay(actions.report?.text);
@@ -1619,13 +1620,18 @@
    */
   async function offerToStashAround(
     action: Extract<Action, { kind: 'pull' }>,
-    files: string[],
+    files: string[] | null,
   ): Promise<boolean> {
-    const named = files.length === 1 ? files[0] : `${files.length} files`;
+    // null is a rebase, which git refuses over any uncommitted work and names no file for.
+    const named = files === null ? null : files.length === 1 ? files[0] : `${files.length} files`;
+    const why =
+      named === null
+        ? 'git will not rebase while there are uncommitted changes, even ones the pull does not touch. '
+        : 'The pull changes what you are still working on, and git will not overwrite it. ';
     const { choice } = await ask({
-      title: `Uncommitted changes to ${named} are in the way`,
+      title: named === null ? 'Uncommitted changes are in the way' : `Uncommitted changes to ${named} are in the way`,
       detail:
-        'The pull changes what you are still working on, and git will not overwrite it. ' +
+        why +
         'Coral can stash your changes, pull, and put them back. If they clash with what came ' +
         'in, the clash is marked in the files and your changes stay in the stash.',
       asksText: false,

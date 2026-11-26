@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { inTheWay } from '../src/app/overwrite';
+import { inTheWay, refusedToRebase } from '../src/app/overwrite';
 
 describe('uncommitted work in the way of a pull or a checkout', () => {
   it('names the files git names', () => {
@@ -26,5 +26,28 @@ describe('uncommitted work in the way of a pull or a checkout', () => {
   it('is not fooled by any other failure', () => {
     expect(inTheWay('fatal: unable to access the remote')).toBeNull();
     expect(inTheWay(undefined)).toBeNull();
+  });
+});
+
+// git will not rebase over uncommitted work at all, whatever the pull changes, and says so in
+// words of its own that name no file. The pull ended in that message.
+describe('a pull that will not rebase over uncommitted work', () => {
+  it('is told by what git says about the working copy', () => {
+    expect(
+      refusedToRebase(
+        'error: cannot pull with rebase: You have unstaged changes.\nerror: Please commit or stash them.',
+      ),
+    ).toBe(true);
+    expect(
+      refusedToRebase(
+        'error: cannot pull with rebase: Your index contains uncommitted changes.\n' +
+          'error: Please commit or stash them.',
+      ),
+    ).toBe(true);
+  });
+
+  it('is not fooled by any other failure', () => {
+    expect(refusedToRebase('error: could not apply 6b4b991... docs: say x')).toBe(false);
+    expect(refusedToRebase(undefined)).toBe(false);
   });
 });
