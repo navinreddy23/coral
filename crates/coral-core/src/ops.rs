@@ -194,6 +194,30 @@ impl RepoLocation {
             .map(|_| ())
     }
 
+    /// Deletes a branch the one checked out already has every commit of.
+    ///
+    /// Not `git branch -d`: that asks a branch's upstream rather than HEAD whenever it has one,
+    /// so a branch merged here and never pushed was refused as "not fully merged".
+    ///
+    /// # Errors
+    /// [`CoralError::Refused`] if HEAD lacks any of its commits; otherwise git failures.
+    pub async fn branch_delete_merged(
+        &self,
+        runner: &GitRunner,
+        name: &str,
+    ) -> Result<(), CoralError> {
+        if !self
+            .is_ancestor(runner, &format!("refs/heads/{name}"), "HEAD")
+            .await?
+        {
+            return Err(CoralError::Refused {
+                label: "delete a branch",
+                detail: format!("{name} has commits the current branch does not"),
+            });
+        }
+        self.branch_delete(runner, name, true).await
+    }
+
     /// Renames a branch.
     ///
     /// # Errors

@@ -86,8 +86,8 @@ impl RepoLocation {
     /// The local branches whose every commit `target` already has, apart from `target` itself
     /// and the branch checked out.
     ///
-    /// Those are the ones deleting takes nothing from: `git branch -d` agrees, and refuses the
-    /// rest.
+    /// Those are the ones deleting takes nothing from, which
+    /// [`branch_delete_merged`](Self::branch_delete_merged) checks again as it deletes.
     ///
     /// # Errors
     /// Propagates git failures, including an unknown `target`.
@@ -99,7 +99,9 @@ impl RepoLocation {
         let out = runner
             .output(
                 GitCommand::read("for-each-ref", self.display_path())
-                    .args(["for-each-ref", "--format=%(refname:short)%00%(HEAD)"])
+                    // lstrip rather than short: with a tag of the same name, short says
+                    // `heads/release`, which no branch command takes.
+                    .args(["for-each-ref", "--format=%(refname:lstrip=2)%00%(HEAD)"])
                     .arg(format!("--merged={target}"))
                     .arg("refs/heads/"),
             )

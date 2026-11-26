@@ -66,7 +66,7 @@ pub enum Action {
         checkout: bool,
     },
     /// Deletes several branches as one step, so one undo brings them all back. `merged` ones
-    /// go with `-d`, which git refuses for anything not merged; `unmerged` ones need `-D`.
+    /// are refused if the current branch lacks any of their commits; `unmerged` ones are not.
     BranchDeleteMany {
         merged: Vec<String>,
         unmerged: Vec<String>,
@@ -903,7 +903,7 @@ async fn run_refs(
         Action::BranchDelete { name, force } => loc.branch_delete(runner, &name, force).await?,
         Action::BranchDeleteMany { merged, unmerged } => {
             for name in &merged {
-                loc.branch_delete(runner, name, false).await?;
+                loc.branch_delete_merged(runner, name).await?;
             }
             for name in &unmerged {
                 loc.branch_delete(runner, name, true).await?;

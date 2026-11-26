@@ -1317,3 +1317,81 @@ async fn cleanup_knows_which_branches_are_merged_and_which_lost_their_upstream()
         "nothing left to stop"
     );
 }
+
+/// A branch with an upstream, merged here but never pushed: `git branch -d` asks the upstream
+/// rather than the branch checked out, refuses, and the clean-up that listed it as merged
+/// stopped on it.
+#[tokio::test]
+async fn a_branch_merged_here_but_not_pushed_is_deleted_as_merged() {
+    let upstream = TestRepo::new().write("a.txt", "1\n").commit("base");
+    upstream.git(["branch", "feature"]);
+    let holder = tempfile::tempdir().unwrap();
+    let clone = holder.path().join("clone");
+    upstream.git(["clone", "--quiet", ".", clone.to_str().unwrap()]);
+    let here = |args: &[&str]| {
+        let out = std::process::Command::new("git")
+            .args(args)
+            .current_dir(&clone)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_AUTHOR_NAME", "A")
+            .env("GIT_AUTHOR_EMAIL", "a@fixture.invalid")
+            .env("GIT_COMMITTER_NAME", "A")
+            .env("GIT_COMMITTER_EMAIL", "a@fixture.invalid")
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    };
+    here(&["checkout", "--quiet", "--track", "origin/feature"]);
+    std::fs::write(clone.join("f.txt"), "f\n").unwrap();
+    here(&["add", "f.txt"]);
+    here(&["commit", "--quiet", "-m", "feature work"]);
+    here(&["checkout", "--quiet", "main"]);
+    here(&[
+        "merge",
+        "--quiet",
+        "--no-ff",
+        "-m",
+        "merge feature",
+        "feature",
+    ]);
+    here(&["branch", "unmerged", "HEAD~1"]);
+    here(&["checkout", "--quiet", "unmerged"]);
+    std::fs::write(clone.join("u.txt"), "u\n").unwrap();
+    here(&["add", "u.txt"]);
+    here(&["commit", "--quiet", "-m", "not merged"]);
+    here(&["checkout", "--quiet", "main"]);
+
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, &clone).await.unwrap();
+    assert_eq!(loc.merged_into(&runner, "main").await.unwrap(), ["feature"]);
+
+    loc.branch_delete_merged(&runner, "feature").await.unwrap();
+    assert!(
+        loc.branch_delete_merged(&runner, "unmerged").await.is_err(),
+        "a branch with commits the current one lacks is still refused"
+    );
+    let left: Vec<_> = loc
+        .refs(&runner)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|r| r.name.starts_with("refs/heads/"))
+        .map(|r| r.short)
+        .collect();
+    assert_eq!(left, ["main", "unmerged"]);
+}
+
+#[tokio::test]
+async fn a_merged_branch_named_like_a_tag_is_listed_by_its_own_name() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    repo.git(["branch", "release"]);
+    repo.git(["tag", "release"]);
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+    assert_eq!(loc.merged_into(&runner, "main").await.unwrap(), ["release"]);
+}
