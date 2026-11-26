@@ -83,6 +83,8 @@ impl Report {
 pub struct Transfers {
     inner: Mutex<HashMap<String, Running>>,
     claims: std::sync::atomic::AtomicU64,
+    /// Claims not yet released, stopped or not: their git may still be running.
+    live: std::sync::atomic::AtomicUsize,
 }
 
 struct Running {
@@ -128,6 +130,7 @@ impl Transfers {
                 claim,
             },
         );
+        self.live.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Ok((claim, stopped))
     }
 
@@ -136,6 +139,7 @@ impl Transfers {
     /// Stopping a transfer takes its entry, and another may claim the key before the stopped
     /// one has cleared up after itself; clearing by key alone dropped that one's switch.
     pub fn release(&self, key: &str, claim: u64) {
+        self.live.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
         let mut held = self.held();
         if held.get(key).is_some_and(|r| r.claim == claim) {
             held.remove(key);
@@ -149,6 +153,30 @@ impl Transfers {
         self.held()
             .remove(key)
             .is_some_and(|r| r.stop.send(()).is_ok())
+    }
+
+    /// Stops every transfer, as quitting has to: git dies when its work is let go, and a
+    /// process on its way out lets go of nothing, so a fetch to a host that never answered
+    /// outlived the window.
+    pub fn stop_all(&self) {
+        for (_, running) in self.held().drain() {
+            let _ = running.stop.send(());
+        }
+    }
+
+    /// Waits up to `limit` for every claim to be released, answering whether they all were.
+    ///
+    /// A transfer releases its claim only once its work has been dropped, which is what kills
+    /// its git, so this returning true means none is left running.
+    pub fn settle(&self, limit: std::time::Duration) -> bool {
+        let deadline = std::time::Instant::now() + limit;
+        while self.live.load(std::sync::atomic::Ordering::SeqCst) > 0 {
+            if std::time::Instant::now() >= deadline {
+                return false;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        true
     }
 }
 
@@ -307,5 +335,33 @@ mod tests {
             "the pull was stopped by the fetch it followed"
         );
         assert!(transfers.cancel("/repo"), "and is still there to stop");
+    }
+
+    /// git dies when its work is let go, and a process on its way out lets go of nothing: a
+    /// fetch to a host that never answered outlived the window it was started from.
+    #[test]
+    fn quitting_stops_every_transfer_and_waits_for_each_to_let_go() {
+        let transfers = std::sync::Arc::new(Transfers::default());
+        let mut letting_go = Vec::new();
+        for key in ["/one", "/two"] {
+            let (claim, stopped) = transfers.claim(key, "fetch").unwrap();
+            let held = std::sync::Arc::clone(&transfers);
+            letting_go.push(std::thread::spawn(move || {
+                let _ = stopped.blocking_recv();
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                held.release(key, claim);
+            }));
+        }
+        assert!(
+            !transfers.settle(std::time::Duration::from_millis(20)),
+            "nothing was stopped, so nothing let go"
+        );
+
+        transfers.stop_all();
+
+        assert!(transfers.settle(std::time::Duration::from_secs(5)));
+        for thread in letting_go {
+            thread.join().unwrap();
+        }
     }
 }

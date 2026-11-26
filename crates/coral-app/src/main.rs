@@ -318,8 +318,23 @@ fn window() {
             Ok(())
         })
         .invoke_handler(handlers())
-        .run(tauri::generate_context!())
-        .expect("tauri failed to start");
+        .build(tauri::generate_context!())
+        .expect("tauri failed to start")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                stop_transfers(app);
+            }
+        });
+}
+
+/// Stops whatever is still talking to a server before the process goes, or its git is left
+/// behind: a fetch to a host that never answered outlived the window.
+fn stop_transfers(app: &tauri::AppHandle) {
+    use tauri::Manager as _;
+    let transfers = app.state::<transfer::Transfers>();
+    transfers.stop_all();
+    // Stopping is a kill, so this is quick; the bound keeps a quit from hanging on it.
+    transfers.settle(std::time::Duration::from_secs(2));
 }
 
 /// Answers git's credential protocol, when invoked as its helper.
