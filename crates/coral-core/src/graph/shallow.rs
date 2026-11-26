@@ -45,7 +45,7 @@ impl<F: gix::objs::Find> gix::objs::Find for Grafted<F> {
         &self,
         id: &gix::hash::oid,
         buffer: &'a mut Vec<u8>,
-    ) -> Result<Option<gix::objs::Data<'a>>, gix::objs::find::Error> {
+    ) -> gix::Result<Option<gix::objs::Data<'a>>> {
         if !self.boundary.contains(id) {
             return self.inner.try_find(id, buffer);
         }

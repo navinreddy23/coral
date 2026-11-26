@@ -20,7 +20,7 @@ coral-core    = { path = "crates/coral-core" }
 coral-hosting = { path = "crates/coral-hosting" }
 coral-assist  = { path = "crates/coral-assist" }
 
-gix       = "0.87.1"
+gix       = "0.91.0"
 tokio     = { version = "1.53.1", default-features = false }
 notify    = "8.2.0"
 serde     = { version = "1.0.229", features = ["derive"] }
