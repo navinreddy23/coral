@@ -1395,3 +1395,51 @@ async fn a_merged_branch_named_like_a_tag_is_listed_by_its_own_name() {
 
     assert_eq!(loc.merged_into(&runner, "main").await.unwrap(), ["release"]);
 }
+
+/// Moving an annotated tag replaced it with a lightweight one: the message and who made it
+/// went, so a release tag moved to a fix lost its notes.
+#[tokio::test]
+async fn a_moved_annotated_tag_keeps_its_message() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    repo.git(["tag", "-a", "-m", "Release notes", "v1"]);
+    let repo = repo.write("a.txt", "2\n").commit("fix");
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+    loc.tag_move(&runner, "v1", "HEAD").await.unwrap();
+
+    assert_eq!(repo.git(["cat-file", "-t", "v1"]), "tag");
+    assert_eq!(
+        repo.git(["rev-parse", "v1^{commit}"]),
+        repo.git(["rev-parse", "HEAD"])
+    );
+    assert_eq!(
+        repo.git([
+            "for-each-ref",
+            "refs/tags/v1",
+            "--format=%(contents:subject)"
+        ]),
+        "Release notes"
+    );
+}
+
+/// `tag.gpgSign` makes every tag a signed one, and a plain tag moved under it went to a
+/// signing program to be signed, which is not what moving a plain tag asks for.
+#[tokio::test]
+async fn a_moved_plain_tag_stays_plain_where_tags_are_signed() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    repo.git(["tag", "v1"]);
+    let repo = repo.write("a.txt", "2\n").commit("fix");
+    repo.git(["config", "tag.gpgSign", "true"]);
+    repo.git(["config", "gpg.program", "/nonexistent/gpg"]);
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+    loc.tag_move(&runner, "v1", "HEAD").await.unwrap();
+
+    assert_eq!(repo.git(["cat-file", "-t", "v1"]), "commit");
+    assert_eq!(
+        repo.git(["rev-parse", "v1"]),
+        repo.git(["rev-parse", "HEAD"])
+    );
+}
