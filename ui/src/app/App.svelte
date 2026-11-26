@@ -6639,6 +6639,7 @@
             {sections}
             {spelling}
             onWordMenu={(at, items) => (menu = { ...at, items })}
+            unborn={info?.head.kind === 'unborn'}
           />
         </aside>
       {:else}

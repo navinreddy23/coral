@@ -40,6 +40,7 @@
     onWantPeople = () => undefined,
     spelling = null,
     onWordMenu = null,
+    unborn = false,
   }: {
     worktree: WorktreeState;
     /**
@@ -101,6 +102,8 @@
      * with a stacking context of its own, and a menu inside it would sit under the graph.
      */
     onWordMenu?: ((at: { x: number; y: number }, items: MenuItem[]) => void) | null;
+    /** The branch has no commit yet, so there is none to amend. */
+    unborn?: boolean;
   } = $props();
 
   let coAuthor = $state('');
@@ -255,6 +258,9 @@
   // sight.
   $effect(() => {
     if (draft.amend) untrack(() => sections.open('compose'));
+  });
+  $effect(() => {
+    if (unborn && draft.amend) draft.amend = false;
   });
 
   /*
@@ -601,8 +607,8 @@
     {#if !closed.compose}
     <div class="fields" id="staging-compose">
     <div class="above">
-      <label class="amend">
-        <input type="checkbox" bind:checked={draft.amend} />
+      <label class="amend" title={unborn ? 'Nothing to amend: this branch has no commits yet' : undefined}>
+        <input type="checkbox" bind:checked={draft.amend} disabled={unborn} />
         {t('staging.amend')}
       </label>
       <label class="signoff" title="Ends the message with Signed-off-by and your name. This repository remembers it.">
