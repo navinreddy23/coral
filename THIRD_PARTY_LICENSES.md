@@ -1158,7 +1158,7 @@ limitations under the License.
 
 ## Apache License 2.0
 
-Used by: `dpi 0.1.2`, `tao 0.35.3`
+Used by: `dpi 0.1.2`, `tao 0.37.3`
 
 ```
 Apache License
@@ -1656,7 +1656,7 @@ limitations under the License.
 
 ## BSD 3-Clause &quot;New&quot; or &quot;Revised&quot; License
 
-Used by: `alloc-no-stdlib 2.0.4`, `brotli 8.0.4`
+Used by: `alloc-no-stdlib 3.0.0`, `brotli 9.1.3`
 
 ```
 Copyright (c) 2016 Dropbox, Inc.
@@ -1713,7 +1713,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## BSD 3-Clause &quot;New&quot; or &quot;Revised&quot; License
 
-Used by: `alloc-stdlib 0.2.4`, `aws-lc-sys 0.47.0`
+Used by: `alloc-stdlib 0.3.0`, `aws-lc-sys 0.47.0`
 
 ```
 Copyright (c) &lt;year&gt; &lt;owner&gt;. 
@@ -2730,7 +2730,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `brotli 8.0.4`
+Used by: `brotli 9.1.3`
 
 ```
 Copyright (c) 2009, 2010, 2013-2016 by the Brotli Authors.
@@ -2757,7 +2757,7 @@ THE SOFTWARE.
 
 ## MIT License
 
-Used by: `core-foundation-sys 0.8.7`, `core-foundation 0.10.1`, `core-graphics-types 0.2.0`, `core-graphics 0.25.0`, `string_cache 0.9.0`, `string_cache_codegen 0.6.1`
+Used by: `core-foundation-sys 0.8.7`, `core-foundation 0.10.1`, `core-graphics-types 0.2.0`, `core-graphics 0.25.0`, `string_cache 0.11.0`, `string_cache 0.9.0`, `string_cache_codegen 0.11.2`, `string_cache_codegen 0.6.1`
 
 ```
 Copyright (c) 2012-2013 Mozilla Foundation
@@ -3072,7 +3072,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `html5ever 0.38.0`, `markup5ever 0.38.0`, `web_atoms 0.2.6`
+Used by: `html5ever 0.39.0`, `html5ever 0.40.1`, `markup5ever 0.39.0`, `markup5ever 0.40.0`, `web_atoms 0.2.6`, `web_atoms 0.3.0`
 
 ```
 Copyright (c) 2014 The html5ever Project Developers
@@ -3496,7 +3496,7 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `png 0.17.16`, `png 0.18.1`
+Used by: `png 0.18.1`
 
 ```
 Copyright (c) 2015 nwin
@@ -4368,7 +4368,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `keyboard-types 0.7.0`
+Used by: `keyboard-types 0.8.3`
 
 ```
 Copyright (c) 2017 Pyfisch
@@ -4970,7 +4970,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `dirs-sys 0.5.0`, `dirs 6.0.0`
+Used by: `dirs-sys 0.5.0`, `dirs 6.0.0`, `dirs 7.0.0`
 
 ```
 Copyright (c) 2018-2019 dirs-rs contributors
@@ -5960,7 +5960,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `bit-set 0.8.0`, `bit-vec 0.8.0`
+Used by: `bit-set 0.11.1`, `bit-set 0.8.0`, `bit-vec 0.10.2`, `bit-vec 0.8.0`
 
 ```
 Copyright (c) 2023 The Rust Project Developers
@@ -6272,7 +6272,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `anstream 1.0.0`, `anstyle-parse 1.0.0`, `anstyle-query 1.1.5`, `anstyle-wincon 3.0.11`, `anstyle 1.0.14`, `clap 4.6.7`, `clap_builder 4.6.7`, `clap_derive 4.6.7`, `clap_lex 1.1.1`, `colorchoice 1.0.5`, `is_terminal_polyfill 1.70.2`, `once_cell_polyfill 1.70.2`, `serde_spanned 0.6.9`, `serde_spanned 1.1.2`, `toml 0.8.2`, `toml 0.9.12+spec-1.1.0`, `toml 1.1.8+spec-1.1.0`, `toml_datetime 0.7.5+spec-1.1.0`, `toml_datetime 1.1.2+spec-1.1.0`, `toml_edit 0.19.15`, `toml_edit 0.20.2`, `toml_edit 0.25.17+spec-1.1.0`, `toml_parser 1.1.5+spec-1.1.0`, `toml_writer 1.1.3+spec-1.1.0`
+Used by: `anstream 1.0.0`, `anstyle-parse 1.0.0`, `anstyle-query 1.1.5`, `anstyle-wincon 3.0.11`, `anstyle 1.0.14`, `clap 4.6.7`, `clap_builder 4.6.7`, `clap_derive 4.6.7`, `clap_lex 1.1.1`, `colorchoice 1.0.5`, `is_terminal_polyfill 1.70.2`, `once_cell_polyfill 1.70.2`, `serde_spanned 0.6.9`, `serde_spanned 1.1.2`, `toml 0.8.2`, `toml 1.1.8+spec-1.1.0`, `toml_datetime 1.1.2+spec-1.1.0`, `toml_edit 0.19.15`, `toml_edit 0.20.2`, `toml_edit 0.25.17+spec-1.1.0`, `toml_parser 1.1.5+spec-1.1.0`, `toml_writer 1.1.3+spec-1.1.0`
 
 ```
 Copyright (c) Individual contributors
@@ -6629,6 +6629,35 @@ SOFTWARE.
 
 ## MIT License
 
+Used by: `tauri-build 2.7.6`, `tauri-codegen 2.7.6`, `tauri-macros 2.7.6`, `tauri-runtime-wry 2.12.5`, `tauri-runtime 2.12.4`, `tauri-utils 2.10.4`, `tauri 2.12.7`
+
+```
+MIT License
+
+Copyright (c) 2017 - Present Tauri Apps Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the &quot;Software&quot;), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+```
+
+## MIT License
+
 Used by: `fs_extra 1.3.0`
 
 ```
@@ -6687,7 +6716,7 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `json-patch 3.0.1`
+Used by: `json-patch 4.2.0`
 
 ```
 MIT License
@@ -6716,7 +6745,7 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `cfb 0.7.3`
+Used by: `cfb 0.14.0`
 
 ```
 MIT License
@@ -6803,7 +6832,7 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `ico 0.5.0`
+Used by: `ico 0.6.0`
 
 ```
 MIT License
@@ -6970,7 +6999,7 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `infer 0.19.0`
+Used by: `infer 0.22.0`
 
 ```
 MIT License
@@ -7191,6 +7220,35 @@ SOFTWARE.
 
 ## MIT License
 
+Used by: `rfd 0.17.2`
+
+```
+MIT License
+
+Copyright (c) 2020 Bilal Elmoussaoui
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the &quot;Software&quot;), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+```
+
+## MIT License
+
 Used by: `cfg_aliases 0.1.1`
 
 ```
@@ -7237,7 +7295,7 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `window-vibrancy 0.6.0`
+Used by: `window-vibrancy 0.8.1`
 
 ```
 MIT License
@@ -7266,7 +7324,7 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `wry 0.55.1`
+Used by: `wry 0.57.4`
 
 ```
 MIT License
@@ -7324,7 +7382,24 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `urlpattern 0.3.0`
+Used by: `static_vcruntime 3.0.0`
+
+```
+MIT License
+
+Copyright (c) 2021 Chris Denton.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the &quot;Software&quot;), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice (including the next paragraph) shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+```
+
+## MIT License
+
+Used by: `urlpattern 0.6.0`
 
 ```
 MIT License
@@ -7411,7 +7486,7 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `rfd 0.16.1`
+Used by: `rfd 0.17.2`
 
 ```
 MIT License
@@ -7440,7 +7515,7 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `jsonptr 0.6.3`
+Used by: `jsonptr 0.7.1`
 
 ```
 MIT License
@@ -7469,7 +7544,7 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `muda 0.19.3`
+Used by: `muda 0.20.0`
 
 ```
 MIT License
@@ -7527,7 +7602,7 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `dom_query 0.27.0`
+Used by: `dom_query 0.28.0`, `dom_query 0.30.0`
 
 ```
 MIT License
@@ -7590,7 +7665,36 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `coral-app 1.6.3`, `coral-assist 1.6.3`, `coral-cli 1.6.3`, `coral-core 1.6.3`, `coral-hosting 1.6.3`, `block2 0.6.2`, `brotli-decompressor 5.0.3`, `cargo_toml 0.22.3`, `cesu8 1.1.0`, `dispatch2 0.3.1`, `dlopen2 0.8.2`, `dlopen2_derive 0.4.3`, `dpi 0.1.2`, `jni-macros 0.22.4`, `jni-sys-macros 0.4.1`, `jni 0.22.4`, `minisign-verify 0.2.5`, `ndk-sys 0.6.0+11769913`, `ndk 0.9.0`, `objc2-app-kit 0.3.2`, `objc2-cloud-kit 0.3.2`, `objc2-core-data 0.3.2`, `objc2-core-foundation 0.3.2`, `objc2-core-graphics 0.3.2`, `objc2-core-image 0.3.2`, `objc2-core-location 0.3.2`, `objc2-core-services 0.3.2`, `objc2-core-text 0.3.2`, `objc2-encode 4.1.0`, `objc2-exception-helper 0.1.1`, `objc2-foundation 0.3.2`, `objc2-osa-kit 0.3.2`, `objc2-quartz-core 0.3.2`, `objc2-ui-kit 0.3.2`, `objc2-user-notifications 0.3.2`, `objc2-web-kit 0.3.2`, `objc2 0.6.5`, `r-efi 5.3.0`, `r-efi 6.0.0`, `rustls-platform-verifier-android 0.2.0`, `tauri-build 2.6.3`, `tauri-codegen 2.6.3`, `tauri-macros 2.6.3`, `tauri-plugin-dialog 2.7.3`, `tauri-plugin-fs 2.5.2`, `tauri-plugin-opener 2.5.5`, `tauri-plugin-updater 2.12.0`, `tauri-plugin 2.6.3`, `tauri-runtime-wry 2.11.4`, `tauri-runtime 2.11.3`, `tauri-utils 2.9.3`, `tauri 2.11.6`, `unic-char-property 0.9.0`, `unic-char-range 0.9.0`, `unic-common 0.9.0`, `unic-ucd-ident 0.9.0`, `unic-ucd-version 0.9.0`, `webview2-com-macros 0.8.1`, `webview2-com-sys 0.38.2`, `webview2-com 0.38.2`, `winapi-i686-pc-windows-gnu 0.4.0`, `winapi-x86_64-pc-windows-gnu 0.4.0`, `windows-collections 0.2.0`, `windows-core 0.61.2`, `windows-future 0.2.1`, `windows-implement 0.60.2`, `windows-interface 0.59.3`, `windows-link 0.1.3`, `windows-link 0.2.1`, `windows-numerics 0.2.0`, `windows-result 0.3.4`, `windows-strings 0.4.2`, `windows-sys 0.45.0`, `windows-sys 0.52.0`, `windows-sys 0.59.0`, `windows-sys 0.60.2`, `windows-sys 0.61.2`, `windows-targets 0.42.2`, `windows-targets 0.52.6`, `windows-targets 0.53.5`, `windows-threading 0.1.0`, `windows-version 0.1.7`, `windows 0.61.3`, `windows_aarch64_gnullvm 0.42.2`, `windows_aarch64_gnullvm 0.52.6`, `windows_aarch64_gnullvm 0.53.1`, `windows_aarch64_msvc 0.42.2`, `windows_aarch64_msvc 0.52.6`, `windows_aarch64_msvc 0.53.1`, `windows_i686_gnu 0.42.2`, `windows_i686_gnu 0.52.6`, `windows_i686_gnu 0.53.1`, `windows_i686_gnullvm 0.52.6`, `windows_i686_gnullvm 0.53.1`, `windows_i686_msvc 0.42.2`, `windows_i686_msvc 0.52.6`, `windows_i686_msvc 0.53.1`, `windows_x86_64_gnu 0.42.2`, `windows_x86_64_gnu 0.52.6`, `windows_x86_64_gnu 0.53.1`, `windows_x86_64_gnullvm 0.42.2`, `windows_x86_64_gnullvm 0.52.6`, `windows_x86_64_gnullvm 0.53.1`, `windows_x86_64_msvc 0.42.2`, `windows_x86_64_msvc 0.52.6`, `windows_x86_64_msvc 0.53.1`
+Used by: `web-time 1.1.0`
+
+```
+MIT License
+
+Copyright (c) 2023 dAxpeDDa
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the &quot;Software&quot;), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+```
+
+## MIT License
+
+Used by: `coral-app 1.6.3`, `coral-assist 1.6.3`, `coral-cli 1.6.3`, `coral-core 1.6.3`, `coral-hosting 1.6.3`, `block2 0.6.2`, `brotli-decompressor 6.4.0`, `cargo_toml 1.0.1`, `cesu8 1.1.0`, `dispatch2 0.3.1`, `dlopen2 0.8.2`, `dlopen2_derive 0.4.3`, `dpi 0.1.2`, `jni-macros 0.22.4`, `jni-sys-macros 0.4.1`, `jni 0.22.4`, `minisign-verify 0.3.0`, `ndk-context 0.1.1`, `ndk-sys 0.6.0+11769913`, `ndk 0.9.0`, `objc2-app-kit 0.3.2`, `objc2-cloud-kit 0.3.2`, `objc2-core-data 0.3.2`, `objc2-core-foundation 0.3.2`, `objc2-core-graphics 0.3.2`, `objc2-core-image 0.3.2`, `objc2-core-location 0.3.2`, `objc2-core-services 0.3.2`, `objc2-core-text 0.3.2`, `objc2-encode 4.1.0`, `objc2-exception-helper 0.1.1`, `objc2-foundation 0.3.2`, `objc2-osa-kit 0.3.2`, `objc2-quartz-core 0.3.2`, `objc2-ui-kit 0.3.2`, `objc2-user-notifications 0.3.2`, `objc2-web-kit 0.3.2`, `objc2 0.6.5`, `r-efi 5.3.0`, `r-efi 6.0.0`, `rustls-platform-verifier-android 0.2.0`, `tauri-plugin-dialog 2.8.4`, `tauri-plugin-fs 2.7.1`, `tauri-plugin-opener 2.7.3`, `tauri-plugin-updater 2.14.1`, `tauri-plugin 2.7.4`, `webview2-com-macros 0.8.1`, `webview2-com-sys 0.39.1`, `webview2-com 0.39.1`, `winapi-i686-pc-windows-gnu 0.4.0`, `winapi-x86_64-pc-windows-gnu 0.4.0`, `windows-collections 0.3.2`, `windows-core 0.62.2`, `windows-future 0.3.2`, `windows-implement 0.60.2`, `windows-interface 0.59.3`, `windows-link 0.2.1`, `windows-numerics 0.3.1`, `windows-result 0.4.1`, `windows-strings 0.5.1`, `windows-sys 0.45.0`, `windows-sys 0.52.0`, `windows-sys 0.61.2`, `windows-targets 0.42.2`, `windows-targets 0.52.6`, `windows-threading 0.2.1`, `windows-version 0.1.7`, `windows 0.62.2`, `windows_aarch64_gnullvm 0.42.2`, `windows_aarch64_gnullvm 0.52.6`, `windows_aarch64_msvc 0.42.2`, `windows_aarch64_msvc 0.52.6`, `windows_i686_gnu 0.42.2`, `windows_i686_gnu 0.52.6`, `windows_i686_gnullvm 0.52.6`, `windows_i686_msvc 0.42.2`, `windows_i686_msvc 0.52.6`, `windows_x86_64_gnu 0.42.2`, `windows_x86_64_gnu 0.52.6`, `windows_x86_64_gnullvm 0.42.2`, `windows_x86_64_gnullvm 0.52.6`, `windows_x86_64_msvc 0.42.2`, `windows_x86_64_msvc 0.52.6`
 
 ```
 MIT License
@@ -7855,7 +7959,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `adler2 2.0.1`, `anyhow 1.0.104`, `async-channel 2.5.0`, `async-executor 1.14.1`, `async-io 2.6.0`, `async-lock 3.5.0`, `async-process 2.5.0`, `async-signal 0.2.14`, `async-task 4.7.1`, `async-trait 0.1.92`, `atomic-waker 1.1.2`, `blocking 1.7.0`, `camino 1.2.6`, `cargo-platform 0.1.9`, `cargo_metadata 0.19.2`, `concurrent-queue 2.5.0`, `displaydoc 0.2.7`, `dtoa 1.0.11`, `dyn-clone 1.0.20`, `endi 1.1.1`, `erased-serde 0.4.11`, `event-listener-strategy 0.5.4`, `event-listener 5.4.2`, `fastrand 2.5.0`, `futures-lite 2.6.1`, `hermit-abi 0.5.3`, `itoa 1.0.18`, `lazy_static 1.5.1`, `linux-raw-sys 0.12.1`, `num_enum 0.7.6`, `num_enum_derive 0.7.6`, `once_cell 1.21.4`, `ordered-stream 0.2.0`, `parking 2.2.1`, `pest 2.9.5`, `pest_derive 2.9.5`, `pest_generator 2.9.5`, `pest_meta 2.9.5`, `pest_stack_guard 1.0.1`, `pin-project-lite 0.2.17`, `piper 0.2.5`, `polling 3.11.0`, `portable-atomic-util 0.2.8`, `portable-atomic 1.15.0`, `proc-macro-crate 1.3.1`, `proc-macro-crate 2.0.2`, `proc-macro-crate 3.5.0`, `proc-macro2 1.0.107`, `quote 1.0.47`, `rustix 1.1.6`, `rustversion 1.0.23`, `semver 1.0.28`, `serde-untagged 0.1.9`, `serde 1.0.229`, `serde_core 1.0.229`, `serde_derive 1.0.229`, `serde_derive_internals 0.29.1`, `serde_json 1.0.154`, `serde_repr 0.1.21`, `servo_arc 0.4.3`, `simd_cesu8 1.2.0`, `syn 1.0.109`, `syn 2.0.119`, `syn 3.0.10`, `system-deps 6.2.2`, `thiserror-impl 1.0.69`, `thiserror-impl 2.0.21`, `thiserror 1.0.69`, `thiserror 2.0.21`, `typeid 1.0.3`, `unicode-ident 1.0.27`, `wasi 0.11.1+wasi-snapshot-preview1`, `wasip2 1.0.4+wasi-0.2.12`, `wasm-streams 0.5.0`, `wit-bindgen 0.57.1`, `x11-dl 2.21.0`, `x11 2.21.0`, `zmij 1.0.23`, `zvariant_utils 4.2.0`
+Used by: `adler2 2.0.1`, `anyhow 1.0.104`, `async-channel 2.5.0`, `async-executor 1.14.1`, `async-io 2.6.0`, `async-lock 3.5.0`, `async-process 2.5.0`, `async-signal 0.2.14`, `async-task 4.7.1`, `async-trait 0.1.92`, `atomic-waker 1.1.2`, `blocking 1.7.0`, `camino 1.2.6`, `cargo-platform 0.1.9`, `cargo_metadata 0.19.2`, `concurrent-queue 2.5.0`, `displaydoc 0.2.7`, `dtoa 1.0.11`, `dyn-clone 1.0.20`, `endi 1.1.1`, `erased-serde 0.4.11`, `event-listener-strategy 0.5.4`, `event-listener 5.4.2`, `fastrand 2.5.0`, `futures-lite 2.6.1`, `hermit-abi 0.5.3`, `itoa 1.0.18`, `lazy_static 1.5.1`, `linux-raw-sys 0.12.1`, `num_enum 0.7.6`, `num_enum_derive 0.7.6`, `once_cell 1.21.4`, `ordered-stream 0.2.0`, `parking 2.2.1`, `pest 2.9.5`, `pest_derive 2.9.5`, `pest_generator 2.9.5`, `pest_meta 2.9.5`, `pest_stack_guard 1.0.1`, `pin-project-lite 0.2.17`, `piper 0.2.5`, `polling 3.11.0`, `portable-atomic-util 0.2.8`, `portable-atomic 1.15.0`, `proc-macro-crate 1.3.1`, `proc-macro-crate 2.0.2`, `proc-macro-crate 3.5.0`, `proc-macro2 1.0.107`, `quote 1.0.47`, `rustix 1.1.6`, `rustversion 1.0.23`, `semver 1.0.28`, `serde-untagged 0.1.9`, `serde 1.0.229`, `serde_core 1.0.229`, `serde_derive 1.0.229`, `serde_derive_internals 0.29.1`, `serde_json 1.0.154`, `serde_repr 0.1.21`, `servo_arc 0.4.3`, `servo_arc 0.5.0`, `simd_cesu8 1.2.0`, `syn 1.0.109`, `syn 2.0.119`, `syn 3.0.10`, `system-deps 6.2.2`, `thiserror-impl 1.0.69`, `thiserror-impl 2.0.21`, `thiserror 1.0.69`, `thiserror 2.0.21`, `typeid 1.0.3`, `unicode-ident 1.0.27`, `wasi 0.11.1+wasi-snapshot-preview1`, `wasip2 1.0.4+wasi-0.2.12`, `wasm-streams 0.5.0`, `wit-bindgen 0.57.1`, `x11-dl 2.21.0`, `x11 2.21.0`, `zmij 1.0.23`, `zvariant_utils 4.2.0`
 
 ```
 Permission is hereby granted, free of charge, to any
@@ -7947,7 +8051,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `winnow 0.5.40`, `winnow 0.7.15`, `winnow 1.0.4`
+Used by: `winnow 0.5.40`, `winnow 1.0.4`
 
 ```
 Permission is hereby granted, free of charge, to any person obtaining
@@ -8049,7 +8153,7 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `ctor-proc-macro 0.0.7`, `ctor 0.8.0`
+Used by: `ctor 1.0.14`, `link-section 0.19.4`
 
 ```
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the &quot;Software&quot;), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
@@ -8193,7 +8297,7 @@ SOFTWARE.
 
 ## MIT License
 
-Used by: `phf 0.13.1`, `phf_codegen 0.13.1`, `phf_generator 0.13.1`, `phf_macros 0.13.1`, `phf_shared 0.13.1`
+Used by: `phf 0.13.1`, `phf 0.14.0`, `phf_codegen 0.13.1`, `phf_codegen 0.14.0`, `phf_generator 0.13.1`, `phf_generator 0.14.0`, `phf_macros 0.13.1`, `phf_macros 0.14.0`, `phf_shared 0.13.1`, `phf_shared 0.14.0`
 
 ```
 The MIT License (MIT)
@@ -8221,7 +8325,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by: `base64 0.21.7`, `base64 0.22.1`
+Used by: `base64 0.21.7`
 
 ```
 The MIT License (MIT)
@@ -9824,7 +9928,7 @@ Exhibit B - &quot;Incompatible With Secondary Licenses&quot; Notice
 
 ## Mozilla Public License 2.0
 
-Used by: `cssparser-macros 0.6.1`, `cssparser 0.36.0`
+Used by: `cssparser-macros 0.7.1`, `cssparser 0.37.0`, `cssparser 0.38.0`
 
 ```
 Mozilla Public License Version 2.0
@@ -10205,7 +10309,7 @@ Exhibit B - &quot;Incompatible With Secondary Licenses&quot; Notice
 
 ## Mozilla Public License 2.0
 
-Used by: `option-ext 0.2.0`, `selectors 0.36.1`
+Used by: `option-ext 0.2.0`, `selectors 0.38.0`, `selectors 0.41.0`
 
 ```
 Mozilla Public License Version 2.0
