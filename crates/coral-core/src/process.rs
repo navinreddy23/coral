@@ -443,6 +443,12 @@ impl GitInstall {
     }
 }
 
+/// Drops all but the last `limit` bytes of `tail`, cutting between two characters.
+fn keep_last(tail: &mut String, limit: usize) {
+    let cut = tail.ceil_char_boundary(tail.len().saturating_sub(limit));
+    tail.drain(..cut);
+}
+
 /// The git every later [`GitRunner::discover`] should use, once something has chosen one.
 ///
 /// Process-wide, because that is what it is: which git the application runs is not a property
@@ -833,8 +839,7 @@ impl GitRunner {
                     n => {
                         // Keep the last of stderr for the error message if this fails.
                         tail.push_str(&String::from_utf8_lossy(&err_buf[..n]));
-                        let keep = tail.len().saturating_sub(4096);
-                        tail.drain(..keep);
+                        keep_last(&mut tail, 4096);
                         feed(&err_buf[..n], &mut err_pending, b"\n\r", &mut on_stderr)?;
                     }
                 },
@@ -1849,5 +1854,28 @@ mod failure_tests {
             why_it_failed(stderr),
             "remote: Counting objects: 50% (1/2)\nremote: Counting objects: 100% (2/2)"
         );
+    }
+}
+
+#[cfg(test)]
+mod tail_tests {
+    use super::keep_last;
+
+    /// A three-byte character never lines up with a 4096-byte cut, so this is the case that
+    /// panicked: a clone into a folder named in Cyrillic or Greek, or git speaking German,
+    /// writes past 4 KB of stderr soon enough.
+    #[test]
+    fn a_tail_is_cut_between_characters() {
+        let mut tail = "€".repeat(2000);
+        keep_last(&mut tail, 4096);
+        assert!(tail.len() <= 4096 && tail.len() > 4090, "{}", tail.len());
+        assert!(tail.chars().all(|c| c == '€'));
+    }
+
+    #[test]
+    fn a_short_tail_is_kept_whole() {
+        let mut tail = "fatal: über".to_owned();
+        keep_last(&mut tail, 4096);
+        assert_eq!(tail, "fatal: über");
     }
 }
