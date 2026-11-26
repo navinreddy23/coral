@@ -603,3 +603,49 @@ async fn redoing_a_mixed_reset_leaves_its_changes_unstaged() {
         "2\n"
     );
 }
+
+/// A pull moves the branch and what the remote has; a fetch on the timer, ten minutes later,
+/// moves what the remote has again. Undoing the pull refused over that, every time.
+#[tokio::test]
+async fn a_pull_can_be_undone_after_a_later_fetch_moved_what_the_remote_has() {
+    let upstream = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let holder = tempfile::tempdir().unwrap();
+    let clone = holder.path().join("clone");
+    upstream.git(["clone", "--quiet", ".", clone.to_str().unwrap()]);
+    let here = |args: &[&str]| {
+        let out = std::process::Command::new("git")
+            .args(args)
+            .current_dir(&clone)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).trim().to_owned()
+    };
+    let start = here(&["rev-parse", "HEAD"]);
+    let upstream = upstream.write("a.txt", "2\n").commit("pulled");
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, &clone).await.unwrap();
+
+    let before = loc.snapshot_refs(&runner).await.unwrap();
+    here(&["pull", "--quiet", "--ff-only"]);
+    let after = loc.snapshot_refs(&runner).await.unwrap();
+    loc.journal_change("pull", before, after, Restore::Worktree)
+        .unwrap();
+
+    let _upstream = upstream.write("a.txt", "3\n").commit("fetched later");
+    here(&["fetch", "--quiet"]);
+    let fetched = here(&["rev-parse", "origin/main"]);
+
+    loc.undo_step(&runner, true).await.unwrap();
+    assert_eq!(here(&["rev-parse", "main"]), start, "the branch is back");
+    assert_eq!(
+        here(&["rev-parse", "origin/main"]),
+        fetched,
+        "and what the remote has is left as the last fetch found it"
+    );
+}

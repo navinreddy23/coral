@@ -45,6 +45,27 @@ fn moved_since(now: &RefSnapshot, from: &RefSnapshot, target: &RefSnapshot) -> O
         .map(|(name, _, _)| name)
 }
 
+/// The step without the remote-tracking refs a fetch has moved since it was taken.
+///
+/// What a remote has is not the step's to take back once a later fetch has said otherwise, and
+/// a fetch on the timer moves those refs every few minutes: undoing a pull was refused every
+/// time over them. The branch the pull moved still comes back; what the remote has stays as the
+/// last fetch found it. One nothing has moved since is put back as before.
+fn without_refetched(
+    now: &RefSnapshot,
+    from: &RefSnapshot,
+    target: &RefSnapshot,
+) -> (RefSnapshot, RefSnapshot) {
+    let (mut from, mut target) = (from.clone(), target.clone());
+    for (name, expected, _) in from.diff(&target) {
+        if name.starts_with("refs/remotes/") && now.refs.get(&name) != expected.as_ref() {
+            from.refs.remove(&name);
+            target.refs.remove(&name);
+        }
+    }
+    (from, target)
+}
+
 /// Which copy of the tracked files a comparison is about.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Side {
@@ -454,7 +475,8 @@ impl RepoLocation {
         // "cannot lock ref 'refs/heads/main': is at <sha> but expected <sha>" says nothing
         // about the step being taken, and the user is looking at an Undo button, not at git.
         let now = self.snapshot_refs(runner).await?;
-        if let Some(name) = moved_since(&now, from, target) {
+        let (from, target) = without_refetched(&now, from, target);
+        if let Some(name) = moved_since(&now, &from, &target) {
             return Err(CoralError::Refused {
                 label: verb,
                 detail: format!(
@@ -466,7 +488,7 @@ impl RepoLocation {
         // Redo puts the operation back and leaves the files as it did. For a commit that is
         // matching them again, since leaving the change staged as well would double it.
         let restore = if backwards { entry.restore } else { entry.redo };
-        self.restore_refs(runner, target, from, restore, verb)
+        self.restore_refs(runner, &target, &from, restore, verb)
             .await?;
 
         if backwards {
