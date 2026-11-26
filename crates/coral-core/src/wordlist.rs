@@ -30,11 +30,9 @@ impl WordList {
     /// # Errors
     /// [`CoralError::Io`] when the file exists and cannot be read.
     pub fn load(path: &Path) -> Result<Self, CoralError> {
-        match std::fs::read_to_string(path) {
-            Ok(text) => Ok(Self::parse(&text)),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
-            Err(e) => Err(e.into()),
-        }
+        Ok(read(path)?
+            .map(|text| Self::parse(&text))
+            .unwrap_or_default())
     }
 
     /// One word to a line; blank lines and the space around a word are ignored.
@@ -79,11 +77,12 @@ impl WordList {
                 detail: "a word to add is one word, with no spaces in it".to_owned(),
             });
         }
-        let existing = match std::fs::read_to_string(path) {
-            Ok(text) => text,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-            Err(e) => return Err(e.into()),
-        };
+        // Read, added to and written back whole, so two adds at once, two quick clicks on Add
+        // to dictionary, take turns rather than the second writing over the first.
+        let _turn = ADDING
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let existing = read(path)?.unwrap_or_default();
         let mut words: Vec<String> = existing
             .lines()
             .map(str::trim)
@@ -94,6 +93,18 @@ impl WordList {
         words.sort();
         words.dedup();
         write(path, &(words.join("\n") + "\n"))
+    }
+}
+
+static ADDING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// The list's text, or `None` when there is no list yet. A byte that is not UTF-8 is read as a
+/// replacement character rather than failing every check of every message over it.
+fn read(path: &Path) -> Result<Option<String>, CoralError> {
+    match std::fs::read(path) {
+        Ok(bytes) => Ok(Some(String::from_utf8_lossy(&bytes).into_owned())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.into()),
     }
 }
 
