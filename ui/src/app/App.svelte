@@ -176,7 +176,7 @@
   import { ViewsState, type PanelState } from '../state/views.svelte';
   import { UpdateState } from '../state/update.svelte';
   import { AutoFetchState } from '../state/autofetch.svelte';
-  import { isTextTarget, resolve, tabJump } from '../state/shortcuts';
+  import { isTextTarget, keyEventOf, resolve, tabJump } from '../state/shortcuts';
   import Shortcuts from './Shortcuts.svelte';
   import TabBar from './TabBar.svelte';
   import Toolbar from './Toolbar.svelte';
@@ -320,13 +320,7 @@
   function onKey(event: KeyboardEvent) {
     // An open menu has the keys: the arrows that step through it moved the graph beneath.
     if (event.target instanceof Element && event.target.closest('[role="menu"]')) return;
-    const e = {
-      key: event.key,
-      ctrl: event.ctrlKey,
-      shift: event.shiftKey,
-      alt: event.altKey,
-      meta: event.metaKey,
-    };
+    const e = keyEventOf(event);
     const jump = tabJump(e);
     if (jump !== null) {
       const target = tabs.session.tabs[jump - 1];

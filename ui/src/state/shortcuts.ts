@@ -42,6 +42,29 @@ export function keysOf(id: string): string | null {
 }
 
 /** True when the primary modifier is held, and no other. Ctrl on Linux and Windows. */
+/**
+ * A browser key event as the bindings read it.
+ *
+ * Shift turns Tab into ISO_Left_Tab, whose key WebKitGTK reports as "Unidentified", so the key
+ * the event was typed on stands in for it there: without it Ctrl+Shift+Tab did nothing on Linux.
+ */
+export function keyEventOf(event: {
+  key: string;
+  code: string;
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+  metaKey: boolean;
+}): KeyEvent {
+  return {
+    key: event.key === 'Unidentified' && event.code === 'Tab' ? 'Tab' : event.key,
+    ctrl: event.ctrlKey,
+    shift: event.shiftKey,
+    alt: event.altKey,
+    meta: event.metaKey,
+  };
+}
+
 function primary(e: KeyEvent): boolean {
   return (e.ctrl || e.meta) && !e.alt;
 }

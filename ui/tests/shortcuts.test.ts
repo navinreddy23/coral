@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { BINDINGS, resolve, tabJump, type KeyEvent } from '../src/state/shortcuts';
+import { BINDINGS, keyEventOf, resolve, tabJump, type KeyEvent } from '../src/state/shortcuts';
 
 function key(k: string, mods: Partial<KeyEvent> = {}): KeyEvent {
   return { key: k, ctrl: false, shift: false, alt: false, meta: false, ...mods };
@@ -79,6 +79,15 @@ describe('shortcuts', () => {
   it('separates next and previous tab by the shift key alone', () => {
     expect(resolve(key('Tab', { ctrl: true }), 'global')?.id).toBe('tab.next');
     expect(resolve(key('Tab', { ctrl: true, shift: true }), 'global')?.id).toBe('tab.previous');
+  });
+
+  // Shift turns Tab into ISO_Left_Tab, which WebKitGTK reports as an "Unidentified" key, so
+  // Ctrl+Shift+Tab never reached the previous tab on Linux.
+  it('reads the previous-tab keys as WebKitGTK reports them', () => {
+    const gtk = { key: 'Unidentified', code: 'Tab', ctrlKey: true, shiftKey: true, altKey: false, metaKey: false };
+    expect(resolve(keyEventOf(gtk), 'global')?.id).toBe('tab.previous');
+    const other = { ...gtk, key: 'Unidentified', code: 'KeyQ' };
+    expect(keyEventOf(other).key).toBe('Unidentified');
   });
 
   it('has no duplicate ids and no binding without a key description', () => {
