@@ -504,6 +504,17 @@ describe('the diff viewer', () => {
     expect(rules.find((t) => /\.line-range[^{]*>\s*span[^{]*\{[^}]*white-space:\s*nowrap/u.test(t))).toBeDefined();
   });
 
+  it('keeps the words on a header button on one line', () => {
+    // Beside a long "Before …" note, "Skipping 1 listed" wrapped onto a second line and out of
+    // its button. The notes are what give way, with an ellipsis; the buttons keep their words.
+    const rules = [...document.styleSheets]
+      .flatMap((sheet) => [...(sheet.cssRules ?? [])])
+      .map((r) => r.cssText);
+    expect(
+      rules.find((t) => /^\.wider[^{,]*\{[^}]*white-space:\s*nowrap[^}]*flex-shrink:\s*0/u.test(t)),
+    ).toBeDefined();
+  });
+
   it('styles a line picked for staging as a row, not as the line-range bar', () => {
     // 1.4.0 gave the bar the class the picked rows already had, so its flex, sticky, 30px
     // rule turned a picked line into a short box drawn over the line numbers.
