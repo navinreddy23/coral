@@ -676,11 +676,39 @@ fn a_patch_past_the_guard_is_reported_without_its_hunks() {
         mode: None,
         too_large: false,
     }];
-    let patch = vec![b'x'; coral_core::diff::LARGE_PATCH_BYTES + 1];
+    let mut patch = b"diff --git a/huge.txt b/huge.txt\n".to_vec();
+    patch.extend(vec![b'x'; coral_core::diff::LARGE_PATCH_BYTES + 1]);
     coral_core::diff::apply_patch(&mut files, &patch, coral_core::diff::DiffOptions::default())
         .unwrap();
     assert!(files[0].too_large);
     assert!(files[0].hunks.is_empty(), "{:?}", files[0].hunks);
+}
+
+#[test]
+fn a_file_past_the_guard_leaves_the_others_beside_it_whole() {
+    // The guard was on the length of the whole patch, so one generated file in a commit took
+    // the hunks of every small file with it: each came back "too large" with nothing to show.
+    let big = "x\n".repeat(coral_core::diff::LARGE_PATCH_BYTES / 2 + 1);
+    let repo = TestRepo::new()
+        .write("small.txt", "hello\n")
+        .write("big.txt", &big)
+        .commit("both");
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let runner = GitRunner::discover().await.unwrap();
+        let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+        let files = loc
+            .commit_diff(&runner, "HEAD", &[], DiffOptions::default())
+            .await
+            .unwrap();
+        let small = files.iter().find(|f| f.path == "small.txt").unwrap();
+        assert!(!small.too_large, "a five-byte file is not too large");
+        assert_eq!(small.hunks[0].lines[0].text, "hello");
+        let huge = files.iter().find(|f| f.path == "big.txt").unwrap();
+        assert!(huge.too_large);
+        assert!(huge.hunks.is_empty(), "{:?}", huge.hunks);
+    });
 }
 
 #[test]

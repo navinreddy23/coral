@@ -344,13 +344,9 @@ pub fn apply_patch(
     patch: &[u8],
     options: DiffOptions,
 ) -> Result<(), CoralError> {
-    if options.guard_large && patch.len() > LARGE_PATCH_BYTES {
-        for f in files.iter_mut() {
-            f.too_large = true;
-        }
-        return Ok(());
-    }
-
+    // File by file: measured on the whole patch, one generated file in a commit took every
+    // small file beside it, each reported too large with nothing to show.
+    let guarded = options.guard_large && patch.len() > LARGE_PATCH_BYTES;
     for (i, section) in split_sections(patch).enumerate() {
         let Some(file) = files.get_mut(i) else {
             return Err(protocol(
@@ -358,6 +354,10 @@ pub fn apply_patch(
             ));
         };
         file.mode = parse_mode(&section);
+        if guarded && section.iter().map(|l| l.len() + 1).sum::<usize>() > LARGE_PATCH_BYTES {
+            file.too_large = true;
+            continue;
+        }
         file.hunks = parse_hunks(section)?;
     }
     Ok(())
