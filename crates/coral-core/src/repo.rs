@@ -330,16 +330,12 @@ impl RepoLocation {
         options: crate::diff::DiffOptions,
     ) -> Result<Vec<crate::diff::FileDiff>, CoralError> {
         let base = |args: &[&str]| {
-            let c = GitCommand::status("diff", self.display_path())
+            GitCommand::status("diff", self.display_path())
                 .arg("diff")
                 .arg("-M")
                 .args(args)
-                .args(against);
-            if paths.is_empty() {
-                c
-            } else {
-                c.arg("--").args(paths)
-            }
+                .args(against)
+                .literal_paths(paths)
         };
 
         let numstat = runner.output(base(&["-z", "--numstat"])).await?;
@@ -439,8 +435,8 @@ impl RepoLocation {
         let listed = runner
             .output(
                 GitCommand::read("ls-files", self.display_path())
-                    .args(["ls-files", "-z", "--others", "--exclude-standard", "--"])
-                    .arg(path),
+                    .args(["ls-files", "-z", "--others", "--exclude-standard"])
+                    .literal_paths([path]),
             )
             .await?;
         if listed.stdout.is_empty() {
@@ -557,16 +553,12 @@ impl RepoLocation {
         options: crate::diff::DiffOptions,
     ) -> Result<Vec<crate::diff::FileDiff>, CoralError> {
         let base = |args: &[&str]| {
-            let c = GitCommand::read("diff-tree", self.display_path())
+            GitCommand::read("diff-tree", self.display_path())
                 .args(["diff-tree", "-r", "-M", "--no-commit-id"])
                 .args(mode)
                 .args(args)
-                .args(revs);
-            if paths.is_empty() {
-                c
-            } else {
-                c.arg("--").args(paths)
-            }
+                .args(revs)
+                .literal_paths(paths)
         };
 
         let numstat = runner.output(base(&["-z", "--numstat"])).await?;
@@ -634,7 +626,7 @@ impl RepoLocation {
         }
         cmd = cmd.arg(q.rev.as_deref().unwrap_or("HEAD"));
         if let Some(p) = &q.path {
-            cmd = cmd.arg("--").arg(p);
+            cmd = cmd.literal_paths([p]);
         }
 
         let out = runner.output(cmd).await?;
@@ -1027,8 +1019,8 @@ impl RepoLocation {
     /// Propagates git failures.
     pub async fn stage(&self, runner: &GitRunner, paths: &[&str]) -> Result<(), CoralError> {
         let cmd = GitCommand::write("add", self.display_path())
-            .args(["add", "--all", "--"])
-            .args(paths);
+            .args(["add", "--all"])
+            .literal_paths(paths);
         runner.output(cmd).await.map(|_| ())
     }
 
@@ -1042,12 +1034,12 @@ impl RepoLocation {
         let unborn = matches!(self.head(runner).await?, Head::Unborn { .. });
         let cmd = if unborn {
             GitCommand::write("rm", self.display_path())
-                .args(["rm", "--cached", "-r", "--quiet", "--"])
-                .args(paths)
+                .args(["rm", "--cached", "-r", "--quiet"])
+                .literal_paths(paths)
         } else {
             GitCommand::write("restore", self.display_path())
-                .args(["restore", "--staged", "--"])
-                .args(paths)
+                .args(["restore", "--staged"])
+                .literal_paths(paths)
         };
         runner.output(cmd).await.map(|_| ())
     }
@@ -1059,8 +1051,8 @@ impl RepoLocation {
     /// Propagates git failures, including a path git does not track.
     pub async fn untrack(&self, runner: &GitRunner, paths: &[&str]) -> Result<(), CoralError> {
         let cmd = GitCommand::write("rm", self.display_path())
-            .args(["rm", "--cached", "-r", "--quiet", "--"])
-            .args(paths);
+            .args(["rm", "--cached", "-r", "--quiet"])
+            .literal_paths(paths);
         runner.output(cmd).await.map(|_| ())
     }
 
@@ -1070,8 +1062,8 @@ impl RepoLocation {
     /// Propagates git failures.
     pub async fn discard(&self, runner: &GitRunner, paths: &[&str]) -> Result<(), CoralError> {
         let cmd = GitCommand::write("restore", self.display_path())
-            .args(["restore", "--worktree", "--"])
-            .args(paths);
+            .args(["restore", "--worktree"])
+            .literal_paths(paths);
         runner.output(cmd).await.map(|_| ())
     }
 
@@ -1096,8 +1088,8 @@ impl RepoLocation {
             return Ok(());
         }
         let cmd = GitCommand::write("restore", self.display_path())
-            .args(["restore", "--source=HEAD", "--staged", "--worktree", "--"])
-            .args(paths);
+            .args(["restore", "--source=HEAD", "--staged", "--worktree"])
+            .literal_paths(paths);
         runner.output(cmd).await.map(|_| ())
     }
 
@@ -1120,8 +1112,8 @@ impl RepoLocation {
         let cmd = GitCommand::write("restore", self.display_path())
             .arg("restore")
             .arg(format!("--source={rev}"))
-            .args(["--worktree", "--"])
-            .args(paths);
+            .arg("--worktree")
+            .literal_paths(paths);
         runner.output(cmd).await.map(|_| ())
     }
 
@@ -1175,8 +1167,8 @@ impl RepoLocation {
             return Ok(());
         }
         let cmd = GitCommand::write("rm", self.display_path())
-            .args(["rm", "--force", "--"])
-            .args(paths);
+            .args(["rm", "--force"])
+            .literal_paths(paths);
         runner.output(cmd).await.map(|_| ())
     }
 
@@ -1197,8 +1189,8 @@ impl RepoLocation {
             return Ok(());
         }
         let cmd = GitCommand::write("clean", self.display_path())
-            .args(["clean", "--force", "-d", "--"])
-            .args(paths);
+            .args(["clean", "--force", "-d"])
+            .literal_paths(paths);
         runner.output(cmd).await.map(|_| ())
     }
 

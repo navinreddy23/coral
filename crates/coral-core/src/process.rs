@@ -168,6 +168,27 @@ impl GitCommand {
         self
     }
 
+    /// `--`, then each of `paths` as itself rather than as a pattern.
+    ///
+    /// git reads a path argument as a glob, so `pages/[id].tsx` also means `pages/d.tsx`, and
+    /// discarding the one threw away the other's changes. `:(literal)` turns matching off for
+    /// that path alone; `--literal-pathspecs` would do it through the environment, which
+    /// hooks and filters inherit. <https://git-scm.com/docs/gitglossary#def_pathspec>
+    #[must_use]
+    pub fn literal_paths<I, S>(mut self, paths: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        self.args.push("--".into());
+        self.args.extend(paths.into_iter().map(|p| {
+            let mut spec = OsString::from(":(literal)");
+            spec.push(p);
+            spec
+        }));
+        self
+    }
+
     /// Registers the argument as sensitive: it is replaced by `<redacted>` in every log line,
     /// error and span field.
     #[must_use]

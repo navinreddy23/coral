@@ -195,8 +195,8 @@ impl RepoLocation {
         let out = runner
             .output(
                 GitCommand::read("ls-files", self.display_path())
-                    .args(["ls-files", "-u", "-z", "--"])
-                    .args(paths),
+                    .args(["ls-files", "-u", "-z"])
+                    .literal_paths(paths),
             )
             .await?;
 
@@ -275,8 +275,8 @@ impl RepoLocation {
                 runner
                     .output(
                         GitCommand::write("rm", self.display_path())
-                            .args(["rm", "--quiet", "-f", "--"])
-                            .arg(path),
+                            .args(["rm", "--quiet", "-f"])
+                            .literal_paths([path]),
                     )
                     .await?;
                 return Ok(());
@@ -298,8 +298,8 @@ impl RepoLocation {
         runner
             .output(
                 GitCommand::write("add", self.display_path())
-                    .args(["add", "--"])
-                    .arg(path),
+                    .arg("add")
+                    .literal_paths([path]),
             )
             .await?;
         self.checkout_form(runner, path).await;
@@ -362,8 +362,8 @@ impl RepoLocation {
         let out = runner
             .output(
                 GitCommand::read("ls-files", self.display_path())
-                    .args(["ls-files", "-u", "-z", "--"])
-                    .arg(path),
+                    .args(["ls-files", "-u", "-z"])
+                    .literal_paths([path]),
             )
             .await?;
 
@@ -397,8 +397,8 @@ impl RepoLocation {
         runner
             .output(
                 GitCommand::write("add", self.display_path())
-                    .args(["add", "--"])
-                    .arg(path),
+                    .arg("add")
+                    .literal_paths([path]),
             )
             .await
             .map(|_| ())
@@ -484,8 +484,8 @@ impl RepoLocation {
         runner
             .output(
                 GitCommand::write("add", self.display_path())
-                    .args(["add", "--"])
-                    .arg(path),
+                    .arg("add")
+                    .literal_paths([path]),
             )
             .await
             .map(|_| ())

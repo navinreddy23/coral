@@ -874,3 +874,22 @@ async fn the_merge_base_is_where_two_branches_parted_and_none_for_unrelated_hist
             .is_err()
     );
 }
+
+#[tokio::test]
+async fn since_a_branch_named_like_a_folder_is_the_branch() {
+    // git takes `docs` as either and refuses both, "ambiguous argument", unless something
+    // after it says where the revisions end.
+    let repo = TestRepo::new().write("docs/a.md", "one\n").commit("base");
+    repo.git(["branch", "docs"]);
+    let repo = repo.write("docs/a.md", "two\n");
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, repo.path()).await.unwrap();
+
+    let listed = loc.changed_since(&runner, "docs").await.unwrap();
+    assert_eq!(listed.len(), 1);
+    let files = loc
+        .diff_since(&runner, "docs", &[], DiffOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(files.len(), 1);
+}
