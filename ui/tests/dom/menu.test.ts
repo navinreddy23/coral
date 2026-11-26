@@ -64,6 +64,35 @@ describe('the context menu', () => {
     expect(document.activeElement).toBe(button('Drop commit'));
   });
 
+  // WebKitGTK lets a scripted focus() show :focus-visible only when the element it came from
+  // showed it, so a row stepped to with the arrows had focus and no mark: a keyboard user could
+  // not see which item Enter would run.
+  it('marks the row the keyboard is on without leaning on focus-visible', async () => {
+    const view = render(Menu, { x: 10, y: 10, items: items(), onClose: vi.fn() });
+    const panel = view.container.querySelector('.menu') as HTMLElement;
+    expect(panel.classList.contains('keyboard'), 'opened with the pointer').toBe(false);
+
+    await fireEvent.keyDown(window, { key: 'ArrowDown' });
+    expect(panel.classList.contains('keyboard')).toBe(true);
+
+    await fireEvent.pointerMove(panel);
+    expect(panel.classList.contains('keyboard'), 'the pointer has it again').toBe(false);
+
+    const rules = [...document.styleSheets]
+      .flatMap((sheet) => [...(sheet.cssRules ?? [])])
+      .map((r) => r.cssText);
+    expect(
+      rules.find((t) => /\.menu\.keyboard[^{]*\.row[^{]*:focus[^-][^{]*\{[^}]*background/u.test(t)),
+    ).toBeDefined();
+    view.unmount();
+  });
+
+  it('starts marked when the keyboard opened it', async () => {
+    const view = render(Menu, { x: 10, y: 10, items: items(), keyed: true, onClose: vi.fn() });
+    expect(view.container.querySelector('.menu')?.classList.contains('keyboard')).toBe(true);
+    view.unmount();
+  });
+
   it('keeps the whole of a row on the row, since its width is capped', async () => {
     // "Push feature/good-name to origin" beside "the upstream stays where it is" came out as
     // "Push feature/good-name to ori… the upstream stays wher…", and a menu row carried no

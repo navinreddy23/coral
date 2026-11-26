@@ -306,6 +306,7 @@
     const row = listed ?? document.querySelector<HTMLElement>('ul.rows > li.row.selected');
     if (!row) return;
     const box = row.getBoundingClientRect();
+    menuByKey = true;
     // From the focused control itself when it is in a row, so the event passes every element
     // between it and the row, whichever of them holds the menu.
     (listed && focused instanceof HTMLElement ? focused : row).dispatchEvent(
@@ -689,6 +690,8 @@
   let submoduleOnKey = $state(false);
   /** The context menu on screen, if any. */
   let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  /** Whether the open menu came from the keyboard, which marks its focused row from the start. */
+  let menuByKey = $state(false);
   let showPrefs = $state(false);
   /** A pane the settings page was asked to open on, rather than its own default. */
   let prefsPane = $state<string | null>(null);
@@ -6674,7 +6677,10 @@
             locks={lfs.byPath}
             {sections}
             {spelling}
-            onWordMenu={(at, items) => (menu = { ...at, items })}
+            onWordMenu={(at, items, keyed) => {
+              menuByKey = keyed;
+              menu = { ...at, items };
+            }}
             unborn={info?.head.kind === 'unborn'}
           />
         </aside>
@@ -6848,7 +6854,16 @@
 {/if}
 
 {#if menu}
-  <Menu x={menu.x} y={menu.y} items={withAWorktree(menu.items)} onClose={() => (menu = null)} />
+  <Menu
+    x={menu.x}
+    y={menu.y}
+    items={withAWorktree(menu.items)}
+    keyed={menuByKey}
+    onClose={() => {
+      menu = null;
+      menuByKey = false;
+    }}
+  />
 {/if}
 
 <Toasts {toasts} />

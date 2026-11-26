@@ -47,12 +47,23 @@
   import Icon from './Icon.svelte';
   import { fitPanel, fitSubmenu } from './placement';
 
-  const { x, y, items, onClose }: {
+  const { x, y, items, keyed = false, onClose }: {
     x: number;
     y: number;
     items: MenuItem[];
+    /** Opened from the keyboard, so the row that has focus is marked from the start. */
+    keyed?: boolean;
     onClose: () => void;
   } = $props();
+
+  /**
+   * Whether the keyboard is working the menu, which is what marks the focused row.
+   *
+   * Not `:focus-visible`: WebKitGTK shows it for a scripted focus() only when the element focus
+   * came from showed it too, so a row reached with the arrows had focus and no mark.
+   */
+  // svelte-ignore state_referenced_locally
+  let keyboard = $state(keyed);
 
   let panel = $state<HTMLDivElement | null>(null);
   /**
@@ -186,6 +197,7 @@
 
   function onKey(event: KeyboardEvent) {
     const here = document.activeElement;
+    if (event.key.startsWith('Arrow')) keyboard = true;
     if (event.key === 'Escape') onClose();
     else if (event.key === 'ArrowDown') step(1);
     else if (event.key === 'ArrowUp') step(-1);
@@ -215,7 +227,9 @@
 
 <div
   class="menu"
+  class:keyboard
   bind:this={panel}
+  onpointermove={() => (keyboard = false)}
   style:left="{at.left}px"
   style:top="{at.top}px"
   role="menu"
@@ -317,12 +331,15 @@
     background: var(--bg-0); border: 0; border-radius: var(--radius-1); color: var(--fg-0);
     transition: background var(--fast) var(--ease);
   }
-  .row:hover:not(:disabled), .row:focus-visible:not(:disabled) {
+  .row:hover:not(:disabled), .row:focus-visible:not(:disabled),
+  .menu.keyboard .row:focus:not(:disabled) {
     background: var(--accent-soft);
   }
   .row:disabled { color: var(--fg-2); cursor: default; }
   .row.danger { color: var(--danger); }
-  .row.danger:hover:not(:disabled) { background: var(--danger-soft); }
+  .row.danger:hover:not(:disabled), .menu.keyboard .row.danger:focus:not(:disabled) {
+    background: var(--danger-soft);
+  }
   /*
    * The label says what the item does and the hint only qualifies it, so the hint gives way
    * first. Both shrinking together cut "Checkout v1.0" to "Check…" beside a hint that had the
