@@ -74,7 +74,10 @@ export interface Side {
 
 /** The file currently open in the diff viewer. */
 export class DiffState {
-  file = $state<FileDiff | null>(null);
+  // Raw: only ever replaced whole. Deep state made a proxy of every line, read through a
+  // signal by each derived that walks the hunks, and a 900,000-line diff held the window for
+  // minutes.
+  file = $state.raw<FileDiff | null>(null);
   /** Path being shown, held separately so the header has something during the load. */
   path = $state<string | null>(null);
   loading = $state(false);
