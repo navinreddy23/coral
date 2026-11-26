@@ -157,22 +157,63 @@ impl RepoLocation {
         let Ok(list) = std::fs::read_to_string(root.join(LISTED)) else {
             return Ok((Vec::new(), Skipping::Nothing));
         };
-        let count = u32::try_from(
-            list.lines()
-                .map(str::trim)
-                .filter(|l| !l.is_empty() && !l.starts_with('#'))
-                .count(),
-        )
-        .unwrap_or(u32::MAX);
+        let entries: Vec<&str> = list
+            .lines()
+            .map(|l| l.split('#').next().unwrap_or_default().trim())
+            .filter(|l| !l.is_empty())
+            .collect();
+        let count = u32::try_from(entries.len()).unwrap_or(u32::MAX);
         Ok(match (count, listed) {
             (0, _) => (Vec::new(), Skipping::Nothing),
-            (_, ListedCommits::Skip) => (
-                vec!["--ignore-revs-file".to_owned(), LISTED.to_owned()],
-                Skipping::Listed { count },
-            ),
+            (_, ListedCommits::Skip) => self.listed_skips(runner, &entries).await?,
             (_, ListedCommits::Blame) => (Vec::new(), Skipping::Offered { count }),
         })
     }
+
+    /// The arguments that look past the commits `entries` name, and how many there are.
+    ///
+    /// git reads the list itself only if every line is a whole object id: one abbreviated or
+    /// mistyped line stops the blame of every file with "invalid object name". Otherwise each
+    /// is looked up here and handed over whole, and a line that names no commit is left out.
+    async fn listed_skips(
+        &self,
+        runner: &GitRunner,
+        entries: &[&str],
+    ) -> Result<(Vec<String>, Skipping), CoralError> {
+        if entries.iter().all(|e| is_whole_id(e)) {
+            let count = u32::try_from(entries.len()).unwrap_or(u32::MAX);
+            let args = vec!["--ignore-revs-file".to_owned(), LISTED.to_owned()];
+            return Ok((args, Skipping::Listed { count }));
+        }
+        let mut names = entries.join("\n").into_bytes();
+        names.push(b'\n');
+        let out = runner
+            .output(
+                GitCommand::read("cat-file", self.display_path())
+                    .args(["cat-file", "--batch-check=%(objectname) %(objecttype)"])
+                    .stdin_bytes(names),
+            )
+            .await?;
+        let ids: Vec<String> = String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .filter_map(|l| l.strip_suffix(" commit"))
+            .map(str::to_owned)
+            .collect();
+        let count = u32::try_from(ids.len()).unwrap_or(u32::MAX);
+        if count == 0 {
+            return Ok((Vec::new(), Skipping::Nothing));
+        }
+        let args = ids
+            .into_iter()
+            .flat_map(|id| ["--ignore-rev".to_owned(), id])
+            .collect();
+        Ok((args, Skipping::Listed { count }))
+    }
+}
+
+/// Forty hex digits, or sixty-four in a SHA-256 repository.
+fn is_whole_id(name: &str) -> bool {
+    matches!(name.len(), 40 | 64) && name.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
 impl Blame {
