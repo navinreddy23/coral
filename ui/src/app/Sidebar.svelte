@@ -365,8 +365,10 @@
     return s.branch === null ? 'Stashed work' : `On ${s.branch}`;
   }
 
+  // The refs the graph is drawn from, which a hidden one no longer is.
   const total = $derived(
-    groups.local.length + groups.remote.length + groups.tags.length + stashes.length,
+    [...groups.local, ...groups.remote, ...groups.tags].filter((r) => !isHidden(r.name)).length +
+      stashes.length,
   );
 </script>
 
@@ -456,7 +458,7 @@
   -->
   {#if soloed === null}
     <p class="viewing" title="Branches, tags and stashes the graph is drawn from">
-      Viewing <strong>{total}</strong> refs
+      Viewing <strong>{total}</strong> {total === 1 ? 'ref' : 'refs'}
     </p>
   {/if}
   <!-- The magnifier is inside the field rather than beside it: a box labelled only by its
