@@ -77,7 +77,7 @@ async function panel(over: Record<string, unknown> = {}) {
   const commit = new CommitState();
   const views = new ViewsState();
   const spelling = new SpellingState(views);
-  const onWordMenu = vi.fn<(at: { x: number; y: number }, items: MenuItem[]) => void>();
+  const onWordMenu = vi.fn<(at: { x: number; y: number }, items: MenuItem[], keyed: boolean) => void>();
   const rendered = render(Staging, {
     props: {
       worktree,
@@ -232,8 +232,9 @@ describe('what a misspelt word offers', () => {
     summary.dispatchEvent(click);
     expect(click.defaultPrevented).toBe(true);
     await waitFor(() => expect(onWordMenu).toHaveBeenCalledTimes(1));
-    const [at, items] = onWordMenu.mock.calls[0] ?? [];
+    const [at, items, keyed] = onWordMenu.mock.calls[0] ?? [];
     expect(at).toEqual({ x: 55, y: 15 });
+    expect(keyed).toBe(false);
     expect(labels(items ?? [])).toEqual([
       'the',
       'tech',
@@ -281,6 +282,7 @@ describe('what a misspelt word offers', () => {
     await waitFor(() => expect(onWordMenu).toHaveBeenCalledTimes(1));
     // Under the word's first letter, where a menu from the keyboard belongs.
     expect(onWordMenu.mock.calls[0]?.[0]).toEqual({ x: 40, y: 25 });
+    expect(onWordMenu.mock.calls[0]?.[2], 'and marked as opened from the keyboard').toBe(true);
 
     body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ContextMenu', bubbles: true, cancelable: true }));
     await waitFor(() => expect(onWordMenu).toHaveBeenCalledTimes(2));

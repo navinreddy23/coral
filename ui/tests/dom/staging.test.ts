@@ -111,6 +111,22 @@ describe('the staging panel', () => {
     expect(button.textContent?.replace(/\s+/gu, ' ').trim()).toBe('Commit 1 file');
   });
 
+  // On a branch with no commits there is nothing to amend: ticked, the box turned the button
+  // into "Amend the previous commit", and pressing it ended in git's "You have nothing to amend".
+  it('offers no amend before the first commit', async () => {
+    const { container, commit } = await panel({ unborn: true });
+    const amend = container.querySelector('.amend input') as HTMLInputElement;
+    expect(amend.disabled).toBe(true);
+    commit.amend = true;
+    await tick();
+    expect(commit.amend).toBe(false);
+    await fireEvent.input(container.querySelector('.summary') as HTMLInputElement, {
+      target: { value: 'First commit' },
+    });
+    const button = container.querySelector('button.commit') as HTMLButtonElement;
+    expect(button.textContent?.replace(/\s+/gu, ' ').trim()).toBe('Commit 1 file');
+  });
+
   it('puts unstaged above staged, which is the direction work moves', async () => {
     const { container } = await panel();
     const [first, second] = headings(container);

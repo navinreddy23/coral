@@ -603,3 +603,119 @@ async fn redoing_a_mixed_reset_leaves_its_changes_unstaged() {
         "2\n"
     );
 }
+
+/// A pull moves the branch and what the remote has; a fetch on the timer, ten minutes later,
+/// moves what the remote has again. Undoing the pull refused over that, every time.
+#[tokio::test]
+async fn a_pull_can_be_undone_after_a_later_fetch_moved_what_the_remote_has() {
+    let upstream = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let holder = tempfile::tempdir().unwrap();
+    let clone = holder.path().join("clone");
+    upstream.git(["clone", "--quiet", ".", clone.to_str().unwrap()]);
+    let here = |args: &[&str]| {
+        let out = std::process::Command::new("git")
+            .args(args)
+            .current_dir(&clone)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).trim().to_owned()
+    };
+    let start = here(&["rev-parse", "HEAD"]);
+    let upstream = upstream.write("a.txt", "2\n").commit("pulled");
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, &clone).await.unwrap();
+
+    let before = loc.snapshot_refs(&runner).await.unwrap();
+    here(&["pull", "--quiet", "--ff-only"]);
+    let after = loc.snapshot_refs(&runner).await.unwrap();
+    loc.journal_change("pull", before, after, Restore::Worktree)
+        .unwrap();
+
+    let _upstream = upstream.write("a.txt", "3\n").commit("fetched later");
+    here(&["fetch", "--quiet"]);
+    let fetched = here(&["rev-parse", "origin/main"]);
+
+    loc.undo_step(&runner, true).await.unwrap();
+    assert_eq!(here(&["rev-parse", "main"]), start, "the branch is back");
+    assert_eq!(
+        here(&["rev-parse", "origin/main"]),
+        fetched,
+        "and what the remote has is left as the last fetch found it"
+    );
+}
+
+/// Clean up branches says one undo brings them all back. The refs came back and what each
+/// followed did not: a branch that tracked origin/feature came back tracking nothing.
+#[tokio::test]
+async fn an_undone_branch_deletion_brings_back_what_the_branch_followed() {
+    let upstream = TestRepo::new().write("a.txt", "1\n").commit("base");
+    upstream.git(["branch", "feature"]);
+    let holder = tempfile::tempdir().unwrap();
+    let clone = holder.path().join("clone");
+    upstream.git(["clone", "--quiet", ".", clone.to_str().unwrap()]);
+    let here = |args: &[&str]| {
+        let out = std::process::Command::new("git")
+            .args(args)
+            .current_dir(&clone)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).trim().to_owned()
+    };
+    here(&["branch", "--quiet", "--track", "feature", "origin/feature"]);
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, &clone).await.unwrap();
+
+    let before = loc.snapshot_refs(&runner).await.unwrap();
+    loc.branch_delete(&runner, "feature", true).await.unwrap();
+    let after = loc.snapshot_refs(&runner).await.unwrap();
+    loc.journal_change("delete feature", before, after, Restore::Worktree)
+        .unwrap();
+
+    loc.undo_step(&runner, true).await.unwrap();
+    assert_eq!(
+        here(&["rev-parse", "--abbrev-ref", "feature@{upstream}"]),
+        "origin/feature"
+    );
+
+    loc.undo_step(&runner, false).await.unwrap();
+    assert_eq!(here(&["branch", "--list", "feature"]), "");
+    assert_eq!(
+        here(&["config", "--get", "branch.feature.merge"]),
+        "",
+        "deleted again, it leaves no setting behind for the next branch of that name"
+    );
+}
+
+/// A mixed reset over a commit that added a file leaves that file untracked, with the very
+/// content the commit has. Undoing it was refused for a dirty worktree, though putting the
+/// commit back loses nothing.
+#[tokio::test]
+async fn undoes_a_mixed_reset_over_a_commit_that_added_a_file() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let repo = repo
+        .write("a.txt", "2\n")
+        .write("new.txt", "added\n")
+        .commit("adds a file");
+    let (runner, loc) = open(&repo).await;
+    let tip = repo.git(["rev-parse", "HEAD"]);
+
+    let before = loc.snapshot_refs(&runner).await.unwrap();
+    loc.reset(&runner, "HEAD~1", ResetMode::Mixed)
+        .await
+        .unwrap();
+    let after = loc.snapshot_refs(&runner).await.unwrap();
+    loc.journal_reset("reset to HEAD~1", before, after, ResetMode::Mixed)
+        .unwrap();
+    assert_eq!(repo.git(["status", "--porcelain"]), "M a.txt\n?? new.txt");
+
+    loc.undo_step(&runner, true).await.unwrap();
+    assert_eq!(repo.git(["rev-parse", "HEAD"]), tip);
+    assert_eq!(repo.git(["status", "--porcelain"]), "");
+}

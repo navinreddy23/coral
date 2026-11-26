@@ -305,7 +305,6 @@ pub enum Command {
         #[arg(long, requires = "hunk", value_delimiter = ',')]
         lines: Option<Vec<usize>>,
     },
-    /// Throw away worktree changes. This cannot be undone from the index.
     /// Write files into the working tree as a commit or a stash has them, staging nothing.
     Take {
         /// The commit to take them from.
@@ -317,6 +316,7 @@ pub enum Command {
         #[arg(long = "path", value_name = "PATH", required = true)]
         paths: Vec<String>,
     },
+    /// Throw away worktree changes. This cannot be undone from the index.
     Discard {
         #[arg(value_name = "PATH", required_unless_present = "file")]
         paths: Vec<String>,

@@ -225,6 +225,30 @@ async fn blame_looks_past_the_commits_a_repository_lists_unless_asked_not_to() {
 }
 
 #[tokio::test]
+async fn a_listed_commit_given_short_is_still_looked_past() {
+    // git wants every line of the file a whole object id, and stops the blame of every file
+    // with "invalid object name" over one that is not. Lists written by hand often are not.
+    let (repo, first, reformat) = reformatted();
+    let repo = repo
+        .write(
+            ".git-blame-ignore-revs",
+            &format!(
+                "# Spacing only\n{}  # the reformat\nnot-a-commit\n",
+                &reformat[..10]
+            ),
+        )
+        .commit("abbreviate it");
+    let (runner, loc) = open(&repo).await;
+
+    let skipped = loc
+        .blame(&runner, "HEAD", "f.c", None, ListedCommits::Skip)
+        .await
+        .unwrap();
+    assert_eq!(skipped.commit_for_line(1).unwrap().oid, first);
+    assert_eq!(skipped.skipping, Skipping::Listed { count: 1 });
+}
+
+#[tokio::test]
 async fn a_configured_list_that_is_not_there_is_noted_rather_than_failing_the_blame() {
     // git refuses the whole blame with "could not open object name list" over it.
     let (repo, _, reformat) = reformatted();

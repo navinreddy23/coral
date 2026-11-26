@@ -51,6 +51,8 @@ export function discardWords(
   branch: string | null,
   /** How many of the tracked files also have something staged, which goes with the rest. */
   staged = 0,
+  /** The branch has no commit yet, so the files in the index are deleted rather than reset. */
+  unborn = false,
 ): { choices: Choice[]; detail: string } {
   const untracked = untrackedPaths.length;
   const going = untrackedWords(untrackedPaths);
@@ -74,7 +76,7 @@ export function discardWords(
       label: tracked > 0 ? `Discard everything, deleting ${going}` : `Delete ${going}`,
     });
   }
-  return { choices, detail: detailOf(tracked, untrackedPaths, branch, staged) };
+  return { choices, detail: detailOf(tracked, untrackedPaths, branch, staged, unborn) };
 }
 
 function detailOf(
@@ -82,15 +84,19 @@ function detailOf(
   untrackedPaths: readonly string[],
   branch: string | null,
   staged: number,
+  unborn: boolean,
 ): string {
   const untracked = untrackedPaths.length;
   const where = branch === null ? 'the commit that is checked out' : branch;
   const parts: string[] = [];
-  if (tracked > 0) {
+  if (tracked > 0 && unborn) {
+    const is = tracked === 1 ? 'is' : 'are';
+    parts.push(`${count(tracked, 'file')} ${is} deleted: ${where} has no commit yet to go back to.`);
+  } else if (tracked > 0) {
     const goes = tracked === 1 ? 'goes' : 'go';
     parts.push(`${count(tracked, 'file')} ${goes} back to what ${where} last committed.`);
   }
-  if (staged > 0) {
+  if (staged > 0 && !unborn) {
     parts.push(`What is staged for ${staged === 1 ? 'it' : 'them'} goes too.`);
   }
   if (untracked > 0) {

@@ -14,16 +14,22 @@ export class WorktreesState {
 
   /** Which repository is wanted, so an answer for the one being left can be dropped. */
   #path = '';
+  /** The path `all` was listed for. */
+  #listed = $state('');
 
   /**
-   * The trees other than the repository's own.
+   * The trees other than the one open here.
    *
-   * The main tree is always in git's listing and is the only one that cannot be removed, so
-   * offering it in a list whose one action is "remove" would be offering nothing. git's own
-   * ordering says which it is: comparing paths does not, because inside a submodule git reports
-   * the gitdir under `.git/modules/…` rather than the checkout, and the submodule listed itself.
+   * In the main tree that is every linked one. git's ordering says which tree is the main one:
+   * comparing paths does not, because inside a submodule git reports the gitdir under
+   * `.git/modules/…` rather than the checkout, and the submodule listed itself. A linked tree is
+   * reported at its own path, so a tab open on one is found by it and lists the main tree
+   * instead: listing itself offered to remove the folder it showed, which git does.
    */
-  linked = $derived(this.all.filter((w) => !w.main && !w.bare));
+  others = $derived.by(() => {
+    const here = this.all.find((w) => !w.main && w.path === this.#listed);
+    return this.all.filter((w) => !w.bare && (here === undefined ? !w.main : w !== here));
+  });
 
   async load(path: string): Promise<void> {
     this.#path = path;
@@ -32,6 +38,7 @@ export class WorktreesState {
       const all = await repoWorktrees(path);
       if (this.#path !== path) return;
       this.all = all;
+      this.#listed = path;
     } catch (e) {
       if (this.#path !== path) return;
       this.error = messageOf(e);
@@ -42,6 +49,7 @@ export class WorktreesState {
   /** Empties the list, for a repository being left. */
   clear(): void {
     this.#path = '';
+    this.#listed = '';
     this.all = [];
     this.error = null;
   }

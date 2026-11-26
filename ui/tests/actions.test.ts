@@ -98,6 +98,16 @@ describe('running an action', () => {
     });
   });
 
+  // Stop on the transfer strip is somebody's decision. It came back as a failure, and the
+  // window said "Something went wrong" in red about a fetch nobody wanted any more.
+  it('reports nothing when the user stopped it', async () => {
+    invoke.mockRejectedValue({ code: 'cancelled', message: 'transfer was cancelled' });
+    const actions = new ActionsState();
+    expect(await actions.run('/repo', { kind: 'fetch', remote: null })).toBeNull();
+    expect(actions.report).toBeNull();
+    expect(actions.busy).toBe(false);
+  });
+
   it('refuses a second action while one is running', async () => {
     let release = () => {};
     invoke.mockReturnValue(new Promise((r) => (release = () => r({ what: 'pull', conflicted: false }))));
@@ -108,5 +118,37 @@ describe('running an action', () => {
     expect(invoke).toHaveBeenCalledTimes(1);
     release();
     await first;
+  });
+});
+
+describe('an action of the user’s during a fetch on the timer', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  // A host that never answers held every click behind the fetch, with nothing on screen to
+  // say why: network commands have no timeout, and the timer's fetch is not on the strip.
+  it('stops the fetch, as the status bar would, and goes ahead', async () => {
+    let refuse: (e: unknown) => void = () => {};
+    invoke.mockImplementation((command: string, args?: { action?: { background?: boolean } }) => {
+      if (args?.action?.background === true) {
+        return new Promise((_, no) => (refuse = no));
+      }
+      if (command === 'cancel_transfer') {
+        refuse({ code: 'cancelled', message: 'stopped' });
+        return Promise.resolve(true);
+      }
+      return Promise.resolve({ what: 'checkout main', conflicted: false, message: '' });
+    });
+    const actions = new ActionsState();
+    const fetching = actions
+      .quietly('/repo', { kind: 'fetch', remote: null, background: true })
+      .catch((e: unknown) => e);
+
+    const done = await actions.run('/repo', { kind: 'checkout', rev: 'main' });
+
+    expect(done?.what).toBe('checkout main');
+    expect(invoke).toHaveBeenCalledWith('cancel_transfer', { key: '/repo' });
+    expect(await fetching).toEqual({ code: 'cancelled', message: 'stopped' });
   });
 });

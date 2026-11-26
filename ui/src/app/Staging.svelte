@@ -40,6 +40,7 @@
     onWantPeople = () => undefined,
     spelling = null,
     onWordMenu = null,
+    unborn = false,
   }: {
     worktree: WorktreeState;
     /**
@@ -100,7 +101,10 @@
      * The window draws the menu rather than this panel: the message box is a sticky surface
      * with a stacking context of its own, and a menu inside it would sit under the graph.
      */
-    onWordMenu?: ((at: { x: number; y: number }, items: MenuItem[]) => void) | null;
+    /** `keyed` when the Menu key or Shift+F10 opened it rather than the pointer. */
+    onWordMenu?: ((at: { x: number; y: number }, items: MenuItem[], keyed: boolean) => void) | null;
+    /** The branch has no commit yet, so there is none to amend. */
+    unborn?: boolean;
   } = $props();
 
   let coAuthor = $state('');
@@ -169,7 +173,7 @@
     const mark = layerOf(which)?.markAt(event.clientX, event.clientY) ?? null;
     if (mark === null || spelling === null || onWordMenu === null) return;
     event.preventDefault();
-    void offer(which, mark, { x: event.clientX, y: event.clientY });
+    void offer(which, mark, { x: event.clientX, y: event.clientY }, false);
   }
 
   /** The Menu key, or Shift+F10, with the caret in a misspelt word. */
@@ -184,13 +188,13 @@
     const at = mark ? layerOf(which)?.placeOf(mark) : null;
     if (!mark || !at) return;
     event.preventDefault();
-    void offer(which, mark, at);
+    void offer(which, mark, at, true);
   }
 
-  async function offer(which: Field, mark: Misspelling, at: { x: number; y: number }) {
+  async function offer(which: Field, mark: Misspelling, at: { x: number; y: number }, keyed: boolean) {
     if (spelling === null || onWordMenu === null) return;
     const suggestions = await spelling.suggest(mark.word);
-    onWordMenu(at, wordItems(which, mark, suggestions));
+    onWordMenu(at, wordItems(which, mark, suggestions), keyed);
   }
 
   function wordItems(which: Field, mark: Misspelling, suggestions: string[]): MenuItem[] {
@@ -255,6 +259,9 @@
   // sight.
   $effect(() => {
     if (draft.amend) untrack(() => sections.open('compose'));
+  });
+  $effect(() => {
+    if (unborn && draft.amend) draft.amend = false;
   });
 
   /*
@@ -601,8 +608,8 @@
     {#if !closed.compose}
     <div class="fields" id="staging-compose">
     <div class="above">
-      <label class="amend">
-        <input type="checkbox" bind:checked={draft.amend} />
+      <label class="amend" title={unborn ? 'Nothing to amend: this branch has no commits yet' : undefined}>
+        <input type="checkbox" bind:checked={draft.amend} disabled={unborn} />
         {t('staging.amend')}
       </label>
       <label class="signoff" title="Ends the message with Signed-off-by and your name. This repository remembers it.">

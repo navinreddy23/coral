@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use bstr::ByteSlice;
@@ -156,6 +156,16 @@ pub fn parse_gitlinks(bytes: &[u8]) -> BTreeMap<String, String> {
         out.insert(path.to_owned(), sha.to_owned());
     }
     out
+}
+
+/// Which submodules the local config switches on, as `is_submodule_active` reads it.
+#[derive(Default)]
+struct Switches {
+    with_url: HashSet<String>,
+    /// Set to `active = false` by name.
+    off: HashSet<String>,
+    /// Whether `submodule.active` itself is set, which `git submodule init` follows.
+    pathspec: bool,
 }
 
 /// A submodule's recorded commit, read from inside the submodule itself.
@@ -464,11 +474,18 @@ impl RepoLocation {
         );
         runner.output(cmd).await?;
 
+        // New to .gitmodules, or named there already with nothing recorded: git adds over a
+        // declaration whose gitlink was removed by hand and its entry left behind.
         let added = self
             .submodules(runner)
             .await?
             .into_iter()
-            .find(|s| !before.iter().any(|b| b.path == s.path))
+            .find(|s| {
+                before
+                    .iter()
+                    .find(|b| b.path == s.path)
+                    .is_none_or(|b| b.pinned.is_none() && s.pinned.is_some())
+            })
             .ok_or_else(|| CoralError::Protocol {
                 label: "submodule add",
                 detail: "git succeeded but declared no new submodule".to_owned(),
@@ -556,14 +573,91 @@ impl RepoLocation {
                 detail: format!("{unknown} is not a submodule of this repository"),
             });
         }
+        let every = if paths.is_empty() {
+            Some(self.active_submodules(runner, &declared).await?)
+        } else {
+            None
+        };
         let mut runs = Vec::new();
         for s in declared {
-            if paths.is_empty() || paths.contains(&s.path) {
+            let wanted = match &every {
+                Some(active) => s.pinned.is_some() && active.contains(&s.name),
+                None => paths.contains(&s.path),
+            };
+            if wanted {
                 let key = self.key_for(runner, &s.name, inherited).await?;
                 runs.push((s.path, key));
             }
         }
         Ok(runs)
+    }
+
+    /// The names of the submodules git would update with no path given.
+    ///
+    /// Naming a path to `git submodule update --init` initialises it whatever
+    /// `submodule.active` says, so "every submodule" asks `git submodule init` first, which
+    /// does follow it, and then takes the ones it left with a URL and not switched off. The
+    /// rule is git's `is_submodule_active`.
+    ///
+    /// Without a `submodule.active` pathspec, a bare `git submodule init` initialises every
+    /// declared submodule and switches one set to `active = false` back on, so it is named the
+    /// others instead.
+    async fn active_submodules(
+        &self,
+        runner: &GitRunner,
+        declared: &[Submodule],
+    ) -> Result<HashSet<String>, CoralError> {
+        let before = self.switches(runner).await?;
+        let init = GitCommand::write("submodule", self.display_path()).args(["submodule", "init"]);
+        let init = if before.off.is_empty() || before.pathspec {
+            Some(init)
+        } else {
+            let on: Vec<&str> = declared
+                .iter()
+                .filter(|s| !before.off.contains(&s.name))
+                .map(|s| s.path.as_str())
+                .collect();
+            (!on.is_empty()).then(|| init.literal_paths(on))
+        };
+        if let Some(init) = init {
+            runner.output(init).await?;
+        }
+        let after = self.switches(runner).await?;
+        Ok(&after.with_url - &after.off)
+    }
+
+    /// What the local config says about which submodules are on.
+    async fn switches(&self, runner: &GitRunner) -> Result<Switches, CoralError> {
+        let cmd = GitCommand::read("config", self.display_path()).args([
+            "config",
+            "--local",
+            "-z",
+            "--get-regexp",
+            r"^submodule\.(active|.*\.(url|active))$",
+        ]);
+        let out = match runner.output(cmd).await {
+            Ok(out) => out.stdout,
+            Err(CoralError::GitExit { code: 1, .. }) => Vec::new(),
+            Err(e) => return Err(e),
+        };
+        let mut switches = Switches::default();
+        for record in out.split(|b| *b == 0).filter(|r| !r.is_empty()) {
+            let record = String::from_utf8_lossy(record);
+            let (key, value) = record.split_once('\n').unwrap_or((&record, ""));
+            let Some(rest) = key.strip_prefix("submodule.") else {
+                continue;
+            };
+            if rest == "active" {
+                switches.pathspec = true;
+            } else if let Some(name) = rest.strip_suffix(".url") {
+                switches.with_url.insert(name.to_owned());
+            } else if let Some(name) = rest.strip_suffix(".active")
+                && value.trim() == "false"
+            {
+                switches.off.insert(name.to_owned());
+            }
+        }
+        Ok(switches)
     }
 
     fn update_command(

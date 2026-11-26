@@ -11,7 +11,7 @@ members = [
 [workspace.package]
 version      = "1.6.3"
 edition      = "2024"
-rust-version = "1.88"
+rust-version = "1.95"
 license      = "MIT"
 repository   = "https://github.com/navinreddy23/coral"
 
@@ -20,7 +20,7 @@ coral-core    = { path = "crates/coral-core" }
 coral-hosting = { path = "crates/coral-hosting" }
 coral-assist  = { path = "crates/coral-assist" }
 
-gix       = "0.87.1"
+gix       = "0.91.0"
 tokio     = { version = "1.53.1", default-features = false }
 notify    = "8.2.0"
 serde     = { version = "1.0.229", features = ["derive"] }
@@ -29,7 +29,6 @@ thiserror = "2.0.20"
 clap      = { version = "4.6.6", features = ["derive", "env", "wrap_help"] }
 bstr      = { version = "1.13.1", features = ["serde"] }
 smallvec  = { version = "1.16.0", features = ["union", "const_generics"] }
-similar   = "3.2.0"
 tracing   = "0.1.44"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 insta     = { version = "1.48.0", features = ["json", "redactions", "filters"] }
@@ -40,10 +39,10 @@ secrecy   = { version = "0.10.3", features = ["serde"] }
 reqwest   = { version = "0.13.4", default-features = false, features = ["json", "rustls", "gzip", "http2"] }
 # The version already in the graph through another dependency, so hashing an email for
 # Gravatar builds nothing new.
-sha2      = "0.10.9"
+sha2      = "0.11.2"
 # The version Tauri resolves its own config directory with, so the credential helper finds the
 # profiles file where the window wrote it.
-dirs      = "6.0.0"
+dirs      = "7.0.0"
 url       = "2"
 # Hunspell's matching in Rust, for the commit box's spelling check. Pinned to the patch: it calls
 # itself alpha, and the CLI's snapshots hold the suggestions it makes.
@@ -52,15 +51,14 @@ spellbook = "=0.4.2"
 # broke ties between suggestions differently on every run.
 foldhash  = "0.2.0"
 ts-rs     = "12.0.1"
-tauri     = "2.11.5"
-tauri-build = "2.6.3"
-tauri-plugin-dialog = "2.7.3"
-tauri-plugin-opener = "2.5.5"
+tauri     = "2.12.7"
+tauri-build = "2.7.6"
+tauri-plugin-dialog = "2.8.4"
+tauri-plugin-opener = "2.7.3"
 # Without `zip`: it only reads zipped Windows installers and gzipped AppImages, which are Tauri v1's
 # update formats. v2 ships the NSIS installer and the AppImage as they are, and macOS's tar.gz
-# reader is not behind the feature. Leaving it out also leaves out zip 4, which has three open
-# advisories and no release this plugin version can take.
-tauri-plugin-updater = { version = "2.12.0", default-features = false, features = ["rustls-tls"] }
+# reader is not behind the feature.
+tauri-plugin-updater = { version = "2.14.1", default-features = false, features = ["rustls-tls"] }
 tempfile  = "3"
 
 [workspace.lints.rust]

@@ -194,6 +194,30 @@ impl RepoLocation {
             .map(|_| ())
     }
 
+    /// Deletes a branch the one checked out already has every commit of.
+    ///
+    /// Not `git branch -d`: that asks a branch's upstream rather than HEAD whenever it has one,
+    /// so a branch merged here and never pushed was refused as "not fully merged".
+    ///
+    /// # Errors
+    /// [`CoralError::Refused`] if HEAD lacks any of its commits; otherwise git failures.
+    pub async fn branch_delete_merged(
+        &self,
+        runner: &GitRunner,
+        name: &str,
+    ) -> Result<(), CoralError> {
+        if !self
+            .is_ancestor(runner, &format!("refs/heads/{name}"), "HEAD")
+            .await?
+        {
+            return Err(CoralError::Refused {
+                label: "delete a branch",
+                detail: format!("{name} has commits the current branch does not"),
+            });
+        }
+        self.branch_delete(runner, name, true).await
+    }
+
     /// Renames a branch.
     ///
     /// # Errors
@@ -291,11 +315,12 @@ impl RepoLocation {
         runner.output(cmd).await.map(|_| ())
     }
 
-    /// Moves an existing tag to another commit.
+    /// Moves an existing tag to another commit, annotated if it was, with its message.
     ///
     /// Separate from [`RepoLocation::tag_create`] because it is a different act: creating a
     /// tag fails if one of that name exists, and this replaces it. Anyone who has already
-    /// fetched the old one keeps it, which is why the window asks first.
+    /// fetched the old one keeps it, which is why the window asks first. A bare `tag -f` made
+    /// every moved tag a lightweight one, and under `tag.gpgSign` sent a plain one to be signed.
     ///
     /// # Errors
     /// Propagates git failures, including an unknown revision.
@@ -305,10 +330,32 @@ impl RepoLocation {
         name: &str,
         at: &str,
     ) -> Result<(), CoralError> {
-        runner
-            .output(GitCommand::write("tag", self.display_path()).args(["tag", "-f", name, at]))
-            .await
-            .map(|_| ())
+        let out = runner
+            .output(
+                GitCommand::read("for-each-ref", self.display_path())
+                    .args([
+                        "for-each-ref",
+                        "--format=%(objecttype)%00%(contents:subject)%00%(contents:body)",
+                    ])
+                    .arg(format!("refs/tags/{name}")),
+            )
+            .await?;
+        let read = String::from_utf8_lossy(&out.stdout);
+        let mut fields = read.splitn(3, '\0');
+        let mut cmd = GitCommand::write("tag", self.display_path()).args(["tag", "-f"]);
+        cmd = match (fields.next(), fields.next(), fields.next()) {
+            (Some("tag"), Some(subject), body) => {
+                let body = body.unwrap_or_default().trim();
+                let message = if body.is_empty() {
+                    subject.to_owned()
+                } else {
+                    format!("{subject}\n\n{body}")
+                };
+                cmd.args(["-a", "-m"]).arg(message)
+            }
+            _ => cmd.arg("--no-sign"),
+        };
+        runner.output(cmd.arg(name).arg(at)).await.map(|_| ())
     }
 
     /// Moves a branch that is not checked out up to `at`, refusing anything but a

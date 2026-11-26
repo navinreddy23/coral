@@ -15,7 +15,7 @@
   import { fitColumns, fitPanels, PANE_LIMITS, PanesState } from '../state/panes.svelte';
   import { SectionsState } from '../state/sections.svelte';
   import DiffView from './DiffView.svelte';
-  import { inTheWay } from './overwrite';
+  import { inTheWay, refusedToRebase } from './overwrite';
   import { DiffState } from '../state/diff.svelte';
   import { SyntaxState } from '../state/syntax.svelte';
   import { GrepState } from '../state/grep.svelte';
@@ -96,6 +96,7 @@
   import { outcomeToast, ToastsState } from '../state/toasts.svelte';
   import { copyText } from './clipboard';
   import { onRepoChanged, unwatchRepo, watchRepo, type RepoChanged } from '../ipc/watch';
+  import { heldFor } from '../state/change';
   import Terminal from './Terminal.svelte';
   import { TerminalState } from '../state/terminal.svelte';
   import { SigningState } from '../state/signing.svelte';
@@ -176,7 +177,7 @@
   import { ViewsState, type PanelState } from '../state/views.svelte';
   import { UpdateState } from '../state/update.svelte';
   import { AutoFetchState } from '../state/autofetch.svelte';
-  import { isTextTarget, resolve, tabJump } from '../state/shortcuts';
+  import { isTextTarget, keyEventOf, resolve, tabJump } from '../state/shortcuts';
   import Shortcuts from './Shortcuts.svelte';
   import TabBar from './TabBar.svelte';
   import Toolbar from './Toolbar.svelte';
@@ -305,6 +306,7 @@
     const row = listed ?? document.querySelector<HTMLElement>('ul.rows > li.row.selected');
     if (!row) return;
     const box = row.getBoundingClientRect();
+    menuByKey = true;
     // From the focused control itself when it is in a row, so the event passes every element
     // between it and the row, whichever of them holds the menu.
     (listed && focused instanceof HTMLElement ? focused : row).dispatchEvent(
@@ -320,13 +322,7 @@
   function onKey(event: KeyboardEvent) {
     // An open menu has the keys: the arrows that step through it moved the graph beneath.
     if (event.target instanceof Element && event.target.closest('[role="menu"]')) return;
-    const e = {
-      key: event.key,
-      ctrl: event.ctrlKey,
-      shift: event.shiftKey,
-      alt: event.altKey,
-      meta: event.metaKey,
-    };
+    const e = keyEventOf(event);
     const jump = tabJump(e);
     if (jump !== null) {
       const target = tabs.session.tabs[jump - 1];
@@ -694,6 +690,8 @@
   let submoduleOnKey = $state(false);
   /** The context menu on screen, if any. */
   let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  /** Whether the open menu came from the keyboard, which marks its focused row from the start. */
+  let menuByKey = $state(false);
   let showPrefs = $state(false);
   /** A pane the settings page was asked to open on, rather than its own default. */
   let prefsPane = $state<string | null>(null);
@@ -1447,6 +1445,7 @@
       if (action.kind === 'pull' && action.autostash !== true) {
         const files = inTheWay(actions.report?.text);
         if (files !== null) return offerToStashAround(action, files);
+        if (refusedToRebase(actions.report?.text)) return offerToStashAround(action, null);
       }
       if (action.kind === 'checkout' || (action.kind === 'branchCreate' && action.checkout)) {
         const files = inTheWay(actions.report?.text);
@@ -1624,13 +1623,18 @@
    */
   async function offerToStashAround(
     action: Extract<Action, { kind: 'pull' }>,
-    files: string[],
+    files: string[] | null,
   ): Promise<boolean> {
-    const named = files.length === 1 ? files[0] : `${files.length} files`;
+    // null is a rebase, which git refuses over any uncommitted work and names no file for.
+    const named = files === null ? null : files.length === 1 ? files[0] : `${files.length} files`;
+    const why =
+      named === null
+        ? 'git will not rebase while there are uncommitted changes, even ones the pull does not touch. '
+        : 'The pull changes what you are still working on, and git will not overwrite it. ';
     const { choice } = await ask({
-      title: `Uncommitted changes to ${named} are in the way`,
+      title: named === null ? 'Uncommitted changes are in the way' : `Uncommitted changes to ${named} are in the way`,
       detail:
-        'The pull changes what you are still working on, and git will not overwrite it. ' +
+        why +
         'Coral can stash your changes, pull, and put them back. If they clash with what came ' +
         'in, the clash is marked in the files and your changes stay in the stash.',
       asksText: false,
@@ -3232,7 +3236,8 @@
     const tracked = entries.filter((e) => e.worktree !== 'untracked').map((e) => e.path);
 
     const staged = tracked.filter((path) => worktree.staged.some((e) => e.path === path)).length;
-    const words = discardWords(tracked.length, untracked, headName, staged);
+    const unborn = info.head.kind === 'unborn';
+    const words = discardWords(tracked.length, untracked, headName, staged, unborn);
     const { choice } = await ask({
       title: 'Discard changes?',
       detail: words.detail,
@@ -4008,6 +4013,7 @@
     event.preventDefault();
     const at = { x: event.clientX, y: event.clientY };
     const busy = worktree.busy;
+    const unborn = info?.head.kind === 'unborn';
     // A new file can be put in LFS before its first commit, which is the best time to; only a
     // file the repository already has can be locked.
     const lfsPart = await lfsItems(entry.path, entry.worktree !== 'untracked');
@@ -4042,8 +4048,13 @@
         label: 'Stash this file',
         // git finds a file to stash by its name on disk or in the index, and a staged deletion
         // is in neither: it refuses with a message about pathspecs that says nothing useful.
-        hint: entry.index === 'deleted' ? 'git cannot stash a deletion by name' : 'leave the rest',
-        disabled: busy || actions.busy || entry.index === 'deleted',
+        // Nor can anything be stashed before the first commit, as the toolbar already says.
+        hint: unborn
+          ? 'after the first commit'
+          : entry.index === 'deleted'
+            ? 'git cannot stash a deletion by name'
+            : 'leave the rest',
+        disabled: busy || actions.busy || unborn || entry.index === 'deleted',
         // By its new name alone for a rename: git refuses the old one, which is on disk and in
         // the index nowhere, so the deletion stays staged until the stash comes back.
         run: () => void act({ kind: 'stashPush', message: null, paths: [entry.path] }),
@@ -4053,8 +4064,10 @@
             {
               kind: 'item' as const,
               label: 'Stash the staged changes',
-              hint: `${worktree.staged.length} ${worktree.staged.length === 1 ? 'file' : 'files'}`,
-              disabled: busy || actions.busy,
+              hint: unborn
+                ? 'after the first commit'
+                : `${worktree.staged.length} ${worktree.staged.length === 1 ? 'file' : 'files'}`,
+              disabled: busy || actions.busy || unborn,
               run: () => void act({ kind: 'stashPush', message: null, staged: true }),
             },
           ]
@@ -4105,7 +4118,7 @@
             {
               kind: 'item' as const,
               label: 'Discard its changes',
-              hint: 'back to the last commit',
+              hint: unborn ? 'nothing committed yet: it is deleted' : 'back to the last commit',
               disabled: busy,
               danger: true,
               run: () => void discardChanges([entry]),
@@ -5165,13 +5178,26 @@
    * object file would freeze the window for five seconds, repeatedly. A ref change is the one
    * that can move HEAD, so it is the one that also moves the selection.
    */
+  let heldChange = $state.raw<RepoChanged | null>(null);
+  $effect(() => {
+    if (heldChange === null || actions.busy || worktree.busy || merge.busy) return;
+    const change = heldChange;
+    heldChange = null;
+    void repoChanged(change);
+  });
+
   async function repoChanged(change: RepoChanged) {
+    if (!info) return;
     // Every kind of busy, not only an action. Reloading reads the status, which refreshes the
     // index and takes its lock, and staging a hunk or continuing a merge is a write holding
     // that same lock: the two collided and the user's write failed with a lock-file error for
     // something a background refresh did. The engine waits such a lock out now; this keeps the
-    // window from starting the fight in the first place.
-    if (!info || actions.busy || worktree.busy || merge.busy) return;
+    // window from starting the fight in the first place. What changed is kept for afterwards:
+    // dropped, an edit saved during a status read never reached the window.
+    if (actions.busy || worktree.busy || merge.busy) {
+      heldChange = heldFor(heldChange, change);
+      return;
+    }
     const path = info.path;
     const wasHead = headMark;
 
@@ -5565,19 +5591,26 @@
           label: 'Copy its path',
           run: () => void copyUrl(tree.path),
         },
-        { kind: 'separator' },
-        {
-          kind: 'item',
-          label: 'Remove this working tree…',
-          danger: true,
-          // git refuses while another process holds it, and saying so here beats letting the
-          // refusal come back as a git error under a button that looked available.
-          disabled: tree.locked,
-          hint: tree.locked ? 'git is using it' : undefined,
-          run: () => void removeWorktree(tree),
-        },
+        // The main tree is listed only from a tab on a linked one, and git will not remove it.
+        ...(tree.main ? [] : removeWorktreeItems(tree)),
       ],
     };
+  }
+
+  function removeWorktreeItems(tree: Worktree): MenuItem[] {
+    return [
+      { kind: 'separator' },
+      {
+        kind: 'item',
+        label: 'Remove this working tree…',
+        danger: true,
+        // git refuses while another process holds it, and saying so here beats letting the
+        // refusal come back as a git error under a button that looked available.
+        disabled: tree.locked,
+        hint: tree.locked ? 'git is using it' : undefined,
+        run: () => void removeWorktree(tree),
+      },
+    ];
   }
 
   /**
@@ -6142,7 +6175,7 @@
         stashes={stashes.list}
         submodules={refs.submodules}
         bare={info?.isBare ?? false}
-        worktrees={worktrees.linked}
+        worktrees={worktrees.others}
         remotes={remotes.list}
         openSubmodule={tabs.active?.submodule ?? null}
         onSelect={reveal}
@@ -6644,7 +6677,11 @@
             locks={lfs.byPath}
             {sections}
             {spelling}
-            onWordMenu={(at, items) => (menu = { ...at, items })}
+            onWordMenu={(at, items, keyed) => {
+              menuByKey = keyed;
+              menu = { ...at, items };
+            }}
+            unborn={info?.head.kind === 'unborn'}
           />
         </aside>
       {:else}
@@ -6817,7 +6854,16 @@
 {/if}
 
 {#if menu}
-  <Menu x={menu.x} y={menu.y} items={withAWorktree(menu.items)} onClose={() => (menu = null)} />
+  <Menu
+    x={menu.x}
+    y={menu.y}
+    items={withAWorktree(menu.items)}
+    keyed={menuByKey}
+    onClose={() => {
+      menu = null;
+      menuByKey = false;
+    }}
+  />
 {/if}
 
 <Toasts {toasts} />

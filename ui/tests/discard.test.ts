@@ -159,3 +159,14 @@ describe('discarding a file that also has something staged', () => {
     expect(discardWords(1, [], 'main', 0).detail).not.toContain('staged');
   });
 });
+
+describe('discarding before the first commit', () => {
+  // There is no last commit to go back to: the file is taken out of the index and deleted.
+  it('says the file goes, not that it goes back', () => {
+    const { detail, choices } = discardWords(1, [], 'main', 1, true);
+    expect(detail).toBe(
+      '1 file is deleted: main has no commit yet to go back to. This cannot be undone.',
+    );
+    expect(choices.map((c) => c.label)).toEqual(['Discard 1 change']);
+  });
+});

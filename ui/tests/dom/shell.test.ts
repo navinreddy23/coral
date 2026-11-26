@@ -1181,6 +1181,43 @@ describe('the shell', () => {
     });
   });
 
+  it('offers to stash around uncommitted work when the pull is to rebase', async () => {
+    // git refuses to rebase over any uncommitted work, in words that name no file, so the
+    // offer above never came and the pull ended in git's message.
+    const { container } = await shell({
+      repo_action: (args: { action: { mode?: string; autostash?: boolean } }) => {
+        if (args.action.autostash === true) return { what: 'pull', conflicted: false, message: '' };
+        if (args.action.mode === 'ffOnly') throw DIVERGED;
+        throw new Error(
+          'git pull exited with 128: error: cannot pull with rebase: You have unstaged ' +
+            'changes.\nerror: Please commit or stash them.',
+        );
+      },
+    });
+    await fireEvent.click(container.querySelector('[aria-label="Pull"]') as HTMLButtonElement);
+    const diverged = await question(container);
+    await fireEvent.click(
+      [...diverged.querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === 'Pull, rebasing',
+      ) as HTMLButtonElement,
+    );
+
+    const dialog = await waitFor(() => {
+      const found = container.querySelector('[role="dialog"]');
+      if (!found?.textContent?.includes('in the way')) throw new Error('no offer yet');
+      return found as HTMLElement;
+    });
+    expect(dialog.textContent).toContain('Uncommitted changes are in the way');
+    const stash = [...dialog.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Stash, pull and put back',
+    ) as HTMLButtonElement;
+    await fireEvent.click(stash);
+
+    await waitFor(() => {
+      expect(sent().at(-1)).toEqual({ kind: 'pull', remote: null, mode: 'rebase', autostash: true });
+    });
+  });
+
   it('pulls by merging first when a refused push leaves a merge on the branch', async () => {
     const { container } = await shell({
       repo_action: (args: { action: { kind: string } }) =>

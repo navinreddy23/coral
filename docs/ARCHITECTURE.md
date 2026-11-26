@@ -211,6 +211,14 @@ waiting on the host that never answered. The first report is sent before git has
 answers produces no progress at all and a way out that waited for the first record would never
 appear.
 
+**The fetch timer** (`ui/src/state/autofetch.svelte.ts`) fetches the repository in front of the
+user while the window has focus. It is the window's idea, so it is quiet: not journaled, off
+the transfer strip, holding nothing the user waits on. One transfer per repository runs at a
+time (`transfer.rs` refuses a second), and an action of the user's started during a timer fetch
+stops it rather than waiting, since a fetch has no timeout. Undo leaves a remote-tracking ref
+that a later fetch has moved where that fetch put it: what a remote has is not a step's to take
+back, and otherwise every undo of a pull would be refused within ten minutes.
+
 **Forcing is always `--force-with-lease`.** There is no bare `--force` in the engine or the
 CLI. The lease refuses when the remote branch has moved since we last saw it, which is exactly
 when a plain force would destroy someone else's work. A rejected ref is reported per-ref, not

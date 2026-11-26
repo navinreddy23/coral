@@ -85,6 +85,32 @@ describe('the file panel', () => {
     expect(diff.lines).toBeNull();
   });
 
+  it('goes back to the whole file\'s history from the change it was opened on', async () => {
+    // A commit picked from the lines' history became where "Whole file" read from, so the list
+    // came back without everything newer than it: the change on screen among them.
+    answering({ line_history: [], file_history: [] });
+    const diff = new DiffState(new ViewsState());
+    await diff.open('/repo', 'deadbeef', 'a.c');
+    diff.setView('blame');
+    await vi.waitFor(() => expect(diff.blame).not.toBeNull());
+    await diff.historyOfLines(2, 3);
+    await diff.showCommit('c0ffee');
+
+    await diff.historyOfFile();
+
+    expect(called('file_history').at(-1)?.[1]).toMatchObject({ rev: 'deadbeef', file: 'a.c' });
+  });
+
+  it('holds a diff as it came, rather than wrapping each line to watch it', async () => {
+    // Deep state made every line a proxy, read through a signal by each derived that walked the
+    // hunks: "Read it anyway" on a 900,000-line file held the window for minutes.
+    const got = { ...EMPTY_DIFF, hunks: [{ header: '@@ -1 +1 @@', lines: [] }] };
+    answering({ file_diff: got });
+    const diff = new DiffState(new ViewsState());
+    await diff.open('/repo', 'deadbeef', 'a.c');
+    expect(diff.file).toBe(got);
+  });
+
   it('asks for nothing beyond the diff until a view that needs it is chosen', async () => {
     answering();
     const diff = new DiffState(new ViewsState());

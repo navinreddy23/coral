@@ -182,6 +182,7 @@
   }
   .host:hover { background: var(--bg-2); color: var(--fg-0); }
   .host.update { background: var(--accent-soft); color: var(--accent); }
+  .host.fetching { display: inline-flex; align-items: center; gap: 4px; }
   .muted { color: var(--fg-2); }
 
   .report {

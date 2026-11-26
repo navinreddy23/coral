@@ -602,6 +602,11 @@ describe('the stash list', () => {
       scope: { solo: null, hidden: ['refs/heads/spike'] },
     });
     expect(view.getByText('1 hidden')).toBeTruthy();
+    // The count is of the refs the graph is drawn from, which a hidden one no longer is: it
+    // read "Viewing 2 refs" under "1 hidden".
+    expect(view.container.querySelector('.viewing')?.textContent?.replace(/\s+/gu, ' ').trim()).toBe(
+      'Viewing 1 ref',
+    );
   });
 
   it('stops counting the repository refs while one branch is soloed', () => {

@@ -80,3 +80,40 @@ fn is_kept_beside_the_window_settings() {
         file.display()
     );
 }
+
+/// Written by another editor in Latin-1, say. One byte that is not UTF-8 failed every check
+/// of every message, not only the line it was on.
+#[test]
+fn a_list_that_is_not_utf8_is_still_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("words.txt");
+    std::fs::write(&path, b"gix\ncaf\xe9\nrebase\n").unwrap();
+
+    let list = WordList::load(&path).unwrap();
+    assert!(list.contains("gix") && list.contains("rebase"));
+
+    WordList::add(&path, "worktree").unwrap();
+    let list = WordList::load(&path).unwrap();
+    assert!(list.contains("gix") && list.contains("worktree"));
+}
+
+/// Two words learnt at once, as two quick clicks on Add to dictionary are: each read the list,
+/// added its word and wrote it back, and the second write lost the first word.
+#[test]
+fn words_added_at_once_are_all_kept() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("words.txt");
+    std::thread::scope(|s| {
+        for i in 0..24 {
+            let path = &path;
+            s.spawn(move || WordList::add(path, &format!("word{i}")).unwrap());
+        }
+    });
+
+    let list = WordList::load(&path).unwrap();
+    let missing: Vec<_> = (0..24)
+        .map(|i| format!("word{i}"))
+        .filter(|w| !list.contains(w))
+        .collect();
+    assert!(missing.is_empty(), "lost {missing:?}");
+}

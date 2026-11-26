@@ -1,5 +1,6 @@
 import { runAction, type Action, type ActionOutcome } from '../ipc/commands';
-import { messageOf, whatFailed } from '../ipc/error';
+import { codeOf, messageOf, whatFailed } from '../ipc/error';
+import { cancelTransfer } from '../ipc/transfer';
 import { neverTrust, retryAfterTrust, type AskTrust } from './hosttrust';
 import { outcomeToast, type ToastKind } from './toasts.svelte';
 
@@ -29,6 +30,8 @@ export class ActionsState {
   /** True while something the window started on its own is running. */
   quiet = $state(false);
   #quiet: Promise<unknown> | null = null;
+  /** The repository the fetch on the timer is for, which is what it is stopped by. */
+  #quietPath = '';
   #askTrust: AskTrust;
 
   /** `askTrust` is put to the user when a fetch, pull or push meets a host ssh has not seen. */
@@ -47,10 +50,15 @@ export class ActionsState {
     this.busy = true;
     this.report = null;
     try {
-      // A background fetch finishes first, rather than the user's action racing it for the
-      // same refs. It is on the transfer bar meanwhile, with the button that stops it. Only
-      // awaited when there is one: an await of nothing still defers the call a turn.
-      if (this.#quiet !== null) await this.#quiet;
+      // A fetch on the timer is stopped, as Fetching… in the status bar stops it, rather than
+      // waited for: it was the window's idea, and network commands have no timeout, so a host
+      // that never answered held every click behind it with nothing on screen to say why. The
+      // user's action does not race it for the same refs either way. Only awaited when there
+      // is one: an await of nothing still defers the call a turn.
+      if (this.#quiet !== null) {
+        await cancelTransfer(this.#quietPath).catch(() => false);
+        await this.#quiet;
+      }
       let outcome: ActionOutcome;
       try {
         outcome = await runAction(path, action);
@@ -64,7 +72,10 @@ export class ActionsState {
       this.report = { text: said.title, tone: toneOf(said.kind), what: null };
       return outcome;
     } catch (e) {
-      this.report = { text: messageOf(e), tone: 'error', what: whatFailed(e) };
+      // Stopped from the strip: called off, not gone wrong, so there is nothing to report.
+      if (codeOf(e) !== 'cancelled') {
+        this.report = { text: messageOf(e), tone: 'error', what: whatFailed(e) };
+      }
       return null;
     } finally {
       this.busy = false;
@@ -82,6 +93,7 @@ export class ActionsState {
     if (this.busy || this.#quiet !== null) return null;
     const running = runAction(path, action);
     this.#quiet = running.catch(() => undefined);
+    this.#quietPath = path;
     this.quiet = true;
     try {
       return await running;

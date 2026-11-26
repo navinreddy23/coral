@@ -905,3 +905,59 @@ async fn a_shallow_clone_gets_deeper_and_then_whole() {
     assert_eq!(count(), "5");
     assert!(!loc.info(&runner).await.unwrap().shallow);
 }
+
+/// What the window asks for: no remote named. `git fetch --all --deepen` and `--unshallow`
+/// pass neither option on to the fetches it starts once there are two remotes, and exit 0.
+#[tokio::test]
+async fn a_shallow_clone_with_two_remotes_gets_deeper_when_none_is_named() {
+    use coral_core::remote::Deepen;
+
+    let upstream = TestRepo::new().write("a.txt", "0\n").commit("first");
+    let upstream = (1..5).fold(upstream, |r, i| {
+        r.write("a.txt", &format!("{i}\n"))
+            .commit(&format!("commit {i}"))
+    });
+    let home = tempfile::tempdir().unwrap();
+    let shallow = home.path().join("shallow");
+    let git = |args: &[&str]| {
+        let status = std::process::Command::new("git")
+            .args(args)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .status()
+            .unwrap();
+        assert!(status.success(), "{args:?}");
+    };
+    let url = format!("file://{}", upstream.path().display());
+    git(&[
+        "clone",
+        "--quiet",
+        "--depth",
+        "1",
+        &url,
+        shallow.to_str().unwrap(),
+    ]);
+    let dir = shallow.to_str().unwrap();
+    git(&["-C", dir, "remote", "add", "fork", &url]);
+
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, &shallow).await.unwrap();
+    let count = || {
+        let out = std::process::Command::new("git")
+            .args(["rev-list", "--count", "HEAD"])
+            .current_dir(&shallow)
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).trim().to_owned()
+    };
+
+    loc.deepen(&runner, None, Deepen::By { commits: 2 }, |_| {})
+        .await
+        .unwrap();
+    assert_eq!(count(), "3", "two deeper, not none and not four");
+
+    loc.deepen(&runner, None, Deepen::All, |_| {})
+        .await
+        .unwrap();
+    assert_eq!(count(), "5");
+    assert!(!loc.info(&runner).await.unwrap().shallow);
+}

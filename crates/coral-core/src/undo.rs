@@ -14,6 +14,17 @@ pub struct RefSnapshot {
     pub head_branch: Option<String>,
     /// What HEAD resolved to. `None` on an unborn branch.
     pub head_oid: Option<String>,
+    /// What each branch followed, by its full name. Deleting a branch deletes this with it,
+    /// so it is what an undo has to put back beside the ref. Absent from older journals.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub upstreams: BTreeMap<String, Upstream>,
+}
+
+/// A branch's `branch.<name>.remote` and `branch.<name>.merge`.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Upstream {
+    pub remote: String,
+    pub merge: String,
 }
 
 impl RefSnapshot {
@@ -43,6 +54,27 @@ fn moved_since(now: &RefSnapshot, from: &RefSnapshot, target: &RefSnapshot) -> O
         .into_iter()
         .find(|(name, expected, _)| now.refs.get(name) != expected.as_ref())
         .map(|(name, _, _)| name)
+}
+
+/// The step without the remote-tracking refs a fetch has moved since it was taken.
+///
+/// What a remote has is not the step's to take back once a later fetch has said otherwise, and
+/// a fetch on the timer moves those refs every few minutes: undoing a pull was refused every
+/// time over them. The branch the pull moved still comes back; what the remote has stays as the
+/// last fetch found it. One nothing has moved since is put back as before.
+fn without_refetched(
+    now: &RefSnapshot,
+    from: &RefSnapshot,
+    target: &RefSnapshot,
+) -> (RefSnapshot, RefSnapshot) {
+    let (mut from, mut target) = (from.clone(), target.clone());
+    for (name, expected, _) in from.diff(&target) {
+        if name.starts_with("refs/remotes/") && now.refs.get(&name) != expected.as_ref() {
+            from.refs.remove(&name);
+            target.refs.remove(&name);
+        }
+    }
+    (from, target)
 }
 
 /// Which copy of the tracked files a comparison is about.
@@ -200,15 +232,28 @@ impl RepoLocation {
             .output(
                 GitCommand::read("for-each-ref", self.display_path())
                     .arg("for-each-ref")
-                    .arg("--format=%(refname)%00%(objectname)"),
+                    .arg(
+                        "--format=%(refname)%00%(objectname)%00%(upstream:remotename)%00\
+                         %(upstream:remoteref)",
+                    ),
             )
             .await?;
 
         let mut refs = BTreeMap::new();
+        let mut upstreams = BTreeMap::new();
         for line in out.stdout.split(|b| *b == b'\n').filter(|l| !l.is_empty()) {
             let text = String::from_utf8_lossy(line);
-            if let Some((name, oid)) = text.split_once('\0') {
-                refs.insert(name.to_owned(), oid.to_owned());
+            let mut fields = text.split('\0');
+            let (Some(name), Some(oid)) = (fields.next(), fields.next()) else {
+                continue;
+            };
+            refs.insert(name.to_owned(), oid.to_owned());
+            if let (Some(remote), Some(merge)) = (fields.next(), fields.next())
+                && !remote.is_empty()
+                && !merge.is_empty()
+            {
+                let (remote, merge) = (remote.to_owned(), merge.to_owned());
+                upstreams.insert(name.to_owned(), Upstream { remote, merge });
             }
         }
 
@@ -221,7 +266,75 @@ impl RepoLocation {
             refs,
             head_branch,
             head_oid,
+            upstreams,
         })
+    }
+
+    /// Moves one ref to where `target` had it, or deletes it when `target` had none.
+    async fn restore_ref(
+        &self,
+        runner: &GitRunner,
+        name: &str,
+        now: Option<String>,
+        then: Option<String>,
+        target: &RefSnapshot,
+    ) -> Result<(), CoralError> {
+        let Some(oid) = then else {
+            runner
+                .output(GitCommand::write("update-ref", self.display_path()).args([
+                    "update-ref",
+                    "-d",
+                    name,
+                ]))
+                .await?;
+            self.forget_branch(runner, name).await;
+            return Ok(());
+        };
+        let mut cmd =
+            GitCommand::write("update-ref", self.display_path()).args(["update-ref", name, &oid]);
+        // Only move the ref if it is still where we left it.
+        if let Some(expected) = &now {
+            cmd = cmd.arg(expected);
+        }
+        runner.output(cmd).await?;
+        if now.is_none() {
+            self.follow_again(runner, name, target).await;
+        }
+        Ok(())
+    }
+
+    /// Puts back what a branch brought back by an undo followed.
+    ///
+    /// Best effort: the ref is what an undo is for, and a branch that comes back following
+    /// nothing is where every undo of a deletion left it before this.
+    async fn follow_again(&self, runner: &GitRunner, name: &str, target: &RefSnapshot) {
+        let (Some(branch), Some(up)) =
+            (name.strip_prefix("refs/heads/"), target.upstreams.get(name))
+        else {
+            return;
+        };
+        for (key, value) in [("remote", &up.remote), ("merge", &up.merge)] {
+            let cmd = GitCommand::write("config", self.display_path())
+                .arg("config")
+                .arg(format!("branch.{branch}.{key}"))
+                .arg(value);
+            if let Err(e) = runner.output(cmd).await {
+                tracing::warn!(error = %e, branch, "could not put back what the branch followed");
+            }
+        }
+    }
+
+    /// Clears a branch's settings once a step has deleted it, as `git branch -D` does, so a
+    /// later branch of the same name does not quietly follow what this one did.
+    async fn forget_branch(&self, runner: &GitRunner, name: &str) {
+        let Some(branch) = name.strip_prefix("refs/heads/") else {
+            return;
+        };
+        let cmd = GitCommand::write("config", self.display_path())
+            .args(["config", "--remove-section"])
+            .arg(format!("branch.{branch}"));
+        // Exits 128 when there is no such section, which is the usual case.
+        let _ = runner.output_allowing(cmd, &[128]).await;
     }
 
     /// Restores refs to a snapshot.
@@ -257,31 +370,9 @@ impl RepoLocation {
             }
         }
 
-        for (name, before, after) in from.diff(target) {
-            // `diff` is called on the current state, so `after` is where we want to end up.
-            match after {
-                Some(oid) => {
-                    let mut cmd = GitCommand::write("update-ref", self.display_path()).args([
-                        "update-ref",
-                        &name,
-                        &oid,
-                    ]);
-                    // Only move the ref if it is still where we left it.
-                    if let Some(expected) = before {
-                        cmd = cmd.arg(expected);
-                    }
-                    runner.output(cmd).await?;
-                }
-                None => {
-                    runner
-                        .output(GitCommand::write("update-ref", self.display_path()).args([
-                            "update-ref",
-                            "-d",
-                            &name,
-                        ]))
-                        .await?;
-                }
-            }
+        // `diff` is called on the current state, so the second side is where to end up.
+        for (name, now, then) in from.diff(target) {
+            self.restore_ref(runner, &name, now, then, target).await?;
         }
 
         // HEAD last, so the checkout lands on refs that are already correct.
@@ -354,8 +445,50 @@ impl RepoLocation {
         if side == Side::Index {
             cmd = cmd.arg("--cached");
         }
-        let out = runner.output(cmd.args(["--name-only", oid, "--"])).await?;
-        Ok(out.stdout.is_empty())
+        let out = runner
+            .output(cmd.args(["-z", "--name-only", oid, "--"]))
+            .await?;
+        if side == Side::Index {
+            return Ok(out.stdout.is_empty());
+        }
+        // `git diff` calls a file the commit has and the index does not deleted, whatever is on
+        // disk: a mixed reset over a commit that added a file leaves exactly that, with the
+        // commit's own content, and undoing the reset was refused over it.
+        for path in out.stdout.split(|b| *b == 0).filter(|p| !p.is_empty()) {
+            if !self
+                .on_disk_as(runner, oid, &String::from_utf8_lossy(path))
+                .await?
+            {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
+    /// Whether `path` is on disk with exactly the content it has at `oid`.
+    async fn on_disk_as(
+        &self,
+        runner: &GitRunner,
+        oid: &str,
+        path: &str,
+    ) -> Result<bool, CoralError> {
+        let Some(root) = &self.workdir else {
+            return Ok(false);
+        };
+        if !root.join(path).is_file() {
+            return Ok(false);
+        }
+        let Ok(there) = self.rev_parse(runner, &format!("{oid}:{path}")).await else {
+            return Ok(false);
+        };
+        let out = runner
+            .output(
+                GitCommand::read("hash-object", self.display_path())
+                    .args(["hash-object", "--"])
+                    .arg(path),
+            )
+            .await?;
+        Ok(String::from_utf8_lossy(&out.stdout).trim() == there)
     }
 }
 
@@ -454,7 +587,8 @@ impl RepoLocation {
         // "cannot lock ref 'refs/heads/main': is at <sha> but expected <sha>" says nothing
         // about the step being taken, and the user is looking at an Undo button, not at git.
         let now = self.snapshot_refs(runner).await?;
-        if let Some(name) = moved_since(&now, from, target) {
+        let (from, target) = without_refetched(&now, from, target);
+        if let Some(name) = moved_since(&now, &from, &target) {
             return Err(CoralError::Refused {
                 label: verb,
                 detail: format!(
@@ -466,7 +600,7 @@ impl RepoLocation {
         // Redo puts the operation back and leaves the files as it did. For a commit that is
         // matching them again, since leaving the change staged as well would double it.
         let restore = if backwards { entry.restore } else { entry.redo };
-        self.restore_refs(runner, target, from, restore, verb)
+        self.restore_refs(runner, &target, &from, restore, verb)
             .await?;
 
         if backwards {

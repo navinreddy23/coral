@@ -82,11 +82,16 @@ impl Report {
 #[derive(Default)]
 pub struct Transfers {
     inner: Mutex<HashMap<String, Running>>,
+    claims: std::sync::atomic::AtomicU64,
+    /// Claims not yet released, stopped or not: their git may still be running.
+    live: std::sync::atomic::AtomicUsize,
 }
 
 struct Running {
     stop: tokio::sync::oneshot::Sender<()>,
     label: String,
+    /// Which claim this is, so a transfer clearing up after itself clears only its own.
+    claim: u64,
 }
 
 type Held<'a> = std::sync::MutexGuard<'a, HashMap<String, Running>>;
@@ -108,20 +113,37 @@ impl Transfers {
         &self,
         key: &str,
         label: &str,
-    ) -> Result<tokio::sync::oneshot::Receiver<()>, String> {
+    ) -> Result<(u64, tokio::sync::oneshot::Receiver<()>), String> {
         let mut held = self.held();
         if let Some(running) = held.get(key) {
             return Err(running.label.clone());
         }
+        let claim = self
+            .claims
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let (stop, stopped) = tokio::sync::oneshot::channel();
         held.insert(
             key.to_owned(),
             Running {
                 stop,
                 label: label.to_owned(),
+                claim,
             },
         );
-        Ok(stopped)
+        self.live.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Ok((claim, stopped))
+    }
+
+    /// Clears `claim` from `key`, and nothing that has claimed `key` since.
+    ///
+    /// Stopping a transfer takes its entry, and another may claim the key before the stopped
+    /// one has cleared up after itself; clearing by key alone dropped that one's switch.
+    pub fn release(&self, key: &str, claim: u64) {
+        self.live.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        let mut held = self.held();
+        if held.get(key).is_some_and(|r| r.claim == claim) {
+            held.remove(key);
+        }
     }
 
     /// Stops the transfer under `key`, answering whether there was one.
@@ -131,6 +153,30 @@ impl Transfers {
         self.held()
             .remove(key)
             .is_some_and(|r| r.stop.send(()).is_ok())
+    }
+
+    /// Stops every transfer, as quitting has to: git dies when its work is let go, and a
+    /// process on its way out lets go of nothing, so a fetch to a host that never answered
+    /// outlived the window.
+    pub fn stop_all(&self) {
+        for (_, running) in self.held().drain() {
+            let _ = running.stop.send(());
+        }
+    }
+
+    /// Waits up to `limit` for every claim to be released, answering whether they all were.
+    ///
+    /// A transfer releases its claim only once its work has been dropped, which is what kills
+    /// its git, so this returning true means none is left running.
+    pub fn settle(&self, limit: std::time::Duration) -> bool {
+        let deadline = std::time::Instant::now() + limit;
+        while self.live.load(std::sync::atomic::Ordering::SeqCst) > 0 {
+            if std::time::Instant::now() >= deadline {
+                return false;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        true
     }
 }
 
@@ -159,7 +205,7 @@ where
     let transfers = app.state::<Transfers>();
     // Before the first report, so a refused transfer never puts a bar up over the one that is
     // really running.
-    let stopped = transfers.claim(key, label).map_err(|running| {
+    let (claim, stopped) = transfers.claim(key, label).map_err(|running| {
         E::from(coral_core::CoralError::Refused {
             label: "start that",
             detail: format!("{running} is still running for this repository"),
@@ -180,7 +226,7 @@ where
         done = work(sender.clone()) => Some(done),
         _ = stopped => None,
     };
-    transfers.held().remove(key);
+    transfers.release(key, claim);
 
     match outcome {
         Some(Ok(value)) => {
@@ -259,7 +305,7 @@ mod tests {
     #[test]
     fn a_second_transfer_of_one_repository_is_refused_not_swapped_in() {
         let transfers = Transfers::default();
-        let mut first = transfers.claim("/repo", "fetch in the background").unwrap();
+        let (_, mut first) = transfers.claim("/repo", "fetch in the background").unwrap();
         assert_eq!(
             transfers.claim("/repo", "pull").unwrap_err(),
             "fetch in the background"
@@ -271,5 +317,51 @@ mod tests {
         assert!(transfers.claim("/elsewhere", "push").is_ok());
         assert!(transfers.cancel("/repo"));
         assert!(transfers.claim("/repo", "pull").is_ok());
+    }
+
+    /// A stopped transfer clears its entry on its way out. A pull claimed in between was the
+    /// entry it cleared, which dropped the pull's switch and stopped it too.
+    #[test]
+    fn a_stopped_transfer_clears_only_its_own_entry() {
+        let transfers = Transfers::default();
+        let (fetch, _stopped) = transfers.claim("/repo", "fetch in the background").unwrap();
+        assert!(transfers.cancel("/repo"));
+        let (_, mut pull) = transfers.claim("/repo", "pull").unwrap();
+
+        transfers.release("/repo", fetch);
+
+        assert!(
+            pull.try_recv().is_err(),
+            "the pull was stopped by the fetch it followed"
+        );
+        assert!(transfers.cancel("/repo"), "and is still there to stop");
+    }
+
+    /// git dies when its work is let go, and a process on its way out lets go of nothing: a
+    /// fetch to a host that never answered outlived the window it was started from.
+    #[test]
+    fn quitting_stops_every_transfer_and_waits_for_each_to_let_go() {
+        let transfers = std::sync::Arc::new(Transfers::default());
+        let mut letting_go = Vec::new();
+        for key in ["/one", "/two"] {
+            let (claim, stopped) = transfers.claim(key, "fetch").unwrap();
+            let held = std::sync::Arc::clone(&transfers);
+            letting_go.push(std::thread::spawn(move || {
+                let _ = stopped.blocking_recv();
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                held.release(key, claim);
+            }));
+        }
+        assert!(
+            !transfers.settle(std::time::Duration::from_millis(20)),
+            "nothing was stopped, so nothing let go"
+        );
+
+        transfers.stop_all();
+
+        assert!(transfers.settle(std::time::Duration::from_secs(5)));
+        for thread in letting_go {
+            thread.join().unwrap();
+        }
     }
 }

@@ -194,4 +194,12 @@ describe('a fetch in the background', () => {
     chip?.click();
     expect(stopped).toBe(1);
   });
+
+  it('keeps its mark on the same line as the word', () => {
+    // The mark is a block, beside the word only in a flex row. The button was not one, so the
+    // mark took a line of its own and pushed "Fetching…" under the bottom edge of the window.
+    const { container } = bar({ fetching: true });
+    const chip = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Fetching'));
+    expect(chip && getComputedStyle(chip).display).toBe('inline-flex');
+  });
 });

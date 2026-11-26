@@ -22,18 +22,20 @@ fn stack() -> TestRepo {
 }
 
 fn coral_binary() -> std::path::PathBuf {
-    let mut at = std::env::current_exe().expect("test binary path");
-    at.pop();
-    if at.ends_with("deps") {
-        at.pop();
-    }
-    let binary = at.join(if cfg!(windows) { "coral.exe" } else { "coral" });
-    assert!(
-        binary.exists(),
-        "the CLI must be built for these: {}",
-        binary.display()
-    );
-    binary
+    // The CLI is in the profile directory, somewhere above the test binary: one level up from
+    // deps/ in cargo's old layout, four from build/<package>/<hash>/out/ since cargo 1.100.
+    let name = if cfg!(windows) { "coral.exe" } else { "coral" };
+    let test = std::env::current_exe().expect("test binary path");
+    test.ancestors()
+        .skip(1)
+        .map(|dir| dir.join(name))
+        .find(|binary| binary.is_file())
+        .unwrap_or_else(|| {
+            panic!(
+                "the CLI must be built for these: none above {}",
+                test.display()
+            )
+        })
 }
 
 /// Newest first, as the graph lists them.

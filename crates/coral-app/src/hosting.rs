@@ -168,10 +168,21 @@ async fn host_of(path: &str, profile: &str) -> Result<HostView, IpcError> {
             unplaced: matches!(e, coral_hosting::HostingError::Unrecognised(_))
                 .then(|| Host::hostname_of(&remote.fetch_url))
                 .flatten(),
-            detail: Some(e.to_string()),
+            detail: Some(not_a_host(&e, &remote.fetch_url)),
             token: TokenSource::None,
         },
     })
+}
+
+/// Why a remote has no host, in words for the Start page's list of tabs rather than the
+/// parser's: a folder on this machine is not a broken URL, and plain git works with it.
+fn not_a_host(e: &coral_hosting::HostingError, url: &str) -> String {
+    match (e, Host::hostname_of(url)) {
+        (coral_hosting::HostingError::Unrecognised(_), Some(server)) => {
+            format!("{server} is not a host Coral knows")
+        }
+        _ => "the remote is not a host Coral knows".to_owned(),
+    }
 }
 
 /// Says what kind of host the repository's remote is on, for one that could not be told from
@@ -570,5 +581,29 @@ fn refused(label: &'static str, e: &coral_hosting::HostingError) -> coral_core::
     coral_core::CoralError::Refused {
         label,
         detail: e.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::not_a_host;
+
+    /// The Start page lists every tab, and one whose remote is a folder said "remote URL could
+    /// not be parsed: /home/…/remote.git", which reads as something broken.
+    #[test]
+    fn a_remote_on_no_host_is_said_plainly() {
+        let said = |url: &str| not_a_host(&coral_hosting::Host::detect(url).unwrap_err(), url);
+        assert_eq!(
+            said("/srv/git/project.git"),
+            "the remote is not a host Coral knows"
+        );
+        assert_eq!(
+            said("file:///srv/git/project.git"),
+            "the remote is not a host Coral knows"
+        );
+        assert_eq!(
+            said("git@git.example.invalid:team/project.git"),
+            "git.example.invalid is not a host Coral knows"
+        );
     }
 }

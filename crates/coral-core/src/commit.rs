@@ -341,7 +341,8 @@ impl crate::repo::RepoLocation {
             .output(
                 crate::process::GitCommand::status("diff", self.display_path())
                     .args(["diff", "-z", "--name-status", "-M", "--end-of-options"])
-                    .arg(rev),
+                    .arg(rev)
+                    .arg("--"),
             )
             .await?;
         Ok(parse_name_status(&out.stdout))
