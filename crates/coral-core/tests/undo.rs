@@ -692,3 +692,30 @@ async fn an_undone_branch_deletion_brings_back_what_the_branch_followed() {
         "deleted again, it leaves no setting behind for the next branch of that name"
     );
 }
+
+/// A mixed reset over a commit that added a file leaves that file untracked, with the very
+/// content the commit has. Undoing it was refused for a dirty worktree, though putting the
+/// commit back loses nothing.
+#[tokio::test]
+async fn undoes_a_mixed_reset_over_a_commit_that_added_a_file() {
+    let repo = TestRepo::new().write("a.txt", "1\n").commit("base");
+    let repo = repo
+        .write("a.txt", "2\n")
+        .write("new.txt", "added\n")
+        .commit("adds a file");
+    let (runner, loc) = open(&repo).await;
+    let tip = repo.git(["rev-parse", "HEAD"]);
+
+    let before = loc.snapshot_refs(&runner).await.unwrap();
+    loc.reset(&runner, "HEAD~1", ResetMode::Mixed)
+        .await
+        .unwrap();
+    let after = loc.snapshot_refs(&runner).await.unwrap();
+    loc.journal_reset("reset to HEAD~1", before, after, ResetMode::Mixed)
+        .unwrap();
+    assert_eq!(repo.git(["status", "--porcelain"]), "M a.txt\n?? new.txt");
+
+    loc.undo_step(&runner, true).await.unwrap();
+    assert_eq!(repo.git(["rev-parse", "HEAD"]), tip);
+    assert_eq!(repo.git(["status", "--porcelain"]), "");
+}

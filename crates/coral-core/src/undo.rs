@@ -445,8 +445,50 @@ impl RepoLocation {
         if side == Side::Index {
             cmd = cmd.arg("--cached");
         }
-        let out = runner.output(cmd.args(["--name-only", oid, "--"])).await?;
-        Ok(out.stdout.is_empty())
+        let out = runner
+            .output(cmd.args(["-z", "--name-only", oid, "--"]))
+            .await?;
+        if side == Side::Index {
+            return Ok(out.stdout.is_empty());
+        }
+        // `git diff` calls a file the commit has and the index does not deleted, whatever is on
+        // disk: a mixed reset over a commit that added a file leaves exactly that, with the
+        // commit's own content, and undoing the reset was refused over it.
+        for path in out.stdout.split(|b| *b == 0).filter(|p| !p.is_empty()) {
+            if !self
+                .on_disk_as(runner, oid, &String::from_utf8_lossy(path))
+                .await?
+            {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
+    /// Whether `path` is on disk with exactly the content it has at `oid`.
+    async fn on_disk_as(
+        &self,
+        runner: &GitRunner,
+        oid: &str,
+        path: &str,
+    ) -> Result<bool, CoralError> {
+        let Some(root) = &self.workdir else {
+            return Ok(false);
+        };
+        if !root.join(path).is_file() {
+            return Ok(false);
+        }
+        let Ok(there) = self.rev_parse(runner, &format!("{oid}:{path}")).await else {
+            return Ok(false);
+        };
+        let out = runner
+            .output(
+                GitCommand::read("hash-object", self.display_path())
+                    .args(["hash-object", "--"])
+                    .arg(path),
+            )
+            .await?;
+        Ok(String::from_utf8_lossy(&out.stdout).trim() == there)
     }
 }
 
