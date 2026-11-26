@@ -1,5 +1,5 @@
 import { runAction, type Action, type ActionOutcome } from '../ipc/commands';
-import { messageOf, whatFailed } from '../ipc/error';
+import { codeOf, messageOf, whatFailed } from '../ipc/error';
 import { cancelTransfer } from '../ipc/transfer';
 import { neverTrust, retryAfterTrust, type AskTrust } from './hosttrust';
 import { outcomeToast, type ToastKind } from './toasts.svelte';
@@ -72,7 +72,10 @@ export class ActionsState {
       this.report = { text: said.title, tone: toneOf(said.kind), what: null };
       return outcome;
     } catch (e) {
-      this.report = { text: messageOf(e), tone: 'error', what: whatFailed(e) };
+      // Stopped from the strip: called off, not gone wrong, so there is nothing to report.
+      if (codeOf(e) !== 'cancelled') {
+        this.report = { text: messageOf(e), tone: 'error', what: whatFailed(e) };
+      }
       return null;
     } finally {
       this.busy = false;

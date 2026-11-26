@@ -98,6 +98,16 @@ describe('running an action', () => {
     });
   });
 
+  // Stop on the transfer strip is somebody's decision. It came back as a failure, and the
+  // window said "Something went wrong" in red about a fetch nobody wanted any more.
+  it('reports nothing when the user stopped it', async () => {
+    invoke.mockRejectedValue({ code: 'cancelled', message: 'transfer was cancelled' });
+    const actions = new ActionsState();
+    expect(await actions.run('/repo', { kind: 'fetch', remote: null })).toBeNull();
+    expect(actions.report).toBeNull();
+    expect(actions.busy).toBe(false);
+  });
+
   it('refuses a second action while one is running', async () => {
     let release = () => {};
     invoke.mockReturnValue(new Promise((r) => (release = () => r({ what: 'pull', conflicted: false }))));
