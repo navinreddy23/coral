@@ -3226,7 +3226,8 @@
     const tracked = entries.filter((e) => e.worktree !== 'untracked').map((e) => e.path);
 
     const staged = tracked.filter((path) => worktree.staged.some((e) => e.path === path)).length;
-    const words = discardWords(tracked.length, untracked, headName, staged);
+    const unborn = info.head.kind === 'unborn';
+    const words = discardWords(tracked.length, untracked, headName, staged, unborn);
     const { choice } = await ask({
       title: 'Discard changes?',
       detail: words.detail,
@@ -4002,6 +4003,7 @@
     event.preventDefault();
     const at = { x: event.clientX, y: event.clientY };
     const busy = worktree.busy;
+    const unborn = info?.head.kind === 'unborn';
     // A new file can be put in LFS before its first commit, which is the best time to; only a
     // file the repository already has can be locked.
     const lfsPart = await lfsItems(entry.path, entry.worktree !== 'untracked');
@@ -4036,8 +4038,13 @@
         label: 'Stash this file',
         // git finds a file to stash by its name on disk or in the index, and a staged deletion
         // is in neither: it refuses with a message about pathspecs that says nothing useful.
-        hint: entry.index === 'deleted' ? 'git cannot stash a deletion by name' : 'leave the rest',
-        disabled: busy || actions.busy || entry.index === 'deleted',
+        // Nor can anything be stashed before the first commit, as the toolbar already says.
+        hint: unborn
+          ? 'after the first commit'
+          : entry.index === 'deleted'
+            ? 'git cannot stash a deletion by name'
+            : 'leave the rest',
+        disabled: busy || actions.busy || unborn || entry.index === 'deleted',
         // By its new name alone for a rename: git refuses the old one, which is on disk and in
         // the index nowhere, so the deletion stays staged until the stash comes back.
         run: () => void act({ kind: 'stashPush', message: null, paths: [entry.path] }),
@@ -4047,8 +4054,10 @@
             {
               kind: 'item' as const,
               label: 'Stash the staged changes',
-              hint: `${worktree.staged.length} ${worktree.staged.length === 1 ? 'file' : 'files'}`,
-              disabled: busy || actions.busy,
+              hint: unborn
+                ? 'after the first commit'
+                : `${worktree.staged.length} ${worktree.staged.length === 1 ? 'file' : 'files'}`,
+              disabled: busy || actions.busy || unborn,
               run: () => void act({ kind: 'stashPush', message: null, staged: true }),
             },
           ]
@@ -4099,7 +4108,7 @@
             {
               kind: 'item' as const,
               label: 'Discard its changes',
-              hint: 'back to the last commit',
+              hint: unborn ? 'nothing committed yet: it is deleted' : 'back to the last commit',
               disabled: busy,
               danger: true,
               run: () => void discardChanges([entry]),

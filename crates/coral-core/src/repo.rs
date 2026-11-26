@@ -1087,9 +1087,17 @@ impl RepoLocation {
         if paths.is_empty() {
             return Ok(());
         }
-        let cmd = GitCommand::write("restore", self.display_path())
-            .args(["restore", "--source=HEAD", "--staged", "--worktree"])
-            .literal_paths(paths);
+        // Before the first commit there is no HEAD to restore from, and every file in the
+        // index is new: back to HEAD is gone, which is what `rm --force` does to one.
+        let cmd = if matches!(self.head(runner).await?, Head::Unborn { .. }) {
+            GitCommand::write("rm", self.display_path())
+                .args(["rm", "--force", "--quiet", "-r"])
+                .literal_paths(paths)
+        } else {
+            GitCommand::write("restore", self.display_path())
+                .args(["restore", "--source=HEAD", "--staged", "--worktree"])
+                .literal_paths(paths)
+        };
         runner.output(cmd).await.map(|_| ())
     }
 

@@ -201,3 +201,19 @@ async fn a_stashed_file_comes_from_the_entry_or_from_its_untracked_part() {
         "the stash itself is kept"
     );
 }
+
+#[tokio::test]
+async fn removes_a_staged_new_file_before_the_first_commit() {
+    // No HEAD to go back to: `restore --source=HEAD` stopped with "could not resolve HEAD" and
+    // the file stayed. Back to before it existed is gone, as it is with a commit to go back to.
+    let repo = TestRepo::new()
+        .write("keep.txt", "stays\n")
+        .write("new.txt", "fresh\n");
+    let (runner, loc) = open(&repo).await;
+    loc.stage(&runner, &["keep.txt", "new.txt"]).await.unwrap();
+
+    loc.restore_from_head(&runner, &["new.txt"]).await.unwrap();
+
+    assert!(!repo.path().join("new.txt").exists());
+    assert_eq!(repo.git(["status", "--porcelain"]).trim(), "A  keep.txt");
+}
