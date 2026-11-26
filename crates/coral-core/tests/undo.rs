@@ -649,3 +649,46 @@ async fn a_pull_can_be_undone_after_a_later_fetch_moved_what_the_remote_has() {
         "and what the remote has is left as the last fetch found it"
     );
 }
+
+/// Clean up branches says one undo brings them all back. The refs came back and what each
+/// followed did not: a branch that tracked origin/feature came back tracking nothing.
+#[tokio::test]
+async fn an_undone_branch_deletion_brings_back_what_the_branch_followed() {
+    let upstream = TestRepo::new().write("a.txt", "1\n").commit("base");
+    upstream.git(["branch", "feature"]);
+    let holder = tempfile::tempdir().unwrap();
+    let clone = holder.path().join("clone");
+    upstream.git(["clone", "--quiet", ".", clone.to_str().unwrap()]);
+    let here = |args: &[&str]| {
+        let out = std::process::Command::new("git")
+            .args(args)
+            .current_dir(&clone)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).trim().to_owned()
+    };
+    here(&["branch", "--quiet", "--track", "feature", "origin/feature"]);
+    let runner = GitRunner::discover().await.unwrap();
+    let loc = RepoLocation::discover(&runner, &clone).await.unwrap();
+
+    let before = loc.snapshot_refs(&runner).await.unwrap();
+    loc.branch_delete(&runner, "feature", true).await.unwrap();
+    let after = loc.snapshot_refs(&runner).await.unwrap();
+    loc.journal_change("delete feature", before, after, Restore::Worktree)
+        .unwrap();
+
+    loc.undo_step(&runner, true).await.unwrap();
+    assert_eq!(
+        here(&["rev-parse", "--abbrev-ref", "feature@{upstream}"]),
+        "origin/feature"
+    );
+
+    loc.undo_step(&runner, false).await.unwrap();
+    assert_eq!(here(&["branch", "--list", "feature"]), "");
+    assert_eq!(
+        here(&["config", "--get", "branch.feature.merge"]),
+        "",
+        "deleted again, it leaves no setting behind for the next branch of that name"
+    );
+}
