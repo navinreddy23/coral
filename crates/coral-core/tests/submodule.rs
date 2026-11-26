@@ -662,3 +662,48 @@ fn a_submodule_that_cannot_be_cloned_does_not_leave_the_others_empty() {
         "with nothing staged in it"
     );
 }
+
+#[test]
+fn updating_every_submodule_passes_over_a_declaration_with_nothing_recorded() {
+    // A `.gitmodules` entry whose gitlink was removed without it: git's own update never sees
+    // it, and naming it fails the whole update with "did not match any file(s) known to git".
+    let (repo, one, _two) = with_two_submodules();
+    repo.git(["submodule", "deinit", "--force", "--all"]);
+    for (key, value) in [
+        ("submodule.gone.path", "gone"),
+        ("submodule.gone.url", one.path().to_str().unwrap()),
+    ] {
+        repo.git(["config", "-f", ".gitmodules", key, value]);
+    }
+
+    run(async {
+        let (runner, loc) = located(&repo).await;
+        loc.submodule_init(&runner, &[], true, false).await.unwrap();
+    });
+    assert!(repo.path().join("external/dev-scripts/lib.txt").exists());
+    assert!(repo.path().join("vendor/tool/tool.txt").exists());
+}
+
+#[test]
+fn updating_every_submodule_keeps_to_the_ones_submodule_active_names() {
+    // What `git clone --recurse-submodules=external/dev-scripts` leaves: one submodule wanted.
+    // Naming each declared path in turn initialised the other as well, and switched it on.
+    let (repo, _one, _two) = with_two_submodules();
+    repo.git(["submodule", "deinit", "--force", "--all"]);
+    repo.git(["config", "submodule.active", "external/dev-scripts"]);
+
+    run(async {
+        let (runner, loc) = located(&repo).await;
+        loc.submodule_init(&runner, &[], true, false).await.unwrap();
+    });
+    assert!(repo.path().join("external/dev-scripts/lib.txt").exists());
+    assert!(
+        !repo.path().join("vendor/tool/tool.txt").exists(),
+        "a submodule submodule.active leaves out was cloned"
+    );
+    let switched_on = repo
+        .command(["config", "--get", "submodule.vendor/tool.active"])
+        .output()
+        .unwrap();
+    assert!(!switched_on.status.success(), "and was marked active");
+}

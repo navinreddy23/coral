@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use bstr::ByteSlice;
@@ -556,14 +556,64 @@ impl RepoLocation {
                 detail: format!("{unknown} is not a submodule of this repository"),
             });
         }
+        let every = if paths.is_empty() {
+            Some(self.active_submodules(runner).await?)
+        } else {
+            None
+        };
         let mut runs = Vec::new();
         for s in declared {
-            if paths.is_empty() || paths.contains(&s.path) {
+            let wanted = match &every {
+                Some(active) => s.pinned.is_some() && active.contains(&s.name),
+                None => paths.contains(&s.path),
+            };
+            if wanted {
                 let key = self.key_for(runner, &s.name, inherited).await?;
                 runs.push((s.path, key));
             }
         }
         Ok(runs)
+    }
+
+    /// The names of the submodules git would update with no path given.
+    ///
+    /// Naming a path to `git submodule update --init` initialises it whatever
+    /// `submodule.active` says, so "every submodule" asks `git submodule init` first, which
+    /// does follow it, and then takes the ones it left with a URL and not switched off. The
+    /// rule is git's `is_submodule_active`.
+    async fn active_submodules(&self, runner: &GitRunner) -> Result<HashSet<String>, CoralError> {
+        runner
+            .output(GitCommand::write("submodule", self.display_path()).args(["submodule", "init"]))
+            .await?;
+        let cmd = GitCommand::read("config", self.display_path()).args([
+            "config",
+            "--local",
+            "-z",
+            "--get-regexp",
+            r"^submodule\..*\.(url|active)$",
+        ]);
+        let out = match runner.output(cmd).await {
+            Ok(out) => out.stdout,
+            Err(CoralError::GitExit { code: 1, .. }) => Vec::new(),
+            Err(e) => return Err(e),
+        };
+        let mut with_url = HashSet::new();
+        let mut off = HashSet::new();
+        for record in out.split(|b| *b == 0).filter(|r| !r.is_empty()) {
+            let record = String::from_utf8_lossy(record);
+            let (key, value) = record.split_once('\n').unwrap_or((&record, ""));
+            let Some(rest) = key.strip_prefix("submodule.") else {
+                continue;
+            };
+            if let Some(name) = rest.strip_suffix(".url") {
+                with_url.insert(name.to_owned());
+            } else if let Some(name) = rest.strip_suffix(".active")
+                && value.trim() == "false"
+            {
+                off.insert(name.to_owned());
+            }
+        }
+        Ok(&with_url - &off)
     }
 
     fn update_command(
