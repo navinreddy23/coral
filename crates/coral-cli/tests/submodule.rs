@@ -212,3 +212,27 @@ async fn init_brings_back_a_working_copy_and_the_one_inside_it() {
         "nested submodules are initialised too"
     );
 }
+
+#[test]
+fn a_submodule_added_where_gitmodules_still_names_one_is_added() {
+    // Its gitlink removed and its .gitmodules entry left: git adds over the entry, and Coral
+    // looked only for a path that had not been declared, said git had declared nothing new,
+    // and left the nested submodule uncloned.
+    let lib = Published::new();
+    let repo = TestRepo::new().write("a.txt", "a").commit("first");
+    for (key, value) in [
+        ("submodule.lib.path", "lib"),
+        ("submodule.lib.url", "https://example.invalid/old.git"),
+    ] {
+        repo.git(["config", "-f", ".gitmodules", key, value]);
+    }
+    let repo = repo.commit("a submodule removed by hand");
+
+    let out = coral(repo.path(), &["submodule-add", lib.url(), "lib"]);
+    assert_eq!(out["ok"], true, "{out}");
+    assert_eq!(out["result"]["submodule"]["path"], "lib");
+    assert!(
+        repo.path().join("lib/deep/deep.txt").exists(),
+        "with its own submodule"
+    );
+}

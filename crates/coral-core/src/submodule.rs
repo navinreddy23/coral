@@ -464,11 +464,18 @@ impl RepoLocation {
         );
         runner.output(cmd).await?;
 
+        // New to .gitmodules, or named there already with nothing recorded: git adds over a
+        // declaration whose gitlink was removed by hand and its entry left behind.
         let added = self
             .submodules(runner)
             .await?
             .into_iter()
-            .find(|s| !before.iter().any(|b| b.path == s.path))
+            .find(|s| {
+                before
+                    .iter()
+                    .find(|b| b.path == s.path)
+                    .is_none_or(|b| b.pinned.is_none() && s.pinned.is_some())
+            })
             .ok_or_else(|| CoralError::Protocol {
                 label: "submodule add",
                 detail: "git succeeded but declared no new submodule".to_owned(),
