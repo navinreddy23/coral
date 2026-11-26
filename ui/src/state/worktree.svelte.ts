@@ -24,6 +24,7 @@ import { messageOf } from '../ipc/error';
 export class WorktreeState {
   status = $state<Status | null>(null);
   busy = $state(false);
+  #runs = 0;
   error = $state<string | null>(null);
 
   #path = '';
@@ -131,6 +132,10 @@ export class WorktreeState {
     // Which repository this belongs to. A status for the one being left answers after the
     // switch and would otherwise be shown under the new one's name.
     const path = this.#path;
+    // Only the latest run ends the busy spell. Keyed by path alone, a read still answering
+    // for a tab that had been closed left `busy` on for good, and the window, which ignores
+    // the watcher while busy, stopped noticing edits made outside it.
+    const ticket = ++this.#runs;
     this.busy = true;
     this.error = null;
     try {
@@ -141,7 +146,7 @@ export class WorktreeState {
       if (this.#path !== path) return;
       this.error = messageOf(e);
     } finally {
-      if (this.#path === path) this.busy = false;
+      if (ticket === this.#runs) this.busy = false;
     }
   }
 
@@ -150,5 +155,7 @@ export class WorktreeState {
     this.#path = '';
     this.status = null;
     this.error = null;
+    this.#runs += 1;
+    this.busy = false;
   }
 }

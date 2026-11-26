@@ -96,6 +96,7 @@
   import { outcomeToast, ToastsState } from '../state/toasts.svelte';
   import { copyText } from './clipboard';
   import { onRepoChanged, unwatchRepo, watchRepo, type RepoChanged } from '../ipc/watch';
+  import { heldFor } from '../state/change';
   import Terminal from './Terminal.svelte';
   import { TerminalState } from '../state/terminal.svelte';
   import { SigningState } from '../state/signing.svelte';
@@ -5168,13 +5169,26 @@
    * object file would freeze the window for five seconds, repeatedly. A ref change is the one
    * that can move HEAD, so it is the one that also moves the selection.
    */
+  let heldChange = $state.raw<RepoChanged | null>(null);
+  $effect(() => {
+    if (heldChange === null || actions.busy || worktree.busy || merge.busy) return;
+    const change = heldChange;
+    heldChange = null;
+    void repoChanged(change);
+  });
+
   async function repoChanged(change: RepoChanged) {
+    if (!info) return;
     // Every kind of busy, not only an action. Reloading reads the status, which refreshes the
     // index and takes its lock, and staging a hunk or continuing a merge is a write holding
     // that same lock: the two collided and the user's write failed with a lock-file error for
     // something a background refresh did. The engine waits such a lock out now; this keeps the
-    // window from starting the fight in the first place.
-    if (!info || actions.busy || worktree.busy || merge.busy) return;
+    // window from starting the fight in the first place. What changed is kept for afterwards:
+    // dropped, an edit saved during a status read never reached the window.
+    if (actions.busy || worktree.busy || merge.busy) {
+      heldChange = heldFor(heldChange, change);
+      return;
+    }
     const path = info.path;
     const wasHead = headMark;
 
