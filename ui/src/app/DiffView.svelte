@@ -1174,9 +1174,15 @@
     flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-0);
     border: var(--hairline) solid var(--border); border-radius: var(--radius-3); overflow: hidden;
   }
+  /*
+   * One line while it fits, and a second rather than a cut when it does not: zoomed in, or in a
+   * narrow pane between the two panels, the controls ran off the end of the header and took the
+   * × that closes the file with them.
+   */
   header {
-    display: flex; align-items: center; gap: var(--space-2);
-    height: 36px; padding: 0 var(--space-2) 0 var(--space-3); flex: 0 0 auto;
+    display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2);
+    min-height: 36px; padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+    flex: 0 0 auto; box-sizing: border-box;
     border-bottom: 1px solid var(--border); background: var(--bg-1);
   }
   /*
