@@ -53,6 +53,15 @@ describe('the component stylesheets', () => {
     expect(body).not.toMatch(/max-height/u);
   });
 
+  it('paints a commit file\'s name on its row\'s ground, not on the page\'s', () => {
+    // The author's `.name` is given the page's ground; the file name shared the class and sat
+    // in a white box on a hovered or open row.
+    const details = STYLES.find((s) => s.name === 'Details.svelte');
+    const path = /<span class="path">([\s\S]*?)<\/span>\s*<LockMark/u.exec(details?.source ?? '')?.[1] ?? '';
+    expect(path).not.toBe('');
+    expect(path).not.toMatch(/class="name"/u);
+  });
+
   it('draws every close control with Close, so they look and read alike', () => {
     // Twenty-one of them had been drawn by hand at five sizes, three as a typed ×, most in the
     // grey of the buttons beside them. The title bar's is the window's own control, drawn to

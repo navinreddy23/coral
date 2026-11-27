@@ -620,7 +620,7 @@
             <span class="mark {file.change}">{mark[file.change] ?? '?'}</span>
             <span class="path">
               <span class="dir">{split(file.path).dir}</span
-              ><span class="name">{split(file.path).name}</span>
+              ><span class="leaf">{split(file.path).name}</span>
             </span>
             <LockMark lock={locks.get(file.path)} />
           </button>
@@ -869,7 +869,9 @@
   /* Same weight and colour as the row it sits on. The name used to be set in the strongest
      foreground while the directory before it was the dimmest, which at this size read as a
      bold word on the end of every path. */
-  .name { flex: 0 0 auto; }
+  /* Not `.name`, which is the author's and is given the page's own ground above: sharing it,
+     the file name sat in a white box on a hovered or open row. */
+  .leaf { flex: 0 0 auto; }
   .files { list-style: none; margin: 0; padding: 0; }
   .files li { display: flex; }
   /* Each file is the target for its own diff, so the whole row lights up rather than the
