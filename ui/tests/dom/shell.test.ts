@@ -2088,6 +2088,18 @@ describe('moving down the list with the keyboard', () => {
       if (container.querySelector('section.diff')) throw new Error('the panel is still up');
     });
   });
+  it('goes back from a new tab to the repository on Escape', async () => {
+    const { container } = await shell();
+    await fireEvent.keyDown(window, { key: 't', ctrlKey: true });
+    await waitFor(() => {
+      if (!container.querySelector('.tab.new')) throw new Error('no new tab yet');
+    });
+    await fireEvent.keyDown(document.body, { key: 'Escape' });
+    await waitFor(() => {
+      if (container.querySelector('.tab.new')) throw new Error('the start page is still up');
+    });
+  });
+
   describe('the keys in a commit\'s files', () => {
     /** A window whose every commit changed two files, with a small diff for each. */
     const twoFiles = {

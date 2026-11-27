@@ -337,6 +337,11 @@
     // Escape closes what is over the graph, wherever the focus went after it opened. The
     // search bar had this on its own field alone, so clicking a result — which is what the
     // bar is for — left no way to dismiss it but the mouse.
+    if (leavesStart(event)) {
+      showStart = false;
+      event.preventDefault();
+      return;
+    }
     if (event.key === 'Escape' && find.open && diff.path === null && grep.at === null) {
       find.close();
       event.preventDefault();
@@ -1328,6 +1333,20 @@
    */
   function covered(): boolean {
     return showStart || document.querySelector('[role="dialog"], [role="menu"]') !== null;
+  }
+
+  /**
+   * Whether Escape goes back from a new tab's start page to the repository under it, as the
+   * page's × does. Not from its fields, nor from under something opened over it.
+   */
+  function leavesStart(event: KeyboardEvent): boolean {
+    return (
+      event.key === 'Escape' &&
+      showStart &&
+      tabs.session.tabs.length > 0 &&
+      !isTextTarget(event.target) &&
+      document.querySelector('[role="dialog"], [role="menu"]') === null
+    );
   }
 
   /** Whether a key the window binds is the window's to answer where it was pressed. */
