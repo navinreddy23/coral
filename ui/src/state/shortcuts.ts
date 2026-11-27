@@ -117,6 +117,12 @@ export const BINDINGS: Binding[] = [
     match: (e) =>
       (plain(e) && e.key === 'ContextMenu') ||
       (e.shift && !e.ctrl && !e.meta && !e.alt && e.key === 'F10') },
+  // From the graph only, which the window checks: on a focused control, Enter is the control's.
+  { id: 'files.focus', label: "Go into the selected commit's files", keys: 'Enter or →',
+    group: 'Navigation', context: 'global',
+    match: (e) => plain(e) && (e.key === 'Enter' || e.key === 'ArrowRight') },
+  { id: 'view.close', label: 'Close the file and go back to the graph', keys: 'Esc',
+    group: 'Navigation', context: 'global', match: (e) => plain(e) && e.key === 'Escape' },
   { id: 'undo', label: 'Undo', keys: 'Ctrl Z', group: 'Navigation',
     context: 'global', match: (e) => primary(e) && !e.shift && is(e, 'z') },
   { id: 'redo', label: 'Redo', keys: 'Ctrl Y or Ctrl Shift Z', group: 'Navigation',

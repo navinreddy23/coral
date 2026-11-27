@@ -454,7 +454,7 @@
 
 {#if searching}
   <div class="scrim" role="presentation" onclick={() => (searching = false)}></div>
-  <div class="finder" style:right="{anchor.right}px" style:top="{anchor.top}px">
+  <div class="finder" role="dialog" aria-modal="true" aria-label="Search tabs" style:right="{anchor.right}px" style:top="{anchor.top}px">
     <input
       bind:this={field}
       bind:value={query}
@@ -504,7 +504,7 @@
 {#if picking}
   {@const tab = picking}
   <div class="scrim" role="presentation" onclick={() => (picking = null)}></div>
-  <div class="picker" style:left="{pickAt.left}px" style:top="{pickAt.top}px">
+  <div class="picker" role="dialog" aria-modal="true" aria-label="Icon for {title(tab)}" style:left="{pickAt.left}px" style:top="{pickAt.top}px">
     <p class="heading">Icon for {title(tab)}</p>
     <div class="grid" style:--hue={hueOf(tab)}>
       {#each TAB_ICONS as choice (choice.id)}

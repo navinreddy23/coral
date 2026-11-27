@@ -141,7 +141,7 @@
 
 <svelte:window onkeydown={key} />
 
-<div class="prefs">
+<div class="prefs" role="dialog" aria-modal="true" aria-label="Preferences">
   <!--
     A header with the way out at its trailing end, which is where every other panel that covers
     this window puts one and where the hand goes looking. It was a text link at the top of the

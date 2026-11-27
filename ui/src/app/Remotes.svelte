@@ -127,7 +127,7 @@
 
 <svelte:window onkeydown={onKey} />
 
-<div class="sheet">
+<div class="sheet" role="dialog" aria-modal="true" aria-label="Remotes">
   <header>
     <h2>Remotes</h2>
     <button class="shut" onclick={onClose} title="Close"><Icon name="close" size={15} /></button>

@@ -71,7 +71,7 @@
 
 <svelte:window onkeydown={onKey} />
 
-<div class="sheet">
+<div class="sheet" role="dialog" aria-modal="true" aria-label="Add a submodule">
   <header>
     <span class="glyph" aria-hidden="true">◱</span>
     <h2>Add a submodule</h2>

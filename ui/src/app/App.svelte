@@ -178,6 +178,7 @@
   import { UpdateState } from '../state/update.svelte';
   import { AutoFetchState } from '../state/autofetch.svelte';
   import { isTextTarget, keyEventOf, resolve, tabJump } from '../state/shortcuts';
+  import { land } from './rows';
   import Shortcuts from './Shortcuts.svelte';
   import TabBar from './TabBar.svelte';
   import Toolbar from './Toolbar.svelte';
@@ -265,6 +266,7 @@
   /** Which shortcuts actually do something today; the help overlay dims the rest. */
   const LIVE = new Set([
     'select.next', 'select.previous', 'select.first', 'select.last', 'select.menu',
+    'files.focus', 'view.close',
     'stage.all', 'unstage.all', 'tab.new', 'tab.close', 'tab.next', 'tab.previous',
     'palette', 'repo.open', 'terminal', 'search.commits', 'search.code',
     'panel.left', 'panel.detail', 'help', 'undo', 'redo',
@@ -334,14 +336,14 @@
     // Escape closes what is over the graph, wherever the focus went after it opened. The
     // search bar had this on its own field alone, so clicking a result — which is what the
     // bar is for — left no way to dismiss it but the mouse.
-    if (event.key === 'Escape' && find.open) {
+    if (event.key === 'Escape' && find.open && diff.path === null && grep.at === null) {
       find.close();
       event.preventDefault();
       return;
     }
 
     const binding = resolve(e, isTextTarget(event.target) ? 'message' : 'global');
-    if (!binding || !LIVE.has(binding.id)) return;
+    if (!binding || !LIVE.has(binding.id) || !applies(binding.id, event.target)) return;
     event.preventDefault();
 
     switch (binding.id) {
@@ -350,6 +352,8 @@
       case 'select.first': move(-Number.MAX_SAFE_INTEGER); break;
       case 'select.last': move(Number.MAX_SAFE_INTEGER); break;
       case 'select.menu': openSelectedMenu(); break;
+      case 'files.focus': enterFiles(); break;
+      case 'view.close': closeView(); break;
       case 'stage.all': void worktree.stage(worktree.unstaged.map((f) => f.path), true); break;
       case 'unstage.all': void worktree.stage(worktree.staged.map((f) => f.path), false); break;
       case 'tab.new': void openAnother(); break;
@@ -1253,6 +1257,67 @@
     if (!info || path === null || (diff.source !== 'staged' && diff.source !== 'unstaged')) return;
     await worktree.stage([path], stage);
     await reloadDiff(info.path);
+  }
+
+  /** The row of the file open in the right panel, if it is listed there. */
+  function openRow(): HTMLElement | null {
+    return document.querySelector<HTMLElement>('[data-panel="files"] [data-row].open');
+  }
+
+  /**
+   * Puts the keys in the right panel's file list, on the file open there or else the first.
+   *
+   * Enter and → on the graph do this, so the graph, a commit's files and their diffs are walked
+   * without the pointer; Escape comes back.
+   */
+  function enterFiles() {
+    const open = openRow();
+    if (open !== null) {
+      open.focus();
+      return;
+    }
+    const panel = document.querySelector<HTMLElement>('[data-panel="files"]');
+    if (panel !== null) land(panel, 0);
+  }
+
+  /**
+   * Closes the file view, or the code search under it, and gives the arrows back to the graph.
+   *
+   * Whatever had the focus was in the view just closed or in the list it was opened from, and
+   * either way the next arrow is meant for the commits.
+   */
+  function closeView() {
+    if (diff.path !== null) diff.close();
+    else grep.close();
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  }
+
+  /**
+   * Whether the focus is on the graph, or on nothing.
+   *
+   * The graph's rows are kept out of the tab order, so a key meant for it arrives from the
+   * page itself or from the row the pointer last clicked.
+   */
+  function onGraph(target: EventTarget | null): boolean {
+    if (target === document.body || target === document.documentElement) return true;
+    return target instanceof Element && target.closest('button.hit') !== null;
+  }
+
+  /**
+   * Whether something is open over the window, which has Escape first.
+   *
+   * The overlays listen on the window too, and this listener runs before theirs, so it cannot
+   * wait to see whether one of them took the key: it asks the page what is open instead.
+   */
+  function covered(): boolean {
+    return showStart || document.querySelector('[role="dialog"], [role="menu"]') !== null;
+  }
+
+  /** Whether a key the window binds is the window's to answer where it was pressed. */
+  function applies(id: string, target: EventTarget | null): boolean {
+    if (id === 'files.focus') return onGraph(target);
+    if (id === 'view.close') return (diff.path !== null || grep.at !== null) && !covered();
+    return true;
   }
 
   /**
@@ -7120,6 +7185,18 @@
   .wip.selected .cell.refs, .wip.selected .cell.message { background: var(--accent-soft); }
 
   .row.selected .cell.message .summary { color: var(--fg-0); font-weight: var(--weight-semibold); }
+  /*
+   * While a list beside the graph has the arrow keys, the selected commit gives up its depth, so
+   * only one row on the screen claims to be where the keys are. The bar stays: it still says
+   * which commit the list belongs to.
+   */
+  :global(body:has([data-row]:focus)) .row.selected .cell.message,
+  :global(body:has([data-row]:focus)) .row.selected .lane-strip {
+    background: var(--row-tint, var(--bg-1));
+  }
+  :global(body:has([data-row]:focus)) .wip.selected,
+  :global(body:has([data-row]:focus)) .wip.selected .cell.refs,
+  :global(body:has([data-row]:focus)) .wip.selected .cell.message { background: var(--bg-1); }
   /*
    * While a list beside the graph has the arrow keys, the selected commit gives up its depth, so
    * only one row on the screen claims to be where the keys are. The bar stays: it still says

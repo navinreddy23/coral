@@ -38,7 +38,7 @@
 
 <svelte:window onkeydown={key} />
 
-<div class="panel">
+<div class="panel" role="dialog" aria-modal="true" aria-label="Review {quoted}">
   <header>
     <button class="back" onclick={onClose}>← Close</button>
     <p class="heading">{quoted} {pr.title}</p>

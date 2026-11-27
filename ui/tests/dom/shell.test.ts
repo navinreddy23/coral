@@ -2160,6 +2160,71 @@ describe('moving down the list with the keyboard', () => {
       expect(selectedIndex(container)).toBe(selected);
     });
 
+    it('closes the file on Escape and gives the arrows back to the graph', async () => {
+      const { container } = await shell(twoFiles);
+      const file = await openFirstFile(container);
+      const selected = selectedIndex(container);
+
+      await fireEvent.keyDown(file, { key: 'Escape' });
+      await waitFor(() => {
+        if (container.querySelector('section.diff')) throw new Error('the file is still open');
+      });
+      expect(document.activeElement).toBe(document.body);
+
+      await fireEvent.keyDown(document.body, { key: 'ArrowDown' });
+      await waitFor(() => {
+        if (selectedIndex(container) !== selected + 1) throw new Error('the graph did not move');
+      });
+    });
+
+    it('leaves Escape to whatever is open over the file', async () => {
+      // The palette, the help sheet and the menus close on Escape themselves; the file under
+      // them must still be there afterwards.
+      const { container } = await shell(twoFiles);
+      await openFirstFile(container);
+      await fireEvent.keyDown(window, { key: '/', ctrlKey: true });
+      await waitFor(() => {
+        if (!document.querySelector('[role="dialog"]')) throw new Error('no help sheet yet');
+      });
+      await fireEvent.keyDown(document.body, { key: 'Escape' });
+      await waitFor(() => {
+        if (document.querySelector('[role="dialog"]')) throw new Error('the sheet is still up');
+      });
+      expect(container.querySelector('section.diff')).not.toBeNull();
+    });
+
+    it('goes from the graph into the files on Enter, opening the first', async () => {
+      const { container } = await shell(twoFiles);
+      const rows = [...container.querySelectorAll('li.row')];
+      await fireEvent.click(rows[0]?.querySelector('button.hit') as HTMLButtonElement);
+      await waitFor(() => {
+        if (!container.querySelector('[data-panel="files"] button.file')) throw new Error('no files');
+      });
+      (document.activeElement as HTMLElement | null)?.blur();
+
+      await fireEvent.keyDown(document.body, { key: 'Enter' });
+      await waitFor(() => {
+        if (openName(container) !== 'one.txt') throw new Error('the first file is not open');
+      });
+      expect(document.activeElement?.getAttribute('data-path')).toBe('one.txt');
+    });
+
+    it('leaves Enter on a focused control to the control', async () => {
+      const { container } = await shell(twoFiles);
+      const rows = [...container.querySelectorAll('li.row')];
+      await fireEvent.click(rows[0]?.querySelector('button.hit') as HTMLButtonElement);
+      const tree = await waitFor(() => {
+        const found = [...container.querySelectorAll<HTMLButtonElement>('[data-panel="files"] .toggle button')]
+          .find((b) => b.textContent?.trim() === 'Tree');
+        if (!found) throw new Error('no toggle yet');
+        return found;
+      });
+      tree.focus();
+      const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+      tree.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      expect(container.querySelector('section.diff')).toBeNull();
+    });
   });
 
   describe('the keys in the working copy\'s files', () => {

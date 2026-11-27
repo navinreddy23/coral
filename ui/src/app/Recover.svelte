@@ -30,7 +30,7 @@
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />
 
-<div class="sheet">
+<div class="sheet" role="dialog" aria-modal="true" aria-label="Recover lost work">
   <header>
     <h2>Recover lost work</h2>
     <button class="shut" title="Close" onclick={onClose}><Icon name="close" size={15} /></button>

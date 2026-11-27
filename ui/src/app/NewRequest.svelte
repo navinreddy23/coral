@@ -72,7 +72,7 @@
 
 <svelte:window onkeydown={key} />
 
-<div class="panel">
+<div class="panel" role="dialog" aria-modal="true" aria-label="New {label.toLowerCase()}">
   <header>
     <button class="back" onclick={onClose}>← Close</button>
     <p class="heading">New {label.toLowerCase()}</p>
