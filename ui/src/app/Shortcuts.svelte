@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { modal } from './modal';
   import { handBackFocus } from './handback.svelte';
   import { BINDINGS } from '../state/shortcuts';
 
@@ -17,7 +18,7 @@
 <svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />
 
 <div class="scrim" role="presentation" onclick={onClose}>
-  <div class="sheet" role="dialog" aria-label="Keyboard shortcuts">
+  <div class="sheet" role="dialog" {@attach modal} aria-label="Keyboard shortcuts">
     <h2>Keyboard shortcuts</h2>
     <!-- Only while there is something dimmed to explain. Every binding is wired now, and a
          legend for a state nothing is in is a line that makes the reader look for one. -->

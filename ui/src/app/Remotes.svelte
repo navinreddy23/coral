@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { modal } from './modal';
   import { handBackFocus } from './handback.svelte';
   import { untrack } from 'svelte';
   import Close from './Close.svelte';
@@ -130,7 +131,7 @@
 
 <svelte:window onkeydown={onKey} />
 
-<div class="sheet" role="dialog" aria-modal="true" aria-label="Remotes">
+<div class="sheet" role="dialog" {@attach modal} aria-modal="true" aria-label="Remotes">
   <header>
     <h2>Remotes</h2>
     <Close label="Close (Esc)" onclick={onClose} />

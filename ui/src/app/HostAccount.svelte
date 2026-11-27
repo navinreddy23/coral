@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { modal } from './modal';
   import { handBackFocus } from './handback.svelte';
   /**
    * Signing in to the host behind the repository's remote, as the profile at the window.
@@ -82,7 +83,7 @@
   <!-- svelte-ignore a11y_interactive_supports_focus -->
   <div
     class="panel"
-    role="dialog"
+    role="dialog" {@attach modal}
     aria-modal="true"
     aria-label="{label} account"
     onclick={(e) => e.stopPropagation()}

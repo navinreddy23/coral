@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { modal } from './modal';
   import { handBackFocus } from './handback.svelte';
   import { t } from '../state/locale.svelte';
   import Icon from './Icon.svelte';
@@ -144,7 +145,7 @@
 
 <svelte:window onkeydown={key} />
 
-<div class="prefs" role="dialog" aria-modal="true" aria-label="Preferences">
+<div class="prefs" role="dialog" {@attach modal} aria-modal="true" aria-label="Preferences">
   <!--
     A header with the way out at its trailing end, which is where every other panel that covers
     this window puts one and where the hand goes looking. It was a text link at the top of the

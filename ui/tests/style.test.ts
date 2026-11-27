@@ -62,6 +62,18 @@ describe('the component stylesheets', () => {
     expect(path).not.toMatch(/class="name"/u);
   });
 
+  it('makes every dialog hold the keys while it is open', () => {
+    // Without it the focus stayed behind the scrim, Tab walked the toolbar under a question,
+    // and Enter pressed whatever had opened it.
+    const offenders = STYLES.flatMap(({ name, source }) =>
+      // The attribute, not the selector App.svelte looks dialogs up with.
+      [...source.matchAll(/(?<!\[)role="dialog"[^>]*>/gu)]
+        .filter((found) => !found[0].includes('{@attach modal}'))
+        .map(() => name),
+    );
+    expect(offenders).toEqual([]);
+  });
+
   it('draws every close control with Close, so they look and read alike', () => {
     // Twenty-one of them had been drawn by hand at five sizes, three as a typed ×, most in the
     // grey of the buttons beside them. The title bar's is the window's own control, drawn to

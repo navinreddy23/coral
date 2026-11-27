@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { modal } from './modal';
   import { handBackFocus } from './handback.svelte';
   import Close from './Close.svelte';
   import type { ActivityState, Channel } from '../state/activity.svelte';
@@ -41,7 +42,7 @@
      finished with a log should not have to find the cross. -->
 <svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />
 
-<div class="sheet" role="dialog" aria-modal="true" aria-label="Activity logs">
+<div class="sheet" role="dialog" {@attach modal} aria-modal="true" aria-label="Activity logs">
   <header>
     <h2>Activity logs</h2>
     <Close label="Close (Esc)" onclick={onClose} />

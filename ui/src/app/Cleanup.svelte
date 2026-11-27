@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { modal } from './modal';
   import { handBackFocus } from './handback.svelte';
   /**
    * Choosing which old branches to delete, all at once.
@@ -48,7 +49,7 @@
 <div class="scrim" role="presentation" onclick={onClose}>
   <div
     class="sheet"
-    role="dialog"
+    role="dialog" {@attach modal}
     aria-modal="true"
     aria-labelledby="cleanup-title"
     tabindex="-1"

@@ -9,6 +9,7 @@
 </script>
 
 <script lang="ts">
+  import { modal } from './modal';
   import { handBackFocus } from './handback.svelte';
   import Close from './Close.svelte';
   import { baseName, submodulePath } from './path';
@@ -74,7 +75,7 @@
 
 <svelte:window onkeydown={onKey} />
 
-<div class="sheet" role="dialog" aria-modal="true" aria-label="Add a submodule">
+<div class="sheet" role="dialog" {@attach modal} aria-modal="true" aria-label="Add a submodule">
   <header>
     <span class="glyph" aria-hidden="true">◱</span>
     <h2>Add a submodule</h2>

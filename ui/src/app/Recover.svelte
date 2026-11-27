@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { modal } from './modal';
   import { handBackFocus } from './handback.svelte';
   import Icon from './Icon.svelte';
   import Close from './Close.svelte';
@@ -34,7 +35,7 @@
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />
 
-<div class="sheet" role="dialog" aria-modal="true" aria-label="Recover lost work">
+<div class="sheet" role="dialog" {@attach modal} aria-modal="true" aria-label="Recover lost work">
   <header>
     <h2>Recover lost work</h2>
     <Close label="Close (Esc)" onclick={onClose} />

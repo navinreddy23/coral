@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { modal } from './modal';
   import { handBackFocus } from './handback.svelte';
   import Icon from './Icon.svelte';
   import { coneOf, coveredBy, holds } from './cone';
@@ -118,7 +119,7 @@
 <div class="scrim" role="presentation" onclick={onClose}>
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_interactive_supports_focus -->
-  <div class="panel" role="dialog" aria-modal="true" aria-label="Choose folders" onclick={(e) => e.stopPropagation()}>
+  <div class="panel" role="dialog" {@attach modal} aria-modal="true" aria-label="Choose folders" onclick={(e) => e.stopPropagation()}>
     <header>
       <h2>Folders to check out</h2>
       <p>

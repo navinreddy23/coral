@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { modal } from './modal';
   import { handBackFocus } from './handback.svelte';
   import Icon from './Icon.svelte';
   import Close from './Close.svelte';
@@ -89,7 +90,7 @@
 
 <svelte:window onkeydown={onKey} />
 
-<div class="sheet" role="dialog" aria-modal="true" aria-label="Edit submodule">
+<div class="sheet" role="dialog" {@attach modal} aria-modal="true" aria-label="Edit submodule">
   <header>
     <span class="glyph" aria-hidden="true">◱</span>
     <h2>Edit submodule</h2>

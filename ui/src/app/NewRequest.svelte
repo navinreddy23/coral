@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { modal } from './modal';
   import { handBackFocus } from './handback.svelte';
   import { hostingCreate, type PullRequest } from '../ipc/commands';
   import { messageOf } from '../ipc/error';
@@ -75,7 +76,7 @@
 
 <svelte:window onkeydown={key} />
 
-<div class="panel" role="dialog" aria-modal="true" aria-label="New {label.toLowerCase()}">
+<div class="panel" role="dialog" {@attach modal} aria-modal="true" aria-label="New {label.toLowerCase()}">
   <header>
     <button class="back" onclick={onClose}>← Close</button>
     <p class="heading">New {label.toLowerCase()}</p>
