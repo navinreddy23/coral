@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { modal } from './modal';
+  import { handBackFocus } from './handback.svelte';
   import { rankCommand } from './palette';
 
   /** One thing the palette can run. */
@@ -60,11 +62,15 @@
     else return;
     event.preventDefault();
   }
+
+  handBackFocus();
 </script>
 
 <div class="scrim" role="presentation" onclick={onClose}>
   <!-- Stops a click inside the panel reaching the scrim and closing it. -->
-  <div class="panel" role="presentation" onclick={(e) => e.stopPropagation()}>
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_interactive_supports_focus -->
+  <div class="panel" role="dialog" {@attach modal} aria-modal="true" aria-label="Command palette" onclick={(e) => e.stopPropagation()}>
     <input
       bind:this={input}
       bind:value={query}

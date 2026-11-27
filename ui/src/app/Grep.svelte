@@ -1,6 +1,6 @@
 <script lang="ts">
   import CodeLine from './CodeLine.svelte';
-  import Icon from './Icon.svelte';
+  import Close from './Close.svelte';
   import { hitSpans } from './hit';
   import { elidePath } from './path';
   import type { GrepMatch } from '../ipc/types';
@@ -40,7 +40,7 @@
   <header>
     <span class="title">Search code at <span class="at mono" title={grep.at?.rev}>{grep.at?.label}</span></span>
     <span class="spread"></span>
-    <button class="close" onclick={onClose} aria-label="Close the code search"><Icon name="close" size={15} /></button>
+    <Close label="Close the code search (Esc)" onclick={onClose} />
   </header>
   <div class="ask">
     <input
@@ -120,12 +120,6 @@
   .title { font-size: var(--text-base); color: var(--fg-1); background: var(--bg-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .at { color: var(--fg-0); }
   .spread { flex: 1 1 auto; }
-  .close {
-    display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
-    width: 24px; height: 24px; font: inherit; cursor: pointer; background: none; border: 0;
-    color: var(--fg-2); border-radius: var(--radius-1);
-  }
-  .close:hover { color: var(--fg-0); background: var(--bg-2); }
 
   .ask {
     display: flex; gap: var(--space-2); align-items: center; flex: 0 0 auto;
@@ -143,7 +137,7 @@
     background: none; border: 1px solid transparent; border-radius: var(--radius-1); color: var(--fg-2);
   }
   .option:hover { color: var(--fg-0); background: var(--bg-2); }
-  .option.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
+  .option.on { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent-line); }
 
   .status {
     display: flex; gap: var(--space-2); align-items: center; margin: 0; flex: 0 0 auto;

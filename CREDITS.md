@@ -25,6 +25,10 @@ paper, it is added here in the same commit with a link and its license.
 - **gitk** and `git log --graph` — prior art for commit graph lane assignment.
 - **lazygit** and **gitui** — prior art for driving the git binary from a client.
 - **Git Credential Manager** — the pattern of a binary acting as its own credential helper.
+- **WAI-ARIA Authoring Practices**, W3C — the tree view keyboard pattern the file lists and the
+  branch list follow: ↑ and ↓ between rows, → to open a folder or step into it, ← to shut it or
+  go up to it. <https://www.w3.org/WAI/ARIA/apg/patterns/treeview/> — W3C Software and Document
+  License.
 
 ## Shell and interface
 

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from '../state/locale.svelte';
   import Icon from './Icon.svelte';
+  import Close from './Close.svelte';
   import type { IconName } from './icon';
   import { keysOf } from '../state/shortcuts';
   import type { PanelState } from '../state/views.svelte';
@@ -288,9 +289,7 @@
     {#if crumb}
       <span class="sep"><Icon name="chevronRight" size={12} /></span>
       <span class="step sub">
-        <button class="leave" onclick={onLeaveSubmodule} title={t('toolbar.backTo', { repo })}>
-          <Icon name="close" size={12} />
-        </button>
+        <Close quiet label={t('toolbar.backTo', { repo })} onclick={onLeaveSubmodule} />
         <span class="col">
           <span class="label">{t('toolbar.crumb.submodule')}</span>
           <span class="value" title={submodule}>{crumb}</span>
@@ -403,13 +402,6 @@
   .sep { color: var(--border-strong); flex: 0 0 auto; display: flex; align-items: center; }
   /* The way out of the submodule sits on the crumb itself, which is the only place it reads
      as belonging to that step rather than to the toolbar. */
-  .leave {
-    flex: 0 0 auto; display: flex; font: inherit; cursor: pointer;
-    padding: 2px; border-radius: var(--radius-1);
-    background: var(--bg-1); border: 0; color: var(--fg-2);
-    transition: color var(--fast) var(--ease), background var(--fast) var(--ease);
-  }
-  .leave:hover { background: var(--danger-soft); color: var(--danger); }
 
   .actions { display: flex; align-items: center; gap: 1px; min-width: 0; }
   /* A rule rather than a gap: the groups have to stay told apart on a window narrow enough
@@ -435,14 +427,14 @@
      instead of above it. */
   .action:active:not(:disabled) { background: var(--bg-3); transition: none; }
   /* A toggle that is on stays lit, so the terminal button says whether the pane is showing. */
-  .action.on { background: var(--accent-soft); color: var(--accent); }
+  .action.on { background: var(--accent-soft); color: var(--accent-ink); }
   .action:disabled { color: var(--fg-2); cursor: default; opacity: 0.45; }
 
   /* Against the button it belongs to rather than in the gap between two, and narrow, so the
      pair reads as one control with a choice attached. */
   .caret {
     display: flex; align-items: center; justify-content: center;
-    width: 14px; height: 28px; padding: 0; margin-right: 2px; cursor: pointer;
+    width: 24px; height: 28px; padding: 0; margin-right: 2px; cursor: pointer;
     font: inherit; background: var(--bg-1); border: 0; border-radius: var(--radius-1);
     color: var(--fg-2);
     transition: background var(--fast) var(--ease), color var(--fast) var(--ease);

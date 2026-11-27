@@ -7,8 +7,10 @@
   import type { PlacedStash } from '../ipc/stash';
   import HostMark, { hostOf } from './HostMark.svelte';
   import Icon from './Icon.svelte';
+  import Close from './Close.svelte';
   import RefMark from './RefMark.svelte';
   import { elideRef } from './path';
+  import { rows } from './rows';
 
   const {
     groups,
@@ -372,7 +374,7 @@
   );
 </script>
 
-{#snippet refRow(r: PlacedRef, label: string, draggable: boolean)}
+{#snippet refRow(r: PlacedRef, label: string, draggable: boolean, depth: number)}
   {@const hidden = isHidden(r.name)}
   {@const outside = !walked(r.name)}
   <li>
@@ -386,6 +388,8 @@
     <button
       class="ref"
       class:current={r.short === head}
+      data-row="show"
+      data-depth={depth}
       class:dragging={dragging === r.short}
       class:over={over === r.short}
       {draggable}
@@ -431,7 +435,7 @@
   </li>
 {/snippet}
 
-<aside bind:this={panel}>
+<aside bind:this={panel} data-panel="refs" {@attach rows}>
   <!--
     Solo is a mode, and a mode the graph does not otherwise announce: the window would simply
     be missing most of its commits, with nothing anywhere saying why or how to get them back.
@@ -472,15 +476,13 @@
       bind:value={filter}
     />
     {#if filter !== ''}
-      <button class="clear" title="Clear the filter" onclick={() => (filter = '')}>
-        <Icon name="close" size={12} />
-      </button>
+      <Close quiet small label="Clear the filter" onclick={() => (filter = '')} />
     {/if}
   </div>
 
   {#each above as section (section.key)}
     <section data-section="{section.key}">
-      <button class="head" onclick={() => onCollapse(section.key, !collapsed[section.key])}>
+      <button class="head" data-row="dir" data-depth="0" aria-expanded={!collapsed[section.key]} onclick={() => onCollapse(section.key, !collapsed[section.key])}>
         <span class="caret">
           <Icon name={collapsed[section.key] ? 'chevronRight' : 'chevronDown'} size={13} />
         </span>
@@ -497,6 +499,8 @@
               <div class="row">
                 <button
                   class="ref current"
+                  data-row="show"
+                  data-depth="1"
                   disabled={detachedHead.row === null}
                   onclick={() => detachedHead?.row !== null && onSelect(detachedHead.row)}
                   title={detachedHead.row === null
@@ -511,11 +515,11 @@
             </li>
           {/if}
           {#each showingAll[section.key] ? section.refs : section.refs.slice(0, CAP) as r (r.name)}
-            {@render refRow(r, r.short, section.key === 'local')}
+            {@render refRow(r, r.short, section.key === 'local', 1)}
           {/each}
           {#if section.refs.length > CAP && !showingAll[section.key]}
             <li>
-              <button class="more" onclick={() => (showingAll[section.key] = true)}>
+              <button class="more" data-row="" data-depth="1" onclick={() => (showingAll[section.key] = true)}>
                 Show all {section.refs.length}
               </button>
             </li>
@@ -533,6 +537,9 @@
     <div class="row head-row" oncontextmenu={(e) => onRemoteMenu(e, null)} role="presentation">
       <button
         class="head"
+        data-row="dir"
+        data-depth="0"
+        aria-expanded={!collapsed['remote']}
         onclick={() => onCollapse('remote', !collapsed['remote'])}
         title="Remotes"
       >
@@ -560,6 +567,9 @@
         <div class="row" oncontextmenu={(e) => onRemoteMenu(e, name)} role="presentation">
           <button
             class="head remote"
+            data-row="dir"
+            data-depth="1"
+            aria-expanded={!collapsed[key]}
             onclick={() => onCollapse(key, !collapsed[key])}
             title={`${name}\n${urlOf(name)}`}
           >
@@ -581,11 +591,11 @@
         {#if !collapsed[key]}
           <ul class="nested">
             {#each showingAll[key] ? refs : refs.slice(0, CAP) as r (r.name)}
-              {@render refRow(r, withoutRemote(r.short), true)}
+              {@render refRow(r, withoutRemote(r.short), true, 2)}
             {/each}
             {#if refs.length > CAP && !showingAll[key]}
               <li>
-                <button class="more" onclick={() => (showingAll[key] = true)}>
+                <button class="more" data-row="" data-depth="2" onclick={() => (showingAll[key] = true)}>
                   Show all {refs.length}
                 </button>
               </li>
@@ -602,7 +612,7 @@
     them can be undone.
   -->
   <section data-section="stashes">
-    <button class="head" onclick={() => onCollapse('stashes', !collapsed['stashes'])}>
+    <button class="head" data-row="dir" data-depth="0" aria-expanded={!collapsed['stashes']} onclick={() => onCollapse('stashes', !collapsed['stashes'])}>
       <span class="caret">
           <Icon name={collapsed['stashes'] ? 'chevronRight' : 'chevronDown'} size={13} />
         </span>
@@ -617,6 +627,8 @@
             <div class="row" oncontextmenu={(e) => onStashMenu(e, stash)} role="presentation">
               <button
                 class="ref"
+                data-row="show"
+                data-depth="1"
                 disabled={stash.row === null}
                 onclick={() => stash.row !== null && onSelect(stash.row)}
                 title={stash.row === null
@@ -641,7 +653,7 @@
 
   {#each below as section (section.key)}
     <section data-section="{section.key}">
-      <button class="head" onclick={() => onCollapse(section.key, !collapsed[section.key])}>
+      <button class="head" data-row="dir" data-depth="0" aria-expanded={!collapsed[section.key]} onclick={() => onCollapse(section.key, !collapsed[section.key])}>
         <span class="caret">
           <Icon name={collapsed[section.key] ? 'chevronRight' : 'chevronDown'} size={13} />
         </span>
@@ -652,11 +664,11 @@
       {#if !collapsed[section.key]}
         <ul>
           {#each showingAll[section.key] ? section.refs : section.refs.slice(0, CAP) as r (r.name)}
-            {@render refRow(r, r.short, section.key === 'local')}
+            {@render refRow(r, r.short, section.key === 'local', 1)}
           {/each}
           {#if section.refs.length > CAP && !showingAll[section.key]}
             <li>
-              <button class="more" onclick={() => (showingAll[section.key] = true)}>
+              <button class="more" data-row="" data-depth="1" onclick={() => (showingAll[section.key] = true)}>
                 Show all {section.refs.length}
               </button>
             </li>
@@ -668,7 +680,7 @@
 
   {#if pullRequests.length > 0}
     <section data-section="prs">
-      <button class="head" onclick={() => onCollapse('prs', !collapsed['prs'])}>
+      <button class="head" data-row="dir" data-depth="0" aria-expanded={!collapsed['prs']} onclick={() => onCollapse('prs', !collapsed['prs'])}>
         <span class="caret">
           <Icon name={collapsed['prs'] ? 'chevronRight' : 'chevronDown'} size={13} />
         </span>
@@ -682,6 +694,8 @@
             <li oncontextmenu={(e) => onPullRequestMenu(e, pr)}>
               <button
                 class="ref pr"
+                data-row=""
+                data-depth="1"
                 onclick={() => onOpenPullRequest(pr)}
                 title={`${pr.title}\n${pr.author}: ${pr.sourceBranch} → ${pr.targetBranch}\n${pr.webUrl}`}
               >
@@ -727,7 +741,7 @@
   -->
   {#if worktrees.length > 0}
     <section data-section="worktrees">
-      <button class="head" onclick={() => onCollapse('worktrees', !collapsed['worktrees'])}>
+      <button class="head" data-row="dir" data-depth="0" aria-expanded={!collapsed['worktrees']} onclick={() => onCollapse('worktrees', !collapsed['worktrees'])}>
         <span class="caret">
           <Icon name={collapsed['worktrees'] ? 'chevronRight' : 'chevronDown'} size={13} />
         </span>
@@ -746,6 +760,8 @@
                 </span>
                 <button
                   class="dots"
+                  data-row=""
+                  data-depth="1"
                   title="What can be done with this working tree"
                   onclick={(e) => onWorktreeMenu(e, tree)}
                 ><Icon name="more" size={13} /></button>
@@ -764,7 +780,7 @@
   {#if !bare}
     <section data-section="submodules">
       <div class="row head-row" oncontextmenu={onSubmodulesMenu} role="presentation">
-        <button class="head" onclick={() => onCollapse('submodules', !collapsed['submodules'])}>
+        <button class="head" data-row="dir" data-depth="0" aria-expanded={!collapsed['submodules']} onclick={() => onCollapse('submodules', !collapsed['submodules'])}>
           <span class="caret">
             <Icon name={collapsed['submodules'] ? 'chevronRight' : 'chevronDown'} size={13} />
           </span>
@@ -808,6 +824,8 @@
                 </span>
                 <button
                   class="dots"
+                  data-row=""
+                  data-depth="1"
                   title="What can be done with this submodule"
                   onclick={(e) => onSubmoduleMenu(e, sub)}
                 ><Icon name="more" size={13} /></button>
@@ -858,11 +876,6 @@
   .filter::placeholder { color: var(--fg-2); }
   /* Appears only when there is something to clear, so the field is not carrying a control
      that would do nothing nine times out of ten. */
-  .clear {
-    flex: 0 0 auto; display: flex; padding: 2px; cursor: pointer;
-    background: var(--bg-0); border: 0; border-radius: var(--radius-1); color: var(--fg-2);
-  }
-  .clear:hover { color: var(--fg-0); background: var(--bg-2); }
 
   /* A rule between sections, as the reference panel draws them: with a label and air alone
      the end of a long list of branches and the next section's heading ran together. */
@@ -949,9 +962,11 @@
   .dots {
     flex: 0 0 auto; display: flex; font: inherit; line-height: 1; cursor: pointer;
     padding: 0 var(--space-2); background: var(--bg-1); border: 0; color: var(--fg-2);
-    visibility: hidden;
+    opacity: 0;
   }
-  .row:hover .dots, .row.current .dots { visibility: visible; }
+  /* Faded rather than hidden: hidden, the menu was out of the tab order and the keyboard could
+     reach a branch but never what could be done with it. */
+  .row:hover .dots, .row:focus-within .dots, .row.current .dots { opacity: 1; }
   .dots:hover { color: var(--fg-0); }
   /*
    * The eye follows the dots, with one difference that matters: a hidden branch keeps it
@@ -962,9 +977,9 @@
   .eye {
     flex: 0 0 auto; display: flex; align-items: center; cursor: pointer;
     padding: 0 var(--space-1); background: var(--bg-1); border: 0; color: var(--fg-2);
-    visibility: hidden;
+    opacity: 0;
   }
-  .row:hover .eye, .eye.off { visibility: visible; }
+  .row:hover .eye, .row:focus-within .eye, .eye.off { opacity: 1; }
   .eye:hover { color: var(--fg-0); }
   .eye.off { color: var(--fg-2); }
   /* Dimmed, not hidden: a branch left out of the walk is still a branch, and still has a menu. */

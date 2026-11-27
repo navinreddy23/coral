@@ -1,5 +1,8 @@
 <script lang="ts">
+  import { modal } from './modal';
+  import { handBackFocus } from './handback.svelte';
   import Icon from './Icon.svelte';
+  import Close from './Close.svelte';
   import { shortAge } from './age';
   import type { ReflogState } from '../state/reflog.svelte';
   import type { ReflogEntry } from '../ipc/types';
@@ -26,14 +29,16 @@
     const repeated = `: ${entry.summary}`;
     return entry.action.endsWith(repeated) ? entry.action.slice(0, -repeated.length) : entry.action;
   }
+
+  handBackFocus();
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />
 
-<div class="sheet">
+<div class="sheet" role="dialog" {@attach modal} aria-modal="true" aria-label="Recover lost work">
   <header>
     <h2>Recover lost work</h2>
-    <button class="shut" title="Close" onclick={onClose}><Icon name="close" size={15} /></button>
+    <Close label="Close (Esc)" onclick={onClose} />
   </header>
 
   <nav class="bar">
@@ -95,11 +100,6 @@
     border-bottom: 1px solid var(--border);
   }
   h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); flex: 1; }
-  .shut {
-    display: flex; font: inherit; line-height: 1; cursor: pointer;
-    background: var(--bg-1); border: 0; color: var(--fg-2); padding: 0 var(--space-2);
-  }
-  .shut:hover { color: var(--fg-0); }
 
   .bar {
     display: flex; align-items: center; gap: var(--space-3);

@@ -53,6 +53,39 @@ describe('the component stylesheets', () => {
     expect(body).not.toMatch(/max-height/u);
   });
 
+  it('paints a commit file\'s name on its row\'s ground, not on the page\'s', () => {
+    // The author's `.name` is given the page's ground; the file name shared the class and sat
+    // in a white box on a hovered or open row.
+    const details = STYLES.find((s) => s.name === 'Details.svelte');
+    const path = /<span class="path">([\s\S]*?)<\/span>\s*<LockMark/u.exec(details?.source ?? '')?.[1] ?? '';
+    expect(path).not.toBe('');
+    expect(path).not.toMatch(/class="name"/u);
+  });
+
+  it('makes every dialog hold the keys while it is open', () => {
+    // Without it the focus stayed behind the scrim, Tab walked the toolbar under a question,
+    // and Enter pressed whatever had opened it.
+    const offenders = STYLES.flatMap(({ name, source }) =>
+      // The attribute, not the selector App.svelte looks dialogs up with.
+      [...source.matchAll(/(?<!\[)role="dialog"[^>]*>/gu)]
+        .filter((found) => !found[0].includes('{@attach modal}'))
+        .map(() => name),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('draws every close control with Close, so they look and read alike', () => {
+    // Twenty-one of them had been drawn by hand at five sizes, three as a typed ×, most in the
+    // grey of the buttons beside them. The title bar's is the window's own control, drawn to
+    // the desktop's convention; Preferences' carries a word as well.
+    const own = new Set(['Close.svelte', 'TitleStrip.svelte', 'Preferences.svelte']);
+    const offenders = STYLES.filter(
+      ({ name, source }) =>
+        !own.has(name) && (/<Icon name="close"/u.test(source) || />\s*×\s*<\/button>/u.test(source)),
+    ).map(({ name }) => name);
+    expect(offenders).toEqual([]);
+  });
+
   it('write no colour that is not a token', () => {
     const offenders: string[] = [];
     for (const { name, css } of STYLES) {
@@ -153,7 +186,7 @@ describe('the component stylesheets', () => {
         // round a drop target. Neither is an elevation, and neither costs anything to repaint.
         // `none` takes one away, which is the opposite of what this is looking for.
         if (value.trim() === 'none') continue;
-        if (/\binset\b/.test(value) || value.includes('var(--ring)')) continue;
+        if (/\binset\b/.test(value)) continue;
         if (/^0 0 0 /.test(value.trim())) continue;
         offenders.push(`${name}: ${value.trim()}`);
       }

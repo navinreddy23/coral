@@ -2,9 +2,11 @@
   import { t } from '../state/locale.svelte';
   import { tick, untrack } from 'svelte';
   import Icon from './Icon.svelte';
+  import Close from './Close.svelte';
   import Splitter from './Splitter.svelte';
   import Changes, { kindOf, markOf } from './Changes.svelte';
   import LockMark from './LockMark.svelte';
+  import { rows } from './rows';
   import Misspellings from './Misspellings.svelte';
   import type { MenuItem } from './Menu.svelte';
   import { buildTree } from '../diff/tree';
@@ -360,13 +362,13 @@
   const anyClosed = $derived(Object.values(closedUnstaged).some(Boolean));
 </script>
 
-<div class="panel" bind:clientHeight={panelPx}>
+<div class="panel" bind:clientHeight={panelPx} {@attach rows}>
   <header>
-    <span class="count">
+    <h2 class="count">
       {worktree.dirty
         ? t('staging.fileChanges', { n: worktree.status?.entries.length ?? 0 })
         : t('staging.noFileChanges')}
-    </span>
+    </h2>
     {#if branch}
       <span class="on">{t('staging.on')}</span><span class="branch" title={branch}>{branch}</span>
     {/if}
@@ -397,7 +399,14 @@
     <ul class="flat">
       {#each worktree.conflicted as e (e.path)}
         <li>
-          <button class="file" onclick={() => onOpenFile(e.path, false)} title={e.path}>
+          <button
+            class="file"
+            class:open={e.path === openPath}
+            data-row="show"
+            data-path={e.path}
+            onclick={() => onOpenFile(e.path, false)}
+            title={e.path}
+          >
             <span class="mark conflict">!</span>
             <span class="name">{e.path}</span>
           </button>
@@ -442,7 +451,7 @@
       {/if}
     </h3>
     {#if !closed.unstaged}
-    <div class="list" id="staging-unstaged">
+    <div class="list" id="staging-unstaged" data-list="unstaged">
     {#if worktree.unstaged.length === 0}
       <p class="empty">{t('staging.nothingUnstaged')}</p>
     {:else if grouping === 'tree'}
@@ -467,6 +476,8 @@
             <button
               class="file"
               class:open={e.path === openPath}
+              data-row="show"
+              data-path={e.path}
               onclick={() => onOpenFile(e.path, false)}
               title={e.path}
             >
@@ -474,7 +485,7 @@
               <span class="name">{e.path}</span>
               <LockMark lock={locks.get(e.path)} />
             </button>
-            <button class="act" title={t('staging.stageIt')} onclick={() => worktree.stage([e.path], true)}>+</button>
+            <button class="act" title={t('staging.stageIt')} aria-label="{t('staging.stageIt')}: {e.path}" onclick={() => worktree.stage([e.path], true)}>+</button>
           </li>
         {/each}
       </ul>
@@ -529,7 +540,7 @@
       {/if}
     </h3>
     {#if !closed.staged}
-    <div class="list" id="staging-staged">
+    <div class="list" id="staging-staged" data-list="staged">
     {#if worktree.staged.length === 0}
       <p class="empty">{t('staging.nothingStaged')}</p>
     {:else if grouping === 'tree'}
@@ -554,6 +565,8 @@
             <button
               class="file"
               class:open={e.path === openPath}
+              data-row="show"
+              data-path={e.path}
               onclick={() => onOpenFile(e.path, true)}
               title={e.path}
             >
@@ -561,7 +574,7 @@
               <span class="name">{e.path}</span>
               <LockMark lock={locks.get(e.path)} />
             </button>
-            <button class="act" title={t('staging.unstageIt')} onclick={() => worktree.stage([e.path], false)}>−</button>
+            <button class="act" title={t('staging.unstageIt')} aria-label="{t('staging.unstageIt')}: {e.path}" onclick={() => worktree.stage([e.path], false)}>−</button>
           </li>
         {/each}
       </ul>
@@ -677,11 +690,7 @@
       {#each draft.coAuthors as who (who)}
         <span class="chip" title={who}>
           {nameOf(who)}
-          <button
-            class="unchip"
-            aria-label={`${t('staging.removeCoAuthor')} ${who}`}
-            onclick={() => draft.removeCoAuthor(who)}
-          ><Icon name="close" size={10} /></button>
+          <Close quiet small label={`${t('staging.removeCoAuthor')} ${who}`} onclick={() => draft.removeCoAuthor(who)} />
         </span>
       {/each}
       <input
@@ -736,11 +745,6 @@
     background: var(--bg-2); color: var(--fg-0); font-size: var(--text-sm);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .unchip {
-    display: flex; padding: 2px; border: 0; background: none; cursor: pointer; color: var(--fg-2);
-    border-radius: var(--radius-1);
-  }
-  .unchip:hover { color: var(--fg-0); background: var(--bg-1); }
   .who {
     flex: 1 1 8em; min-width: 8em; font: inherit; font-size: var(--text-sm);
     padding: 2px var(--space-2); background: var(--bg-0); color: var(--fg-0);
@@ -784,12 +788,13 @@
     display: flex; align-items: center; gap: var(--space-2);
     padding-bottom: var(--space-2); border-bottom: 1px solid var(--border);
   }
-  .count { font-weight: var(--weight-semibold); color: var(--fg-0); white-space: nowrap; }
+  /* The panel's heading, over the lists' own, so the headings nest the way they read. */
+  .count { margin: 0; font: inherit; font-weight: var(--weight-semibold); color: var(--fg-0); white-space: nowrap; }
   .on { color: var(--fg-2); }
   .branch {
     flex: 0 1 auto; min-width: 0;
     font-size: var(--text-sm); padding: 1px 8px; border-radius: var(--radius-pill);
-    background: var(--accent-soft); color: var(--accent);
+    background: var(--accent-soft); color: var(--accent-ink);
     max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   /*
@@ -886,7 +891,12 @@
     background: var(--bg-0); border: 0; border-radius: var(--radius-0); color: var(--fg-1);
     min-height: calc(var(--row-h) - 4px);
   }
-  .file.open { background: var(--accent-soft); color: var(--fg-0); }
+  /* The bar as well as the tint, as the commit's flat list has it: the tint alone is 1.1:1
+     against a hovered row, a difference of hue that a pointer passing by makes ambiguous. */
+  .file.open {
+    background: var(--accent-soft); color: var(--fg-0);
+    box-shadow: inset 2px 0 0 var(--accent-line);
+  }
   /* The end of a path identifies the file, so a long one is cut from the left. */
   .name {
     min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -903,11 +913,13 @@
   .mark.conflict { color: var(--danger); }
   .act {
     flex: 0 0 auto; font: inherit; font-size: var(--text-md); line-height: 1; width: 1.6em;
-    cursor: pointer; visibility: hidden;
+    cursor: pointer; opacity: 0;
     background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-0);
     color: var(--fg-1); margin-right: var(--space-1);
   }
-  .flat li:hover .act { visibility: visible; }
+  /* Faded rather than hidden until the row is pointed at or has the keys, so Tab still reaches
+     it: hidden, it was out of the tab order and staging one file needed the pointer. */
+  .flat li:hover .act, .flat li:focus-within .act { opacity: 1; }
   .act:hover { background: var(--bg-3); color: var(--fg-0); }
 
   /*

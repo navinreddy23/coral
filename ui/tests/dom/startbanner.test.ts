@@ -70,7 +70,7 @@ describe('the start page over a repository that would not open', () => {
     expect(container.querySelector('.banner.error')).toBeNull();
 
     // Back to the tab: the reason it is empty has to be on screen again.
-    const shut = container.querySelector('.tab.new .shut');
+    const shut = container.querySelector('.tab.new .shut button');
     if (shut === null) throw new Error('the new tab has no way back');
     await fireEvent.click(shut);
     await waitFor(() => {

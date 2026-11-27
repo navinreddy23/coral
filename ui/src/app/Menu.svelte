@@ -43,6 +43,7 @@
 </script>
 
 <script lang="ts">
+  import { handBackFocus } from './handback.svelte';
   import { tick } from 'svelte';
   import Icon from './Icon.svelte';
   import { fitPanel, fitSubmenu } from './placement';
@@ -146,21 +147,12 @@
     panel?.querySelector<HTMLButtonElement>('.row:not(:disabled)')?.focus();
   });
 
-  /**
-   * Focus goes back where it was when the menu closes, as a desktop menu returns it.
-   *
-   * Left to the webview, focus leaving a removed button landed on the next control it could
-   * find — the graph column's splitter — and drew its keyboard ring down the whole graph after
-   * every action chosen from a menu.
+  /*
+   * Focus goes back where it was when the menu closes. Left to the webview, focus leaving a
+   * removed button landed on the next control it could find — the graph column's splitter —
+   * and drew its keyboard ring down the whole graph after every action chosen from a menu.
    */
-  const before = document.activeElement;
-  $effect(() => () => {
-    if (before instanceof HTMLElement && before !== document.body && before.isConnected) {
-      before.focus({ preventScroll: true });
-    } else if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur();
-    }
-  });
+  handBackFocus();
 
   /** The rows the arrow keys step through: the open submenu's while focus is in it. */
   function rowsBeside(row: Element | null): HTMLButtonElement[] {

@@ -259,7 +259,7 @@ describe('the tab search', () => {
     const { container } = bar();
     await open(container);
 
-    const drop = container.querySelectorAll('.finder .drop')[2] as HTMLElement;
+    const drop = container.querySelectorAll('.finder .drop button')[2] as HTMLElement;
     await fireEvent.click(drop);
 
     await waitFor(() => {

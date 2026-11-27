@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { modal } from './modal';
+  import { handBackFocus } from './handback.svelte';
   import { t } from '../state/locale.svelte';
   import Icon from './Icon.svelte';
   import type { AvatarState } from '../state/avatars.svelte';
@@ -137,11 +139,13 @@
       event.preventDefault();
     }
   }
+
+  handBackFocus();
 </script>
 
 <svelte:window onkeydown={key} />
 
-<div class="prefs">
+<div class="prefs" role="dialog" {@attach modal} aria-modal="true" aria-label="Preferences">
   <!--
     A header with the way out at its trailing end, which is where every other panel that covers
     this window puts one and where the hand goes looking. It was a text link at the top of the
@@ -238,6 +242,8 @@
     background: var(--bg-2); border: var(--hairline) solid var(--border); color: var(--fg-1);
   }
   .shut:hover { background: var(--bg-3); color: var(--fg-0); }
+  /* The cross in the same red as every other close control, beside the word this one needs. */
+  .shut :global(svg) { color: var(--danger); }
   /* The same ground and card as the main window: the list of panes on the ground, the pane
      itself a card beside it. */
   .body {

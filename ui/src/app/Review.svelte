@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { modal } from './modal';
+  import { handBackFocus } from './handback.svelte';
   import { shortAge } from './age';
   import type { PullRequest, Reply } from '../ipc/commands';
   import type { ReviewState } from '../state/review.svelte';
@@ -34,11 +36,13 @@
       event.preventDefault();
     }
   }
+
+  handBackFocus();
 </script>
 
 <svelte:window onkeydown={key} />
 
-<div class="panel">
+<div class="panel" role="dialog" {@attach modal} aria-modal="true" aria-label="Review {quoted}">
   <header>
     <button class="back" onclick={onClose}>← Close</button>
     <p class="heading">{quoted} {pr.title}</p>

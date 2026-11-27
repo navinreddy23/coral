@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { codeOf, messageOf } from '../ipc/error';
   import {
     covers,
@@ -150,6 +150,7 @@
   import { RefsState } from '../state/refs.svelte';
   import { ScopeState } from '../state/scope.svelte';
   import Icon from './Icon.svelte';
+  import Close from './Close.svelte';
   import Mark from './Mark.svelte';
   import Border from './Border.svelte';
   import {
@@ -178,6 +179,8 @@
   import { UpdateState } from '../state/update.svelte';
   import { AutoFetchState } from '../state/autofetch.svelte';
   import { isTextTarget, keyEventOf, resolve, tabJump } from '../state/shortcuts';
+  import { land, placeOf } from './rows';
+  import { cycleRegion } from './region';
   import Shortcuts from './Shortcuts.svelte';
   import TabBar from './TabBar.svelte';
   import Toolbar from './Toolbar.svelte';
@@ -265,6 +268,7 @@
   /** Which shortcuts actually do something today; the help overlay dims the rest. */
   const LIVE = new Set([
     'select.next', 'select.previous', 'select.first', 'select.last', 'select.menu',
+    'files.focus', 'view.close', 'pane.next', 'pane.previous',
     'stage.all', 'unstage.all', 'tab.new', 'tab.close', 'tab.next', 'tab.previous',
     'palette', 'repo.open', 'terminal', 'search.commits', 'search.code',
     'panel.left', 'panel.detail', 'help', 'undo', 'redo',
@@ -334,14 +338,19 @@
     // Escape closes what is over the graph, wherever the focus went after it opened. The
     // search bar had this on its own field alone, so clicking a result — which is what the
     // bar is for — left no way to dismiss it but the mouse.
-    if (event.key === 'Escape' && find.open) {
+    if (leavesStart(event)) {
+      showStart = false;
+      event.preventDefault();
+      return;
+    }
+    if (event.key === 'Escape' && find.open && diff.path === null && grep.at === null) {
       find.close();
       event.preventDefault();
       return;
     }
 
     const binding = resolve(e, isTextTarget(event.target) ? 'message' : 'global');
-    if (!binding || !LIVE.has(binding.id)) return;
+    if (!binding || !LIVE.has(binding.id) || !applies(binding.id, event.target)) return;
     event.preventDefault();
 
     switch (binding.id) {
@@ -350,6 +359,10 @@
       case 'select.first': move(-Number.MAX_SAFE_INTEGER); break;
       case 'select.last': move(Number.MAX_SAFE_INTEGER); break;
       case 'select.menu': openSelectedMenu(); break;
+      case 'files.focus': enterFiles(); break;
+      case 'view.close': closeView(); break;
+      case 'pane.next': cycleRegion(1); break;
+      case 'pane.previous': cycleRegion(-1); break;
       case 'stage.all': void worktree.stage(worktree.unstaged.map((f) => f.path), true); break;
       case 'unstage.all': void worktree.stage(worktree.staged.map((f) => f.path), false); break;
       case 'tab.new': void openAnother(); break;
@@ -1223,13 +1236,6 @@
     commitDraft.focus();
   }
 
-  /**
-   * Stages or unstages the file whose diff is open.
-   *
-   * "Current file" is the one being read, which is the only file the window has a notion of.
-   * Without a diff open there is nothing to act on, and doing something to a file the user
-   * cannot see would be worse than doing nothing.
-   */
   /** Whether the repository was gone the last time the window looked. */
   let wasGone = false;
 
@@ -1248,11 +1254,133 @@
     void tabs.refresh();
   });
 
+  /**
+   * Stages or unstages the file the keys are on, or else the file whose diff is open.
+   *
+   * Without either there is nothing to act on, and doing something to a file the user cannot
+   * see would be worse than doing nothing. From a row in the list the key is for, the focus
+   * moves on to the file that takes the row's place, so S pressed down a list stages it file
+   * by file; left on the row, it went with the row and the next arrow walked the graph.
+   */
   async function stageOpenFile(stage: boolean) {
-    const path = diff.path;
-    if (!info || path === null || (diff.source !== 'staged' && diff.source !== 'unstaged')) return;
-    await worktree.stage([path], stage);
+    const focused = document.activeElement;
+    const list =
+      focused instanceof HTMLElement
+        ? focused.closest<HTMLElement>(`[data-list="${stage ? 'unstaged' : 'staged'}"]`)
+        : null;
+    const row =
+      list === null
+        ? null
+        : (focused as HTMLElement).closest<HTMLElement>('[data-row="show"], [data-row="dir"]');
+    const open = diff.source === 'staged' || diff.source === 'unstaged' ? diff.path : null;
+    const paths = row !== null ? pathsOf(row, stage) : open !== null ? [open] : [];
+    if (!info || paths.length === 0) return;
+    const place = list !== null && row !== null ? placeOf(list, row) : -1;
+    await worktree.stage(paths, stage);
+    if (list !== null && place >= 0) {
+      await tick();
+      if (land(list, place) !== null) return;
+    }
     await reloadDiff(info.path);
+    if (place < 0) return;
+    await tick();
+    openRow()?.focus();
+  }
+
+  /**
+   * The files a row in the working copy's lists stands for: its own, or for a folder every
+   * file under it on that side, which is what the folder's own + or − acts on.
+   */
+  function pathsOf(row: HTMLElement, stage: boolean): string[] {
+    const path = row.dataset.path ?? '';
+    if (row.dataset.row !== 'dir') return path === '' ? [] : [path];
+    const side = stage ? worktree.unstaged : worktree.staged;
+    return side.map((e) => e.path).filter((p) => p.startsWith(`${path}/`));
+  }
+
+  /** The row of the file open in the right panel, if it is listed there. */
+  function openRow(): HTMLElement | null {
+    return document.querySelector<HTMLElement>('[data-panel="files"] [data-row].open');
+  }
+
+  /**
+   * Puts the keys in the right panel's file list, on the file open there or else the first.
+   *
+   * Enter and → on the graph do this, so the graph, a commit's files and their diffs are walked
+   * without the pointer; Escape comes back.
+   */
+  function enterFiles() {
+    const open = openRow();
+    if (open !== null) {
+      open.focus();
+      return;
+    }
+    const panel = document.querySelector<HTMLElement>('[data-panel="files"]');
+    if (panel !== null) land(panel, 0);
+  }
+
+  /**
+   * Closes the file view, or the code search under it, and gives the arrows back to the graph.
+   *
+   * Whatever had the focus was in the view just closed or in the list it was opened from, and
+   * either way the next arrow is meant for the commits.
+   */
+  function closeView() {
+    if (diff.path !== null) diff.close();
+    else grep.close();
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  }
+
+  /**
+   * Whether the focus is on the graph, or on nothing.
+   *
+   * The graph's rows are kept out of the tab order, so a key meant for it arrives from the
+   * page itself or from the row the pointer last clicked.
+   */
+  function onGraph(target: EventTarget | null): boolean {
+    if (target === document.body || target === document.documentElement) return true;
+    return target instanceof Element && target.closest('button.hit') !== null;
+  }
+
+  /**
+   * Whether something is open over the window, which has Escape first.
+   *
+   * The overlays listen on the window too, and this listener runs before theirs, so it cannot
+   * wait to see whether one of them took the key: it asks the page what is open instead.
+   */
+  function covered(): boolean {
+    return showStart || overlaid();
+  }
+
+  /** Whether a menu or a dialog is open. */
+  function overlaid(): boolean {
+    return document.querySelector('[role="dialog"], [role="menu"]') !== null;
+  }
+
+  /**
+   * Whether Escape goes back from a new tab's start page to the repository under it, as the
+   * page's × does. Not from its fields, nor from under something opened over it.
+   */
+  function leavesStart(event: KeyboardEvent): boolean {
+    return (
+      event.key === 'Escape' &&
+      showStart &&
+      tabs.session.tabs.length > 0 &&
+      !isTextTarget(event.target) &&
+      !overlaid()
+    );
+  }
+
+  /**
+   * Whether a key the window binds is the window's to answer where it was pressed. The keys
+   * that move the focus or close a view are left alone while something covers the window,
+   * which holds the focus itself.
+   */
+  function applies(id: string, target: EventTarget | null): boolean {
+    if (id === 'files.focus') return onGraph(target) && !covered();
+    if (id === 'view.close') return (diff.path !== null || grep.at !== null) && !covered();
+    if (id === 'pane.next' || id === 'pane.previous') return !covered();
+    return true;
   }
 
   /**
@@ -6430,9 +6558,7 @@
               Stop
             </button>
           {/if}
-          <button onclick={() => find.close()} title="Close the search">
-            <Icon name="close" size={13} />
-          </button>
+          <Close label="Close the search (Esc)" onclick={() => find.close()} />
           {#if find.error !== null}
             <p class="problem" role="alert">{find.error}</p>
           {/if}
@@ -6657,7 +6783,7 @@
         onreset={() => panes.reset()}
       />
       {#if stagingShowing}
-        <aside class="wip-panel">
+        <aside class="wip-panel" data-panel="files">
           <Staging
             {worktree}
             commit={commitDraft}
@@ -7121,6 +7247,18 @@
 
   .row.selected .cell.message .summary { color: var(--fg-0); font-weight: var(--weight-semibold); }
   /*
+   * While a list beside the graph has the arrow keys, the selected commit gives up its depth, so
+   * only one row on the screen claims to be where the keys are. The bar stays: it still says
+   * which commit the list belongs to.
+   */
+  :global(body:has([data-row]:focus)) .row.selected .cell.message,
+  :global(body:has([data-row]:focus)) .row.selected .lane-strip {
+    background: var(--row-tint, var(--bg-1));
+  }
+  :global(body:has([data-row]:focus)) .wip.selected,
+  :global(body:has([data-row]:focus)) .wip.selected .cell.refs,
+  :global(body:has([data-row]:focus)) .wip.selected .cell.message { background: var(--bg-1); }
+  /*
    * Every text surface paints an opaque background of its own, and this is not optional.
    *
    * WebKit antialiases text on a composited layer with subpixel precision only where it knows
@@ -7148,7 +7286,7 @@
   /* The whole row is the target; a button laid over it keeps that keyboard-reachable without
      nesting interactive elements inside one another. */
   /* See the note on the element: it takes clicks and never keyboard focus. */
-  .hit:focus-visible { box-shadow: none; }
+  .hit:focus-visible { outline: none; }
   .hit {
     position: absolute; inset: 0; width: 100%; height: 100%;
     background: none; border: 0; padding: 0; margin: 0; cursor: pointer;

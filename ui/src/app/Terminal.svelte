@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
+  import Close from './Close.svelte';
   import { onMount } from 'svelte';
   import { FitAddon } from '@xterm/addon-fit';
   import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -99,6 +100,10 @@
       // A block cursor over software rendering costs nothing and is easier to find.
       cursorStyle: 'block',
       theme: palette(),
+      // The palette is tuned, but a program can ask for any colour, and a 256-colour yellow on
+      // the light ground is unreadable. xterm lifts a cell short of this, and halves it for dim
+      // text, which is meant to read as dim.
+      minimumContrastRatio: 4.5,
       allowProposedApi: true,
     });
     fit = new FitAddon();
@@ -107,6 +112,9 @@
     // rather than doing nothing.
     term.loadAddon(new WebLinksAddon((_, uri) => void openInBrowser(uri)));
     term.open(host);
+    // F6 leaves the pane for the next one, the only way out that is not closing it: the shell
+    // has Tab. Declined here, xterm lets the key reach the window instead of the shell.
+    term.attachCustomKeyEventHandler((event) => event.key !== 'F6');
     fit.fit();
 
     void begin();
@@ -226,7 +234,7 @@
   }
 </script>
 
-<section class="terminal">
+<section class="terminal" data-panel="terminal">
   <header>
     <span class="title">Terminal</span>
     <span class="shell mono">{shell}</span>
@@ -255,7 +263,7 @@
     >
       <Icon name="restart" size={13} />
     </button>
-    <button class="close" onclick={onClose} aria-label="Hide the terminal"><Icon name="close" size={14} /></button>
+    <Close label="Hide the terminal" onclick={onClose} />
   </header>
 
   {#if session.error}

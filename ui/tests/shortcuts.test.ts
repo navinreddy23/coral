@@ -23,6 +23,21 @@ describe('shortcuts', () => {
     expect(resolve(key('End'), 'global')?.id).toBe('select.last');
   });
 
+  it('moves between panes on F6 from anywhere, a text field included', () => {
+    expect(resolve(key('F6'), 'global')?.id).toBe('pane.next');
+    expect(resolve(key('F6'), 'message')?.id).toBe('pane.next');
+    expect(resolve(key('F6', { shift: true }), 'message')?.id).toBe('pane.previous');
+  });
+
+  it('goes into the files on Enter or the right arrow, and back out on Escape', () => {
+    expect(resolve(key('Enter'), 'global')?.id).toBe('files.focus');
+    expect(resolve(key('ArrowRight'), 'global')?.id).toBe('files.focus');
+    expect(resolve(key('Escape'), 'global')?.id).toBe('view.close');
+    // Typing a message is not leaving anything.
+    expect(resolve(key('Enter'), 'message')).toBeNull();
+    expect(resolve(key('Escape'), 'message')).toBeNull();
+  });
+
   it('opens the selected row\'s menu from the Menu key and Shift+F10', () => {
     expect(resolve(key('ContextMenu'), 'global')?.id).toBe('select.menu');
     expect(resolve(key('F10', { shift: true }), 'global')?.id).toBe('select.menu');

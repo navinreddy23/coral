@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { modal } from './modal';
+  import { handBackFocus } from './handback.svelte';
   /**
    * One question, asked in the window rather than by the platform.
    *
@@ -98,6 +100,8 @@
     } else return;
     event.preventDefault();
   }
+
+  handBackFocus();
 </script>
 
 <svelte:window onkeydown={key} />
@@ -112,7 +116,7 @@
   <div
     class="panel"
     class:code
-    role="dialog"
+    role="dialog" {@attach modal}
     aria-modal="true"
     aria-label={title}
     onclick={(e) => e.stopPropagation()}
@@ -133,10 +137,13 @@
       <input bind:this={input} bind:value={text} {placeholder} aria-label={title} />
     {/if}
     <div class="choices">
-      <button class="cancel" onclick={() => answer(null)}>Cancel</button>
+      <!-- The focus starts on the answer Enter gives, so the two cannot disagree; on Cancel where
+           there is none, so a key pressed by habit takes nothing away. -->
+      <button class="cancel" data-autofocus={primary === null || undefined} onclick={() => answer(null)}>Cancel</button>
       {#each choices as choice (choice.id)}
         <button
           class:primary={choice.id === primary?.id}
+          data-autofocus={choice.id === primary?.id || undefined}
           class:danger={choice.danger === true}
           disabled={asksText && !optional && text.trim() === ''}
           onclick={() => answer(choice.id)}

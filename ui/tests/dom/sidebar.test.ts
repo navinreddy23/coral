@@ -122,6 +122,35 @@ describe('the sidebar', () => {
     expect(went).toEqual([42]);
   });
 
+  it('walks its branches with the arrows, showing each, and folds a section from the keys', async () => {
+    // The arrows went to the graph from here too: a branch clicked and then ↓ moved the commit
+    // selection, and nothing in the list could be reached without the pointer.
+    const picked: string[] = [];
+    const folded: [string, boolean][] = [];
+    const { container } = mount({
+      groups: { local: [ref('alpha'), ref('beta')], remote: [], tags: [], stashes: [] },
+      head: 'alpha',
+      onSelectRef: (r: PlacedRef) => picked.push(r.short),
+      onCollapse: (key: string, closed: boolean) => folded.push([key, closed]),
+    });
+    const refs = [...container.querySelectorAll<HTMLButtonElement>('[data-section="local"] button.ref')];
+    await fireEvent.click(refs[0] as HTMLButtonElement);
+    expect(document.activeElement).toBe(refs[0]);
+
+    const down = new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true });
+    refs[0]?.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(refs[1]);
+    expect(picked).toEqual(['alpha', 'beta']);
+
+    // Left from a branch goes up to its section, and left again folds it.
+    await fireEvent.keyDown(refs[1] as HTMLElement, { key: 'ArrowLeft' });
+    const head = container.querySelector('[data-section="local"] button.head');
+    expect(document.activeElement).toBe(head);
+    await fireEvent.keyDown(head as HTMLElement, { key: 'ArrowLeft' });
+    expect(folded).toEqual([['local', true]]);
+  });
+
   it('offers no way to HEAD when its commit is outside the loaded graph', () => {
     const { container } = mount({ detachedHead: { oid: 'c0ffee1234567890', row: null } });
     const head = [...container.querySelectorAll('button.ref')].find((b) =>

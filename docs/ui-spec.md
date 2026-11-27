@@ -17,7 +17,10 @@ Three rules follow from that and are enforced by tests rather than by intention.
 what a primary button is. Coral carries the identity, and appears in exactly four places: the
 mark, the line along the top of the current tab, the working copy's row, and the boot screen.
 They are kept apart by role rather than by hue, because a warm red cannot mean "brand" in one
-place and "this deletes something" in another.
+place and "this ends something" in another. Red (`--danger`) ends things: it deletes, and it
+closes. Every × is one control, `Close.svelte`, red at rest where it closes a view, a sheet, the
+terminal, a search or the current tab, and grey until pointed at or focused where it repeats
+down a list — inactive tabs, toasts, chips, recent repositories, a filter.
 
 **Nothing is written in pixels.** Colour, type, spacing, shape and motion come from
 `ui/src/styles/tokens.css` and nowhere else. `ui/tests/style.test.ts` fails a component that
@@ -239,7 +242,8 @@ same three numbers reach the stylesheet and the canvas metrics, which cannot rea
   hide/solo this branch. A file in its list can be taken into the working copy as of the commit
   or as it was before it, unstaged, asking first when that replaces changes of your own.
 - Hide/solo removes hidden tips from the walk or walks only that tip; state persists per repo.
-- Keyboard: ↑↓ moves selection, Enter opens details, `/` focuses the filter, Esc clears.
+- Keyboard: ↑↓ (j, k, Home, End) move the selection while the focus is on nothing or on the
+  graph; Enter or → go into the selected commit's files; `/` focuses the branch filter.
 
 ## Right panel
 
@@ -248,7 +252,15 @@ interface face with its line breaks kept; a long body scrolls inside the box whi
 at its own split, and grows with it once the divider is dragged. Under it the avatar, author and
 "authored" date, committer when different, full SHA with copy, parents as links, file list with
 tree/flat toggle and a path filter, and `+ - ~` counts. Clicking a file opens the diff in the
-centre with a breadcrumb back to the graph.
+centre, closed by its red × or Escape, which hands the keys back to the graph.
+
+**Keys in a list.** A list that has the focus — a commit's files, the working copy's lists, the
+branch list, a file's history — takes its own arrows rather than the graph taking them
+(`app/rows.ts`): ↑↓ move between rows and show the file or branch landed on, → and ← open,
+shut and step through folders, and S or U on a working-copy file stage it and move on to the
+next. The row with the keys is outlined, and the graph's selected commit drops its tint while a
+list has them. A click in an open file gives it the keys to scroll with. F6 and Shift+F6 move
+between the panes — the branch list, the graph or file, the files, the terminal.
 
 **Comparing** — a second commit Ctrl-clicked compares the two. From a commit's menu, "Compare
 with working tree" compares it with what is on disk, staged or not (untracked files are not part
@@ -383,11 +395,11 @@ desktop has already read them for the session Coral was started in.
 
 ## Command palette and shortcuts
 
-`Ctrl/Cmd+P` opens the palette with every action, fuzzy search and recent items. Defaults:
-`Cmd+T` new tab, `Cmd+W` close tab, `Cmd+Z` undo, `Cmd+Shift+Z` redo, `Cmd+Enter` commit,
-`Cmd+F` filter, `Cmd+,` preferences, `Cmd+Shift+P` push, `Cmd+Shift+L` pull, `Cmd+B` new
-branch, `Cmd+Shift+G` add current tab to a group, `Cmd+1…9` jump to tab, `Ctrl+Tab` next tab.
-All rebindable.
+`Ctrl/Cmd+P` opens the palette with every action, fuzzy search and recent items. The shortcuts
+follow the GitKraken cheat sheet and live in one table, `ui/src/state/shortcuts.ts`, which the
+help sheet (`Ctrl+/`) and the toolbar's tooltips both read; the help sheet is the list.
+Escape closes whatever is on top: a menu or sheet first, then a file open over the graph, then
+a new tab's start page. Whatever closes hands the focus back to where it was.
 
 ## Profiles
 

@@ -103,6 +103,10 @@
         <div class="row">
           <button
             class="dir"
+            data-row="dir"
+            data-depth={depth}
+            data-path={node.path}
+            aria-expanded={!closed[node.path]}
             style:padding-left="{depth * 12 + 4}px"
             onclick={() => onToggleDir(node.path)}
           >
@@ -139,6 +143,9 @@
           <button
             class="file"
             class:open={node.path === openPath}
+            data-row="show"
+            data-depth={depth}
+            data-path={node.path}
             style:padding-left="{depth * 12 + 4}px"
             onclick={() => onOpen(node.path)}
             title={node.item.origPath ? `${node.path}\nfrom ${node.item.origPath}` : node.path}
@@ -149,7 +156,8 @@
           </button>
           <button
             class="act"
-            title={staged ? 'Unstage it' : 'Stage it'}
+            title={staged ? 'Unstage it (U)' : 'Stage it (S)'}
+            aria-label={staged ? `Unstage ${node.path}` : `Stage ${node.path}`}
             onclick={() => onAct([node.path])}
           >{staged ? '−' : '+'}</button>
         </div>
@@ -175,7 +183,12 @@
   }
   .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dir { color: var(--fg-1); font-weight: var(--weight-semibold); }
-  .file.open { background: var(--accent-soft); color: var(--fg-0); }
+  /* The bar as well as the tint, as the commit's flat list has it: the tint alone is 1.1:1
+     against a hovered row, a difference of hue that a pointer passing by makes ambiguous. */
+  .file.open {
+    background: var(--accent-soft); color: var(--fg-0);
+    box-shadow: inset 2px 0 0 var(--accent-line);
+  }
   .caret { width: 9px; flex: 0 0 auto; color: var(--fg-2); }
   .mark {
     flex: 0 0 auto; width: 12px; text-align: center;
@@ -197,10 +210,11 @@
   .count.gone { color: var(--danger); }
   .act {
     flex: 0 0 auto; font: inherit; font-size: var(--text-md); line-height: 1; width: 1.6em;
-    cursor: pointer; visibility: hidden;
+    cursor: pointer; opacity: 0;
     background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-0);
     color: var(--fg-1); margin-right: var(--space-1);
   }
-  .row:hover .act { visibility: visible; }
+  /* Faded rather than hidden, so Tab still reaches it; see Staging. */
+  .row:hover .act, .row:focus-within .act { opacity: 1; }
   .act:hover { background: var(--bg-3); color: var(--fg-0); }
 </style>

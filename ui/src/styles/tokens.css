@@ -58,6 +58,9 @@
   /* A selected row, tinted rather than filled so the text on it keeps its contrast. */
   --accent-soft: #ddedeb;
   --accent-line: #0a7d72;
+  /* Accent-coloured words on the accent tint — a lit toggle, a branch name, a "set" tag — where
+     the accent itself makes 4.2:1, short of what text needs. 5.4:1. */
+  --accent-ink: #086a61;
 
   /*
    * Coral carries the identity and never a state. It appears in five places and nowhere
@@ -202,8 +205,6 @@
   --scrim: rgb(12 16 23 / 34%);
   --elevate-1: 0 2px 8px rgb(12 16 23 / 10%), 0 0 0 1px rgb(12 16 23 / 5%);
   --elevate-2: 0 12px 32px rgb(12 16 23 / 16%), 0 2px 8px rgb(12 16 23 / 8%);
-  /* The keyboard focus ring, drawn outside the control so it never changes a layout. */
-  --ring: 0 0 0 2px var(--bg-0), 0 0 0 4px var(--accent);
 }
 
 :root[data-theme='dark'] {
@@ -237,6 +238,7 @@
   --accent-fg: #04211d;
   --accent-soft: #143738;
   --accent-line: #35d6c6;
+  --accent-ink: #2ecfc0;
 
   --brand: #ff8f5a;
   --brand-soft: #392822;

@@ -285,7 +285,7 @@
   .hint.warn { color: var(--warn); }
   .tag {
     margin-left: var(--space-2); font-size: var(--text-xs); padding: 0 6px; border-radius: var(--radius-pill);
-    background: var(--accent-soft); color: var(--accent);
+    background: var(--accent-soft); color: var(--accent-ink);
   }
   .check { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-base); color: var(--fg-1); }
 
