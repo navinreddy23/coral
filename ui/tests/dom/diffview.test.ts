@@ -136,8 +136,8 @@ describe('the diff viewer', () => {
       const { container } = render(DiffView, {
         props: { diff, onClose: () => {}, onPart: () => {} },
       });
-      const header = container.querySelector('header');
-      const kids = [...(header?.children ?? [])];
+      const bar = container.querySelector('header .bar');
+      const kids = [...(bar?.children ?? [])];
       const tabs = kids.findIndex((e) => e.getAttribute('aria-label') === 'What to show about this file');
       return { tabs, spread: kids.findIndex((e) => e.classList.contains('spread')) };
     };

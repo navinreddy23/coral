@@ -720,144 +720,146 @@
 
 <section class="diff">
   <header>
-    <span class="path mono" title={diff.path ?? ''}>{elidePath(diff.path ?? '', 72)}</span>
-    {#if diff.file && !diff.file.binary}
-      <span class="tally">
-        <span class="added">+{diff.file.added ?? 0}</span>
-        <span class="removed">−{diff.file.removed ?? 0}</span>
-      </span>
-    {/if}
-    <!-- Not for a comparison of two commits: blame and history are about one file's past,
-         and there is no single revision here to have one. -->
-    {#if diff.source !== 'compare'}
-      <div class="toggle" role="group" aria-label="What to show about this file">
-        <button class:on={diff.view === 'diff'} onclick={() => diff.setView('diff')}>Diff</button>
-        <!-- Blame reads the file as lines, which a binary has none of: git answers for one all
-             the same and the pane painted four kilobytes of replacement characters. -->
-        <button
-          class:on={diff.view === 'blame'}
-          disabled={diff.file?.binary === true}
-          title={diff.file?.binary === true ? 'A binary file has no lines to blame' : 'Blame'}
-          onclick={() => diff.setView('blame')}>Blame</button
-        >
-        <button class:on={diff.view === 'history'} onclick={() => diff.setView('history')}>
-          History
-        </button>
-        <button
-          class:on={diff.view === 'file'}
-          disabled={diff.file?.binary === true}
-          title={diff.file?.binary === true ? 'A binary file has no lines to show' : 'The whole file as this change leaves it'}
-          onclick={() => diff.setView('file')}>File</button
-        >
-      </div>
-    {/if}
-
-    <!--
-      The free space sits here rather than in the file name, so that what follows is pushed to
-      the right and what precedes it stays put. Everything after this comes and goes with the
-      view: choosing Blame took the layout toggle away and slid the three tabs a quarter of the
-      header to the right, out from under the pointer that had just chosen one of them.
-    -->
-    <span class="spread"></span>
-
-    {#if diff.view === 'file' && diff.contents !== null && diff.contents.kind !== 'absent' && diff.contents.before}
-      <span class="note">As it was: this change deleted it</span>
-    {/if}
-    {#if diff.view === 'file' && onSaveAs !== null && diff.contents !== null && diff.contents.kind !== 'absent' && diff.sides !== null}
-      {@const shown = diff.contents.before ? diff.sides.before : diff.sides.after}
-      <button class="wider" onclick={() => onSaveAs(shown.side, shown.file)} title="Save this file, as it is here, somewhere else"
-        >Save as…</button
-      >
-    {/if}
-
-    {#if diff.view === 'blame'}
-      {@const step = diff.blameTrail.at(-1)}
-      {@const skipping = diff.blame?.skipping}
-      {#if step !== undefined}
-        <!-- The file blamed is named when it is not the one in the header: going back past a
-             rename blames the file under the name it had then. -->
-        <span class="note" title={step.path}
-          >{step.path === diff.path ? 'Before' : `${step.path}, before`} “{step.past}”</span
-        >
-        <button class="wider" onclick={() => void diff.blameBack()} title="Back to the blame this came from">Back</button>
+    <div class="bar">
+      <span class="path mono" title={diff.path ?? ''}>{elidePath(diff.path ?? '', 72)}</span>
+      {#if diff.file && !diff.file.binary}
+        <span class="tally">
+          <span class="added">+{diff.file.added ?? 0}</span>
+          <span class="removed">−{diff.file.removed ?? 0}</span>
+        </span>
       {/if}
-      {#if skipping?.kind === 'listed'}
-        <button
-          class="wider"
-          onclick={() => void diff.setSkipListed(false)}
-          title="Looking past the commits .git-blame-ignore-revs lists, reformats mostly. Click to name them too."
-        >Skipping {skipping.count} listed</button>
-      {:else if skipping?.kind === 'offered'}
-        <button
-          class="wider"
-          onclick={() => void diff.setSkipListed(true)}
-          title="Look past the commits .git-blame-ignore-revs lists, reformats mostly"
-        >Skip {skipping.count} listed</button>
-      {:else if skipping?.kind === 'configured'}
-        <span class="note" title="blame.ignoreRevsFile in your git configuration">Skipping what {skipping.file} lists</span>
-      {:else if skipping?.kind === 'missing'}
-        <span class="note warn" title="blame.ignoreRevsFile in your git configuration"
-          >{skipping.file} is not there, so it skips nothing</span
-        >
-      {/if}
-    {/if}
-
-    {#if diff.view === 'diff'}
-      <div class="toggle" role="group" aria-label="Diff layout">
-        <button class:on={diff.mode === 'inline'} onclick={() => diff.setMode('inline')}>
-          Inline
-        </button>
-        <button class:on={diff.mode === 'split'} onclick={() => diff.setMode('split')}>
-          Side by side
-        </button>
-      </div>
-
-      {#if diff.mode === 'inline' && diff.file && !diff.file.binary}
-        <button
-          class="wider"
-          class:on={diff.expanded}
-          onclick={() => diff.setExpanded(!diff.expanded)}
-          title={diff.expanded
-            ? 'Show only the changed parts of the file'
-            : 'Show the whole file around the changes'}
-        >
-          {diff.expanded ? 'Changes only' : 'Whole file'}
-        </button>
-      {/if}
-
-      {#if diff.mode === 'split'}
-        <div class="steps">
+      <!-- Not for a comparison of two commits: blame and history are about one file's past,
+           and there is no single revision here to have one. -->
+      {#if diff.source !== 'compare'}
+        <div class="toggle" role="group" aria-label="What to show about this file">
+          <button class:on={diff.view === 'diff'} onclick={() => diff.setView('diff')}>Diff</button>
+          <!-- Blame reads the file as lines, which a binary has none of: git answers for one all
+               the same and the pane painted four kilobytes of replacement characters. -->
           <button
-            onclick={() => step(-1)}
-            disabled={changeRows.length === 0}
-            title="Previous change"><Icon name="chevronUp" size={14} /></button
+            class:on={diff.view === 'blame'}
+            disabled={diff.file?.binary === true}
+            title={diff.file?.binary === true ? 'A binary file has no lines to blame' : 'Blame'}
+            onclick={() => diff.setView('blame')}>Blame</button
           >
+          <button class:on={diff.view === 'history'} onclick={() => diff.setView('history')}>
+            History
+          </button>
           <button
-            onclick={() => step(1)}
-            disabled={changeRows.length === 0}
-            title="Next change"><Icon name="chevronDown" size={14} /></button
-          >
-        </div>
-      {:else if diff.mode === 'inline'}
-        <div class="steps">
-          <button onclick={() => stepInline(-1)} disabled={!anyChange} title="Previous change"
-            ><Icon name="chevronUp" size={14} /></button
-          >
-          <button onclick={() => stepInline(1)} disabled={!anyChange} title="Next change"
-            ><Icon name="chevronDown" size={14} /></button
+            class:on={diff.view === 'file'}
+            disabled={diff.file?.binary === true}
+            title={diff.file?.binary === true ? 'A binary file has no lines to show' : 'The whole file as this change leaves it'}
+            onclick={() => diff.setView('file')}>File</button
           >
         </div>
       {/if}
 
-      <!-- A reformatting commit rewrites a file without changing what it says. -->
-      <button
-        class="ws"
-        class:on={diff.ignoreWhitespace}
-        onclick={() => diff.setIgnoreWhitespace(!diff.ignoreWhitespace)}
-        title={diff.ignoreWhitespace ? 'Counting whitespace again' : 'Ignore whitespace'}
-        aria-pressed={diff.ignoreWhitespace}
-      ><Icon name="pilcrow" size={14} /></button>
-    {/if}
+      <!--
+        The free space sits here rather than in the file name, so that what follows is pushed to
+        the right and what precedes it stays put. Everything after this comes and goes with the
+        view: choosing Blame took the layout toggle away and slid the three tabs a quarter of the
+        header to the right, out from under the pointer that had just chosen one of them.
+      -->
+      <span class="spread"></span>
+
+      {#if diff.view === 'file' && diff.contents !== null && diff.contents.kind !== 'absent' && diff.contents.before}
+        <span class="note">As it was: this change deleted it</span>
+      {/if}
+      {#if diff.view === 'file' && onSaveAs !== null && diff.contents !== null && diff.contents.kind !== 'absent' && diff.sides !== null}
+        {@const shown = diff.contents.before ? diff.sides.before : diff.sides.after}
+        <button class="wider" onclick={() => onSaveAs(shown.side, shown.file)} title="Save this file, as it is here, somewhere else"
+          >Save as…</button
+        >
+      {/if}
+
+      {#if diff.view === 'blame'}
+        {@const step = diff.blameTrail.at(-1)}
+        {@const skipping = diff.blame?.skipping}
+        {#if step !== undefined}
+          <!-- The file blamed is named when it is not the one in the header: going back past a
+               rename blames the file under the name it had then. -->
+          <span class="note" title={step.path}
+            >{step.path === diff.path ? 'Before' : `${step.path}, before`} “{step.past}”</span
+          >
+          <button class="wider" onclick={() => void diff.blameBack()} title="Back to the blame this came from">Back</button>
+        {/if}
+        {#if skipping?.kind === 'listed'}
+          <button
+            class="wider"
+            onclick={() => void diff.setSkipListed(false)}
+            title="Looking past the commits .git-blame-ignore-revs lists, reformats mostly. Click to name them too."
+          >Skipping {skipping.count} listed</button>
+        {:else if skipping?.kind === 'offered'}
+          <button
+            class="wider"
+            onclick={() => void diff.setSkipListed(true)}
+            title="Look past the commits .git-blame-ignore-revs lists, reformats mostly"
+          >Skip {skipping.count} listed</button>
+        {:else if skipping?.kind === 'configured'}
+          <span class="note" title="blame.ignoreRevsFile in your git configuration">Skipping what {skipping.file} lists</span>
+        {:else if skipping?.kind === 'missing'}
+          <span class="note warn" title="blame.ignoreRevsFile in your git configuration"
+            >{skipping.file} is not there, so it skips nothing</span
+          >
+        {/if}
+      {/if}
+
+      {#if diff.view === 'diff'}
+        <div class="toggle" role="group" aria-label="Diff layout">
+          <button class:on={diff.mode === 'inline'} onclick={() => diff.setMode('inline')}>
+            Inline
+          </button>
+          <button class:on={diff.mode === 'split'} onclick={() => diff.setMode('split')}>
+            Side by side
+          </button>
+        </div>
+
+        {#if diff.mode === 'inline' && diff.file && !diff.file.binary}
+          <button
+            class="wider"
+            class:on={diff.expanded}
+            onclick={() => diff.setExpanded(!diff.expanded)}
+            title={diff.expanded
+              ? 'Show only the changed parts of the file'
+              : 'Show the whole file around the changes'}
+          >
+            {diff.expanded ? 'Changes only' : 'Whole file'}
+          </button>
+        {/if}
+
+        {#if diff.mode === 'split'}
+          <div class="steps">
+            <button
+              onclick={() => step(-1)}
+              disabled={changeRows.length === 0}
+              title="Previous change"><Icon name="chevronUp" size={14} /></button
+            >
+            <button
+              onclick={() => step(1)}
+              disabled={changeRows.length === 0}
+              title="Next change"><Icon name="chevronDown" size={14} /></button
+            >
+          </div>
+        {:else if diff.mode === 'inline'}
+          <div class="steps">
+            <button onclick={() => stepInline(-1)} disabled={!anyChange} title="Previous change"
+              ><Icon name="chevronUp" size={14} /></button
+            >
+            <button onclick={() => stepInline(1)} disabled={!anyChange} title="Next change"
+              ><Icon name="chevronDown" size={14} /></button
+            >
+          </div>
+        {/if}
+
+        <!-- A reformatting commit rewrites a file without changing what it says. -->
+        <button
+          class="ws"
+          class:on={diff.ignoreWhitespace}
+          onclick={() => diff.setIgnoreWhitespace(!diff.ignoreWhitespace)}
+          title={diff.ignoreWhitespace ? 'Counting whitespace again' : 'Ignore whitespace'}
+          aria-pressed={diff.ignoreWhitespace}
+        ><Icon name="pilcrow" size={14} /></button>
+      {/if}
+    </div>
     <Close label="Close the file (Esc)" onclick={onClose} />
   </header>
 
@@ -1177,13 +1179,18 @@
   /*
    * One line while it fits, and a second rather than a cut when it does not: zoomed in, or in a
    * narrow pane between the two panels, the controls ran off the end of the header and took the
-   * × that closes the file with them.
+   * × that closes the file with them. The × stays out of the wrapping, at the top right where a
+   * close control is looked for.
    */
   header {
-    display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2);
+    display: flex; align-items: flex-start; gap: var(--space-2);
     min-height: 36px; padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
     flex: 0 0 auto; box-sizing: border-box;
     border-bottom: 1px solid var(--border); background: var(--bg-1);
+  }
+  .bar {
+    flex: 1; min-width: 0; min-height: 26px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2);
   }
   /*
    * Every text surface in the header paints its own background, as everywhere else in the
