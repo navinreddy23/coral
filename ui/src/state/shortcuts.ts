@@ -8,7 +8,7 @@
  * list that silently omits the rest.
  */
 
-export type Context = 'global' | 'message';
+export type Context = 'global' | 'message' | 'anywhere';
 
 export interface Binding {
   id: string;
@@ -16,7 +16,10 @@ export interface Binding {
   /** How the sheet writes it, for the help overlay. */
   keys: string;
   group: 'Repo actions' | 'Navigation' | 'Command palette' | 'UI';
-  /** Where it applies. `message` bindings fire only inside the commit message box. */
+  /**
+   * Where it applies. `message` bindings fire only inside the commit message box, `anywhere`
+   * ones in a text field as well, for a key no field types with.
+   */
   context: Context;
   match: (e: KeyEvent) => boolean;
 }
@@ -121,6 +124,13 @@ export const BINDINGS: Binding[] = [
   { id: 'files.focus', label: "Go into the selected commit's files", keys: 'Enter or →',
     group: 'Navigation', context: 'global',
     match: (e) => plain(e) && (e.key === 'Enter' || e.key === 'ArrowRight') },
+  // The key every desktop moves between panes with. Anywhere, because the terminal is one of the
+  // panes and takes Tab for its shell.
+  { id: 'pane.next', label: 'Next pane', keys: 'F6', group: 'Navigation', context: 'anywhere',
+    match: (e) => plain(e) && e.key === 'F6' },
+  { id: 'pane.previous', label: 'Previous pane', keys: 'Shift F6', group: 'Navigation',
+    context: 'anywhere',
+    match: (e) => e.shift && !e.ctrl && !e.meta && !e.alt && e.key === 'F6' },
   { id: 'view.close', label: 'Close the file and go back to the graph', keys: 'Esc',
     group: 'Navigation', context: 'global', match: (e) => plain(e) && e.key === 'Escape' },
   { id: 'undo', label: 'Undo', keys: 'Ctrl Z', group: 'Navigation',
@@ -198,7 +208,7 @@ const FIELD_OWNS = new Set(['undo', 'redo', 'select.first', 'select.last']);
  */
 export function resolve(e: KeyEvent, context: Context): Binding | null {
   return (
-    BINDINGS.find((b) => b.context === context && b.match(e)) ??
+    BINDINGS.find((b) => (b.context === context || b.context === 'anywhere') && b.match(e)) ??
     (context === 'global'
       ? null
       : BINDINGS.find(

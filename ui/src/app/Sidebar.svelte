@@ -435,7 +435,7 @@
   </li>
 {/snippet}
 
-<aside bind:this={panel} {@attach rows}>
+<aside bind:this={panel} data-panel="refs" {@attach rows}>
   <!--
     Solo is a mode, and a mode the graph does not otherwise announce: the window would simply
     be missing most of its commits, with nothing anywhere saying why or how to get them back.

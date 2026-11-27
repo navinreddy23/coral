@@ -2221,6 +2221,20 @@ describe('moving down the list with the keyboard', () => {
       expect(document.activeElement?.getAttribute('data-path')).toBe('one.txt');
     });
 
+    it('moves between the panes on F6, and back to the graph', async () => {
+      const { container } = await shell(twoFiles);
+      const rows = [...container.querySelectorAll('li.row')];
+      await fireEvent.click(rows[0]?.querySelector('button.hit') as HTMLButtonElement);
+      await waitFor(() => {
+        if (!container.querySelector('[data-panel="files"] button.file')) throw new Error('no files');
+      });
+      (document.activeElement as HTMLElement | null)?.blur();
+      await fireEvent.keyDown(document.body, { key: 'F6' });
+      expect(document.activeElement?.closest('[data-panel]')?.getAttribute('data-panel')).toBe('files');
+      await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'F6', shiftKey: true });
+      expect(document.activeElement).toBe(document.body);
+    });
+
     it('leaves Enter on a focused control to the control', async () => {
       const { container } = await shell(twoFiles);
       const rows = [...container.querySelectorAll('li.row')];

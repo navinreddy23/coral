@@ -180,6 +180,7 @@
   import { AutoFetchState } from '../state/autofetch.svelte';
   import { isTextTarget, keyEventOf, resolve, tabJump } from '../state/shortcuts';
   import { land, placeOf } from './rows';
+  import { cycleRegion } from './region';
   import Shortcuts from './Shortcuts.svelte';
   import TabBar from './TabBar.svelte';
   import Toolbar from './Toolbar.svelte';
@@ -267,7 +268,7 @@
   /** Which shortcuts actually do something today; the help overlay dims the rest. */
   const LIVE = new Set([
     'select.next', 'select.previous', 'select.first', 'select.last', 'select.menu',
-    'files.focus', 'view.close',
+    'files.focus', 'view.close', 'pane.next', 'pane.previous',
     'stage.all', 'unstage.all', 'tab.new', 'tab.close', 'tab.next', 'tab.previous',
     'palette', 'repo.open', 'terminal', 'search.commits', 'search.code',
     'panel.left', 'panel.detail', 'help', 'undo', 'redo',
@@ -360,6 +361,8 @@
       case 'select.menu': openSelectedMenu(); break;
       case 'files.focus': enterFiles(); break;
       case 'view.close': closeView(); break;
+      case 'pane.next': cycleRegion(1); break;
+      case 'pane.previous': cycleRegion(-1); break;
       case 'stage.all': void worktree.stage(worktree.unstaged.map((f) => f.path), true); break;
       case 'unstage.all': void worktree.stage(worktree.staged.map((f) => f.path), false); break;
       case 'tab.new': void openAnother(); break;

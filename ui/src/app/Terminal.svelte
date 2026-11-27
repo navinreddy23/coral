@@ -112,6 +112,9 @@
     // rather than doing nothing.
     term.loadAddon(new WebLinksAddon((_, uri) => void openInBrowser(uri)));
     term.open(host);
+    // F6 leaves the pane for the next one, the only way out that is not closing it: the shell
+    // has Tab. Declined here, xterm lets the key reach the window instead of the shell.
+    term.attachCustomKeyEventHandler((event) => event.key !== 'F6');
     fit.fit();
 
     void begin();
@@ -231,7 +234,7 @@
   }
 </script>
 
-<section class="terminal">
+<section class="terminal" data-panel="terminal">
   <header>
     <span class="title">Terminal</span>
     <span class="shell mono">{shell}</span>
