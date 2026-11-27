@@ -57,6 +57,19 @@ function state(files: ConflictedFile[], swapped = false) {
 const noop = () => {};
 
 describe("the merge tool", () => {
+  it("walks its conflicted files with the arrows, opening each, not the graph behind it", async () => {
+    const merge = state([conflicted({ path: "a.txt" }), conflicted({ path: "b.txt" })]);
+    const open = vi.spyOn(merge, "open").mockResolvedValue();
+    const { container } = render(MergeTool, { props: { merge, onDone: noop } });
+    const files = [...container.querySelectorAll<HTMLButtonElement>("ul.files button.file")];
+    (files[0] as HTMLButtonElement).focus();
+    const down = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true });
+    files[0]?.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(files[1]);
+    expect(open).toHaveBeenCalledWith("b.txt");
+  });
+
   it("marks a file rerere resolved and keeps that answer rather than a side", async () => {
     const merge = state([conflicted({ recorded: true })]);
     const take = vi.spyOn(merge, "take").mockResolvedValue(true);

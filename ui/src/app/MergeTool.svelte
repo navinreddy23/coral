@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { rows } from './rows';
   import { elidePath } from './path';
   import CodeSheet from './CodeSheet.svelte';
   import Icon from './Icon.svelte';
@@ -291,7 +292,7 @@
   {/if}
 
   <div class="body">
-    <ul class="files">
+    <ul class="files" {@attach rows}>
       {#each merge.files as file (file.path)}
         {@const blockwise = supportsBlocks(file)}
         {@const has = sidesOf(file)}
@@ -302,6 +303,7 @@
           <button
             class="file"
             class:on={file.path === merge.active}
+            data-row="show"
             title={file.path}
             onclick={() => merge.open(file.path)}
           >
