@@ -2,6 +2,7 @@
   import ImageDiff, { isImage } from './ImageDiff.svelte';
   import Icon from './Icon.svelte';
   import Close from './Close.svelte';
+  import { rows } from './rows';
   import { firstChangedRow, marksOf, onScreen, splitRows, windowAround } from '../diff/split';
   import { gapsOf, type Gap } from '../diff/gap';
   import { wordMarks } from '../diff/word';
@@ -147,6 +148,25 @@
 
   /** Height of one row, matching `--diff-row` in the stylesheet below. */
   const ROW = 17;
+
+  /** The keys a reader scrolls with, which the browser already does for a focused scroller. */
+  const READING_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End', ' ']);
+
+  /**
+   * Keeps the reading keys in the file once it has the focus.
+   *
+   * The window walks the commits on the same keys, and a file opened from a commit closes when
+   * the selection leaves it, so ↓ pressed to read further down closed the file instead.
+   */
+  function readingKey(event: KeyboardEvent) {
+    if (event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.key === 'j' || event.key === 'k') {
+      scroller?.scrollBy({ top: event.key === 'j' ? ROW : -ROW });
+    } else if (!READING_KEYS.has(event.key)) {
+      return;
+    }
+    event.stopPropagation();
+  }
   /** Rows kept either side of the viewport, so a fast scroll does not show a gap. */
   const OVERSCAN = 12;
 
@@ -847,7 +867,7 @@
       The commits that touched this file, newest first. Selecting one shows what it did to
       the file, which is the question a file history is opened to answer.
     -->
-    <ul class="history">
+    <ul class="history" {@attach rows}>
       {#if diff.lines !== null}
         <li class="scope">
           <span>History of {linesLabel(diff.lines.from, diff.lines.to)}</span>
@@ -861,6 +881,7 @@
           <button
             class="entry"
             class:on={diff.atCommit === commit.oid}
+            data-row="show"
             onclick={() => void diff.showCommit(commit.oid)}
           >
             <span class="who" title={commit.author.name}>{initialsOf(commit.author.name) ?? '?'}</span>
@@ -890,7 +911,22 @@
     </ul>
   {/if}
 
-  <div class="scroll" bind:this={scroller} onscroll={onScroll} bind:clientHeight={viewport}>
+  <!--
+    Focusable, so a click in the file gives the keys to it: ↑, ↓, Page Up and Down, Home and End
+    scroll it, and j and k step a line, rather than walking the commits behind it.
+  -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div
+    class="scroll"
+    role="region"
+    aria-label="The file"
+    tabindex="0"
+    bind:this={scroller}
+    onscroll={onScroll}
+    onkeydown={readingKey}
+    bind:clientHeight={viewport}
+  >
     {#if diff.view === 'blame'}
       {#if diff.sideError}
         <p class="error">{diff.sideError}</p>

@@ -56,6 +56,23 @@ function mounted(mode: 'inline' | 'split') {
 }
 
 describe('the diff viewer', () => {
+  it('keeps the reading keys in the diff once it has the focus', async () => {
+    // The window walks the commits on the same keys, and a diff opened from a commit closes
+    // when the selection leaves it: ↓ pressed to read further down closed the file instead.
+    const { container } = mounted('inline');
+    const scroll = container.querySelector('.scroll') as HTMLElement;
+    expect(scroll.tabIndex).toBe(0);
+    const heard = vi.fn();
+    window.addEventListener('keydown', heard);
+    for (const key of ['ArrowDown', 'ArrowUp', 'PageDown', 'Home', 'End', 'j', 'k']) {
+      await fireEvent.keyDown(scroll, { key });
+    }
+    // Escape still reaches the window, which is what closes the file.
+    await fireEvent.keyDown(scroll, { key: 'Escape' });
+    window.removeEventListener('keydown', heard);
+    expect(heard.mock.calls.map((c) => (c[0] as KeyboardEvent).key)).toEqual(['Escape']);
+  });
+
   it('shows one row per line inline, with both numberings', () => {
     const { container } = mounted('inline');
     const rows = [...container.querySelectorAll('tbody tr')].filter(
