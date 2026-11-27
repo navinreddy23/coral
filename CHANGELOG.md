@@ -1,5 +1,50 @@
 # Changelog
 
+## 1.8.0
+
+### Changed
+
+- **The arrow keys walk the list that has the focus.** A file clicked in a commit's list, in the
+  working copy's lists, in the merge tool or in a file's history, or a branch clicked in the
+  branch list, takes the arrows: ↑ and ↓ (and j, k, Home and End) move between its rows and open
+  the file or show the branch they land on, and → and ← open, shut and step through folders. The
+  arrows used to move the selected commit in the graph whatever had been clicked. The row the
+  keys are on is outlined, and the graph's selected commit drops its tint while a list has them.
+- **Escape closes an open file and gives the keys back to the graph**, and closes a code search
+  or a new tab's start page the same way. Whatever is open over the window — a menu, the
+  palette, Preferences, a sheet — still takes Escape first.
+- **Enter or → on the graph goes into the selected commit's files**, opening the first, so a
+  commit, its files and their diffs can be read without the pointer.
+- **S and U move on down the list.** On a working-copy file they stage or unstage it and land on
+  the next file, so a list can be staged file by file; on a folder they act on everything in it.
+- **F6 and Shift+F6 move between the panes** — the branch list, the graph or the open file, the
+  files, the terminal — which is also the way out of the terminal, whose shell takes Tab.
+- **Every close control is the same red ×.** There were twenty-one, at five sizes, most in the
+  grey of the buttons beside them. The one that closes a file, a sheet, the terminal, a search or
+  the current tab is red at rest; one repeated down a list is grey until pointed at. Each says
+  what it closes, and where Escape does it too.
+- **A click in an open file gives it the keys**: the arrows, Page Up and Down, Home and End
+  scroll it and j and k step a line. ↓ pressed there used to walk the commits and close the file.
+
+### Fixed
+
+- **A dialog takes the focus when it opens and keeps Tab inside.** The focus stayed on the button
+  behind it, Tab walked the toolbar under the scrim, and on a question with no default answer
+  Enter pressed that button.
+- **Closing the palette, Preferences or a sheet hands the focus back** to where it was, rather
+  than to the page, where the next arrow moved the graph hidden under an open file.
+- **Tab reaches every control.** Stage and unstage beside a file, the eye and menu beside a
+  branch, and the × of an inactive tab showed only under the pointer and could not be reached
+  from the keyboard. The focus ring shows on the selected file, the checked-out branch and the
+  working copy's row, where a shadow of their own had hidden it.
+- **The header over an open file wraps** rather than cutting off its × when zoomed in or narrow.
+- **A commit's open file has its name on the row's tint**, not in a white box.
+- **The open file carries a bar in every list**, so it is not told from a hovered row by hue alone.
+- **From an accessibility audit of every surface**: accent words on the accent tint read at 4.2:1
+  in the light theme and now 5.4:1; the pull and push menu buttons and the copy buttons beside a
+  commit's id are 24-pixel targets; the terminal lifts a colour a program asks for when it would
+  be unreadable on its ground; the diff is no longer announced as a table cell by cell.
+
 ## 1.7.0
 
 ### Changed
