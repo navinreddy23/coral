@@ -1349,7 +1349,12 @@
    * wait to see whether one of them took the key: it asks the page what is open instead.
    */
   function covered(): boolean {
-    return showStart || document.querySelector('[role="dialog"], [role="menu"]') !== null;
+    return showStart || overlaid();
+  }
+
+  /** Whether a menu or a dialog is open. */
+  function overlaid(): boolean {
+    return document.querySelector('[role="dialog"], [role="menu"]') !== null;
   }
 
   /**
@@ -1362,14 +1367,19 @@
       showStart &&
       tabs.session.tabs.length > 0 &&
       !isTextTarget(event.target) &&
-      document.querySelector('[role="dialog"], [role="menu"]') === null
+      !overlaid()
     );
   }
 
-  /** Whether a key the window binds is the window's to answer where it was pressed. */
+  /**
+   * Whether a key the window binds is the window's to answer where it was pressed. The keys
+   * that move the focus or close a view are left alone while something covers the window,
+   * which holds the focus itself.
+   */
   function applies(id: string, target: EventTarget | null): boolean {
-    if (id === 'files.focus') return onGraph(target);
+    if (id === 'files.focus') return onGraph(target) && !covered();
     if (id === 'view.close') return (diff.path !== null || grep.at !== null) && !covered();
+    if (id === 'pane.next' || id === 'pane.previous') return !covered();
     return true;
   }
 

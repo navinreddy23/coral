@@ -2235,6 +2235,20 @@ describe('moving down the list with the keyboard', () => {
       expect(document.activeElement).toBe(document.body);
     });
 
+    it('leaves F6 to a dialog that is open, so the focus stays in it', async () => {
+      const { container } = await shell(twoFiles);
+      const rows = [...container.querySelectorAll('li.row')];
+      await fireEvent.click(rows[0]?.querySelector('button.hit') as HTMLButtonElement);
+      await fireEvent.keyDown(window, { key: '/', ctrlKey: true });
+      const sheet = await waitFor(() => {
+        const found = document.querySelector<HTMLElement>('[role="dialog"]');
+        if (!found) throw new Error('no help sheet yet');
+        return found;
+      });
+      await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'F6' });
+      expect(sheet.contains(document.activeElement)).toBe(true);
+    });
+
     it('leaves Enter on a focused control to the control', async () => {
       const { container } = await shell(twoFiles);
       const rows = [...container.querySelectorAll('li.row')];
