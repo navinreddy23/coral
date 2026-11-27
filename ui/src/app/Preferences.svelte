@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { handBackFocus } from './handback.svelte';
   import { t } from '../state/locale.svelte';
   import Icon from './Icon.svelte';
   import type { AvatarState } from '../state/avatars.svelte';
@@ -137,6 +138,8 @@
       event.preventDefault();
     }
   }
+
+  handBackFocus();
 </script>
 
 <svelte:window onkeydown={key} />

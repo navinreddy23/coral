@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { handBackFocus } from './handback.svelte';
   import { rankCommand } from './palette';
 
   /** One thing the palette can run. */
@@ -60,6 +61,8 @@
     else return;
     event.preventDefault();
   }
+
+  handBackFocus();
 </script>
 
 <div class="scrim" role="presentation" onclick={onClose}>

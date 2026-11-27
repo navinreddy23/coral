@@ -1,9 +1,12 @@
 <script lang="ts">
+  import { handBackFocus } from './handback.svelte';
   import { BINDINGS } from '../state/shortcuts';
 
   const { live, onClose }: { live: Set<string>; onClose: () => void } = $props();
 
   const groups = ['Repo actions', 'Navigation', 'Command palette', 'UI'] as const;
+
+  handBackFocus();
 </script>
 
 <!--

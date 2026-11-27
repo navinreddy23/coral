@@ -9,6 +9,7 @@
 </script>
 
 <script lang="ts">
+  import { handBackFocus } from './handback.svelte';
   import Close from './Close.svelte';
   import { baseName, submodulePath } from './path';
   import type { SshKey } from '../ipc/types';
@@ -67,6 +68,8 @@
   function onKey(event: KeyboardEvent) {
     if (event.key === 'Escape') onClose();
   }
+
+  handBackFocus();
 </script>
 
 <svelte:window onkeydown={onKey} />

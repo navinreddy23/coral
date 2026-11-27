@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { handBackFocus } from './handback.svelte';
   import Icon from './Icon.svelte';
   import { coneOf, coveredBy, holds } from './cone';
   import { repoFolders } from '../ipc/commands';
@@ -73,6 +74,8 @@
       event.preventDefault();
     }
   }
+
+  handBackFocus();
 </script>
 
 <svelte:window onkeydown={key} />

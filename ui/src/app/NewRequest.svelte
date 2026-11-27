@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { handBackFocus } from './handback.svelte';
   import { hostingCreate, type PullRequest } from '../ipc/commands';
   import { messageOf } from '../ipc/error';
 
@@ -68,6 +69,8 @@
       event.preventDefault();
     }
   }
+
+  handBackFocus();
 </script>
 
 <svelte:window onkeydown={key} />

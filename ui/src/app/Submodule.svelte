@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { handBackFocus } from './handback.svelte';
   import Icon from './Icon.svelte';
   import Close from './Close.svelte';
   import { baseName } from './path';
@@ -82,6 +83,8 @@
   function onKey(event: KeyboardEvent) {
     if (event.key === 'Escape') onClose();
   }
+
+  handBackFocus();
 </script>
 
 <svelte:window onkeydown={onKey} />

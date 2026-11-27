@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { handBackFocus } from './handback.svelte';
   import Icon from './Icon.svelte';
   import Close from './Close.svelte';
   import { shortAge } from './age';
@@ -27,6 +28,8 @@
     const repeated = `: ${entry.summary}`;
     return entry.action.endsWith(repeated) ? entry.action.slice(0, -repeated.length) : entry.action;
   }
+
+  handBackFocus();
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />

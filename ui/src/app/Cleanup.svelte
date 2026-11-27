@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { handBackFocus } from './handback.svelte';
   /**
    * Choosing which old branches to delete, all at once.
    *
@@ -38,6 +39,8 @@
       event.preventDefault();
     }
   }
+
+  handBackFocus();
 </script>
 
 <svelte:window onkeydown={key} />

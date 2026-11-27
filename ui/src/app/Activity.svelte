@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { handBackFocus } from './handback.svelte';
   import Close from './Close.svelte';
   import type { ActivityState, Channel } from '../state/activity.svelte';
   import type { ActivityEntry } from '../ipc/activity';
@@ -32,6 +33,8 @@
     if (entry.millis === null || entry.millis < 100) return '';
     return entry.millis < 1000 ? `${entry.millis}ms` : `${(entry.millis / 1000).toFixed(1)}s`;
   }
+
+  handBackFocus();
 </script>
 
 <!-- Escape closes it, as it closes every other panel that covers the window: a reader who has

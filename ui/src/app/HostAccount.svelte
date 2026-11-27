@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { handBackFocus } from './handback.svelte';
   /**
    * Signing in to the host behind the repository's remote, as the profile at the window.
    *
@@ -70,6 +71,8 @@
     onClose();
     event.preventDefault();
   }
+
+  handBackFocus();
 </script>
 
 <svelte:window onkeydown={key} />

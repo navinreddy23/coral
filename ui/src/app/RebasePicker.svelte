@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { handBackFocus } from './handback.svelte';
   /**
    * A revision as a heading should read it: an object id cut to eight characters, a name left
    * whole. `d38081e90dcfd1183977998a03aed3fe8e324949~1` is not a heading.
@@ -31,6 +32,8 @@
   async function run() {
     if (await rebase.start()) onDone();
   }
+
+  handBackFocus();
 </script>
 
 <div class="scrim" role="presentation" onclick={() => rebase.close()}>

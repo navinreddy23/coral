@@ -70,6 +70,19 @@ describe('the command palette', () => {
     expect(ran).toEqual(['pull']);
   });
 
+  it('hands the focus back to where it was when it closes', async () => {
+    // Closed, it left the focus on the page, and the next arrow walked the graph hidden under
+    // the file the keys had been on.
+    const row = document.createElement('button');
+    document.body.append(row);
+    row.focus();
+    const view = render(Palette, { props: { commands: commands([]), onClose: () => {} } });
+    expect(document.activeElement).not.toBe(row);
+    view.unmount();
+    expect(document.activeElement).toBe(row);
+    row.remove();
+  });
+
   it('closes on Escape without running anything', async () => {
     const ran: string[] = [];
     let closed = false;

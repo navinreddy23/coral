@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { handBackFocus } from './handback.svelte';
   import { shortAge } from './age';
   import type { PullRequest, Reply } from '../ipc/commands';
   import type { ReviewState } from '../state/review.svelte';
@@ -34,6 +35,8 @@
       event.preventDefault();
     }
   }
+
+  handBackFocus();
 </script>
 
 <svelte:window onkeydown={key} />

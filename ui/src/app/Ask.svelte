@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { handBackFocus } from './handback.svelte';
   /**
    * One question, asked in the window rather than by the platform.
    *
@@ -98,6 +99,8 @@
     } else return;
     event.preventDefault();
   }
+
+  handBackFocus();
 </script>
 
 <svelte:window onkeydown={key} />
