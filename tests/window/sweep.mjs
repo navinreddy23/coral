@@ -67,6 +67,27 @@ const STOPS = [
       await b.click('aside ul.files button', 0);
     },
   },
+  {
+    // A commit's files with the keys on them: the row the arrow reached outlined, the file it
+    // opened beside it, and the red × that closes it. Dispatched on the focused row, since the
+    // list takes its own keys before the window hears them.
+    name: 'files-keyed',
+    at: APP,
+    go: async (b) => {
+      await b.click('li.row', 3);
+      await b.click('aside ul.files button', 0);
+      await b.eval(`(() => {
+        document.activeElement?.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
+        );
+        return true;
+      })()`);
+      await pause(400);
+      const on = await b.eval("document.activeElement?.getAttribute('data-path') ?? ''");
+      const open = await b.eval("document.querySelector('aside ul.files button.open')?.getAttribute('data-path') ?? ''");
+      if (on === '' || on !== open) throw new Error(`the keys are on "${on}" and the open file is "${open}"`);
+    },
+  },
   { name: 'find', at: APP, go: (b) => b.hotkey('f', { ctrl: true }) },
   { name: 'palette', at: APP, go: (b) => b.hotkey('p', { ctrl: true }) },
   { name: 'shortcuts', at: APP, go: (b) => b.hotkey('/', { ctrl: true }) },
