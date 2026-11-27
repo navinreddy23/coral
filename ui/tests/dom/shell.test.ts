@@ -2088,6 +2088,151 @@ describe('moving down the list with the keyboard', () => {
       if (container.querySelector('section.diff')) throw new Error('the panel is still up');
     });
   });
+  describe('the keys in a commit\'s files', () => {
+    /** A window whose every commit changed two files, with a small diff for each. */
+    const twoFiles = {
+      commit_detail: (args: { rev: string }) => ({
+        commit: {
+          oid: args.rev,
+          parents: [],
+          author: { name: 'Ada', email: 'ada@example.com', time: 0, offset: 0 },
+          committer: { name: 'Ada', email: 'ada@example.com', time: 0, offset: 0 },
+          summary: 'core: the summary',
+          body: '',
+        },
+        files: [
+          { path: 'one.txt', oldPath: null, change: 'modified' },
+          { path: 'two.txt', oldPath: null, change: 'modified' },
+        ],
+      }),
+      file_diff: (args: { path: string }) => ({
+        path: args.path,
+        oldPath: null,
+        change: 'modified',
+        binary: false,
+        added: 1,
+        removed: 0,
+        tooLarge: false,
+        hunks: [],
+      }),
+    };
+
+    /** Selects the first commit and opens its first file, as a click would. */
+    async function openFirstFile(container: HTMLElement) {
+      const rows = [...container.querySelectorAll('li.row')];
+      await fireEvent.click(rows[0]?.querySelector('button.hit') as HTMLButtonElement);
+      const file = await waitFor(() => {
+        const found = container.querySelector<HTMLButtonElement>('[data-panel="files"] button.file');
+        if (!found) throw new Error('no file list yet');
+        return found;
+      });
+      await fireEvent.click(file);
+      await waitFor(() => {
+        if (!container.querySelector('section.diff')) throw new Error('no file panel yet');
+      });
+      return file;
+    }
+
+    const selectedIndex = (container: HTMLElement) =>
+      [...container.querySelectorAll('li.row')].findIndex((r) => r.classList.contains('selected'));
+    const openName = (container: HTMLElement) =>
+      container.querySelector('[data-panel="files"] button.file.open')?.getAttribute('data-path');
+
+    it('walks the files with the arrows and leaves the commit where it is', async () => {
+      // The arrows went to the graph whatever had the focus, so the next file was reached by
+      // moving to the next commit, which closed the file and showed another commit's list.
+      const { container } = await shell(twoFiles);
+      const file = await openFirstFile(container);
+      const selected = selectedIndex(container);
+      expect(document.activeElement).toBe(file);
+
+      await fireEvent.keyDown(file, { key: 'ArrowDown' });
+      await waitFor(() => {
+        if (openName(container) !== 'two.txt') throw new Error('the second file is not open');
+      });
+      expect(selectedIndex(container)).toBe(selected);
+      expect(container.querySelector('section.diff')).not.toBeNull();
+
+      await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'k' });
+      await waitFor(() => {
+        if (openName(container) !== 'one.txt') throw new Error('the first file is not open again');
+      });
+      expect(selectedIndex(container)).toBe(selected);
+    });
+
+  });
+
+  describe('the keys in the working copy\'s files', () => {
+    /** Three files changed and one staged, with staging done the way git would do it. */
+    function workingCopy() {
+      const entry = (path: string, staged: boolean) => ({
+        path,
+        origPath: null,
+        index: staged ? 'modified' : 'unmodified',
+        worktree: staged ? 'unmodified' : 'modified',
+        conflict: null,
+        score: null,
+        submodule: false,
+        modeChanged: false,
+      });
+      let entries = [entry('a.txt', false), entry('b.txt', false), entry('c.txt', false), entry('d.txt', true)];
+      const status = () => ({ entries, conflicted: [] });
+      return {
+        repo_status: () => status(),
+        stage_paths: (args: { paths: string[]; stage: boolean }) => {
+          entries = entries.map((e) => (args.paths.includes(e.path) ? entry(e.path, args.stage) : e));
+          return status();
+        },
+        worktree_diff: (args: { file: string }) => ({
+          path: args.file,
+          oldPath: null,
+          change: 'modified',
+          binary: false,
+          added: 1,
+          removed: 0,
+          tooLarge: false,
+          hunks: [],
+        }),
+      };
+    }
+
+    async function openWorkingFile(container: HTMLElement, path: string) {
+      await waitFor(() => {
+        if (!container.querySelector('button.row.wip')) throw new Error('no working copy row yet');
+      });
+      await fireEvent.click(container.querySelector('button.row.wip') as HTMLButtonElement);
+      const file = await waitFor(() => {
+        const found = container.querySelector<HTMLButtonElement>(`[data-panel="files"] [data-path="${path}"]`);
+        if (!found) throw new Error('no staging panel yet');
+        return found;
+      });
+      await fireEvent.click(file);
+      await waitFor(() => {
+        if (!container.querySelector('section.diff')) throw new Error('no file panel yet');
+      });
+      return file;
+    }
+
+    const focusedPath = () => document.activeElement?.getAttribute('data-path');
+    const openIn = (container: HTMLElement, side: string) =>
+      container.querySelector(`[data-list="${side}"] button.file.open`)?.getAttribute('data-path');
+
+    it('walks down the changed files and on into the staged ones', async () => {
+      const { container } = await shell(workingCopy());
+      await openWorkingFile(container, 'b.txt');
+      await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowDown' });
+      await waitFor(() => {
+        if (openIn(container, 'unstaged') !== 'c.txt') throw new Error('c.txt is not open');
+      });
+      await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowDown' });
+      await waitFor(() => {
+        if (openIn(container, 'staged') !== 'd.txt') throw new Error('d.txt is not open');
+      });
+      expect(focusedPath()).toBe('d.txt');
+    });
+
+  });
+
   it('stashes one file from its menu, and the staged changes when there are some', async () => {
     const { container } = await shell({
       repo_status: {

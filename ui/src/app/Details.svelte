@@ -6,6 +6,7 @@
   import LockMark from './LockMark.svelte';
   import Splitter from './Splitter.svelte';
   import { copyText } from './clipboard';
+  import { rows } from './rows';
   import { forgeOf } from './forge';
   import { authorColourIndex, initialsOf } from '../graph/initials';
   import { buildTree } from '../diff/tree';
@@ -312,7 +313,7 @@
   });
 </script>
 
-<aside bind:clientHeight={asidePx}>
+<aside bind:clientHeight={asidePx} data-panel="files">
   <div
     class="head"
     class:shared={sharing}
@@ -589,7 +590,7 @@
         View all files
       </label>
     </div>
-    <div class="scroll" id="detail-files">
+    <div class="scroll" id="detail-files" {@attach rows}>
     {#if showAll}
       {#if loadingAll}
         <p class="muted">Reading the tree…</p>
@@ -610,6 +611,8 @@
           <button
             class="file"
             class:open={file.path === openPath}
+            data-row="show"
+            data-path={file.path}
             onclick={() => onOpenFile(file.path)}
             oncontextmenu={(event) => onFileMenu?.(event, file.path)}
             title={file.oldPath ? `${file.path}\nfrom ${file.oldPath}` : file.path}

@@ -103,6 +103,9 @@
         <div class="row">
           <button
             class="dir"
+            data-row="dir"
+            data-depth={depth}
+            aria-expanded={!closed[node.path]}
             style:padding-left="{depth * 12 + 4}px"
             onclick={() => onToggleDir(node.path)}
           >
@@ -139,6 +142,9 @@
           <button
             class="file"
             class:open={node.path === openPath}
+            data-row="show"
+            data-depth={depth}
+            data-path={node.path}
             style:padding-left="{depth * 12 + 4}px"
             onclick={() => onOpen(node.path)}
             title={node.item.origPath ? `${node.path}\nfrom ${node.item.origPath}` : node.path}

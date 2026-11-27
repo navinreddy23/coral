@@ -55,6 +55,15 @@ code, .mono { font-family: var(--font-mono); font-variant-ligatures: none; }
 }
 
 /*
+ * A row the arrow keys walk (app/rows.ts) is marked whenever it has the focus, not only when
+ * the web view judges the focus visible: WebKitGTK never does after a scripted focus, and the
+ * arrows move the focus by script. An outline, so it sits over the tint or bar the row's own
+ * state draws rather than replacing it, and is the one mark saying where the keys are.
+ */
+[data-row]:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+[data-row]:focus-visible { box-shadow: none; }
+
+/*
  * Checkboxes drawn from the tokens rather than by the web view.
  *
  * WebKitGTK paints an unticked box white whatever `color-scheme` says, so in the dark theme

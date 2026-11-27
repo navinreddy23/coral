@@ -66,6 +66,9 @@
       {#if node.kind === 'dir'}
         <button
           class="dir"
+          data-row="dir"
+          data-depth={depth}
+          aria-expanded={!shut(node.path)}
           style:padding-left="{depth * 12 + 4}px"
           onclick={() => (closed[node.path] = !shut(node.path))}
           oncontextmenu={(event) => onFolderMenu?.(event, node.path)}
@@ -90,6 +93,9 @@
         <button
           class="file"
           class:open={node.path === openPath}
+          data-row="show"
+          data-depth={depth}
+          data-path={node.path}
           style:padding-left="{depth * 12 + 4}px"
           onclick={() => onOpenFile(node.path)}
           oncontextmenu={(event) => onFileMenu?.(event, node.path)}

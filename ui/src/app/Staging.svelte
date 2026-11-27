@@ -5,6 +5,7 @@
   import Splitter from './Splitter.svelte';
   import Changes, { kindOf, markOf } from './Changes.svelte';
   import LockMark from './LockMark.svelte';
+  import { rows } from './rows';
   import Misspellings from './Misspellings.svelte';
   import type { MenuItem } from './Menu.svelte';
   import { buildTree } from '../diff/tree';
@@ -360,7 +361,7 @@
   const anyClosed = $derived(Object.values(closedUnstaged).some(Boolean));
 </script>
 
-<div class="panel" bind:clientHeight={panelPx}>
+<div class="panel" bind:clientHeight={panelPx} {@attach rows}>
   <header>
     <span class="count">
       {worktree.dirty
@@ -397,7 +398,14 @@
     <ul class="flat">
       {#each worktree.conflicted as e (e.path)}
         <li>
-          <button class="file" onclick={() => onOpenFile(e.path, false)} title={e.path}>
+          <button
+            class="file"
+            class:open={e.path === openPath}
+            data-row="show"
+            data-path={e.path}
+            onclick={() => onOpenFile(e.path, false)}
+            title={e.path}
+          >
             <span class="mark conflict">!</span>
             <span class="name">{e.path}</span>
           </button>
@@ -442,7 +450,7 @@
       {/if}
     </h3>
     {#if !closed.unstaged}
-    <div class="list" id="staging-unstaged">
+    <div class="list" id="staging-unstaged" data-list="unstaged">
     {#if worktree.unstaged.length === 0}
       <p class="empty">{t('staging.nothingUnstaged')}</p>
     {:else if grouping === 'tree'}
@@ -467,6 +475,8 @@
             <button
               class="file"
               class:open={e.path === openPath}
+              data-row="show"
+              data-path={e.path}
               onclick={() => onOpenFile(e.path, false)}
               title={e.path}
             >
@@ -529,7 +539,7 @@
       {/if}
     </h3>
     {#if !closed.staged}
-    <div class="list" id="staging-staged">
+    <div class="list" id="staging-staged" data-list="staged">
     {#if worktree.staged.length === 0}
       <p class="empty">{t('staging.nothingStaged')}</p>
     {:else if grouping === 'tree'}
@@ -554,6 +564,8 @@
             <button
               class="file"
               class:open={e.path === openPath}
+              data-row="show"
+              data-path={e.path}
               onclick={() => onOpenFile(e.path, true)}
               title={e.path}
             >

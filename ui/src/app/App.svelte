@@ -6657,7 +6657,7 @@
         onreset={() => panes.reset()}
       />
       {#if stagingShowing}
-        <aside class="wip-panel">
+        <aside class="wip-panel" data-panel="files">
           <Staging
             {worktree}
             commit={commitDraft}
@@ -7120,6 +7120,18 @@
   .wip.selected .cell.refs, .wip.selected .cell.message { background: var(--accent-soft); }
 
   .row.selected .cell.message .summary { color: var(--fg-0); font-weight: var(--weight-semibold); }
+  /*
+   * While a list beside the graph has the arrow keys, the selected commit gives up its depth, so
+   * only one row on the screen claims to be where the keys are. The bar stays: it still says
+   * which commit the list belongs to.
+   */
+  :global(body:has([data-row]:focus)) .row.selected .cell.message,
+  :global(body:has([data-row]:focus)) .row.selected .lane-strip {
+    background: var(--row-tint, var(--bg-1));
+  }
+  :global(body:has([data-row]:focus)) .wip.selected,
+  :global(body:has([data-row]:focus)) .wip.selected .cell.refs,
+  :global(body:has([data-row]:focus)) .wip.selected .cell.message { background: var(--bg-1); }
   /*
    * Every text surface paints an opaque background of its own, and this is not optional.
    *
