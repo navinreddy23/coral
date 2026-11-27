@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { codeOf, messageOf } from '../ipc/error';
   import {
     covers,
@@ -178,7 +178,7 @@
   import { UpdateState } from '../state/update.svelte';
   import { AutoFetchState } from '../state/autofetch.svelte';
   import { isTextTarget, keyEventOf, resolve, tabJump } from '../state/shortcuts';
-  import { land } from './rows';
+  import { land, placeOf } from './rows';
   import Shortcuts from './Shortcuts.svelte';
   import TabBar from './TabBar.svelte';
   import Toolbar from './Toolbar.svelte';
@@ -1227,13 +1227,6 @@
     commitDraft.focus();
   }
 
-  /**
-   * Stages or unstages the file whose diff is open.
-   *
-   * "Current file" is the one being read, which is the only file the window has a notion of.
-   * Without a diff open there is nothing to act on, and doing something to a file the user
-   * cannot see would be worse than doing nothing.
-   */
   /** Whether the repository was gone the last time the window looked. */
   let wasGone = false;
 
@@ -1252,11 +1245,34 @@
     void tabs.refresh();
   });
 
+  /**
+   * Stages or unstages the file the keys are on, or else the file whose diff is open.
+   *
+   * Without either there is nothing to act on, and doing something to a file the user cannot
+   * see would be worse than doing nothing. From a row in the list the key is for, the focus
+   * moves on to the file that takes the row's place, so S pressed down a list stages it file
+   * by file; left on the row, it went with the row and the next arrow walked the graph.
+   */
   async function stageOpenFile(stage: boolean) {
-    const path = diff.path;
-    if (!info || path === null || (diff.source !== 'staged' && diff.source !== 'unstaged')) return;
+    const focused = document.activeElement;
+    const list =
+      focused instanceof HTMLElement
+        ? focused.closest<HTMLElement>(`[data-list="${stage ? 'unstaged' : 'staged'}"]`)
+        : null;
+    const row = list === null ? null : (focused as HTMLElement).closest<HTMLElement>('[data-row="show"]');
+    const path = row?.dataset.path ?? diff.path;
+    if (!info || path === undefined || path === null) return;
+    if (row === null && diff.source !== 'staged' && diff.source !== 'unstaged') return;
+    const place = list !== null && row !== null ? placeOf(list, row) : -1;
     await worktree.stage([path], stage);
+    if (list !== null && place >= 0) {
+      await tick();
+      if (land(list, place) !== null) return;
+    }
     await reloadDiff(info.path);
+    if (place < 0) return;
+    await tick();
+    openRow()?.focus();
   }
 
   /** The row of the file open in the right panel, if it is listed there. */
@@ -7185,18 +7201,6 @@
   .wip.selected .cell.refs, .wip.selected .cell.message { background: var(--accent-soft); }
 
   .row.selected .cell.message .summary { color: var(--fg-0); font-weight: var(--weight-semibold); }
-  /*
-   * While a list beside the graph has the arrow keys, the selected commit gives up its depth, so
-   * only one row on the screen claims to be where the keys are. The bar stays: it still says
-   * which commit the list belongs to.
-   */
-  :global(body:has([data-row]:focus)) .row.selected .cell.message,
-  :global(body:has([data-row]:focus)) .row.selected .lane-strip {
-    background: var(--row-tint, var(--bg-1));
-  }
-  :global(body:has([data-row]:focus)) .wip.selected,
-  :global(body:has([data-row]:focus)) .wip.selected .cell.refs,
-  :global(body:has([data-row]:focus)) .wip.selected .cell.message { background: var(--bg-1); }
   /*
    * While a list beside the graph has the arrow keys, the selected commit gives up its depth, so
    * only one row on the screen claims to be where the keys are. The bar stays: it still says

@@ -2296,6 +2296,42 @@ describe('moving down the list with the keyboard', () => {
       expect(focusedPath()).toBe('d.txt');
     });
 
+    it('stages file after file when S is pressed down the list', async () => {
+      // The row stood on went to the other list with its file, the focus with it, and the
+      // next key walked the graph instead of the next file.
+      const { container } = await shell(workingCopy());
+      await openWorkingFile(container, 'a.txt');
+
+      await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 's' });
+      await waitFor(() => {
+        if (focusedPath() !== 'b.txt' || openIn(container, 'unstaged') !== 'b.txt') {
+          throw new Error('the focus did not move on to b.txt');
+        }
+      });
+      await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 's' });
+      await waitFor(() => {
+        if (focusedPath() !== 'c.txt') throw new Error('the focus did not move on to c.txt');
+      });
+      const staged = invoke.mock.calls
+        .filter((c) => c[0] === 'stage_paths')
+        .map((c) => (c[1] as { paths: string[] }).paths.join());
+      expect(staged).toEqual(['a.txt', 'b.txt']);
+    });
+
+    it('follows the last file over to the staged list when nothing is left to move on to', async () => {
+      const { container } = await shell(workingCopy());
+      await openWorkingFile(container, 'c.txt');
+      await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'End' });
+      // The staged list's only row: U sends it back, and the focus goes with it.
+      await waitFor(() => {
+        if (focusedPath() !== 'd.txt') throw new Error('not on d.txt');
+      });
+      await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'u' });
+      await waitFor(() => {
+        if (openIn(container, 'unstaged') !== 'd.txt') throw new Error('d.txt was not followed');
+        if (focusedPath() !== 'd.txt') throw new Error('the focus did not follow it');
+      });
+    });
   });
 
   it('stashes one file from its menu, and the staged changes when there are some', async () => {
