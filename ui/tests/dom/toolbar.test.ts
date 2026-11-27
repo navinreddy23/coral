@@ -209,7 +209,7 @@ describe('the toolbar', () => {
   it('shows the way out of a submodule on the crumb it belongs to', () => {
     const { container } = bar({ submodule: 'vendor/thing' });
     expect(container.querySelector('.step.sub .value')?.textContent).toBe('thing');
-    expect(container.querySelector('.step.sub .leave')).not.toBeNull();
+    expect(container.querySelector('.step.sub button.close')?.getAttribute('aria-label')).toMatch(/back/iu);
   });
 });
 

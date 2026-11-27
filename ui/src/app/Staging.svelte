@@ -2,6 +2,7 @@
   import { t } from '../state/locale.svelte';
   import { tick, untrack } from 'svelte';
   import Icon from './Icon.svelte';
+  import Close from './Close.svelte';
   import Splitter from './Splitter.svelte';
   import Changes, { kindOf, markOf } from './Changes.svelte';
   import LockMark from './LockMark.svelte';
@@ -689,11 +690,7 @@
       {#each draft.coAuthors as who (who)}
         <span class="chip" title={who}>
           {nameOf(who)}
-          <button
-            class="unchip"
-            aria-label={`${t('staging.removeCoAuthor')} ${who}`}
-            onclick={() => draft.removeCoAuthor(who)}
-          ><Icon name="close" size={10} /></button>
+          <Close quiet small label={`${t('staging.removeCoAuthor')} ${who}`} onclick={() => draft.removeCoAuthor(who)} />
         </span>
       {/each}
       <input
@@ -748,11 +745,6 @@
     background: var(--bg-2); color: var(--fg-0); font-size: var(--text-sm);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .unchip {
-    display: flex; padding: 2px; border: 0; background: none; cursor: pointer; color: var(--fg-2);
-    border-radius: var(--radius-1);
-  }
-  .unchip:hover { color: var(--fg-0); background: var(--bg-1); }
   .who {
     flex: 1 1 8em; min-width: 8em; font: inherit; font-size: var(--text-sm);
     padding: 2px var(--space-2); background: var(--bg-0); color: var(--fg-0);

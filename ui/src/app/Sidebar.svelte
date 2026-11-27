@@ -7,6 +7,7 @@
   import type { PlacedStash } from '../ipc/stash';
   import HostMark, { hostOf } from './HostMark.svelte';
   import Icon from './Icon.svelte';
+  import Close from './Close.svelte';
   import RefMark from './RefMark.svelte';
   import { elideRef } from './path';
   import { rows } from './rows';
@@ -475,9 +476,7 @@
       bind:value={filter}
     />
     {#if filter !== ''}
-      <button class="clear" title="Clear the filter" onclick={() => (filter = '')}>
-        <Icon name="close" size={12} />
-      </button>
+      <Close quiet small label="Clear the filter" onclick={() => (filter = '')} />
     {/if}
   </div>
 
@@ -877,11 +876,6 @@
   .filter::placeholder { color: var(--fg-2); }
   /* Appears only when there is something to clear, so the field is not carrying a control
      that would do nothing nine times out of ten. */
-  .clear {
-    flex: 0 0 auto; display: flex; padding: 2px; cursor: pointer;
-    background: var(--bg-0); border: 0; border-radius: var(--radius-1); color: var(--fg-2);
-  }
-  .clear:hover { color: var(--fg-0); background: var(--bg-2); }
 
   /* A rule between sections, as the reference panel draws them: with a label and air alone
      the end of a long list of branches and the next section's heading ran together. */

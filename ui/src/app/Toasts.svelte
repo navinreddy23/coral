@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Icon from './Icon.svelte';
+  import Close from './Close.svelte';
   import type { ToastsState } from '../state/toasts.svelte';
 
   const { toasts }: { toasts: ToastsState } = $props();
@@ -29,7 +29,7 @@
           <p class="title">{toast.title}</p>
           {#if toast.detail}<p class="detail">{toast.detail}</p>{/if}
         </div>
-        <button class="shut" onclick={() => toasts.dismiss(toast.id)} title="Dismiss"><Icon name="close" size={13} /></button>
+        <Close quiet label="Dismiss" onclick={() => toasts.dismiss(toast.id)} />
       </div>
     {/each}
     {#if toasts.items.length > 1}
@@ -85,11 +85,6 @@
     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3;
     overflow: hidden; white-space: pre-wrap; word-break: break-word;
   }
-  .shut {
-    flex: 0 0 auto; display: flex; font: inherit; line-height: 1; cursor: pointer;
-    padding: 0 var(--space-1); background: none; border: 0; color: var(--fg-2);
-  }
-  .shut:hover { color: var(--fg-0); }
   .all {
     font: inherit; font-size: var(--text-sm); cursor: pointer;
     padding: 2px var(--space-2); border-radius: var(--radius-1);

@@ -1,6 +1,7 @@
 <script lang="ts">
   import ImageDiff, { isImage } from './ImageDiff.svelte';
   import Icon from './Icon.svelte';
+  import Close from './Close.svelte';
   import { firstChangedRow, marksOf, onScreen, splitRows, windowAround } from '../diff/split';
   import { gapsOf, type Gap } from '../diff/gap';
   import { wordMarks } from '../diff/word';
@@ -837,7 +838,7 @@
         aria-pressed={diff.ignoreWhitespace}
       ><Icon name="pilcrow" size={14} /></button>
     {/if}
-    <button class="close" onclick={onClose} aria-label="Close the diff"><Icon name="close" size={15} /></button>
+    <Close label="Close the file (Esc)" onclick={onClose} />
   </header>
 
   <div class="body">
@@ -910,9 +911,7 @@
                 if (range !== null) void diff.historyOfLines(range.from, range.to);
               }}
             >History of {range.from === range.to ? 'this line' : 'these lines'}</button>
-            <button onclick={() => (range = null)} aria-label="Clear the picked lines">
-              <Icon name="close" size={12} />
-            </button>
+            <Close quiet label="Clear the picked lines" onclick={() => (range = null)} />
           {/if}
         </div>
         {@render sheet(true)}
@@ -1187,14 +1186,6 @@
     background: var(--bg-0); color: var(--fg-0); font-weight: var(--weight-semibold);
     box-shadow: var(--elevate-1);
   }
-  .close {
-    display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
-    width: 24px; height: 24px; margin-left: var(--space-1);
-    font: inherit; cursor: pointer; background: none; border: 0; color: var(--fg-2);
-    border-radius: var(--radius-1);
-    transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
-  }
-  .close:hover { color: var(--fg-0); background: var(--bg-2); }
 
   .body { flex: 1; min-height: 0; display: flex; }
 

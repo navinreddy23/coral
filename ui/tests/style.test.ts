@@ -53,6 +53,18 @@ describe('the component stylesheets', () => {
     expect(body).not.toMatch(/max-height/u);
   });
 
+  it('draws every close control with Close, so they look and read alike', () => {
+    // Twenty-one of them had been drawn by hand at five sizes, three as a typed ×, most in the
+    // grey of the buttons beside them. The title bar's is the window's own control, drawn to
+    // the desktop's convention; Preferences' carries a word as well.
+    const own = new Set(['Close.svelte', 'TitleStrip.svelte', 'Preferences.svelte']);
+    const offenders = STYLES.filter(
+      ({ name, source }) =>
+        !own.has(name) && (/<Icon name="close"/u.test(source) || />\s*×\s*<\/button>/u.test(source)),
+    ).map(({ name }) => name);
+    expect(offenders).toEqual([]);
+  });
+
   it('write no colour that is not a token', () => {
     const offenders: string[] = [];
     for (const { name, css } of STYLES) {

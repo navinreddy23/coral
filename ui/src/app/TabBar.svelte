@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
+  import Close from './Close.svelte';
   import Menu, { type MenuItem } from './Menu.svelte';
   import TabMark, { TAB_ICONS } from './TabMark.svelte';
   import { laneColour } from './lane';
@@ -367,7 +368,7 @@
       <span class="icon" style:--hue={hueOf(tab)}><TabMark kind={iconOf(tab)} /></span>
       <span class="name">{title(tab)}</span>
     </button>
-    <button class="shut" onclick={() => tabs.close(tab.id)} title="Close">×</button>
+    <span class="shut"><Close quiet={newTab || tabs.session.active !== tab.id} label="Close {title(tab)} (Ctrl W)" onclick={() => tabs.close(tab.id)} /></span>
   </div>
 {/snippet}
 
@@ -423,7 +424,7 @@
         <span class="name">New tab</span>
       </button>
       {#if tabs.session.tabs.length > 0}
-        <button class="shut" onclick={onCloseNew} title="Close">×</button>
+        <span class="shut"><Close label="Close the new tab (Ctrl W)" onclick={onCloseNew} /></span>
       {/if}
     </div>
   {/if}
@@ -486,7 +487,7 @@
               <span class="tag" style:--band={laneColour(group.colour)}>{group.name}</span>
             {/if}
           </button>
-          <button class="drop" onclick={() => tabs.close(tab.id)} title="Close">×</button>
+          <span class="drop"><Close quiet label="Close {title(tab)}" onclick={() => tabs.close(tab.id)} /></span>
         </li>
       {/each}
       {#if found.length === 0}
@@ -652,18 +653,11 @@
   /* The picture, in the colour that repository always gets. It keeps its colour on the tab
      that is not current: a strip of grey marks is no easier to read than no marks at all. */
   .icon { display: flex; flex: 0 0 auto; color: var(--hue, var(--fg-2)); }
-  /* The close button appears on the tab being pointed at, and on the active one always: a row
-     of crosses is noise, and a tab with no visible way to close it is a trap. */
-  .shut {
-    font: inherit; font-size: var(--text-md); line-height: 1; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    width: 18px; height: 18px; margin-right: var(--space-2);
-    padding: 0; border-radius: 50%;
-    background: transparent; border: 0; color: var(--fg-2);
-    visibility: hidden;
-  }
-  .tab:hover .shut, .tab.active .shut { visibility: visible; }
-  .shut:hover { color: var(--danger); background: var(--danger-soft); }
+  /* The close button appears on the tab being pointed at, on the one the keyboard is on, and
+     on the active one always: a row of crosses is noise, and a tab with no visible way to close
+     it is a trap. Faded rather than hidden, which would take it out of the tab order. */
+  .shut { display: flex; align-items: center; margin-right: var(--space-1); opacity: 0; }
+  .tab:hover .shut, .tab:focus-within .shut, .tab.active .shut { opacity: 1; }
 
   /* On the tabs' own centre line, which in a strip of this height is four pixels below the
      middle. Matches the rule the window applies to everything else beside the tabs. */
@@ -753,11 +747,7 @@
     flex: 0 0 auto; font-size: var(--text-xs); padding: 0 6px; border-radius: var(--radius-pill);
     background: var(--band); color: var(--bg-0);
   }
-  .drop {
-    flex: 0 0 auto; font: inherit; font-size: var(--text-lg); line-height: 1; cursor: pointer;
-    padding: 0 var(--space-2); background: var(--bg-2); border: 0; color: var(--fg-2);
-  }
-  .drop:hover { color: var(--danger); }
+  .drop { flex: 0 0 auto; display: flex; align-items: center; padding: 0 var(--space-1); }
   .none { padding: var(--space-3); color: var(--fg-2); font-size: var(--text-base); }
 
   /* The icon picker, hung where the menu was rather than under the tab: the menu is where the

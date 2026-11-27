@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
+  import Close from './Close.svelte';
   import { onMount } from 'svelte';
   import { FitAddon } from '@xterm/addon-fit';
   import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -255,7 +256,7 @@
     >
       <Icon name="restart" size={13} />
     </button>
-    <button class="close" onclick={onClose} aria-label="Hide the terminal"><Icon name="close" size={14} /></button>
+    <Close label="Hide the terminal" onclick={onClose} />
   </header>
 
   {#if session.error}

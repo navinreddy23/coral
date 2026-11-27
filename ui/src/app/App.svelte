@@ -150,6 +150,7 @@
   import { RefsState } from '../state/refs.svelte';
   import { ScopeState } from '../state/scope.svelte';
   import Icon from './Icon.svelte';
+  import Close from './Close.svelte';
   import Mark from './Mark.svelte';
   import Border from './Border.svelte';
   import {
@@ -6511,9 +6512,7 @@
               Stop
             </button>
           {/if}
-          <button onclick={() => find.close()} title="Close the search">
-            <Icon name="close" size={13} />
-          </button>
+          <Close label="Close the search (Esc)" onclick={() => find.close()} />
           {#if find.error !== null}
             <p class="problem" role="alert">{find.error}</p>
           {/if}

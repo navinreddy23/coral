@@ -64,6 +64,15 @@ describe.each(THEMES)('the %s palette', (theme) => {
     }
   });
 
+  it('keeps a close control legible at rest, pointed at and pressed', () => {
+    // Red at rest on the panes and on bg-2 under a pointer that has just left a neighbour;
+    // red on its own tint when pointed at; the page colour on a red fill when pressed.
+    for (const ground of ['bg-0', 'bg-1', 'bg-2', 'danger-soft']) {
+      expect(on('danger', ground), `danger on ${ground}`).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(on('bg-0', 'danger')).toBeGreaterThanOrEqual(4.5);
+  });
+
   it('keeps text on a state tint readable', () => {
     for (const state of ['danger', 'ok', 'warn', 'brand']) {
       expect(on('fg-0', `${state}-soft`), `fg-0 on ${state}-soft`).toBeGreaterThanOrEqual(7);

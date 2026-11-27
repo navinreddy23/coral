@@ -9,7 +9,7 @@
 </script>
 
 <script lang="ts">
-  import Icon from './Icon.svelte';
+  import Close from './Close.svelte';
   import { baseName, submodulePath } from './path';
   import type { SshKey } from '../ipc/types';
 
@@ -75,7 +75,7 @@
   <header>
     <span class="glyph" aria-hidden="true">◱</span>
     <h2>Add a submodule</h2>
-    <button class="shut" onclick={onClose} title="Close"><Icon name="close" size={15} /></button>
+    <Close label="Close (Esc)" onclick={onClose} />
   </header>
 
   <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -154,11 +154,6 @@
   }
   .glyph { color: var(--fg-2); }
   h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); flex: 1; }
-  .shut {
-    display: flex; font: inherit; line-height: 1; cursor: pointer;
-    background: var(--bg-1); border: 0; color: var(--fg-2); padding: 0 var(--space-2);
-  }
-  .shut:hover { color: var(--fg-0); }
 
   .body {
     flex: 1; min-height: 0; overflow-y: auto;

@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
+  import Close from './Close.svelte';
   import { baseName } from './path';
   import type { SshKey, Submodule, SubmoduleRevision, SubmoduleSsh } from '../ipc/types';
 
@@ -89,7 +90,7 @@
   <header>
     <span class="glyph" aria-hidden="true">◱</span>
     <h2>Edit submodule</h2>
-    <button class="shut" onclick={onClose} title="Close"><Icon name="close" size={15} /></button>
+    <Close label="Close (Esc)" onclick={onClose} />
   </header>
 
   <div class="body">
@@ -195,11 +196,6 @@
   }
   .glyph { color: var(--fg-2); }
   h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); flex: 1; }
-  .shut {
-    display: flex; font: inherit; line-height: 1; cursor: pointer;
-    background: var(--bg-1); border: 0; color: var(--fg-2); padding: 0 var(--space-2);
-  }
-  .shut:hover { color: var(--fg-0); }
 
   .body {
     flex: 1; min-height: 0; overflow-y: auto;
@@ -254,12 +250,12 @@
   dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--fg-1); }
 
   .row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-  button:not(.shut) {
+  button {
     font: inherit; font-size: var(--text-base); cursor: pointer;
     padding: var(--space-2) var(--space-3); border-radius: var(--radius-1);
     background: var(--bg-2); border: 1px solid var(--border); color: var(--fg-1);
   }
-  button:not(.shut):hover:not(:disabled) { background: var(--bg-3); color: var(--fg-0); }
+  button:hover:not(:disabled) { background: var(--bg-3); color: var(--fg-0); }
   button:disabled { opacity: 0.5; cursor: default; }
   .primary {
     background: var(--accent); border-color: var(--accent); color: var(--accent-fg);

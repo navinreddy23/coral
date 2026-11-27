@@ -3,6 +3,7 @@
   import { quoteRequest } from './request';
   import type { RequestsState } from '../state/requests.svelte';
   import Icon from './Icon.svelte';
+  import Close from './Close.svelte';
   import Mark from './Mark.svelte';
   import type { StartState } from '../state/start.svelte';
   import type { SshKey } from '../ipc/types';
@@ -154,7 +155,7 @@
       <Mark size={30} />
       <h2>Repositories</h2>
       {#if onClose}
-        <button class="shut" title="Back" onclick={onClose}><Icon name="close" size={15} /></button>
+        <Close label="Back to the repository (Esc)" onclick={onClose} />
       {/if}
     </header>
 
@@ -432,11 +433,9 @@
               <span class="repo-path mono">{elidePath(repo.path, 72)}</span>
               <span class="repo-when">{repo.missing ? 'Not found' : when(repo.opened)}</span>
             </button>
-            <button
-              class="forget"
-              title="Take {repo.name} off this list"
-              onclick={() => void start.forget(repo.path)}
-            ><Icon name="close" size={12} /></button>
+            <span class="forget">
+              <Close quiet label="Take {repo.name} off this list" onclick={() => void start.forget(repo.path)} />
+            </span>
           </li>
         {/each}
       </ul>
@@ -466,11 +465,6 @@
     margin: var(--space-5) 0 var(--space-2); font-size: var(--text-base); font-weight: var(--weight-semibold);
     color: var(--fg-2); background: var(--bg-0);
   }
-  .shut {
-    display: flex; font: inherit; line-height: 1; cursor: pointer; align-self: flex-start;
-    background: var(--bg-0); border: 0; color: var(--fg-2); padding: 0 var(--space-2);
-  }
-  .shut:hover { color: var(--fg-0); }
 
   /* Three of equal width rather than three sized by their labels: they are alternatives, and
      one that is wider than the others reads as the one to press. */
@@ -594,16 +588,13 @@
   }
   /* On the row being pointed at only: a column of crosses beside a list of repositories reads
      as a list of things to delete. */
-  .forget {
-    flex: 0 0 auto; font: inherit; font-size: var(--text-base); line-height: 1; cursor: pointer;
-    padding: 0 var(--space-2); background: none; border: 0; color: var(--fg-2);
-    visibility: hidden;
-  }
-  .recents li:hover .forget { visibility: visible; }
+  .forget { flex: 0 0 auto; display: flex; padding: 0 var(--space-1); opacity: 0; }
+  /* Faded rather than hidden, so the keyboard can still reach it: a hidden control is out of
+     the tab order, and these could only be removed with the pointer. */
+  .recents li:hover .forget, .recents li:focus-within .forget { opacity: 1; }
   /* The same mark the tab strip puts on a tab whose repository has gone, so the row says so
      before it is clicked rather than after, in an error. */
   .gone .repo-name { text-decoration: line-through; color: var(--fg-2); }
   .gone .repo-path { text-decoration: line-through; }
   .gone .repo-when { color: var(--danger); }
-  .forget:hover { color: var(--danger); }
 </style>

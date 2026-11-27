@@ -238,6 +238,8 @@
     background: var(--bg-2); border: var(--hairline) solid var(--border); color: var(--fg-1);
   }
   .shut:hover { background: var(--bg-3); color: var(--fg-0); }
+  /* The cross in the same red as every other close control, beside the word this one needs. */
+  .shut :global(svg) { color: var(--danger); }
   /* The same ground and card as the main window: the list of panes on the ground, the pane
      itself a card beside it. */
   .body {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import Icon from './Icon.svelte';
+  import Close from './Close.svelte';
   import type { RemotesState } from '../state/remotes.svelte';
 
   const { remotes, focus, onClose, onChanged }: {
@@ -130,7 +130,7 @@
 <div class="sheet" role="dialog" aria-modal="true" aria-label="Remotes">
   <header>
     <h2>Remotes</h2>
-    <button class="shut" onclick={onClose} title="Close"><Icon name="close" size={15} /></button>
+    <Close label="Close (Esc)" onclick={onClose} />
   </header>
 
   <div class="split">
@@ -246,11 +246,6 @@
     border-bottom: 1px solid var(--border);
   }
   h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); flex: 1; }
-  .shut {
-    display: flex; font: inherit; line-height: 1; cursor: pointer;
-    background: var(--bg-1); border: 0; color: var(--fg-2); padding: 0 var(--space-2);
-  }
-  .shut:hover { color: var(--fg-0); }
 
   .split { display: flex; flex: 1; min-height: 0; }
   .list {
