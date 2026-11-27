@@ -180,11 +180,22 @@ describe('a row clicked with the pointer', () => {
 });
 
 describe('landing on a row from outside the list', () => {
-  it('stands on the row at a place, or the last when the list got shorter', () => {
+  it('stands on the file at a place, or the last when the list got shorter', () => {
     const { list, clicks } = tree();
     expect(land(list, 1)?.id).toBe('a1');
     expect(document.activeElement?.id).toBe('a1');
     expect(land(list, 40)?.id).toBe('c');
+    expect(clicks).toEqual(['a1', 'c']);
+  });
+
+  it('passes over a folder to the file after it, since a folder shows nothing', () => {
+    // A file staged out of a tree left the keys on the folder after it, and the file still
+    // open beside them was the one that had just gone to the other list.
+    const { list, clicks } = tree();
+    expect(land(list, 0)?.id).toBe('a1');
+    // The place is counted in rows, folders included: the third row is b, a shut folder, so
+    // the file after it is c.
+    expect(land(list, 3)?.id).toBe('c');
     expect(clicks).toEqual(['a1', 'c']);
   });
 

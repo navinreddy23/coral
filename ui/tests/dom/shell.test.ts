@@ -2255,7 +2255,7 @@ describe('moving down the list with the keyboard', () => {
 
   describe('the keys in the working copy\'s files', () => {
     /** Three files changed and one staged, with staging done the way git would do it. */
-    function workingCopy() {
+    function workingCopy(changed = ['a.txt', 'b.txt', 'c.txt']) {
       const entry = (path: string, staged: boolean) => ({
         path,
         origPath: null,
@@ -2266,7 +2266,7 @@ describe('moving down the list with the keyboard', () => {
         submodule: false,
         modeChanged: false,
       });
-      let entries = [entry('a.txt', false), entry('b.txt', false), entry('c.txt', false), entry('d.txt', true)];
+      let entries = [...changed.map((path) => entry(path, false)), entry('d.txt', true)];
       const status = () => ({ entries, conflicted: [] });
       return {
         repo_status: () => status(),
@@ -2342,6 +2342,28 @@ describe('moving down the list with the keyboard', () => {
         .filter((c) => c[0] === 'stage_paths')
         .map((c) => (c[1] as { paths: string[] }).paths.join());
       expect(staged).toEqual(['a.txt', 'b.txt']);
+    });
+
+    it('moves on to a file, not a folder, and stages a whole folder from its row', async () => {
+      // In the tree the place a staged file left was often a folder's, and standing on it
+      // showed nothing while the file that had just gone stayed open; S pressed there then
+      // staged that file again rather than the folder.
+      const fixture = workingCopy(['lib/a.txt', 'lib/b.txt', 'lib/c.txt', 'z.txt']);
+      const { container } = await shell(fixture);
+      await openWorkingFile(container, 'lib/a.txt');
+      await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 's' });
+      await waitFor(() => {
+        if (focusedPath() !== 'lib/b.txt') throw new Error('the focus did not move on to lib/b.txt');
+      });
+      const folder = container.querySelector<HTMLElement>('[data-list="unstaged"] [data-row="dir"]');
+      folder?.focus();
+      invoke.mockClear();
+      await fireEvent.keyDown(folder as HTMLElement, { key: 's' });
+      await waitFor(() => {
+        const call = invoke.mock.calls.find((c) => c[0] === 'stage_paths');
+        if (!call) throw new Error('nothing staged');
+        expect((call[1] as { paths: string[] }).paths).toEqual(['lib/b.txt', 'lib/c.txt']);
+      });
     });
 
     it('follows the last file over to the staged list when nothing is left to move on to', async () => {

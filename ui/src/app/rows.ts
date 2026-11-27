@@ -136,12 +136,16 @@ export function rows(list: HTMLElement): () => void {
 }
 
 /**
- * Stands on the row at a place in a list, or the last when the list has fewer, and shows it.
- * For the keys that act on a row and take it away, so the focus stays in the list.
+ * Stands on the first file at or after a place in a list, or the last file before it, and
+ * shows it. For the keys that act on a row and take it away, so the focus stays in the list,
+ * and for going into a list from outside. A folder is passed over: standing on one shows
+ * nothing, and the file left open beside it would be the one that had just gone.
  */
 export function land(list: HTMLElement, index: number): HTMLElement | null {
   const all = rowsOf(list);
-  const row = all[Math.min(index, all.length - 1)];
+  const shown = (row: HTMLElement | undefined) => row?.dataset.row === 'show';
+  const at = Math.max(index, 0);
+  const row = all.slice(at).find(shown) ?? all.slice(0, at).reverse().find(shown);
   if (row === undefined) return null;
   arrive(row);
   return row;

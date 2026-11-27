@@ -105,6 +105,7 @@
             class="dir"
             data-row="dir"
             data-depth={depth}
+            data-path={node.path}
             aria-expanded={!closed[node.path]}
             style:padding-left="{depth * 12 + 4}px"
             onclick={() => onToggleDir(node.path)}

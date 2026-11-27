@@ -1268,12 +1268,15 @@
       focused instanceof HTMLElement
         ? focused.closest<HTMLElement>(`[data-list="${stage ? 'unstaged' : 'staged'}"]`)
         : null;
-    const row = list === null ? null : (focused as HTMLElement).closest<HTMLElement>('[data-row="show"]');
-    const path = row?.dataset.path ?? diff.path;
-    if (!info || path === undefined || path === null) return;
-    if (row === null && diff.source !== 'staged' && diff.source !== 'unstaged') return;
+    const row =
+      list === null
+        ? null
+        : (focused as HTMLElement).closest<HTMLElement>('[data-row="show"], [data-row="dir"]');
+    const open = diff.source === 'staged' || diff.source === 'unstaged' ? diff.path : null;
+    const paths = row !== null ? pathsOf(row, stage) : open !== null ? [open] : [];
+    if (!info || paths.length === 0) return;
     const place = list !== null && row !== null ? placeOf(list, row) : -1;
-    await worktree.stage([path], stage);
+    await worktree.stage(paths, stage);
     if (list !== null && place >= 0) {
       await tick();
       if (land(list, place) !== null) return;
@@ -1282,6 +1285,17 @@
     if (place < 0) return;
     await tick();
     openRow()?.focus();
+  }
+
+  /**
+   * The files a row in the working copy's lists stands for: its own, or for a folder every
+   * file under it on that side, which is what the folder's own + or − acts on.
+   */
+  function pathsOf(row: HTMLElement, stage: boolean): string[] {
+    const path = row.dataset.path ?? '';
+    if (row.dataset.row !== 'dir') return path === '' ? [] : [path];
+    const side = stage ? worktree.unstaged : worktree.staged;
+    return side.map((e) => e.path).filter((p) => p.startsWith(`${path}/`));
   }
 
   /** The row of the file open in the right panel, if it is listed there. */
