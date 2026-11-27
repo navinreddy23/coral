@@ -962,9 +962,11 @@
   .dots {
     flex: 0 0 auto; display: flex; font: inherit; line-height: 1; cursor: pointer;
     padding: 0 var(--space-2); background: var(--bg-1); border: 0; color: var(--fg-2);
-    visibility: hidden;
+    opacity: 0;
   }
-  .row:hover .dots, .row.current .dots { visibility: visible; }
+  /* Faded rather than hidden: hidden, the menu was out of the tab order and the keyboard could
+     reach a branch but never what could be done with it. */
+  .row:hover .dots, .row:focus-within .dots, .row.current .dots { opacity: 1; }
   .dots:hover { color: var(--fg-0); }
   /*
    * The eye follows the dots, with one difference that matters: a hidden branch keeps it
@@ -975,9 +977,9 @@
   .eye {
     flex: 0 0 auto; display: flex; align-items: center; cursor: pointer;
     padding: 0 var(--space-1); background: var(--bg-1); border: 0; color: var(--fg-2);
-    visibility: hidden;
+    opacity: 0;
   }
-  .row:hover .eye, .eye.off { visibility: visible; }
+  .row:hover .eye, .row:focus-within .eye, .eye.off { opacity: 1; }
   .eye:hover { color: var(--fg-0); }
   .eye.off { color: var(--fg-2); }
   /* Dimmed, not hidden: a branch left out of the walk is still a branch, and still has a menu. */

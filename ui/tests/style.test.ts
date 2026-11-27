@@ -165,7 +165,7 @@ describe('the component stylesheets', () => {
         // round a drop target. Neither is an elevation, and neither costs anything to repaint.
         // `none` takes one away, which is the opposite of what this is looking for.
         if (value.trim() === 'none') continue;
-        if (/\binset\b/.test(value) || value.includes('var(--ring)')) continue;
+        if (/\binset\b/.test(value)) continue;
         if (/^0 0 0 /.test(value.trim())) continue;
         offenders.push(`${name}: ${value.trim()}`);
       }

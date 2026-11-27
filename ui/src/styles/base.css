@@ -42,13 +42,16 @@ code, .mono { font-family: var(--font-mono); font-variant-ligatures: none; }
  * A visible ring for keyboard users and nothing for the pointer. Every control in the window
  * is a plain element, so without this a tab-through leaves no trace of where it is.
  *
- * Drawn as a shadow rather than an outline so it follows a rounded corner, and with the
- * page's own colour in the inner ring so it reads on a control that already has a border.
+ * An outline, set off from the control so it reads on one that already has a border. It was a
+ * shadow, which any component drawing a shadow of its own replaced: the selected file, the
+ * checked-out branch, the chosen half of a segmented control and the working copy's row all
+ * took the focus with no ring at all. Outlines follow a rounded corner in every engine the
+ * window runs on.
  */
 :focus { outline: none; }
 :focus-visible {
-  outline: none;
-  box-shadow: var(--ring);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
   /* Above whatever it sits beside, or half the ring is painted over by the next control. */
   position: relative;
   z-index: 1;
@@ -61,7 +64,6 @@ code, .mono { font-family: var(--font-mono); font-variant-ligatures: none; }
  * state draws rather than replacing it, and is the one mark saying where the keys are.
  */
 [data-row]:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
-[data-row]:focus-visible { box-shadow: none; }
 
 /*
  * Checkboxes drawn from the tokens rather than by the web view.

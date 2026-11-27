@@ -202,8 +202,6 @@
   --scrim: rgb(12 16 23 / 34%);
   --elevate-1: 0 2px 8px rgb(12 16 23 / 10%), 0 0 0 1px rgb(12 16 23 / 5%);
   --elevate-2: 0 12px 32px rgb(12 16 23 / 16%), 0 2px 8px rgb(12 16 23 / 8%);
-  /* The keyboard focus ring, drawn outside the control so it never changes a layout. */
-  --ring: 0 0 0 2px var(--bg-0), 0 0 0 4px var(--accent);
 }
 
 :root[data-theme='dark'] {

@@ -155,7 +155,8 @@
           </button>
           <button
             class="act"
-            title={staged ? 'Unstage it' : 'Stage it'}
+            title={staged ? 'Unstage it (U)' : 'Stage it (S)'}
+            aria-label={staged ? `Unstage ${node.path}` : `Stage ${node.path}`}
             onclick={() => onAct([node.path])}
           >{staged ? '−' : '+'}</button>
         </div>
@@ -203,10 +204,11 @@
   .count.gone { color: var(--danger); }
   .act {
     flex: 0 0 auto; font: inherit; font-size: var(--text-md); line-height: 1; width: 1.6em;
-    cursor: pointer; visibility: hidden;
+    cursor: pointer; opacity: 0;
     background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-0);
     color: var(--fg-1); margin-right: var(--space-1);
   }
-  .row:hover .act { visibility: visible; }
+  /* Faded rather than hidden, so Tab still reaches it; see Staging. */
+  .row:hover .act, .row:focus-within .act { opacity: 1; }
   .act:hover { background: var(--bg-3); color: var(--fg-0); }
 </style>

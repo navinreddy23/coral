@@ -7240,7 +7240,7 @@
   /* The whole row is the target; a button laid over it keeps that keyboard-reachable without
      nesting interactive elements inside one another. */
   /* See the note on the element: it takes clicks and never keyboard focus. */
-  .hit:focus-visible { box-shadow: none; }
+  .hit:focus-visible { outline: none; }
   .hit {
     position: absolute; inset: 0; width: 100%; height: 100%;
     background: none; border: 0; padding: 0; margin: 0; cursor: pointer;

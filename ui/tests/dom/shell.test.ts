@@ -2034,7 +2034,7 @@ describe('moving down the list with the keyboard', () => {
       .flatMap((sheet) => [...(sheet.cssRules ?? [])])
       .map((r) => r.cssText);
     const quiet = rules.find((text) => /\.hit[^{]*:focus-visible/u.test(text));
-    expect(quiet).toMatch(/box-shadow:\s*none/u);
+    expect(quiet).toMatch(/outline[^;]*none/u);
   });
 
   it('still selects the row it is clicked on', async () => {

@@ -485,7 +485,7 @@
               <span class="name">{e.path}</span>
               <LockMark lock={locks.get(e.path)} />
             </button>
-            <button class="act" title={t('staging.stageIt')} onclick={() => worktree.stage([e.path], true)}>+</button>
+            <button class="act" title={t('staging.stageIt')} aria-label="{t('staging.stageIt')}: {e.path}" onclick={() => worktree.stage([e.path], true)}>+</button>
           </li>
         {/each}
       </ul>
@@ -574,7 +574,7 @@
               <span class="name">{e.path}</span>
               <LockMark lock={locks.get(e.path)} />
             </button>
-            <button class="act" title={t('staging.unstageIt')} onclick={() => worktree.stage([e.path], false)}>−</button>
+            <button class="act" title={t('staging.unstageIt')} aria-label="{t('staging.unstageIt')}: {e.path}" onclick={() => worktree.stage([e.path], false)}>−</button>
           </li>
         {/each}
       </ul>
@@ -907,11 +907,13 @@
   .mark.conflict { color: var(--danger); }
   .act {
     flex: 0 0 auto; font: inherit; font-size: var(--text-md); line-height: 1; width: 1.6em;
-    cursor: pointer; visibility: hidden;
+    cursor: pointer; opacity: 0;
     background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-0);
     color: var(--fg-1); margin-right: var(--space-1);
   }
-  .flat li:hover .act { visibility: visible; }
+  /* Faded rather than hidden until the row is pointed at or has the keys, so Tab still reaches
+     it: hidden, it was out of the tab order and staging one file needed the pointer. */
+  .flat li:hover .act, .flat li:focus-within .act { opacity: 1; }
   .act:hover { background: var(--bg-3); color: var(--fg-0); }
 
   /*
