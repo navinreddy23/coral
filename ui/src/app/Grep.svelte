@@ -137,7 +137,7 @@
     background: none; border: 1px solid transparent; border-radius: var(--radius-1); color: var(--fg-2);
   }
   .option:hover { color: var(--fg-0); background: var(--bg-2); }
-  .option.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
+  .option.on { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent-line); }
 
   .status {
     display: flex; gap: var(--space-2); align-items: center; margin: 0; flex: 0 0 auto;

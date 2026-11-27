@@ -832,7 +832,8 @@
   .signature.danger { color: var(--danger); }
   .why { display: block; color: var(--fg-2); font-size: var(--text-sm); }
   .copy {
-    flex: 0 0 auto; display: flex; padding: 2px; margin-top: -1px; cursor: pointer;
+    flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; padding: 0; margin-top: -4px; cursor: pointer;
     background: var(--bg-0); border: 0; border-radius: var(--radius-1); color: var(--fg-2);
     transition: color var(--fast) var(--ease), background var(--fast) var(--ease);
   }

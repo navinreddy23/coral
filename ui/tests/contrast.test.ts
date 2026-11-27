@@ -64,6 +64,13 @@ describe.each(THEMES)('the %s palette', (theme) => {
     }
   });
 
+  it('keeps accent words on the accent tint legible', () => {
+    // A lit toggle, the branch beside the working copy's count, a "set" tag: the accent itself
+    // made 4.2:1 on its tint in the light theme.
+    expect(on('accent-ink', 'accent-soft')).toBeGreaterThanOrEqual(4.5);
+    expect(on('accent-ink', 'bg-0')).toBeGreaterThanOrEqual(4.5);
+  });
+
   it('keeps a close control legible at rest, pointed at and pressed', () => {
     // Red at rest on the panes and on bg-2 under a pointer that has just left a neighbour;
     // red on its own tint when pointed at; the page colour on a red fill when pressed.

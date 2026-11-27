@@ -100,6 +100,10 @@
       // A block cursor over software rendering costs nothing and is easier to find.
       cursorStyle: 'block',
       theme: palette(),
+      // The palette is tuned, but a program can ask for any colour, and a 256-colour yellow on
+      // the light ground is unreadable. xterm lifts a cell short of this, and halves it for dim
+      // text, which is meant to read as dim.
+      minimumContrastRatio: 4.5,
       allowProposedApi: true,
     });
     fit = new FitAddon();

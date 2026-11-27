@@ -364,11 +364,11 @@
 
 <div class="panel" bind:clientHeight={panelPx} {@attach rows}>
   <header>
-    <span class="count">
+    <h2 class="count">
       {worktree.dirty
         ? t('staging.fileChanges', { n: worktree.status?.entries.length ?? 0 })
         : t('staging.noFileChanges')}
-    </span>
+    </h2>
     {#if branch}
       <span class="on">{t('staging.on')}</span><span class="branch" title={branch}>{branch}</span>
     {/if}
@@ -788,12 +788,13 @@
     display: flex; align-items: center; gap: var(--space-2);
     padding-bottom: var(--space-2); border-bottom: 1px solid var(--border);
   }
-  .count { font-weight: var(--weight-semibold); color: var(--fg-0); white-space: nowrap; }
+  /* The panel's heading, over the lists' own, so the headings nest the way they read. */
+  .count { margin: 0; font: inherit; font-weight: var(--weight-semibold); color: var(--fg-0); white-space: nowrap; }
   .on { color: var(--fg-2); }
   .branch {
     flex: 0 1 auto; min-width: 0;
     font-size: var(--text-sm); padding: 1px 8px; border-radius: var(--radius-pill);
-    background: var(--accent-soft); color: var(--accent);
+    background: var(--accent-soft); color: var(--accent-ink);
     max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   /*

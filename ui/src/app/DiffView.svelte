@@ -1024,7 +1024,9 @@
         {/if}
       </p>
     {:else if diff.mode === 'inline'}
-      <table class="lines" bind:this={table}>
+      <!-- A grid of lines, not a table of data: read as one, it was announced as a table with
+           no headers, a cell at a time. -->
+      <table class="lines" role="presentation" bind:this={table}>
         <tbody>
           {#each hunks as hunk, h (hunk.header + hunk.newStart)}
             {@const gap = gaps.get(h)}
@@ -1242,7 +1244,7 @@
   /* A pressed toggle keeps the tinted fill rather than the solid accent: these sit beside the
      segmented tracks, and two different ways of saying "chosen" in one header is one too
      many. */
-  .wider.on, .ws.on { background: var(--accent-soft); color: var(--accent); font-weight: var(--weight-semibold); }
+  .wider.on, .ws.on { background: var(--accent-soft); color: var(--accent-ink); font-weight: var(--weight-semibold); }
   /* Words on a button keep to one line: squeezed by a long note, "Skipping 1 listed" wrapped
      out of its button. The notes are what give way, with an ellipsis. */
   .wider { white-space: nowrap; flex: 0 0 auto; }

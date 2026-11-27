@@ -300,7 +300,7 @@
     margin-left: var(--space-2); font-size: var(--text-xs); padding: 0 6px; border-radius: var(--radius-pill);
     background: var(--bg-3); color: var(--fg-2);
   }
-  .tag.set { background: var(--accent-soft); color: var(--accent); }
+  .tag.set { background: var(--accent-soft); color: var(--accent-ink); }
 
   label {
     display: flex; flex-direction: column; gap: var(--space-1);

@@ -427,14 +427,14 @@
      instead of above it. */
   .action:active:not(:disabled) { background: var(--bg-3); transition: none; }
   /* A toggle that is on stays lit, so the terminal button says whether the pane is showing. */
-  .action.on { background: var(--accent-soft); color: var(--accent); }
+  .action.on { background: var(--accent-soft); color: var(--accent-ink); }
   .action:disabled { color: var(--fg-2); cursor: default; opacity: 0.45; }
 
   /* Against the button it belongs to rather than in the gap between two, and narrow, so the
      pair reads as one control with a choice attached. */
   .caret {
     display: flex; align-items: center; justify-content: center;
-    width: 14px; height: 28px; padding: 0; margin-right: 2px; cursor: pointer;
+    width: 24px; height: 28px; padding: 0; margin-right: 2px; cursor: pointer;
     font: inherit; background: var(--bg-1); border: 0; border-radius: var(--radius-1);
     color: var(--fg-2);
     transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
