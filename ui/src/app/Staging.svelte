@@ -891,7 +891,12 @@
     background: var(--bg-0); border: 0; border-radius: var(--radius-0); color: var(--fg-1);
     min-height: calc(var(--row-h) - 4px);
   }
-  .file.open { background: var(--accent-soft); color: var(--fg-0); }
+  /* The bar as well as the tint, as the commit's flat list has it: the tint alone is 1.1:1
+     against a hovered row, a difference of hue that a pointer passing by makes ambiguous. */
+  .file.open {
+    background: var(--accent-soft); color: var(--fg-0);
+    box-shadow: inset 2px 0 0 var(--accent-line);
+  }
   /* The end of a path identifies the file, so a long one is cut from the left. */
   .name {
     min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

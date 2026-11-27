@@ -182,7 +182,12 @@
   }
   .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dir { color: var(--fg-1); font-weight: var(--weight-semibold); }
-  .file.open { background: var(--accent-soft); color: var(--fg-0); }
+  /* The bar as well as the tint, as the commit's flat list has it: the tint alone is 1.1:1
+     against a hovered row, a difference of hue that a pointer passing by makes ambiguous. */
+  .file.open {
+    background: var(--accent-soft); color: var(--fg-0);
+    box-shadow: inset 2px 0 0 var(--accent-line);
+  }
   .caret { width: 9px; flex: 0 0 auto; color: var(--fg-2); }
   .mark {
     flex: 0 0 auto; width: 12px; text-align: center;

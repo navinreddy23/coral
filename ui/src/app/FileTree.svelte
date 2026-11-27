@@ -134,7 +134,12 @@
      on the button itself does nothing: a flex item does not shrink, so it was cut mid-letter. */
   .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   button:hover { background: var(--bg-1); }
-  .file.open { background: var(--accent-soft); color: var(--fg-0); }
+  /* The bar as well as the tint, as the commit's flat list has it: the tint alone is 1.1:1
+     against a hovered row, a difference of hue that a pointer passing by makes ambiguous. */
+  .file.open {
+    background: var(--accent-soft); color: var(--fg-0);
+    box-shadow: inset 2px 0 0 var(--accent-line);
+  }
   .dir { color: var(--fg-2); }
   .caret { width: 9px; flex: 0 0 auto; }
   .mark { flex: 0 0 auto; width: 10px; font-family: var(--font-mono); font-variant-ligatures: none; font-size: var(--text-xs); }
