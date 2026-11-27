@@ -346,8 +346,9 @@ sorted by row, so stepping through them moves down the list rather than about it
 the graph's keys on itself (`ui/src/state/shortcuts.ts`, dispatched in `App.svelte`), because
 its million rows are kept out of the tab order. A list that has the focus takes its own arrows
 before the window hears them (`ui/src/app/rows.ts`), an open file takes its scrolling keys, and
-the overlays mark themselves `role="dialog"` so Escape closes the top one first. F6 moves between
-the panes (`ui/src/app/region.ts`); whatever closes hands the focus back to where it was.
+the overlays mark themselves `role="dialog"` so Escape closes the top one first, and hold the
+focus while open (`ui/src/app/modal.ts`). F6 moves between the panes (`ui/src/app/region.ts`);
+whatever closes hands the focus back to where it was.
 
 **Spelling in the commit box is checked in Rust**, against SCOWL's US or British Hunspell
 dictionary built into `coral-core` and matched with spellbook, so the window and `coral spell`
