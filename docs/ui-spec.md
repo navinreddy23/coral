@@ -216,9 +216,18 @@ Row height follows the density chosen in Preferences: 24, 28 or 32 pixels, with 
 same three numbers reach the stylesheet and the canvas metrics, which cannot read each other, so
 `ui/tests/density.test.ts` reads both files and fails when they drift.
 
-- Canvas draws only visible rows plus one screen of overscan. An edge that changes lane leaves
-  its node across the row and turns down into the parent's lane through a rounded corner, the
-  way GitKraken draws it; lanes take a stable colour from the eight-colour palette in
+- Canvas draws only visible rows plus one screen of overscan. Edges change lane through a
+  rounded corner, in the two shapes GitKraken draws. A merge leaves its node across its own row
+  and turns down into the lane of the line it brought in (`●─╮`). A branch runs straight down
+  its own lane to the commit it left from and turns into that commit across *its* row (`●─╯`),
+  so every branch is one straight lane from its merge to its fork and is seen to start from
+  the commit it did. A commit several lines lead to is drawn in the leftmost of them, so every
+  branch turns into it from the right and the trunk keeps its lane; the line the user is on —
+  HEAD, its first parents, and its branch's upstream above it when that is ahead — is kept in
+  lane 0 whatever is newer. A branch whose fork is more than 100 rows down joins the line to
+  it across its own row instead: on the kernel, lines held to forks thousands of rows below
+  filled every lane. A merge into a line already running joins it where it is, which is the
+  one corner that can turn left. Lanes take a stable colour from the eight-colour palette in
   `tokens.css`. Every commit, merges included, is a disc in its author's colour ringed in its
   lane's, with the author's initials on it set in the interface face. Nothing is fetched to
   draw a node. The commit HEAD is on carries a second ring in the brand colour, clear of its
