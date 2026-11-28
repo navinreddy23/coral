@@ -77,31 +77,7 @@ export function drawLanes(
 
     const lane = frame.lanes[local];
     if (lane === undefined) continue;
-    const x0 = laneX(lane, metrics);
-    const y0 = rowY(row, first, metrics);
-
-    for (const parentLane of parentLanesOf(frame, local)) {
-      // A parent the assigner had no lane left for; there is nowhere to draw the edge to.
-      if (parentLane === NO_LANE) continue;
-      const x1 = laneX(parentLane, metrics);
-      const y1 = rowY(row + 1, first, metrics);
-      ctx.strokeStyle = laneColour(parentLane, colours);
-      ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      if (x0 === x1) {
-        // A straight run continues to the bottom of the viewport; the vertical pass below
-        // covers the rest of it.
-        ctx.lineTo(x1, y1);
-      } else {
-        // A right-angled elbow with a rounded corner, as the reference draws it: the edge
-        // leaves the node horizontally on the node's own row, turns through a short arc, and
-        // runs straight down the parent's lane. A bezier spread over the row instead reads as
-        // a lazy diagonal and makes it hard to tell which lane a line ended up in.
-        ctx.arcTo(x1, y0, x1, y1, cornerRadius(metrics));
-        ctx.lineTo(x1, y1);
-      }
-      ctx.stroke();
-    }
+    drawEdges(ctx, frame, local, laneX(lane, metrics), rowY(row, first, metrics), metrics, colours);
   }
 
   // Vertical runs for lanes that pass through a row without a node in it.
@@ -177,6 +153,65 @@ export function drawLanes(
 }
 
 /**
+ * One row's own edges: the lines leaving its node, and the lines turning into it.
+ *
+ * Two shapes, the two GitKraken draws. A line to a parent in another lane leaves the node
+ * across its own row and turns down into the parent's lane — a merge's corner is on the merge.
+ * A branch's line comes straight down its own lane to the commit it left from and turns into
+ * that commit across *its* row, so the branch is seen to start from it rather than from the
+ * middle of the trunk's line. Each runs only to the edge of the row; the runs between rows are
+ * drawn by `drawThroughLanes`, so a corner never has a straight line poking out past it.
+ */
+function drawEdges(
+  ctx: CanvasRenderingContext2D,
+  frame: Frame,
+  local: number,
+  x0: number,
+  y0: number,
+  metrics: Metrics,
+  colours: string[],
+): void {
+  const half = metrics.rowHeight / 2;
+  const radius = cornerRadius(metrics);
+
+  for (const parentLane of parentLanesOf(frame, local)) {
+    // A parent the assigner had no lane left for; there is nowhere to draw the edge to.
+    if (parentLane === NO_LANE) continue;
+    const x1 = laneX(parentLane, metrics);
+    ctx.strokeStyle = laneColour(parentLane, colours);
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    // A right-angled elbow with a rounded corner, as the reference draws it, rather than a
+    // bezier spread over the row: that reads as a lazy diagonal and makes it hard to tell
+    // which lane a line ended up in.
+    if (x1 !== x0) ctx.arcTo(x1, y0, x1, y0 + half, radius);
+    ctx.lineTo(x1, y0 + half);
+    ctx.stroke();
+  }
+
+  // Outermost first, so where two share a stretch of the row the nearer lane's colour is the
+  // one beside the node. Every join is to the node's right, so that is the highest lane first.
+  for (const lane of lanesIn(frame.joins[local] ?? 0).reverse()) {
+    const x1 = laneX(lane, metrics);
+    ctx.strokeStyle = laneColour(lane, colours);
+    ctx.beginPath();
+    ctx.moveTo(x1, y0 - half);
+    ctx.arcTo(x1, y0, x0, y0, radius);
+    ctx.lineTo(x0, y0);
+    ctx.stroke();
+  }
+}
+
+/** The lanes a 32-bit mask names, lowest first. */
+function lanesIn(mask: number): number[] {
+  const out: number[] = [];
+  for (let lane = 0; lane < 32; lane++) {
+    if ((mask & (1 << lane)) !== 0) out.push(lane);
+  }
+  return out;
+}
+
+/**
  * Where the ring on the HEAD node sits.
  *
  * Three pixels outside the node where there is room, and less where there is not. It has to
@@ -238,18 +273,31 @@ function drawThroughLanes(
   // lane -> the y it has been running from. Lanes already open above the window start at its
   // top edge, since their opening commit is off screen.
   const open = new Map<number, number>();
-  const entering = frame.open[window.first - frame.startRow] ?? 0;
-  for (let lane = 0; lane < 32; lane++) {
-    if ((entering & (1 << lane)) !== 0) open.set(lane, topY);
+  for (const lane of lanesIn(frame.open[window.first - frame.startRow] ?? 0)) {
+    open.set(lane, topY);
   }
 
   for (let row = window.first; row <= window.last; row++) {
     const local = row - frame.startRow;
     if (local < 0 || local >= frame.rowCount) continue;
-
-    // A run ends at precisely the row drawn in its lane.
-    const lane = frame.lanes[local];
     const nodeY = rowY(row, first, metrics);
+    const rowTop = nodeY - half;
+
+    // A line given back for running too long is no longer in the mask: it stops at the top of
+    // this row with a gap under it, rather than running on into whatever takes the lane next.
+    if (local < frame.open.length) {
+      const mask = frame.open[local] ?? 0;
+      for (const [lane, from] of open) {
+        if (lane < 32 && (mask & (1 << lane)) === 0) {
+          strokeVertical(ctx, lane, from, rowTop, metrics, colours);
+          open.delete(lane);
+        }
+      }
+    }
+
+    // A run ends at the row drawn in its lane, or at the top of a row it turns into; the
+    // turn itself is the edge pass's.
+    const lane = frame.lanes[local];
     if (lane !== undefined) {
       const from = open.get(lane);
       if (from !== undefined) {
@@ -257,12 +305,20 @@ function drawThroughLanes(
         open.delete(lane);
       }
     }
-    // The edge pass has already drawn this row's own descent into each parent lane, so the
-    // run picks up from the next row's centre. A lane already open is one an earlier child
-    // reserved; its run is continuous and must keep its original start.
+    for (const joining of lanesIn(frame.joins[local] ?? 0)) {
+      const from = open.get(joining);
+      if (from !== undefined) {
+        strokeVertical(ctx, joining, from, rowTop, metrics, colours);
+        open.delete(joining);
+      }
+    }
+
+    // The edge pass has drawn this row's own edges to its bottom edge, so a run picks up from
+    // there. A lane already open is one an earlier child reserved; its run is continuous and
+    // keeps its original start.
     for (const parentLane of parentLanesOf(frame, local)) {
       if (parentLane === NO_LANE) continue;
-      if (!open.has(parentLane)) open.set(parentLane, rowY(row + 1, first, metrics));
+      if (!open.has(parentLane)) open.set(parentLane, nodeY + half);
     }
   }
 

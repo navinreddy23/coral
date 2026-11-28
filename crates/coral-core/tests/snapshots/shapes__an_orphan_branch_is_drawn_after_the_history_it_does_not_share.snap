@@ -1,0 +1,17 @@
+---
+source: crates/coral-core/tests/shapes.rs
+expression: h.picture()
+---
+●  main: three
+│
+●  main: two
+│
+●  main: one
+│
+●  base
+
+●  pages: three
+│
+●  pages: two
+│
+●  pages: root

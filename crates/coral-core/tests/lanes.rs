@@ -1,124 +1,162 @@
-//! Lane assignment, rendered as ASCII and snapshotted.
+//! Lane assignment, drawn as box art and snapshotted.
 //!
 //! A lane bug is otherwise very hard to read from raw indices; as a picture it is a one-line
-//! diff. Each DAG is written parent-last, matching the order a topological walk emits.
+//! diff. Each DAG is written parent-last, matching the order a topological walk emits, and
+//! every picture is checked against the DAG it came from before it is compared: each line has
+//! to end at the commit it was drawn for.
 
-use std::fmt::Write as _;
+mod common;
 
-use coral_core::graph::{LaneAssigner, MAX_LANES, NO_LANE};
+use common::{SPILL, assert_drawable};
+use coral_core::graph::{LaneAssigner, MAX_LANES, NO_LANE, RowTopology, art};
 
-/// Renders a DAG as lane art. `dag[i]` is the list of parent indices for commit `i`, and
-/// commits are listed children-first as a topological walk would emit them.
-fn render(dag: &[&[usize]], labels: &[&str]) -> String {
+/// Lays out a DAG. `dag[i]` lists the parent indices of commit `i`, children first.
+fn lay_out<P: AsRef<[usize]>>(dag: &[P]) -> (Vec<RowTopology>, LaneAssigner<usize>) {
     let mut assigner = LaneAssigner::<usize>::new();
-    let rows: Vec<_> = dag
+    let rows = dag
         .iter()
         .enumerate()
-        .map(|(i, p)| assigner.push(&i, p))
+        .map(|(i, p)| assigner.push(&i, p.as_ref()))
         .collect();
-    let width = usize::from(assigner.max_width()).max(1);
-
-    let mut out = String::new();
-    for (i, row) in rows.iter().enumerate() {
-        let mut line: Vec<char> = vec![' '; width * 2];
-        // Lanes that carry a vertical run through this row: reserved before it, resolved after.
-        for lane in 0..width {
-            if carries_through(&rows, i, lane) {
-                line[lane * 2] = '|';
-            }
-        }
-        line[usize::from(row.lane) * 2] = '*';
-        let art: String = line.into_iter().collect();
-
-        let edges: Vec<String> = row.parent_lanes.iter().map(ToString::to_string).collect();
-        let label = labels.get(i).copied().unwrap_or("");
-        let _ = writeln!(
-            out,
-            "{art}  {label:<12} lane {:<2} -> [{}]",
-            row.lane,
-            edges.join(",")
-        );
-    }
-    out
+    (rows, assigner)
 }
 
-/// True when `lane` is occupied across row `i` by a reservation made above and consumed below.
-fn carries_through(rows: &[coral_core::graph::RowTopology], i: usize, lane: usize) -> bool {
-    let lane = u16::try_from(lane).unwrap_or(u16::MAX);
-    rows[..i].iter().enumerate().any(|(j, r)| {
-        r.parent_lanes.contains(&lane) && rows[j + 1..=i].iter().all(|k| k.lane != lane)
-    })
+/// The layout of a DAG as a picture, one row per line with the lanes running on under it,
+/// after checking it can be drawn.
+fn picture(dag: &[&[usize]], labels: &[&str]) -> String {
+    let (rows, _) = lay_out(dag);
+    assert_drawable(dag, &rows, true);
+    let drawn: Vec<art::Row<'_>> = rows.iter().map(art::Row::from).collect();
+    common::labelled(&art::draw(&drawn), labels.iter().copied())
 }
 
 #[test]
 fn linear_history_stays_in_one_lane() {
     let dag: &[&[usize]] = &[&[1], &[2], &[3], &[]];
-    insta::assert_snapshot!(render(dag, &["d", "c", "b", "a (root)"]));
+    insta::assert_snapshot!(picture(dag, &["d", "c", "b", "a (root)"]));
 }
 
 #[test]
 fn a_merge_opens_a_lane_for_the_second_parent() {
     // m takes both a and b; they share the root r.
     let dag: &[&[usize]] = &[&[1, 2], &[3], &[3], &[]];
-    insta::assert_snapshot!(render(dag, &["m (merge)", "a", "b", "r (root)"]));
+    insta::assert_snapshot!(picture(dag, &["m (merge)", "a", "b", "r (root)"]));
 }
 
 #[test]
-fn a_fork_rejoins_without_opening_a_lane() {
-    // Two children of the same parent: the second draws a diagonal into the first's lane.
+fn a_branch_runs_down_its_own_lane_to_the_commit_it_left_from() {
+    // Two children of one parent: the second keeps its lane to the parent's row and turns in.
     let dag: &[&[usize]] = &[&[2], &[2], &[]];
-    insta::assert_snapshot!(render(dag, &["child-1", "child-2", "shared parent"]));
+    insta::assert_snapshot!(picture(dag, &["child-1", "child-2", "shared parent"]));
+}
+
+#[test]
+fn a_feature_merged_back_is_one_lane_from_merge_to_fork() {
+    // The order git's topological walk gives: the merged line first, then the mainline.
+    let dag: &[&[usize]] = &[&[3, 1], &[2], &[4], &[4], &[]];
+    insta::assert_snapshot!(picture(
+        dag,
+        &["merge", "feature-2", "feature-1", "main", "base"]
+    ));
+}
+
+#[test]
+fn five_branches_from_one_commit_all_turn_in_from_the_right() {
+    let dag: &[&[usize]] = &[&[5], &[5], &[5], &[5], &[5], &[]];
+    insta::assert_snapshot!(picture(dag, &["a", "b", "c", "d", "e", "base"]));
+}
+
+#[test]
+fn a_branch_off_a_branch_turns_into_the_branch() {
+    let dag: &[&[usize]] = &[&[5], &[2], &[4], &[4], &[5], &[]];
+    insta::assert_snapshot!(picture(
+        dag,
+        &["main", "sub", "sub-1", "feature", "feature-1", "base"]
+    ));
+}
+
+#[test]
+fn main_merged_into_a_feature_joins_mains_line() {
+    let dag: &[&[usize]] = &[&[2], &[3, 2], &[4], &[4], &[]];
+    insta::assert_snapshot!(picture(
+        dag,
+        &["main", "merge main", "main-1", "feature-1", "base"]
+    ));
+}
+
+#[test]
+fn a_branch_merged_twice_runs_on_through_the_first_merge() {
+    let dag: &[&[usize]] = &[&[2, 1], &[3], &[4, 3], &[5], &[5], &[]];
+    insta::assert_snapshot!(picture(
+        dag,
+        &[
+            "merge-2",
+            "feature-2",
+            "merge-1",
+            "feature-1",
+            "main",
+            "base"
+        ]
+    ));
 }
 
 #[test]
 fn an_octopus_opens_a_lane_per_extra_parent() {
     let dag: &[&[usize]] = &[&[1, 2, 3, 4], &[5], &[5], &[5], &[5], &[]];
-    insta::assert_snapshot!(render(dag, &["octopus", "a", "b", "c", "d", "r (root)"]));
+    insta::assert_snapshot!(picture(dag, &["octopus", "a", "b", "c", "d", "r (root)"]));
 }
 
 #[test]
-fn a_criss_cross_draws_diagonals_rather_than_new_lanes() {
+fn a_criss_cross_joins_the_lines_already_running() {
     // Two merges that each reach both shared parents.
     let dag: &[&[usize]] = &[&[2, 3], &[2, 3], &[4], &[4], &[]];
-    insta::assert_snapshot!(render(dag, &["merge-x", "merge-y", "a", "b", "r (root)"]));
+    insta::assert_snapshot!(picture(dag, &["merge-x", "merge-y", "a", "b", "r (root)"]));
 }
 
 #[test]
-fn a_second_root_gets_its_own_lane() {
+fn a_second_root_starts_a_line_of_its_own() {
     let dag: &[&[usize]] = &[&[1], &[], &[3], &[]];
-    insta::assert_snapshot!(render(dag, &["a", "root-1", "b (orphan)", "root-2"]));
+    insta::assert_snapshot!(picture(dag, &["a", "root-1", "b (orphan)", "root-2"]));
+}
+
+#[test]
+fn two_orphan_branches_side_by_side_end_at_their_own_roots() {
+    let dag: &[&[usize]] = &[&[2], &[3], &[4], &[5], &[], &[]];
+    insta::assert_snapshot!(picture(
+        dag,
+        &[
+            "main",
+            "pages",
+            "main-1",
+            "pages-1",
+            "main root",
+            "pages root"
+        ]
+    ));
+}
+
+#[test]
+fn an_unrelated_history_merged_in_ends_at_its_root() {
+    let dag: &[&[usize]] = &[&[2, 1], &[], &[3], &[]];
+    insta::assert_snapshot!(picture(dag, &["merge", "other root", "main", "base"]));
+}
+
+#[test]
+fn a_branch_newer_than_main_keeps_the_left_lane() {
+    // Whichever tip comes first takes lane 0; the other turns into the fork from the right.
+    let dag: &[&[usize]] = &[&[3], &[2], &[3], &[]];
+    insta::assert_snapshot!(picture(dag, &["feature", "main", "main-1", "base"]));
 }
 
 #[test]
 fn width_never_exceeds_the_number_of_live_branches() {
     let dag: &[&[usize]] = &[&[1, 2], &[3], &[3], &[]];
-    let mut a = LaneAssigner::<usize>::new();
-    for (i, p) in dag.iter().enumerate() {
-        a.push(&i, p);
-    }
+    let (_, assigner) = lay_out(dag);
     assert_eq!(
-        a.max_width(),
+        assigner.max_width(),
         2,
         "a two-sided merge needs exactly two lanes"
     );
-}
-
-/// Every lane a row points at must be reachable: some later row must actually occupy it.
-#[test]
-fn every_reserved_lane_is_eventually_occupied() {
-    let dag: &[&[usize]] = &[&[1, 2, 3, 4], &[5], &[5], &[5], &[5], &[]];
-    let mut a = LaneAssigner::<usize>::new();
-    let rows: Vec<_> = dag.iter().enumerate().map(|(i, p)| a.push(&i, p)).collect();
-
-    for (i, row) in rows.iter().enumerate() {
-        for (k, lane) in row.parent_lanes.iter().enumerate() {
-            let parent = dag[i][k];
-            assert_eq!(
-                rows[parent].lane, *lane,
-                "row {i} parent {parent} lane mismatch"
-            );
-        }
-    }
 }
 
 /// Regression: a row whose first parent is already reserved does not keep its own lane, but
@@ -128,29 +166,95 @@ fn every_reserved_lane_is_eventually_occupied() {
 #[test]
 fn a_lane_handed_to_a_later_parent_is_not_freed_from_under_it() {
     let dag: &[&[usize]] = &[&[2, 3], &[2, 4], &[], &[], &[]];
-    let mut a = LaneAssigner::<usize>::new();
-    let rows: Vec<_> = dag.iter().enumerate().map(|(i, p)| a.push(&i, p)).collect();
+    let (rows, _) = lay_out(dag);
+    assert_drawable(dag, &rows, true);
+}
 
-    for (i, row) in rows.iter().enumerate() {
-        for (k, lane) in row.parent_lanes.iter().enumerate() {
-            let parent = dag[i][k];
-            assert_eq!(
-                rows[parent].lane, *lane,
-                "row {i} reserved lane {lane} for parent {parent}, which was drawn in {}",
-                rows[parent].lane
-            );
-        }
+/// A small deterministic generator, so a failure names a seed that reproduces it.
+struct Dice(u64);
+
+impl Dice {
+    fn roll(&mut self, sides: usize) -> usize {
+        // xorshift64*
+        self.0 ^= self.0 >> 12;
+        self.0 ^= self.0 << 25;
+        self.0 ^= self.0 >> 27;
+        let value = self.0.wrapping_mul(0x2545_f491_4f6c_dd1d) >> 33;
+        usize::try_from(value).unwrap_or(0) % sides.max(1)
     }
 }
 
-/// True when `lane` holds a reservation made above row `i` that row `i` has not yet consumed.
-///
-/// The definition the wire format's open mask must satisfy, derived here by scanning the whole
-/// history so it cannot share a bug with the incremental version the assigner keeps.
-fn reserved_entering(rows: &[coral_core::graph::RowTopology], i: usize, lane: u16) -> bool {
-    rows[..i].iter().enumerate().any(|(j, r)| {
-        r.parent_lanes.contains(&lane) && rows[j + 1..i].iter().all(|k| k.lane != lane)
-    })
+/// A history the way repositories grow one: branches open off a commit, take commits, and
+/// merge back; now and then one merges several, forks from deep in the past, or starts over
+/// from no parent at all. Returned children first, as a topological walk would emit it.
+fn history(dice: &mut Dice, commits: usize, branches: usize) -> Vec<Vec<usize>> {
+    let mut parents: Vec<Vec<usize>> = Vec::with_capacity(commits);
+    let mut heads: Vec<usize> = Vec::new();
+    for c in 0..commits {
+        let roll = dice.roll(100);
+        let mut mine = Vec::new();
+        if c > 0 && roll >= 3 {
+            let first = if heads.is_empty() || dice.roll(10) == 0 {
+                dice.roll(c)
+            } else {
+                heads[dice.roll(heads.len())]
+            };
+            mine.push(first);
+            let extra = match roll {
+                3..=14 => 1,
+                15..=16 => 2 + dice.roll(3),
+                _ => 0,
+            };
+            for _ in 0..extra {
+                let other = dice.roll(c);
+                if !mine.contains(&other) {
+                    mine.push(other);
+                }
+            }
+        }
+        for p in &mine {
+            heads.retain(|h| h != p);
+        }
+        // A head is dropped now and then even when nothing builds on it, which is a branch
+        // left behind; otherwise a new head replaces the oldest once there are enough.
+        heads.push(c);
+        if heads.len() > branches {
+            heads.remove(dice.roll(heads.len()));
+        }
+        parents.push(mine);
+    }
+    // Reversed: the newest commit first, and every parent index rebased to match.
+    let last = commits - 1;
+    parents
+        .into_iter()
+        .rev()
+        .map(|ps| ps.into_iter().map(|p| last - p).collect())
+        .collect()
+}
+
+#[test]
+fn every_line_ends_at_the_commit_it_was_drawn_for() {
+    let mut widths = std::collections::BTreeMap::new();
+    for seed in 1..=3000_u64 {
+        let mut dice = Dice(seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1);
+        let commits = 2 + dice.roll(150);
+        let branches = 1 + dice.roll(12);
+        let dag = history(&mut dice, commits, branches);
+        let (rows, assigner) = lay_out(&dag);
+        *widths.entry(assigner.max_width()).or_insert(0) += 1;
+        assert_drawable(&dag, &rows, assigner.max_width() < SPILL);
+    }
+    eprintln!("widths: {widths:?}");
+}
+
+#[test]
+fn a_saturated_graph_still_draws_inside_the_column() {
+    for seed in 1..=200_u64 {
+        let mut dice = Dice(seed.wrapping_mul(0xd1b5_4a32_d192_ed03) | 1);
+        let dag = history(&mut dice, 400, 60);
+        let (rows, _) = lay_out(&dag);
+        assert_drawable(&dag, &rows, false);
+    }
 }
 
 #[test]
@@ -163,26 +267,11 @@ fn the_open_mask_names_every_lane_entering_a_row() {
         &[&[2], &[2], &[]],
         &[&[1, 2, 3, 4], &[5], &[5], &[5], &[5], &[]],
         &[&[2, 3], &[2, 3], &[4], &[4], &[]],
+        &[&[2, 1], &[3], &[4, 3], &[5], &[5], &[]],
     ];
-
-    for (d, dag) in dags.iter().enumerate() {
-        let mut assigner = LaneAssigner::<usize>::new();
-        let rows: Vec<_> = dag
-            .iter()
-            .enumerate()
-            .map(|(i, p)| assigner.push(&i, p))
-            .collect();
-
-        for (i, row) in rows.iter().enumerate() {
-            for lane in 0..assigner.max_width() {
-                let expected = reserved_entering(&rows, i, lane);
-                let actual = row.open & (1 << lane) != 0;
-                assert_eq!(
-                    actual, expected,
-                    "dag {d}, row {i}, lane {lane}: open mask disagrees with a full scan"
-                );
-            }
-        }
+    for dag in dags {
+        let (rows, _) = lay_out(dag);
+        assert_drawable(dag, &rows, true);
     }
 }
 
@@ -190,7 +279,7 @@ fn the_open_mask_names_every_lane_entering_a_row() {
 fn a_lane_stays_open_across_a_long_run() {
     // The kernel's first-parent chain runs for hundreds of thousands of rows between merges.
     // Every row in between must report the lane as open, or the renderer draws nothing for it.
-    let mut dag: Vec<Vec<usize>> = vec![vec![1, 2]];
+    let mut dag: Vec<Vec<usize>> = vec![vec![1, 200]];
     for i in 1..200 {
         dag.push(vec![i + 1]);
     }

@@ -1,0 +1,21 @@
+---
+source: crates/coral-core/tests/shapes.rs
+expression: h.picture()
+---
+●─╮    merge feature
+│ │
+│ ●─╮  merge sub into feature
+│ │ │
+│ │ ●  sub: two
+│ │ │
+│ │ ●  sub: one
+│ │ │
+│ ● │  feature: three
+│ │ │
+│ ●─╯  feature: two
+│ │
+│ ●    feature: one
+│ │
+● │    main: one
+│ │
+●─╯    base

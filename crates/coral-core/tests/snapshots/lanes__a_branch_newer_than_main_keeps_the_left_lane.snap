@@ -1,0 +1,11 @@
+---
+source: crates/coral-core/tests/lanes.rs
+expression: "picture(dag, &[\"feature\", \"main\", \"main-1\", \"base\"])"
+---
+●    feature
+│
+│ ●  main
+│ │
+│ ●  main-1
+│ │
+●─╯  base

@@ -1,3 +1,4 @@
+pub mod art;
 pub mod gix_stream;
 pub mod lanes;
 pub mod shallow;

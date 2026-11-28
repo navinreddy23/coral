@@ -1,0 +1,15 @@
+---
+source: crates/coral-core/tests/shapes.rs
+expression: h.picture()
+---
+●─┬─┬─╮  octopus
+│ │ │ │
+│ │ │ ●  z: one
+│ │ │ │
+│ │ ● │  y: one
+│ │ │ │
+│ ● │ │  x: one
+│ │ │ │
+● │ │ │  main: one
+│ │ │ │
+●─┴─┴─╯  base

@@ -34,6 +34,7 @@ pub struct RowStore {
     hash_len: usize,
     lane: Vec<u16>,
     open: Vec<u32>,
+    join: Vec<u32>,
     flags: Vec<u8>,
     time: Vec<i64>,
     /// CSR offsets into `parent_row`; length is `len + 1`.
@@ -94,6 +95,12 @@ impl RowStore {
         self.open.get(row as usize).copied().unwrap_or_default()
     }
 
+    /// Lanes whose line ends on `row` by turning into its node, as a bitmask over lanes 0..32.
+    #[must_use]
+    pub fn joins(&self, row: u32) -> u32 {
+        self.join.get(row as usize).copied().unwrap_or_default()
+    }
+
     #[must_use]
     pub fn time(&self, row: u32) -> Option<i64> {
         self.time.get(row as usize).copied()
@@ -147,6 +154,7 @@ impl RowStore {
         self.oids.capacity()
             + self.lane.capacity() * 2
             + self.open.capacity() * 4
+            + self.join.capacity() * 4
             + self.flags.capacity()
             + self.time.capacity() * 8
             + self.parent_start.capacity() * 4
@@ -166,6 +174,7 @@ pub struct RowStoreBuilder {
     hash_len: usize,
     lane: Vec<u16>,
     open: Vec<u32>,
+    join: Vec<u32>,
     flags: Vec<u8>,
     time: Vec<i64>,
     parent_start: Vec<u32>,
@@ -183,6 +192,7 @@ impl RowStoreBuilder {
             hash_len: 0,
             lane: Vec::new(),
             open: Vec::new(),
+            join: Vec::new(),
             flags: Vec::new(),
             time: Vec::new(),
             parent_start: vec![0],
@@ -193,10 +203,11 @@ impl RowStoreBuilder {
         }
     }
 
-    /// Reserves space for a known row count, avoiding repeated reallocation of eight arrays.
+    /// Reserves space for a known row count, avoiding repeated reallocation of nine arrays.
     pub fn reserve(&mut self, rows: usize) {
         self.lane.reserve(rows);
         self.open.reserve(rows);
+        self.join.reserve(rows);
         self.flags.reserve(rows);
         self.time.reserve(rows);
         self.parent_start.reserve(rows + 1);
@@ -211,6 +222,7 @@ impl RowStoreBuilder {
         self.oids.extend_from_slice(node.id.as_bytes());
         self.lane.push(topo.lane);
         self.open.push(topo.open);
+        self.join.push(topo.joins);
         self.time.push(node.commit_time);
 
         let mut f = 0_u8;
@@ -277,6 +289,7 @@ impl RowStoreBuilder {
             hash_len,
             lane: self.lane,
             open: self.open,
+            join: self.join,
             flags,
             time: self.time,
             parent_start: self.parent_start,

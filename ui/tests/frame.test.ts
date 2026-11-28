@@ -147,6 +147,7 @@ describe('paging', () => {
       parentLanes: new Uint16Array(0),
       oids: new Uint8Array(rowCount * 20),
       open: new Uint32Array(rowCount),
+      joins: new Uint32Array(rowCount),
     };
   }
 
@@ -247,6 +248,7 @@ describe('finding a commit again', () => {
       parentLanes: new Uint16Array(0),
       oids: bytes,
       open: new Uint32Array(rowCount),
+      joins: new Uint32Array(rowCount),
     };
   }
 
@@ -295,6 +297,7 @@ describe('an id that is only partly a hash', () => {
       parentLanes: new Uint16Array(0),
       oids: bytes,
       open: new Uint32Array(1),
+      joins: new Uint32Array(1),
     };
     expect(rowOfOid(frame, '1a')).toBe(0);
     expect(rowOfOid(frame, '1z')).toBeNull();

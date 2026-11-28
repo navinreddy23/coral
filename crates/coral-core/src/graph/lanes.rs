@@ -34,7 +34,11 @@ const SPILL: u16 = MAX_LANES - 1;
 pub struct RowTopology {
     /// The lane the commit's node is drawn in.
     pub lane: u16,
-    /// The lane each parent will be drawn in, in parent order.
+    /// The lane each parent's line runs down from this row, in parent order.
+    ///
+    /// The first parent's is always the row's own lane, outside the lane of last resort: a
+    /// branch runs straight down to the commit it left from. A later parent's may be another
+    /// lane, reached across this row — a merge's corner is on the merge.
     pub parent_lanes: SmallVec<[u16; 2]>,
     /// Lanes occupied after this row, i.e. the graph's width here.
     pub width: u16,
@@ -45,19 +49,30 @@ pub struct RowTopology {
     /// the lane simply is not drawn for the whole span between its endpoints. Lanes past 31
     /// are omitted; the graph column cannot show them.
     pub open: u32,
+    /// Bit `n` set when lane `n`'s line ends on this row by turning into its node.
+    ///
+    /// A branch's line, held in its own lane down to the commit it left from: the corner is
+    /// on that commit's row, as `GitKraken` draws it, so the branch is seen to start from it.
+    /// Always to the right of [`Self::lane`], because a commit takes the leftmost of the lanes
+    /// waiting for it, so every branch turns in from the same side.
+    pub joins: u32,
 }
 
 /// Assigns commits to vertical lanes as the walk emits them.
 ///
-/// The invariant that makes the wire format work: a lane holds at most one reservation, and a
-/// reservation is cleared only when its commit is emitted. So a lane reserved for parent `P`
-/// at row `c` is continuously occupied from `c` until `P`'s own row, and exactly one commit is
-/// ever drawn in it over that span. That is why no "lanes ending here" list has to be sent —
-/// a vertical run in lane `L` ends at precisely the row whose own lane is `L`.
+/// The invariant that makes the wire format work: a lane carries one line at a time, and a
+/// line is cleared only when the commit it leads to is emitted. So a lane reserved for parent
+/// `P` at row `c` is continuously occupied from `c` until `P`'s own row, and on that row it
+/// ends — in `P`'s node when `P` is drawn in it, or turning into `P`'s node when it is one of
+/// [`RowTopology::joins`]. That is why no list of where runs end has to be sent beyond the
+/// join mask.
 ///
-/// Rendering convention is an immediate join: an edge from `(row c, lane Lc)` to a parent in
-/// `Lp != Lc` leaves `Lc` at row `c` and joins `Lp` by row `c+1`, then runs straight down.
-/// This keeps `Lc` free rather than holding it open for a possibly million-row span.
+/// Two shapes of edge, the two `GitKraken` draws. A merge's later parent is reached across the
+/// merge's own row and then straight down the parent's lane. A first parent drawn elsewhere is
+/// reached straight down the child's lane and then across the parent's row. Several lines may
+/// wait for one commit — a branch and the line it left, or every branch off one release — and
+/// the commit is drawn in the leftmost of them, so the trunk keeps its lane and every branch
+/// joins it from the right.
 ///
 /// Requires that children are emitted before their parents, which is what
 /// [`super::Order::Topological`] guarantees.
@@ -65,7 +80,7 @@ pub struct RowTopology {
 /// index in the tests. A parent's row number is not known when its child is emitted, so the
 /// key cannot be the row.
 pub struct LaneAssigner<K> {
-    /// Lane -> the commit it is reserved for and when it was claimed, or `None` when free.
+    /// Lane -> the commit its line leads to and when it was claimed, or `None` when free.
     lanes: Vec<Option<(K, u64)>>,
     /// Rows placed so far, which is what "claimed longest ago" is measured in.
     clock: u64,
@@ -75,11 +90,16 @@ pub struct LaneAssigner<K> {
     /// checks a row and forty-six million over the kernel. This is the row that scan would
     /// first find something at, so until then there is nothing to look for.
     next_sweep: u64,
-    /// Reservations still outstanding. Bounded by the graph's width, not its length: an entry
-    /// lives only from the child that claims a lane until the parent that consumes it.
-    reserved: std::collections::HashMap<K, u16>,
+    /// Commit -> every lane whose line leads to it. Bounded by the graph's width, not its
+    /// length: an entry lives only from the child that claims a lane until the parent that
+    /// consumes it.
+    reserved: std::collections::HashMap<K, SmallVec<[u16; 2]>>,
     /// Lanes freed on the current row; never reused until the next one, so a lane does not
     /// appear to teleport across a single row.
+    ///
+    /// A lane that joined this row's node is not among them: a merge here may carry its own
+    /// edge on down that lane, which draws as the one line touching the node on its way past —
+    /// `GitKraken`'s shape for a branch merged a second time, and a lane narrower.
     freed_this_row: SmallVec<[u16; 4]>,
     max_width: u16,
 }
@@ -119,33 +139,26 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
         self.retire_stale();
         let open = self.open_mask();
 
-        // A child may already have reserved a lane for me; otherwise I am a branch tip.
-        let lane = match self.reserved.remove(key) {
-            Some(l) => {
-                self.lanes[l as usize] = None;
-                l
-            }
-            None => self.alloc().unwrap_or(SPILL),
-        };
-
+        let (lane, joins) = self.place(key);
         let mut parent_lanes = SmallVec::new();
-        let mut kept_my_lane = false;
         for (i, p) in parents.iter().enumerate() {
-            if let Some(&existing) = self.reserved.get(p) {
-                // Another child already claimed this parent: a fork joining back, or one side
-                // of a criss-cross. Draw a diagonal into that lane rather than opening one.
-                parent_lanes.push(existing);
-                continue;
-            }
-            let pl = if i == 0 && !kept_my_lane && lane != SPILL {
-                kept_my_lane = true;
-                Some(lane)
-            } else {
+            let first = i == 0 && lane != SPILL;
+            let waiting = self.reserved.get(p).filter(|lanes| !lanes.is_empty());
+            let pl = match waiting {
+                // A first parent runs straight down this lane. When it already has a line, this
+                // is a branch leaving it, or one side of a criss-cross: held down to the
+                // parent's own row, where it turns in.
+                _ if first => Some(lane),
+                // A merge into a line already running there: across this row and down it.
+                Some(lanes) => {
+                    parent_lanes.push(nearest(lanes, lane));
+                    continue;
+                }
                 // To the right of this commit, so the line bends one way. A free lane to the
                 // left is closer, but taking it draws a branch that leaves leftwards and
                 // comes back, and a screen of those reads as a knot rather than as a trunk
                 // with branches off it.
-                self.alloc_after(lane)
+                None => self.alloc_after(lane),
             };
             // Nowhere to put it. The edge is dropped and the parent becomes a tip when its own
             // row comes: a missing line in a region already too wide to draw is a smaller lie
@@ -154,33 +167,64 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
                 parent_lanes.push(NO_LANE);
                 continue;
             };
-            self.lanes[pl as usize] = Some((p.clone(), self.clock));
-            self.next_sweep = self.next_sweep.min(self.clock.saturating_add(LINE_LIMIT));
-            self.reserved.insert(p.clone(), pl);
+            self.claim(pl, p);
             parent_lanes.push(pl);
-        }
-
-        // A root, or a first parent that was already reserved elsewhere: my lane dies here.
-        //
-        // Unless a later parent was allocated into it. Claiming my lane above left its slot
-        // free, so `alloc` is entitled to hand it straight back out; freeing it then would
-        // destroy a live reservation and leave the map pointing at a trimmed-away slot.
-        if !kept_my_lane && !parent_lanes.contains(&lane) && lane != SPILL {
-            self.free(lane);
         }
         self.trim();
 
-        // The row is drawn in `lane` even when that lane dies here — a fork rejoining takes a
-        // lane for one row and diagonals out of it — so width must cover it, not just the
-        // lanes still live after the trim.
+        // The row is drawn in `lane` even when that lane dies here — a root — and its joins
+        // reach across it, so width must cover both, not just the lanes still live after the
+        // trim.
         let live = u16::try_from(self.lanes.len()).unwrap_or(u16::MAX);
-        let width = live.max(lane.saturating_add(1));
+        let joined = u16::try_from(32 - joins.leading_zeros()).unwrap_or(0);
+        let width = live.max(lane.saturating_add(1)).max(joined);
         self.max_width = self.max_width.max(width);
         RowTopology {
             lane,
             parent_lanes,
             width,
             open,
+            joins,
+        }
+    }
+
+    /// The lane `key` is drawn in, and the lanes whose lines turn into it there.
+    ///
+    /// The leftmost of the lines waiting for it, so the others all join from its right; a
+    /// tip, with nothing waiting, takes the leftmost free lane. Every waiting lane is cleared.
+    fn place(&mut self, key: &K) -> (u16, u32) {
+        let waiting = self.reserved.remove(key).unwrap_or_default();
+        let Some(&lane) = waiting.iter().min() else {
+            return (self.alloc().unwrap_or(SPILL), 0);
+        };
+        let mut joins = 0_u32;
+        for &w in &waiting {
+            if let Some(slot) = self.lanes.get_mut(w as usize) {
+                *slot = None;
+            }
+            if w != lane && w < 32 {
+                joins |= 1 << w;
+            }
+        }
+        (lane, joins)
+    }
+
+    /// Starts the line in `lane` that leads to `key`.
+    fn claim(&mut self, lane: u16, key: &K) {
+        if let Some(slot) = self.lanes.get_mut(lane as usize) {
+            *slot = Some((key.clone(), self.clock));
+        }
+        self.next_sweep = self.next_sweep.min(self.clock.saturating_add(LINE_LIMIT));
+        self.reserved.entry(key.clone()).or_default().push(lane);
+    }
+
+    /// Ends the line in `lane` that led to `key` without its commit having come.
+    fn release(&mut self, key: &K, lane: u16) {
+        if let Some(lanes) = self.reserved.get_mut(key) {
+            lanes.retain(|l| *l != lane);
+            if lanes.is_empty() {
+                self.reserved.remove(key);
+            }
         }
     }
 
@@ -251,12 +295,10 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
                 .is_some_and(|(_, at)| *at < cutoff)
                 .then(|| self.lanes[i].as_ref().map(|(key, _)| key.clone()))
                 .flatten();
-            if let Some(key) = stale {
-                self.reserved.remove(&key);
+            if let (Some(key), Ok(lane)) = (stale, u16::try_from(i)) {
+                self.release(&key, lane);
                 self.lanes[i] = None;
-                if let Ok(lane) = u16::try_from(i) {
-                    self.freed_this_row.push(lane);
-                }
+                self.freed_this_row.push(lane);
             } else if let Some((_, at)) = &self.lanes[i] {
                 oldest = oldest.min(*at);
             }
@@ -286,16 +328,10 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
             .map(|(i, key, _)| (i, key.clone()));
 
         let (index, key) = oldest?;
-        self.reserved.remove(&key);
+        let lane = u16::try_from(index).ok()?;
+        self.release(&key, lane);
         self.lanes[index] = None;
-        u16::try_from(index).ok()
-    }
-
-    fn free(&mut self, lane: u16) {
-        if let Some(slot) = self.lanes.get_mut(lane as usize) {
-            *slot = None;
-        }
-        self.freed_this_row.push(lane);
+        Some(lane)
     }
 
     /// Drops trailing free lanes so `width` reflects the live graph.
@@ -304,4 +340,14 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
             self.lanes.pop();
         }
     }
+}
+
+/// Of the lanes leading to one commit, the one a merge in `from` reaches across the fewest
+/// lanes to join; to the right on a tie, the way a merge's new lane opens.
+fn nearest(lanes: &[u16], from: u16) -> u16 {
+    lanes
+        .iter()
+        .copied()
+        .min_by_key(|&l| (l.abs_diff(from), l < from))
+        .unwrap_or(NO_LANE)
 }

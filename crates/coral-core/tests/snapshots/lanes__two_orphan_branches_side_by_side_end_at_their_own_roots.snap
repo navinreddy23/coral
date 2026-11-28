@@ -1,0 +1,15 @@
+---
+source: crates/coral-core/tests/lanes.rs
+expression: "picture(dag,\n&[\"main\", \"pages\", \"main-1\", \"pages-1\", \"main root\", \"pages root\"])"
+---
+●    main
+│
+│ ●  pages
+│ │
+● │  main-1
+│ │
+│ ●  pages-1
+│ │
+● │  main root
+  │
+  ●  pages root
