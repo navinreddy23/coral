@@ -132,10 +132,12 @@ fn parse_line(line: &[u8]) -> Result<CommitNode, CoralError> {
         parents
             .push(ObjectId::from_hex(f.as_bytes()).map_err(|_| protocol("malformed parent id"))?);
     }
+    // rev-list keeps a stash's parents and walks its index commit as a row of its own.
     Ok(CommitNode {
         id,
         parents,
         commit_time,
+        stash: false,
     })
 }
 

@@ -336,7 +336,8 @@ fn emit(
     }
     // Both gix and git report every parent even when only the first is traversed; keeping the
     // rest would leave edges pointing at rows the walk never emits.
-    let first_only = opts.first_parent || stashes.contains(&id);
+    let stash = stashes.contains(&id);
+    let first_only = opts.first_parent || stash;
     let parents: SmallVec<[ObjectId; 2]> = if first_only {
         SmallVec::from_slice(&parents[..parents.len().min(1)])
     } else {
@@ -348,6 +349,7 @@ fn emit(
         id,
         parents,
         commit_time,
+        stash,
     };
     if sink(node) == WalkControl::Stop {
         return false;

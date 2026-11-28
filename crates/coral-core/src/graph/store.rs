@@ -182,6 +182,8 @@ pub struct RowStoreBuilder {
     provisional: bool,
     /// The line to keep left; see [`RowStoreBuilder::keep_left`].
     trunk: Option<Trunk>,
+    /// Rows that are stashes, in order, which never carry HEAD's line on.
+    stashes: Vec<u32>,
 }
 
 /// How far down HEAD may be for its line to be kept in lane 0.
@@ -213,6 +215,7 @@ impl RowStoreBuilder {
             parent_oids: Vec::new(),
             provisional,
             trunk: None,
+            stashes: Vec::new(),
         }
     }
 
@@ -235,6 +238,10 @@ impl RowStoreBuilder {
     pub fn push(&mut self, node: &CommitNode) {
         if self.hash_len == 0 {
             self.hash_len = node.id.as_bytes().len();
+        }
+        if node.stash {
+            self.stashes
+                .push(u32::try_from(self.time.len()).unwrap_or(u32::MAX));
         }
         self.oids.extend_from_slice(node.id.as_bytes());
         self.time.push(node.commit_time);
@@ -307,6 +314,7 @@ impl RowStoreBuilder {
             start: &self.parent_start,
             row: &parent_row,
             missing: &missing,
+            stashes: &self.stashes,
         };
         let top = self.trunk.and_then(|trunk| {
             graph.trunk_top(
@@ -346,6 +354,8 @@ struct Edges<'a> {
     /// of its own: the kernel's first paint filled the column from row 76 down, then every
     /// line there moved when the full walk landed.
     missing: &'a HashMap<u32, u32>,
+    /// Rows that are stashes, in order.
+    stashes: &'a [u32],
 }
 
 /// What [`Edges::lay_out`] gives every row.
@@ -369,14 +379,48 @@ impl Edges<'_> {
     }
 
     /// The row whose line is kept in lane 0: the upstream's when its first parents lead down
-    /// to HEAD, which is what a fetch leaves; HEAD's otherwise. `None` when HEAD is not within
-    /// [`HEAD_WITHIN`] rows.
+    /// to HEAD, which is what a fetch leaves; otherwise the newest commit HEAD's line runs
+    /// straight on into. `None` when HEAD is not within [`HEAD_WITHIN`] rows.
     fn trunk_top(&self, head: u32, upstream: Option<u32>) -> Option<u32> {
         if head == NO_ROW || u64::from(head) >= HEAD_WITHIN {
             return None;
         }
         let ahead = upstream.filter(|&up| up != NO_ROW && self.leads_to(up, head));
-        Some(ahead.unwrap_or(head))
+        Some(ahead.unwrap_or_else(|| self.straight_on_from(head)))
+    }
+
+    /// The newest commit on the line up from `row` while it does not fork: each step is the
+    /// one commit above with it for a parent, its first, and not a merge.
+    ///
+    /// A HEAD left behind a straight history by a bisect or an old tag is on the only line
+    /// there is, and keeping lane 0 for HEAD alone put the commits above it in lane 1 turning
+    /// into it: a fork drawn where the history has none. At a real fork the line stops, so
+    /// both branches turn into the commit the user is on. A merge stops it too. A stash is not
+    /// counted at all, so it stays beside HEAD's line rather than on top of it, and a stash
+    /// taken on HEAD does not stop the line running on.
+    fn straight_on_from(&self, row: u32) -> u32 {
+        const NONE: u32 = u32::MAX;
+        const MANY: u32 = u32::MAX - 1;
+        // Children are above their parents, so only the rows above `row` can be one.
+        let mut child = vec![NONE; row as usize + 1];
+        for above in 0..row {
+            if self.stashes.binary_search(&above).is_ok() {
+                continue;
+            }
+            for &parent in self.parents(above) {
+                if let Some(slot) = child.get_mut(parent as usize) {
+                    *slot = if *slot == NONE { above } else { MANY };
+                }
+            }
+        }
+        let mut top = row;
+        loop {
+            let next = child[top as usize];
+            if next == NONE || next == MANY || self.parents(next) != [top] {
+                return top;
+            }
+            top = next;
+        }
     }
 
     /// Whether `from`'s first parents lead down to `to`.

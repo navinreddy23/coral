@@ -10,6 +10,9 @@ pub struct CommitNode {
     pub id: ObjectId,
     pub parents: SmallVec<[ObjectId; 2]>,
     pub commit_time: i64,
+    /// A stash whose index and untracked-files parents were dropped, so that it reads as an
+    /// ordinary commit on the one it was taken from.
+    pub stash: bool,
 }
 
 /// Emission order.

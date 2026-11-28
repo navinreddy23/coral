@@ -197,6 +197,7 @@ fn node(n: u32, parents: &[u32]) -> CommitNode {
         id: id(n),
         parents: parents.iter().map(|&p| id(p)).collect(),
         commit_time: 0,
+        stash: false,
     }
 }
 
@@ -353,5 +354,75 @@ fn a_walk_cut_short_shares_the_line_to_a_commit_it_does_not_reach() {
             ),
             "row {row} is laid out differently by the walk cut short"
         );
+    }
+}
+
+/// Lays out `nodes` with HEAD on `head`.
+fn with_head(nodes: &[CommitNode], head: u32) -> coral_core::graph::RowStore {
+    let mut builder = RowStoreBuilder::new(false);
+    builder.keep_left(Some(Trunk {
+        head: id(head),
+        upstream: None,
+    }));
+    for n in nodes {
+        builder.push(n);
+    }
+    builder.finish()
+}
+
+/// A HEAD behind the tip of a straight history, as a bisect or an old tag leaves it, is on
+/// the one line there is: drawn as one lane. Keeping lane 0 for HEAD alone put the commits
+/// above it in lane 1, turning into it, a fork where the history has none.
+#[test]
+fn a_head_behind_a_straight_line_leaves_it_straight() {
+    let nodes: Vec<CommitNode> = (0..10)
+        .map(|n| {
+            if n < 9 {
+                node(n, &[n + 1])
+            } else {
+                node(n, &[])
+            }
+        })
+        .collect();
+    let store = with_head(&nodes, 5);
+    for row in 0..10 {
+        assert_eq!(store.lane(row), Some(0), "row {row} left the line");
+    }
+}
+
+/// A fork above HEAD is where the line stops: both branches turn into HEAD's lane, so the
+/// lane the user is on is the one running down, whichever branch is newer.
+#[test]
+fn a_head_with_two_branches_above_it_keeps_lane_0_to_itself() {
+    let nodes = [
+        node(0, &[1]),
+        node(1, &[4]),
+        node(2, &[3]),
+        node(3, &[4]),
+        node(4, &[5]),
+        node(5, &[]),
+    ];
+    let store = with_head(&nodes, 4);
+    assert_eq!(store.lane(4), Some(0));
+    assert!(
+        [0, 1, 2, 3].iter().all(|&row| store.lane(row) != Some(0)),
+        "a branch above the fork took lane 0"
+    );
+}
+
+/// A stash on HEAD, its index parent dropped as the walk drops it, reads as a commit on
+/// HEAD: it stays beside HEAD's line rather than becoming its top, and does not stop the line
+/// running on above it.
+#[test]
+fn a_stash_on_head_is_not_taken_for_the_line_running_on() {
+    let stash = CommitNode {
+        stash: true,
+        ..node(0, &[2])
+    };
+    let nodes = [stash, node(1, &[2]), node(2, &[3]), node(3, &[])];
+    let store = with_head(&nodes, 2);
+    assert_ne!(store.lane(0), Some(0), "the stash took lane 0");
+    for row in 1..4 {
+        assert_eq!(store.lane(row), Some(0), "row {row} left the line");
     }
 }

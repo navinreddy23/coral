@@ -223,8 +223,8 @@ same three numbers reach the stylesheet and the canvas metrics, which cannot rea
   so every branch is one straight lane from its merge to its fork and is seen to start from
   the commit it did. A commit several lines lead to is drawn in the leftmost of them, so every
   branch turns into it from the right and the trunk keeps its lane; the line the user is on —
-  HEAD, its first parents, and its branch's upstream above it when that is ahead — is kept in
-  lane 0 whatever is newer. A branch whose fork is more than 100 rows down runs eight rows on
+  HEAD, its first parents, and above it its branch's upstream when that is ahead, or else the
+  commits it runs straight on into until a fork — is kept in lane 0 whatever is newer. A branch whose fork is more than 100 rows down runs eight rows on
   down its own lane and stops: on the kernel, lines held to forks thousands of rows below
   filled every lane, and joining the line to the fork across the branch's own row turned a
   corner either way, the right-hand ones looking like merges. A merge into a line already running joins it where it is, which is the
