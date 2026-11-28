@@ -240,9 +240,12 @@ fn history(dice: &mut Dice, commits: usize, branches: usize) -> Vec<Vec<usize>> 
                 heads[dice.roll(heads.len())]
             };
             mine.push(first);
+            // Now and then an octopus as wide as the kernel's, which can need more lanes than
+            // the column has on one row.
             let extra = match roll {
                 3..=14 => 1,
                 15..=16 => 2 + dice.roll(3),
+                17 => 5 + dice.roll(40),
                 _ => 0,
             };
             for _ in 0..extra {
@@ -422,6 +425,40 @@ fn a_saturated_graph_with_far_forks_never_ends_a_line_at_another_commit() {
             );
         }
     }
+}
+
+/// A merge joining lines already running to some of its parents uses those lanes as much as
+/// the ones it opens: a full column must not take them back for its later parents. The
+/// kernel's 66-parent octopus came to a full column, joined seven lines running to its parents,
+/// and then handed those seven lanes to seven more of its parents, whose lines all ended at
+/// the wrong commits.
+#[test]
+fn an_octopus_in_a_full_column_never_hands_a_lane_it_joined_to_another_parent() {
+    let mut assigner = LaneAssigner::<u32>::new();
+    // Thirty-one tips with a line each, filling the column; the ten newest lead to commits the
+    // octopus has for parents too, and it comes to them before the others.
+    for tip in 0..31_u32 {
+        assigner.push(&tip, &[100 + tip]);
+    }
+    let parents: Vec<u32> = std::iter::once(300)
+        .chain(121..131)
+        .chain(301..331)
+        .collect();
+    let row = assigner.push(&50, &parents);
+    for (k, &lane) in row.parent_lanes.iter().enumerate() {
+        if lane == NO_LANE {
+            continue;
+        }
+        let twice = row.parent_lanes[..k].contains(&lane);
+        assert!(
+            !twice,
+            "parent {k} drawn down lane {lane}, which an earlier parent has"
+        );
+    }
+    assert!(
+        row.parent_lanes.contains(&NO_LANE),
+        "the column never ran out, so nothing was tested"
+    );
 }
 
 #[test]
@@ -654,4 +691,68 @@ fn a_merge_opens_its_extra_lane_to_the_right() {
         "the branch bends left, into lane {opened}, from lane {}",
         merge.lane
     );
+}
+
+/// Every rule at once, over far more histories than the suite runs: near and far forks mixed,
+/// a line kept left, graphs from a handful of commits to past the column's width. Too slow for
+/// every gate; `CORAL_FUZZ_SEEDS` sets how many, 20,000 when unset.
+///
+/// `cargo test -p coral-core --all-features --test lanes -- --ignored`
+#[test]
+#[ignore = "a long run; see the doc comment"]
+fn deep_fuzz_every_rule_at_once() {
+    let seeds: u64 = std::env::var("CORAL_FUZZ_SEEDS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20_000);
+    let mut saturated = 0;
+    for seed in 1..=seeds {
+        let mut dice = Dice(seed.wrapping_mul(0xbf58_476d_1ce4_e5b9) | 1);
+        let commits = 2 + dice.roll(if seed % 10 == 0 { 600 } else { 150 });
+        let branches = 1 + dice.roll(if seed % 7 == 0 { 70 } else { 12 });
+        let dag = history(&mut dice, commits, branches);
+        let far_odds = dice.roll(4);
+        let kept = (seed % 3 == 0).then(|| dice.roll(commits));
+        let mut assigner = LaneAssigner::<usize>::new();
+        if let Some(k) = kept {
+            assigner.keep_left(k);
+        }
+        let mut any_far = false;
+        let rows: Vec<RowTopology> = dag
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                if far_odds > 0 && dice.roll(far_odds + 1) == 0 {
+                    any_far = true;
+                    assigner.push_far(&i, p)
+                } else {
+                    assigner.push(&i, p)
+                }
+            })
+            .collect();
+        let full = assigner.max_width() >= SPILL;
+        saturated += usize::from(full);
+        assert_drawable(&dag, &rows, !full && !any_far);
+        assert_branches_hold(&rows);
+        for (i, row) in rows.iter().enumerate() {
+            let drawn: Vec<u16> = row
+                .parent_lanes
+                .iter()
+                .copied()
+                .filter(|&l| l != NO_LANE)
+                .collect();
+            let mut unique = drawn.clone();
+            unique.sort_unstable();
+            unique.dedup();
+            assert_eq!(
+                unique.len(),
+                drawn.len(),
+                "seed {seed}, row {i}: two parents down one lane {drawn:?}"
+            );
+        }
+        if let Some(k) = kept {
+            assert_eq!(rows[k].lane, 0, "seed {seed}: the kept commit left lane 0");
+        }
+    }
+    eprintln!("{seeds} histories, {saturated} of them filling the column");
 }

@@ -67,7 +67,9 @@ is near enough to see (otherwise its line runs eight rows and stops), and HEAD's
 screen's walk, so a first screen and the full walk agree.
 
 Measured on the kernel: 1,508,459 rows and 1,630,422 edges build in 2.2 s into 95.5 MB, at
-66.4 bytes per row, in the 31 lanes the column is capped at.
+66.4 bytes per row, in the 31 lanes the column is capped at. The lane rules fail in crowds the
+generated histories in the tests are too small for, so `examples/check_graph.rs` lays out a
+real repository as the window does and checks every row and edge against them.
 
 Every row also carries a 32-bit mask of the lanes entering it, and a second of the lanes that
 end on it by turning into its node — a branch arriving at the commit it left from. The renderer

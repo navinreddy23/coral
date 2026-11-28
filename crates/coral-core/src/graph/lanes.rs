@@ -117,12 +117,16 @@ pub struct LaneAssigner<K> {
     /// is closed in this row's `open` so that it stops above the row instead of running on into
     /// whatever the lane carries next.
     evicted_this_row: u32,
-    /// Lanes this row has drawn a line down, as a mask: never taken back for another of its
-    /// parents, whose line would then be drawn down the same lane as the first's.
+    /// Lanes this row has drawn a line down, opened or joined, as a mask: never taken back for
+    /// another of its parents, whose line would then be drawn down the same lane as the
+    /// first's.
     ///
     /// A tail is the line due soonest, so it is the first a full column would take, and in the
-    /// kernel a merge's first parent was given a tail and its second parent the same lane.
-    claimed_this_row: u32,
+    /// kernel a merge's first parent was given a tail and its second parent the same lane. A
+    /// joined line is the newest, so it is the last, but the kernel's 66-parent octopus came to
+    /// a full column, joined seven lines and opened the rest, and its last seven parents were
+    /// handed the lanes of the seven it had joined.
+    used_this_row: u32,
     /// The commit lane 0 is kept for until it is placed; see [`Self::keep_left`].
     trunk: Option<K>,
     max_width: u16,
@@ -144,7 +148,7 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
             reserved: std::collections::HashMap::new(),
             freed_this_row: SmallVec::new(),
             evicted_this_row: 0,
-            claimed_this_row: 0,
+            used_this_row: 0,
             trunk: None,
             max_width: 0,
         }
@@ -191,7 +195,7 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
     fn lay(&mut self, key: &K, parents: &[K], hold: bool) -> RowTopology {
         self.freed_this_row.clear();
         self.evicted_this_row = 0;
-        self.claimed_this_row = 0;
+        self.used_this_row = 0;
         self.clock += 1;
         self.retire_stale();
         let open = self.open_mask();
@@ -297,7 +301,7 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
         self.next_sweep = self.next_sweep.min(until.saturating_add(1));
         self.reserved.entry(key.clone()).or_default().push(lane);
         if lane < 32 {
-            self.claimed_this_row |= 1 << lane;
+            self.used_this_row |= 1 << lane;
         }
     }
 
@@ -311,6 +315,9 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
     fn renew(&mut self, lane: u16) {
         if let Some(Some((_, until))) = self.lanes.get_mut(lane as usize) {
             *until = self.clock.saturating_add(LINE_LIMIT);
+        }
+        if lane < 32 {
+            self.used_this_row |= 1 << lane;
         }
     }
 
@@ -430,7 +437,7 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
             .filter_map(|(i, slot)| slot.as_ref().map(|(key, until)| (i, key, *until)))
             .filter(|(i, _, _)| {
                 u16::try_from(*i).is_ok_and(|l| {
-                    !self.freed_this_row.contains(&l) && self.claimed_this_row & (1 << l) == 0
+                    !self.freed_this_row.contains(&l) && self.used_this_row & (1 << l) == 0
                 })
             })
             .min_by_key(|(_, _, until)| *until)
