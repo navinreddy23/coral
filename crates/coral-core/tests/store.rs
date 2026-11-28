@@ -280,3 +280,45 @@ async fn both_streams_name_the_same_trunk() {
     assert_eq!(gix_stream.trunk(), Some(tracking));
     assert_eq!(sub.trunk(), Some(tracking));
 }
+
+/// Two tips leaving one commit, the second `gap` rows above it: the line to it held or not.
+fn two_branches_off_one_commit(gap: u32) -> coral_core::graph::RowStore {
+    // Row 0 leads to the fork first; row 1 is the branch that may or may not hold a lane down
+    // to it; rows 2.. are an unrelated line that puts the fork `gap` rows below row 1.
+    let fork = gap + 1;
+    let mut builder = RowStoreBuilder::new(false);
+    builder.push(&node(0, &[fork]));
+    builder.push(&node(1, &[fork]));
+    for n in 2..fork {
+        let parents: &[u32] = if n + 1 < fork { &[n + 1] } else { &[] };
+        builder.push(&node(n, parents));
+    }
+    builder.push(&node(fork, &[]));
+    builder.finish()
+}
+
+/// A branch keeps its lane down to a fork a few screens below, as `GitKraken` draws it.
+#[test]
+fn a_branch_holds_its_lane_to_a_fork_a_few_screens_down() {
+    let store = two_branches_off_one_commit(60);
+    assert_eq!(store.parent_lanes(1), &[store.lane(1).unwrap()]);
+    assert_ne!(
+        store.joins(61) & (1 << store.lane(1).unwrap()),
+        0,
+        "it turns into the fork"
+    );
+}
+
+/// Further than that it joins the line already running to its fork, on its own row: on the
+/// kernel, held lines to forks thousands of rows down filled every lane of the column.
+#[test]
+fn a_branch_joins_the_line_to_a_fork_too_far_down_to_hold_one() {
+    let store = two_branches_off_one_commit(400);
+    assert_eq!(store.lane(1), Some(1));
+    assert_eq!(
+        store.parent_lanes(1),
+        &[0],
+        "across its own row into the line to the fork"
+    );
+    assert_eq!(store.joins(401), 0);
+}

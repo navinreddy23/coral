@@ -7,7 +7,7 @@
 
 mod common;
 
-use common::{SPILL, assert_drawable};
+use common::{SPILL, assert_branches_hold, assert_drawable};
 use coral_core::graph::{LaneAssigner, MAX_LANES, NO_LANE, RowTopology, art};
 
 /// Lays out a DAG. `dag[i]` lists the parent indices of commit `i`, children first.
@@ -26,6 +26,7 @@ fn lay_out<P: AsRef<[usize]>>(dag: &[P]) -> (Vec<RowTopology>, LaneAssigner<usiz
 fn picture(dag: &[&[usize]], labels: &[&str]) -> String {
     let (rows, _) = lay_out(dag);
     assert_drawable(dag, &rows, true);
+    assert_branches_hold(&rows);
     let drawn: Vec<art::Row<'_>> = rows.iter().map(art::Row::from).collect();
     common::labelled(&art::draw(&drawn), labels.iter().copied())
 }
@@ -292,6 +293,7 @@ fn every_line_ends_at_the_commit_it_was_drawn_for() {
             .collect();
         *widths.entry(assigner.max_width()).or_insert(0) += 1;
         assert_drawable(&dag, &rows, assigner.max_width() < SPILL);
+        assert_branches_hold(&rows);
         if let Some(k) = kept {
             assert_eq!(rows[k].lane, 0, "seed {seed}: the kept commit left lane 0");
             assert!(
@@ -301,6 +303,49 @@ fn every_line_ends_at_the_commit_it_was_drawn_for() {
         }
     }
     eprintln!("widths: {widths:?}");
+}
+
+#[test]
+fn a_far_fork_joins_the_line_already_running_across_its_own_row() {
+    // Two children of one parent; the second is laid out as one whose fork is far below.
+    let dag: &[&[usize]] = &[&[2], &[2], &[]];
+    let mut assigner = LaneAssigner::<usize>::new();
+    let rows = vec![
+        assigner.push(&0, dag[0]),
+        assigner.push_far(&1, dag[1]),
+        assigner.push(&2, dag[2]),
+    ];
+    assert_drawable(dag, &rows, true);
+    assert_eq!(rows[1].lane, 1);
+    assert_eq!(
+        rows[1].parent_lanes.as_slice(),
+        &[0],
+        "across its own row into lane 0"
+    );
+    assert_eq!(rows[2].joins, 0, "nothing is left to turn into the parent");
+}
+
+#[test]
+fn far_forks_mixed_in_still_end_every_line_at_its_commit() {
+    for seed in 1..=1000_u64 {
+        let mut dice = Dice(seed.wrapping_mul(0x94d0_49bb_1331_11eb) | 1);
+        let commits = 2 + dice.roll(120);
+        let branches = 1 + dice.roll(10);
+        let dag = history(&mut dice, commits, branches);
+        let mut assigner = LaneAssigner::<usize>::new();
+        let rows: Vec<RowTopology> = dag
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                if dice.roll(3) == 0 {
+                    assigner.push_far(&i, p)
+                } else {
+                    assigner.push(&i, p)
+                }
+            })
+            .collect();
+        assert_drawable(&dag, &rows, assigner.max_width() < SPILL);
+    }
 }
 
 #[test]

@@ -53,12 +53,6 @@ pub fn assert_drawable<P: AsRef<[usize]>>(dag: &[P], rows: &[RowTopology], stric
                 lane, SPILL,
                 "row {i} holds a line in the lane of last resort"
             );
-            if k == 0 && row.lane != SPILL {
-                assert_eq!(
-                    lane, row.lane,
-                    "row {i}: a first parent left its lane on the child's row"
-                );
-            }
             if !strict {
                 continue;
             }
@@ -80,6 +74,22 @@ pub fn assert_drawable<P: AsRef<[usize]>>(dag: &[P], rows: &[RowTopology], stric
                 row.open, entering[i],
                 "row {i}: the open mask {:b} disagrees with a full scan {:b}",
                 row.open, entering[i]
+            );
+        }
+    }
+}
+
+/// Every branch keeps its own lane down to the commit it left from: no first parent is reached
+/// across the child's row, which is what a history with no far forks must look like.
+pub fn assert_branches_hold(rows: &[RowTopology]) {
+    for (i, row) in rows.iter().enumerate() {
+        if let Some(&first) = row.parent_lanes.first()
+            && first != NO_LANE
+            && row.lane != SPILL
+        {
+            assert_eq!(
+                first, row.lane,
+                "row {i}: a first parent left its lane on the child's row"
             );
         }
     }

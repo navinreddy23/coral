@@ -147,6 +147,21 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
     /// `index` identifies this commit and `parents` are the indices its parents will be given.
     /// Indices rather than object ids keep the assigner independent of the hash length.
     pub fn push(&mut self, key: &K, parents: &[K]) -> RowTopology {
+        self.lay(key, parents, true)
+    }
+
+    /// As [`Self::push`], for a commit whose first parent is too far below for a line to be
+    /// held down to it: when that parent already has a line, this commit joins it across its
+    /// own row and its lane ends here.
+    ///
+    /// No screen shows both ends of such a line, and on a history like the kernel's, where
+    /// every subsystem branch forks from a release candidate thousands of rows down, holding
+    /// them all fills the column with lines that end nowhere in sight.
+    pub fn push_far(&mut self, key: &K, parents: &[K]) -> RowTopology {
+        self.lay(key, parents, false)
+    }
+
+    fn lay(&mut self, key: &K, parents: &[K], hold: bool) -> RowTopology {
         self.freed_this_row.clear();
         self.clock += 1;
         self.retire_stale();
@@ -161,8 +176,10 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
                 // A first parent runs straight down this lane. When it already has a line, this
                 // is a branch leaving it, or one side of a criss-cross: held down to the
                 // parent's own row, where it turns in.
-                _ if first => Some(lane),
-                // A merge into a line already running there: across this row and down it.
+                Some(_) if first && hold => Some(lane),
+                None if first => Some(lane),
+                // A merge into a line already running there, or a branch whose fork is too far
+                // down to hold a line to: across this row and down that line.
                 Some(lanes) => {
                     parent_lanes.push(nearest(lanes, lane));
                     continue;

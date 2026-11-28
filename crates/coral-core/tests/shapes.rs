@@ -10,7 +10,7 @@ mod common;
 
 use std::collections::HashMap;
 
-use common::assert_drawable;
+use common::{assert_branches_hold, assert_drawable};
 use coral_core::graph::{GixCommitStream, NO_ROW, RowStore, RowTopology, StreamOpts, art, build};
 use coral_core::testutil::TestRepo;
 
@@ -77,6 +77,7 @@ impl History {
         let store = build(&stream, &StreamOpts::default()).expect("walk");
         let (rows, dag) = topology(&store);
         assert_drawable(&dag, &rows, true);
+        assert_branches_hold(&rows);
 
         let subjects = self.subjects();
         let labels: Vec<String> = (0..store.len())
