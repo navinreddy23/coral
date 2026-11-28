@@ -322,3 +322,36 @@ fn a_branch_joins_the_line_to_a_fork_too_far_down_to_hold_one() {
     );
     assert_eq!(store.joins(401), 0);
 }
+
+/// A walk cut off above a commit that two branches leave from draws them as the whole walk
+/// does: one line to it, which the second branch joins. Keyed apart, every edge out of the
+/// cut opened a lane of its own, and the kernel's first paint of 4,096 rows filled the column
+/// from row 76 down, until the full walk landed and every line below moved.
+#[test]
+fn a_walk_cut_short_shares_the_line_to_a_commit_it_does_not_reach() {
+    let full = two_branches_off_one_commit(400);
+    let mut builder = RowStoreBuilder::new(false);
+    builder.push(&node(0, &[401]));
+    builder.push(&node(1, &[401]));
+    for n in 2..300 {
+        builder.push(&node(n, &[n + 1]));
+    }
+    let cut = builder.finish();
+    for row in 0..300 {
+        assert_eq!(
+            (
+                cut.lane(row),
+                cut.parent_lanes(row),
+                cut.open(row),
+                cut.joins(row)
+            ),
+            (
+                full.lane(row),
+                full.parent_lanes(row),
+                full.open(row),
+                full.joins(row)
+            ),
+            "row {row} is laid out differently by the walk cut short"
+        );
+    }
+}

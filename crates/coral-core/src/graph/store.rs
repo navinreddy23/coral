@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use gix::ObjectId;
 
 use super::lanes::LaneAssigner;
@@ -285,14 +287,19 @@ impl RowStoreBuilder {
 
         let mut parent_row = vec![NO_ROW; self.parent_oids.len() / hash_len];
         let mut flags = self.flags;
+        let mut first_edge_to: HashMap<&[u8], u32> = HashMap::new();
+        let mut missing = HashMap::new();
         // Walk rows rather than edges, so the owning row of each edge is known outright.
         for (row, window) in self.parent_start.windows(2).enumerate() {
             let (start, end) = (window[0] as usize, window[1] as usize);
             for (k, slot) in parent_row[start..end].iter_mut().enumerate() {
                 let at = (start + k) * hash_len;
-                *slot = lookup(&self.parent_oids[at..at + hash_len]);
+                let parent = &self.parent_oids[at..at + hash_len];
+                *slot = lookup(parent);
                 if *slot == NO_ROW {
                     flags[row] |= flags::BOUNDARY;
+                    let edge = u32::try_from(start + k).unwrap_or(u32::MAX);
+                    missing.insert(edge, *first_edge_to.entry(parent).or_insert(edge));
                 }
             }
         }
@@ -300,6 +307,7 @@ impl RowStoreBuilder {
         let graph = Edges {
             start: &self.parent_start,
             row: &parent_row,
+            missing: &missing,
         };
         let top = self.trunk.and_then(|trunk| {
             graph.trunk_top(
@@ -331,6 +339,14 @@ impl RowStoreBuilder {
 struct Edges<'a> {
     start: &'a [u32],
     row: &'a [u32],
+    /// Each edge to a parent outside the walk -> the first edge to the same parent, which
+    /// stands for that parent in the layout.
+    ///
+    /// The parent never arrives, but its children still share one line to it, as they would
+    /// had the walk reached it. Keyed apart, every edge out of a walk cut short opened a lane
+    /// of its own: the kernel's first paint filled the column from row 76 down, then every
+    /// line there moved when the full walk landed.
+    missing: &'a HashMap<u32, u32>,
 }
 
 /// What [`Edges::lay_out`] gives every row.
@@ -397,10 +413,11 @@ impl Edges<'_> {
         let mut keys: Vec<u64> = Vec::new();
         for row in 0..u32::try_from(rows).unwrap_or(u32::MAX) {
             keys.clear();
-            for (k, &parent) in self.parents(row).iter().enumerate() {
-                // A parent outside the walk never arrives, and two of them must not share a line.
+            let first = self.start[row as usize];
+            for (k, &parent) in (first..).zip(self.parents(row)) {
+                // Above every row, so a parent outside the walk is never taken for one in it.
                 keys.push(if parent == NO_ROW {
-                    u64::from(u32::MAX) + 1 + u64::from(self.start[row as usize]) + k as u64
+                    u64::from(u32::MAX) + 1 + u64::from(self.missing.get(&k).copied().unwrap_or(k))
                 } else {
                     u64::from(parent)
                 });
