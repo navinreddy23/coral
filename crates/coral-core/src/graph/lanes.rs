@@ -12,7 +12,8 @@ pub const NO_LANE: u16 = u16::MAX;
 /// the column and the graph looked empty.
 pub const MAX_LANES: u16 = 32;
 
-/// How many rows a lane may be held open for a parent that has not arrived.
+/// How many rows a lane may be held open for a parent that has not arrived, counted from the
+/// last commit that sent its edge down it.
 ///
 /// A merge's second parent can be twenty thousand rows below it in the kernel, and a lane held
 /// that long is a line nobody ever sees both ends of — but it costs a whole column for its
@@ -80,9 +81,10 @@ pub struct RowTopology {
 /// index in the tests. A parent's row number is not known when its child is emitted, so the
 /// key cannot be the row.
 pub struct LaneAssigner<K> {
-    /// Lane -> the commit its line leads to and when it was claimed, or `None` when free.
+    /// Lane -> the commit its line leads to and the row a commit last sent its edge down it,
+    /// or `None` when free.
     lanes: Vec<Option<(K, u64)>>,
-    /// Rows placed so far, which is what "claimed longest ago" is measured in.
+    /// Rows placed so far, which is what "idle longest" is measured in.
     clock: u64,
     /// The earliest row at which any reservation could have gone stale.
     ///
@@ -101,6 +103,10 @@ pub struct LaneAssigner<K> {
     /// edge on down that lane, which draws as the one line touching the node on its way past —
     /// `GitKraken`'s shape for a branch merged a second time, and a lane narrower.
     freed_this_row: SmallVec<[u16; 4]>,
+    /// Lanes taken back on the current row and handed straight on, as a mask: their old line
+    /// is closed in this row's `open` so that it stops above the row instead of running on into
+    /// whatever the lane carries next.
+    evicted_this_row: u32,
     /// The commit lane 0 is kept for until it is placed; see [`Self::keep_left`].
     trunk: Option<K>,
     max_width: u16,
@@ -121,6 +127,7 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
             next_sweep: u64::MAX,
             reserved: std::collections::HashMap::new(),
             freed_this_row: SmallVec::new(),
+            evicted_this_row: 0,
             trunk: None,
             max_width: 0,
         }
@@ -163,6 +170,7 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
 
     fn lay(&mut self, key: &K, parents: &[K], hold: bool) -> RowTopology {
         self.freed_this_row.clear();
+        self.evicted_this_row = 0;
         self.clock += 1;
         self.retire_stale();
         let open = self.open_mask();
@@ -171,7 +179,11 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
         let mut parent_lanes = SmallVec::new();
         for (i, p) in parents.iter().enumerate() {
             let first = i == 0 && lane != SPILL;
-            let waiting = self.reserved.get(p).filter(|lanes| !lanes.is_empty());
+            let waiting = self
+                .reserved
+                .get(p)
+                .filter(|lanes| !lanes.is_empty())
+                .map(|lanes| nearest(lanes, lane));
             let pl = match waiting {
                 // A first parent runs straight down this lane. When it already has a line, this
                 // is a branch leaving it, or one side of a criss-cross: held down to the
@@ -180,8 +192,9 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
                 None if first => Some(lane),
                 // A merge into a line already running there, or a branch whose fork is too far
                 // down to hold a line to: across this row and down that line.
-                Some(lanes) => {
-                    parent_lanes.push(nearest(lanes, lane));
+                Some(running) => {
+                    self.renew(running);
+                    parent_lanes.push(running);
                     continue;
                 }
                 // To the right of this commit, so the line bends one way. A free lane to the
@@ -213,7 +226,7 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
             lane,
             parent_lanes,
             width,
-            open,
+            open: open & !self.evicted_this_row,
             joins,
         }
     }
@@ -257,6 +270,19 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
         }
         self.next_sweep = self.next_sweep.min(self.clock.saturating_add(LINE_LIMIT));
         self.reserved.entry(key.clone()).or_default().push(lane);
+    }
+
+    /// Counts the line in `lane` as drawn from this row, which a commit has just sent its edge
+    /// down.
+    ///
+    /// Its age is what decides when it is given up, and a line joined here has an end on this
+    /// screen however long ago it was first drawn. Aged from its first row instead, a merge
+    /// in the kernel joined a line that was given up on the very next row: the merge's edge
+    /// went out to its lane and stopped, with its parent drawn as a tip right under it.
+    fn renew(&mut self, lane: u16) {
+        if let Some(Some((_, at))) = self.lanes.get_mut(lane as usize) {
+            *at = self.clock;
+        }
     }
 
     /// Ends the line in `lane` that led to `key` without its commit having come.
@@ -357,7 +383,7 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
         self.trim();
     }
 
-    /// Takes back the lane whose reservation has been outstanding longest.
+    /// Takes back the lane whose line has gone longest without a commit joining it.
     ///
     /// The kernel keeps more branches open at once than a column can show: the frontier is
     /// sixty-odd lanes deep in its history, so with thirty-one every lane was reserved for a
@@ -366,6 +392,8 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
     /// screen. Recycling the oldest reservation keeps the graph the width it can draw. What is
     /// lost is the line from a merge to a parent so far below that no screen shows both: the
     /// `open` mask closes it at this row, so it stops rather than joining the wrong commit.
+    /// Closing it takes [`Self::evicted_this_row`]: the mask was read before the lane was
+    /// taken, and the lane is handed straight to this row.
     fn evict(&mut self) -> Option<u16> {
         let oldest = self
             .lanes
@@ -381,6 +409,7 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
         let lane = u16::try_from(index).ok()?;
         self.release(&key, lane);
         self.lanes[index] = None;
+        self.evicted_this_row |= 1 << lane;
         Some(lane)
     }
 

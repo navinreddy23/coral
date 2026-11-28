@@ -404,6 +404,41 @@ fn a_lane_stays_open_across_a_long_run() {
     }
 }
 
+/// A line another commit has joined is as new as that commit.
+///
+/// Lines are given up a few hundred rows after they were drawn, but at kernel row 25302 a
+/// merge joined a line drawn long before, which was then given up on the very next row: the
+/// merge's line went out to lane 13 and stopped, and its parent, right under it, was drawn as
+/// a tip in lane 9.
+#[test]
+fn a_line_joined_late_runs_on_to_its_commit() {
+    // Row 0 is a merge whose second parent is 600; row 400 merges 600 again, and the chain
+    // from row 0 leads down to 600 too.
+    let mut dag: Vec<Vec<usize>> = vec![vec![1, 600]];
+    for i in 1..600 {
+        dag.push(if i == 400 {
+            vec![i + 1, 600]
+        } else {
+            vec![i + 1]
+        });
+    }
+    dag.push(vec![]);
+    let (rows, _) = lay_out(&dag);
+    assert_drawable(&dag, &rows, false);
+
+    let joined = rows[400].parent_lanes[1];
+    assert_eq!(
+        joined, rows[0].parent_lanes[1],
+        "row 400 joins row 0's line"
+    );
+    assert_eq!(rows[600].lane, 0);
+    assert_ne!(
+        rows[600].joins & (1 << joined),
+        0,
+        "the line row 400 joined never reached its commit"
+    );
+}
+
 /// A graph wider than the column can show is a graph nobody can read.
 ///
 /// The kernel's stable-tree merges have ninety branches open at once, and the assigner handed
@@ -500,17 +535,34 @@ fn a_recycled_lane_is_closed_before_it_is_handed_out_again() {
         rows.push(assigner.push(&child, &parents));
     }
 
-    // No row ever claims a lane that a later row still says is open from above without a
-    // commit of its own having ended it.
+    // Every row here is a tip with two parents that never arrive, so every lane it is drawn in
+    // or draws down is new, and a line entering one of them from above would run on into this
+    // row's node or edge. Taken back, the old line has to stop above the row.
+    let mut recycled = 0;
     for (i, row) in rows.iter().enumerate() {
         assert!(row.lane < MAX_LANES, "row {i} is outside the column");
-        for lane in &row.parent_lanes {
+        for &lane in row.parent_lanes.iter().chain([&row.lane]) {
+            if lane == NO_LANE || lane == SPILL {
+                continue;
+            }
             assert!(
-                *lane == NO_LANE || *lane < MAX_LANES,
+                lane < MAX_LANES,
                 "row {i} points at a lane nothing is drawn in"
             );
+            assert_eq!(
+                row.open & (1 << lane),
+                0,
+                "row {i}: the line in lane {lane} runs on into a commit it was not drawn for"
+            );
+            if rows[..i].iter().any(|r| r.parent_lanes.contains(&lane)) {
+                recycled += 1;
+            }
         }
     }
+    assert!(
+        recycled > 0,
+        "nothing was taken back, so nothing was tested"
+    );
 }
 
 /// Branch lines bend one way, which is what makes a graph read as a trunk with branches.

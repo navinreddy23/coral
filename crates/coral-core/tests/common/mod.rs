@@ -20,11 +20,36 @@ fn line_end(rows: &[RowTopology], from: usize, lane: u16) -> Option<usize> {
     None
 }
 
+/// Where a line drawn out of row `from` in `lane` goes, the open mask consulted as a renderer
+/// consults it.
+#[derive(Debug, PartialEq, Eq)]
+enum Fate {
+    /// Into the node of this row, or turning into it.
+    Ends(usize),
+    /// Not entering this row: the line stops with a gap above it.
+    Stops(usize),
+    /// Off the bottom of the graph.
+    RunsOff,
+}
+
+fn fate(rows: &[RowTopology], from: usize, lane: u16) -> Fate {
+    for (r, row) in rows.iter().enumerate().skip(from + 1) {
+        if row.open & (1 << lane) == 0 {
+            return Fate::Stops(r);
+        }
+        if row.lane == lane || row.joins & (1 << lane) != 0 {
+            return Fate::Ends(r);
+        }
+    }
+    Fate::RunsOff
+}
+
 /// Everything a drawing of `rows` rests on.
 ///
 /// `strict` for a graph that never filled the column and never held a line long enough to be
 /// given back: there, every line must end at exactly the commit it was drawn for, and the open
-/// mask must agree with a full scan. A saturated graph is allowed to stop lines short.
+/// mask must agree with a full scan. A saturated graph is allowed to stop lines short, but
+/// never to carry one on into another commit.
 pub fn assert_drawable<P: AsRef<[usize]>>(dag: &[P], rows: &[RowTopology], strict: bool) {
     let mut entering = vec![0_u32; rows.len()];
     for (i, row) in rows.iter().enumerate() {
@@ -53,10 +78,16 @@ pub fn assert_drawable<P: AsRef<[usize]>>(dag: &[P], rows: &[RowTopology], stric
                 lane, SPILL,
                 "row {i} holds a line in the lane of last resort"
             );
+            let parent = dag[i].as_ref()[k];
             if !strict {
+                let fate = fate(rows, i, lane);
+                assert!(
+                    matches!(fate, Fate::Ends(r) if r == parent)
+                        || matches!(fate, Fate::Stops(r) if r <= parent),
+                    "row {i}: the line to parent {parent} in lane {lane} goes {fate:?}"
+                );
                 continue;
             }
-            let parent = dag[i].as_ref()[k];
             let end = line_end(rows, i, lane);
             assert_eq!(
                 end,
