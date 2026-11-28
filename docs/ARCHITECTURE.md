@@ -63,7 +63,7 @@ Parent *rows* cannot be known during the walk — topological order puts a paren
 child, so the child is written first. Parent object ids are buffered and resolved in one pass
 at the end, against a sorted lookup index built at the same time, and lanes are laid out after
 that (`graph/lanes.rs`), because a branch keeps its own lane down to its fork only when the fork
-is near enough to see, and HEAD's line is kept in lane 0 only when HEAD is within the first
+is near enough to see (otherwise its line runs eight rows and stops), and HEAD's line is kept in lane 0 only when HEAD is within the first
 screen's walk, so a first screen and the full walk agree.
 
 Measured on the kernel: 1,508,459 rows and 1,630,422 edges build in 2.2 s into 95.5 MB, at

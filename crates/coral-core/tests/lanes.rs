@@ -305,28 +305,52 @@ fn every_line_ends_at_the_commit_it_was_drawn_for() {
     eprintln!("widths: {widths:?}");
 }
 
+/// A branch whose fork is too far down to hold a line to runs a few rows on down its own lane
+/// and stops: no corner on its own row, so every corner in the graph still turns one way.
 #[test]
-fn a_far_fork_joins_the_line_already_running_across_its_own_row() {
-    // Two children of one parent; the second is laid out as one whose fork is far below.
-    let dag: &[&[usize]] = &[&[2], &[2], &[]];
+fn a_far_fork_runs_a_short_tail_down_its_own_lane() {
+    // Rows 0 and 1 leave from row 30; row 1 is laid out as one whose fork is far below, and
+    // rows 2.. are an unrelated line beside them.
+    let mut dag: Vec<Vec<usize>> = vec![vec![30], vec![30]];
+    for i in 2..30 {
+        dag.push(if i < 29 { vec![i + 1] } else { vec![] });
+    }
+    dag.push(vec![]);
     let mut assigner = LaneAssigner::<usize>::new();
-    let rows = vec![
-        assigner.push(&0, dag[0]),
-        assigner.push_far(&1, dag[1]),
-        assigner.push(&2, dag[2]),
-    ];
-    assert_drawable(dag, &rows, true);
-    assert_eq!(rows[1].lane, 1);
+    let rows: Vec<RowTopology> = dag
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            if i == 1 {
+                assigner.push_far(&i, p)
+            } else {
+                assigner.push(&i, p)
+            }
+        })
+        .collect();
+    assert_drawable(&dag, &rows, false);
+    assert_branches_hold(&rows);
+
+    let tail = rows[1].lane;
     assert_eq!(
         rows[1].parent_lanes.as_slice(),
-        &[0],
-        "across its own row into lane 0"
+        &[tail],
+        "down its own lane"
     );
-    assert_eq!(rows[2].joins, 0, "nothing is left to turn into the parent");
+    let run = rows[2..]
+        .iter()
+        .take_while(|row| row.open & (1 << tail) != 0)
+        .count();
+    assert_eq!(run, 8, "the tail runs eight rows under the commit");
+    assert_eq!(
+        rows[30].joins & (1 << tail),
+        0,
+        "and never reaches the fork"
+    );
 }
 
 #[test]
-fn far_forks_mixed_in_still_end_every_line_at_its_commit() {
+fn far_forks_mixed_in_never_end_a_line_at_another_commit() {
     for seed in 1..=1000_u64 {
         let mut dice = Dice(seed.wrapping_mul(0x94d0_49bb_1331_11eb) | 1);
         let commits = 2 + dice.roll(120);
@@ -344,7 +368,9 @@ fn far_forks_mixed_in_still_end_every_line_at_its_commit() {
                 }
             })
             .collect();
-        assert_drawable(&dag, &rows, assigner.max_width() < SPILL);
+        // A tail stops short of its commit by design.
+        assert_drawable(&dag, &rows, false);
+        assert_branches_hold(&rows);
     }
 }
 
@@ -355,6 +381,46 @@ fn a_saturated_graph_still_draws_inside_the_column() {
         let dag = history(&mut dice, 400, 60);
         let (rows, _) = lay_out(&dag);
         assert_drawable(&dag, &rows, false);
+    }
+}
+
+/// Tails are the lines due to be given up soonest, so a full column takes them back first,
+/// but never one drawn on the row that needs the lane: in the kernel a merge's first parent
+/// got a tail and its second parent the same lane, both drawn down it to the second.
+#[test]
+fn a_saturated_graph_with_far_forks_never_ends_a_line_at_another_commit() {
+    for seed in 1..=200_u64 {
+        let mut dice = Dice(seed.wrapping_mul(0xa076_1d64_78bd_642f) | 1);
+        let dag = history(&mut dice, 400, 60);
+        let mut assigner = LaneAssigner::<usize>::new();
+        let rows: Vec<RowTopology> = dag
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                if dice.roll(2) == 0 {
+                    assigner.push_far(&i, p)
+                } else {
+                    assigner.push(&i, p)
+                }
+            })
+            .collect();
+        assert_drawable(&dag, &rows, false);
+        for (i, row) in rows.iter().enumerate() {
+            let drawn: Vec<u16> = row
+                .parent_lanes
+                .iter()
+                .copied()
+                .filter(|&l| l != NO_LANE)
+                .collect();
+            let mut unique = drawn.clone();
+            unique.sort_unstable();
+            unique.dedup();
+            assert_eq!(
+                unique.len(),
+                drawn.len(),
+                "seed {seed}, row {i}: two parents down one lane {drawn:?}"
+            );
+        }
     }
 }
 

@@ -309,23 +309,23 @@ fn a_branch_holds_its_lane_to_a_fork_a_few_screens_down() {
     );
 }
 
-/// Further than that it joins the line already running to its fork, on its own row: on the
-/// kernel, held lines to forks thousands of rows down filled every lane of the column.
+/// Further than that its line runs a few rows on and stops: on the kernel, held lines to
+/// forks thousands of rows down filled every lane of the column.
 #[test]
-fn a_branch_joins_the_line_to_a_fork_too_far_down_to_hold_one() {
+fn a_branch_runs_a_short_tail_towards_a_fork_too_far_down_to_hold_a_line_to() {
     let store = two_branches_off_one_commit(400);
     assert_eq!(store.lane(1), Some(1));
-    assert_eq!(
-        store.parent_lanes(1),
-        &[0],
-        "across its own row into the line to the fork"
-    );
+    assert_eq!(store.parent_lanes(1), &[1], "down its own lane");
+    let run = (2..401)
+        .take_while(|&row| store.open(row) & 0b10 != 0)
+        .count();
+    assert_eq!(run, 8, "for eight rows");
     assert_eq!(store.joins(401), 0);
 }
 
 /// A walk cut off above a commit that two branches leave from draws them as the whole walk
-/// does: one line to it, which the second branch joins. Keyed apart, every edge out of the
-/// cut opened a lane of its own, and the kernel's first paint of 4,096 rows filled the column
+/// does: one line to it, and a short tail under the second branch. Keyed apart, every edge
+/// out of the cut held a lane of its own, and the kernel's first paint of 4,096 rows filled the column
 /// from row 76 down, until the full walk landed and every line below moved.
 #[test]
 fn a_walk_cut_short_shares_the_line_to_a_commit_it_does_not_reach() {

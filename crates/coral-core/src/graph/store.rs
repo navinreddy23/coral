@@ -198,8 +198,7 @@ const HEAD_WITHIN: u64 = StreamOpts::FIRST_PAINT_ROWS;
 /// own longest is 37 rows and a busy team's fixture 49. The kernel's subsystem branches fork
 /// from a release candidate hundreds or thousands of rows down, and held lines for all of them
 /// filled every lane of the column with lines nobody could follow to either end. Further than
-/// this, a branch's oldest commit joins the line already running to its fork, across its own
-/// row.
+/// this, a branch's line runs a few rows on under its oldest commit and stops.
 const HOLD_ROWS: u32 = 100;
 
 impl RowStoreBuilder {
