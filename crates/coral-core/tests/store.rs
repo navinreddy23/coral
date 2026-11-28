@@ -216,6 +216,7 @@ fn a_first_screen_lays_out_its_rows_as_the_full_walk_does() {
         let trunk = Trunk {
             head: id(head_row),
             upstream: None,
+            left_from: None,
         };
 
         let lay_out = |count: usize| {
@@ -257,6 +258,7 @@ async fn both_streams_name_the_same_trunk() {
     let alone = Trunk {
         head,
         upstream: None,
+        left_from: None,
     };
     assert_eq!(gix_stream.trunk(), Some(alone));
     assert_eq!(sub.trunk(), Some(alone));
@@ -275,6 +277,7 @@ async fn both_streams_name_the_same_trunk() {
     let tracking = Trunk {
         head,
         upstream: Some(side),
+        left_from: None,
     };
     // Reopened, as the window opens one for every walk: gix reads the config when it opens.
     let gix_stream = GixCommitStream::open(repo.path()).unwrap();
@@ -363,6 +366,7 @@ fn with_head(nodes: &[CommitNode], head: u32) -> coral_core::graph::RowStore {
     builder.keep_left(Some(Trunk {
         head: id(head),
         upstream: None,
+        left_from: None,
     }));
     for n in nodes {
         builder.push(n);
@@ -425,4 +429,123 @@ fn a_stash_on_head_is_not_taken_for_the_line_running_on() {
     for row in 1..4 {
         assert_eq!(store.lane(row), Some(0), "row {row} left the line");
     }
+}
+
+/// A main line of merges is still one line. Above a HEAD left on it, the next commit on it is
+/// a merge, and a branch off HEAD's commit leaves beside it: the line runs on into the merge,
+/// the main line merging a branch back, and the branch turns in from the right.
+#[test]
+fn a_head_behind_a_main_line_of_merges_leaves_it_straight() {
+    let nodes = [node(0, &[2, 1]), node(1, &[2]), node(2, &[3]), node(3, &[])];
+    let store = with_head(&nodes, 2);
+    assert_eq!(store.lane(0), Some(0), "the merge above HEAD left the line");
+    assert_eq!(store.lane(2), Some(0));
+    assert_ne!(store.lane(1), Some(0));
+}
+
+/// A branch merging HEAD's commit in does not stop HEAD's line: it is not where that line
+/// goes, only where it was taken from.
+#[test]
+fn a_branch_merging_head_in_does_not_stop_the_line() {
+    let nodes = [
+        node(0, &[2]),
+        node(1, &[3, 2]),
+        node(2, &[4]),
+        node(3, &[4]),
+        node(4, &[]),
+    ];
+    let store = with_head(&nodes, 2);
+    assert_eq!(
+        store.lane(0),
+        Some(0),
+        "the commit above HEAD left the line"
+    );
+    assert_eq!(store.lane(2), Some(0));
+}
+
+/// A detached HEAD's line goes on up into the branch it was left from, where the history alone
+/// cannot say which way it went: two plain commits leave the commit above HEAD, and the one
+/// on the branch is the line.
+#[test]
+fn a_detached_head_keeps_the_branch_it_was_left_from_in_lane_0() {
+    let nodes = [
+        node(0, &[1]),
+        node(1, &[3]),
+        node(2, &[3]),
+        node(3, &[4]),
+        node(4, &[5]),
+        node(5, &[]),
+    ];
+    let lay_out = |left_from: Option<u32>| {
+        let mut builder = RowStoreBuilder::new(false);
+        builder.keep_left(Some(Trunk {
+            head: id(4),
+            upstream: None,
+            left_from: left_from.map(id),
+        }));
+        for n in &nodes {
+            builder.push(n);
+        }
+        builder.finish()
+    };
+    let store = lay_out(Some(0));
+    for row in [0, 1, 3, 4, 5] {
+        assert_eq!(store.lane(row), Some(0), "row {row} left the branch's line");
+    }
+    // A branch that does not lead down to HEAD is no line of HEAD's: the line stops where
+    // the history above HEAD forks.
+    let store = lay_out(Some(5));
+    assert_eq!(store.lane(3), Some(0));
+    assert_ne!(
+        store.lane(0),
+        Some(0),
+        "row 0 took lane 0 by way of a branch below HEAD"
+    );
+}
+
+/// Both walks name the branch a detached HEAD was left from alike: the one a bisect started
+/// from, else main.
+#[tokio::test(flavor = "multi_thread")]
+async fn both_streams_name_the_branch_a_detached_head_was_left_from() {
+    let repo = fixture();
+    let runner = GitRunner::discover().await.unwrap();
+    let rev =
+        |name: &str| gix::ObjectId::from_hex(repo.git(["rev-parse", name]).as_bytes()).unwrap();
+    let main = rev("main");
+
+    repo.git(["checkout", "--quiet", "--detach", "main~1"]);
+    let head = rev("HEAD");
+    let gix_stream = GixCommitStream::open(repo.path()).unwrap();
+    let sub = SubprocessCommitStream::new(runner.clone(), repo.path());
+    let detached = Trunk {
+        head,
+        upstream: None,
+        left_from: Some(main),
+    };
+    assert_eq!(gix_stream.trunk(), Some(detached));
+    assert_eq!(sub.trunk(), Some(detached));
+
+    // A bisect started from a topic branch names it, whatever main is.
+    repo.git(["checkout", "--quiet", "-b", "topic", "main"]);
+    for n in 0..4 {
+        repo.git([
+            "commit",
+            "--quiet",
+            "--allow-empty",
+            "-m",
+            &format!("topic {n}"),
+        ]);
+    }
+    let topic = rev("topic");
+    repo.git(["bisect", "start", "topic", "main"]);
+    let head = rev("HEAD");
+    assert_ne!(head, topic, "the bisect left HEAD where it was");
+    let gix_stream = GixCommitStream::open(repo.path()).unwrap();
+    let bisecting = Trunk {
+        head,
+        upstream: None,
+        left_from: Some(topic),
+    };
+    assert_eq!(gix_stream.trunk(), Some(bisecting));
+    assert_eq!(sub.trunk(), Some(bisecting));
 }

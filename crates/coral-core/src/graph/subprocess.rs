@@ -4,7 +4,7 @@ use gix::ObjectId;
 use smallvec::SmallVec;
 
 use super::stream::{
-    CommitNode, CommitStream, Order, StreamOpts, Tips, Trunk, WalkControl, WalkStats,
+    CommitNode, CommitStream, MAIN_LINES, Order, StreamOpts, Tips, Trunk, WalkControl, WalkStats,
 };
 use crate::error::CoralError;
 use crate::process::{GitCommand, GitRunner, Sink};
@@ -51,6 +51,37 @@ impl SubprocessCommitStream {
             Ok(Sink::Stop)
         });
         read.is_ok() && detached
+    }
+
+    /// See [`Trunk::left_from`].
+    fn left_from(&self) -> Option<ObjectId> {
+        if !self.head_detached() {
+            return None;
+        }
+        let bisected = self
+            .bisect_start()
+            .map(|branch| format!("refs/heads/{branch}"));
+        bisected
+            .into_iter()
+            .chain(MAIN_LINES.iter().map(|name| (*name).to_owned()))
+            .find_map(|name| self.commit_at(&name))
+    }
+
+    /// What a bisect in progress started from, as git wrote it to `BISECT_START`.
+    fn bisect_start(&self) -> Option<String> {
+        let cmd = GitCommand::read("rev-parse", &self.workdir)
+            .arg("rev-parse")
+            .arg("--path-format=absolute")
+            .arg("--git-path")
+            .arg("BISECT_START");
+        let mut path = None;
+        let read = self.runner.stream_blocking(&cmd, b'\n', |line| {
+            path = Some(String::from_utf8_lossy(line).into_owned());
+            Ok(Sink::Stop)
+        });
+        read.ok()?;
+        let text = std::fs::read_to_string(path?).ok()?;
+        Some(text.trim().to_owned()).filter(|name| !name.is_empty())
     }
 
     /// The commit `rev` names, or `None` when it names none: an unborn HEAD, or a branch with
@@ -191,6 +222,7 @@ impl CommitStream for SubprocessCommitStream {
         Some(Trunk {
             head: self.commit_at("HEAD")?,
             upstream: self.commit_at("@{upstream}"),
+            left_from: self.left_from(),
         })
     }
 }

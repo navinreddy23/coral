@@ -118,4 +118,16 @@ pub struct Trunk {
     /// Where the upstream of HEAD's branch is, when it has one. Ahead of HEAD after a fetch,
     /// and then the same line goes on up to it; a local branch built on HEAD is not.
     pub upstream: Option<ObjectId>,
+    /// For a detached HEAD, where the branch it was most likely left from is: the one a bisect
+    /// started from, else main or master. Where the history above HEAD forks, it says which
+    /// way HEAD's line goes on up.
+    pub left_from: Option<ObjectId>,
 }
+
+/// The branches a detached HEAD is looked for on, in order, after the one a bisect started
+/// from: the names a repository's main line goes by.
+pub(crate) const MAIN_LINES: [&str; 3] = [
+    "refs/heads/main",
+    "refs/heads/master",
+    "refs/remotes/origin/HEAD",
+];

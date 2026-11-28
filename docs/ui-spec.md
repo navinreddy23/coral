@@ -224,7 +224,8 @@ same three numbers reach the stylesheet and the canvas metrics, which cannot rea
   the commit it did. A commit several lines lead to is drawn in the leftmost of them, so every
   branch turns into it from the right and the trunk keeps its lane; the line the user is on —
   HEAD, its first parents, and above it its branch's upstream when that is ahead, or else the
-  commits it runs straight on into until a fork — is kept in lane 0 whatever is newer. A branch whose fork is more than 100 rows down runs eight rows on
+  commits its line runs straight on into, the main line's merges included — is kept in lane 0
+  whatever is newer. A branch whose fork is more than 100 rows down runs eight rows on
   down its own lane and stops: on the kernel, lines held to forks thousands of rows below
   filled every lane, and joining the line to the fork across the branch's own row turned a
   corner either way, the right-hand ones looking like merges. A merge into a line already running joins it where it is, which is the

@@ -10,7 +10,8 @@
 use std::time::Instant;
 
 use coral_core::graph::{
-    CommitStream, GixCommitStream, MAX_LANES, NO_LANE, NO_ROW, RowStore, StreamOpts, Trunk, build,
+    CommitStream, GixCommitStream, MAX_LANES, NO_LANE, NO_ROW, Order, RowStore, StreamOpts, Trunk,
+    build,
 };
 
 const SPILL: u16 = MAX_LANES - 1;
@@ -180,18 +181,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         tally.edges, tally.ended, tally.stopped, tally.dropped
     );
 
-    let first = build(
-        &stream,
-        &StreamOpts::first_paint(StreamOpts::FIRST_PAINT_ROWS, stream.first_paint_order()),
-    )?;
-    match same_rows(&full, &first) {
-        None => println!(
-            "first paint: all {} rows as the full walk lays them out",
-            first.len()
-        ),
-        Some(row) => tally.fault(format!(
-            "first paint differs from the full walk at row {row}"
-        )),
+    // Without a commit-graph the first paint is in commit-time order, a stand-in the full walk
+    // replaces, so only a topological one has to agree with it.
+    let order = stream.first_paint_order();
+    if order == Order::Topological {
+        let first = build(
+            &stream,
+            &StreamOpts::first_paint(StreamOpts::FIRST_PAINT_ROWS, order),
+        )?;
+        match same_rows(&full, &first) {
+            None => println!(
+                "first paint: all {} rows as the full walk lays them out",
+                first.len()
+            ),
+            Some(row) => tally.fault(format!(
+                "first paint differs from the full walk at row {row}"
+            )),
+        }
+    } else {
+        println!("first paint: in commit-time order, no commit-graph, replaced by the full walk");
     }
     if let Some(trunk) = trunk
         && let Some(head) = full.row_of(&trunk.head)

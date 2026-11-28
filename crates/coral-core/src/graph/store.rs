@@ -317,9 +317,10 @@ impl RowStoreBuilder {
             stashes: &self.stashes,
         };
         let top = self.trunk.and_then(|trunk| {
+            let row = |id: Option<ObjectId>| id.map(|id| lookup(id.as_bytes()));
             graph.trunk_top(
                 lookup(trunk.head.as_bytes()),
-                trunk.upstream.map(|up| lookup(up.as_bytes())),
+                [row(trunk.upstream), row(trunk.left_from)],
             )
         });
         let lanes = graph.lay_out(top);
@@ -378,45 +379,64 @@ impl Edges<'_> {
         self.row.get(s as usize..e as usize).unwrap_or(&[])
     }
 
-    /// The row whose line is kept in lane 0: the upstream's when its first parents lead down
-    /// to HEAD, which is what a fetch leaves; otherwise the newest commit HEAD's line runs
-    /// straight on into. `None` when HEAD is not within [`HEAD_WITHIN`] rows.
-    fn trunk_top(&self, head: u32, upstream: Option<u32>) -> Option<u32> {
+    /// The row whose line is kept in lane 0: the first of `above` whose first parents lead
+    /// down to HEAD — the upstream a fetch leaves ahead, or the branch a detached HEAD was left
+    /// from — and otherwise the newest commit HEAD's line runs straight on into. `None` when
+    /// HEAD is not within [`HEAD_WITHIN`] rows.
+    fn trunk_top(&self, head: u32, above: [Option<u32>; 2]) -> Option<u32> {
         if head == NO_ROW || u64::from(head) >= HEAD_WITHIN {
             return None;
         }
-        let ahead = upstream.filter(|&up| up != NO_ROW && self.leads_to(up, head));
-        Some(ahead.unwrap_or_else(|| self.straight_on_from(head)))
+        let on_the_line = above
+            .into_iter()
+            .flatten()
+            .find(|&tip| tip != NO_ROW && self.leads_to(tip, head));
+        Some(on_the_line.unwrap_or_else(|| self.straight_on_from(head)))
     }
 
-    /// The newest commit on the line up from `row` while it does not fork: each step is the
-    /// one commit above with it for a parent, its first, and not a merge.
+    /// The newest commit HEAD's line runs straight on into above `row`: each step is to the
+    /// commit above that has it for a first parent, or where branches leave it too, to the one
+    /// merge among those, the main line merging a branch back.
     ///
-    /// A HEAD left behind a straight history by a bisect or an old tag is on the only line
-    /// there is, and keeping lane 0 for HEAD alone put the commits above it in lane 1 turning
-    /// into it: a fork drawn where the history has none. At a real fork the line stops, so
-    /// both branches turn into the commit the user is on. A merge stops it too. A stash is not
-    /// counted at all, so it stays beside HEAD's line rather than on top of it, and a stash
-    /// taken on HEAD does not stop the line running on.
+    /// A HEAD left behind the tip by a bisect or an old tag is on the line above it, and
+    /// keeping lane 0 for HEAD alone put the commits above in lane 1 turning into it: a fork
+    /// drawn where the history has none, and a team's main line of merges drawn as a branch.
+    /// A commit merging HEAD's in as a later parent is a branch taking it, not where the line
+    /// goes, and a stash, its index parent dropped by the walk, is beside the line. Where the
+    /// way on is not plain, the line stops at HEAD and both ways turn into it.
     fn straight_on_from(&self, row: u32) -> u32 {
         const NONE: u32 = u32::MAX;
         const MANY: u32 = u32::MAX - 1;
+        let note = |slot: &mut u32, child: u32| {
+            *slot = if *slot == NONE { child } else { MANY };
+        };
         // Children are above their parents, so only the rows above `row` can be one.
         let mut child = vec![NONE; row as usize + 1];
+        let mut merge = vec![NONE; row as usize + 1];
         for above in 0..row {
             if self.stashes.binary_search(&above).is_ok() {
                 continue;
             }
-            for &parent in self.parents(above) {
-                if let Some(slot) = child.get_mut(parent as usize) {
-                    *slot = if *slot == NONE { above } else { MANY };
-                }
+            let parents = self.parents(above);
+            let Some(&first) = parents.first() else {
+                continue;
+            };
+            if let Some(slot) = child.get_mut(first as usize) {
+                note(slot, above);
+            }
+            if parents.len() > 1
+                && let Some(slot) = merge.get_mut(first as usize)
+            {
+                note(slot, above);
             }
         }
         let mut top = row;
         loop {
-            let next = child[top as usize];
-            if next == NONE || next == MANY || self.parents(next) != [top] {
+            let next = match child[top as usize] {
+                MANY => merge[top as usize],
+                one => one,
+            };
+            if next == NONE || next == MANY {
                 return top;
             }
             top = next;

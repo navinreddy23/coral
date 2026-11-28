@@ -5,7 +5,7 @@ use smallvec::SmallVec;
 
 use super::shallow::{Grafted, boundary};
 use super::stream::{
-    CommitNode, CommitStream, Order, StreamOpts, Tips, Trunk, WalkControl, WalkStats,
+    CommitNode, CommitStream, MAIN_LINES, Order, StreamOpts, Tips, Trunk, WalkControl, WalkStats,
 };
 use crate::error::CoralError;
 
@@ -62,6 +62,22 @@ impl GixCommitStream {
         let tips = Self::tips_for(&repo, &opts.tips)?;
         let (_, hidden) = Self::stash_plumbing(&repo);
         super::topo::count(&repo, &graph, &tips, opts.first_parent, &hidden).map(Some)
+    }
+
+    /// See [`Trunk::left_from`].
+    fn left_from(repo: &gix::Repository) -> Option<ObjectId> {
+        let bisected = std::fs::read_to_string(repo.git_dir().join("BISECT_START"))
+            .ok()
+            .map(|text| text.trim().to_owned())
+            .filter(|branch| !branch.is_empty())
+            .map(|branch| format!("refs/heads/{branch}"));
+        bisected
+            .into_iter()
+            .chain(MAIN_LINES.iter().map(|name| (*name).to_owned()))
+            .find_map(|name| {
+                let mut reference = repo.find_reference(name.as_str()).ok()?;
+                reference.peel_to_id().ok().map(gix::Id::detach)
+            })
     }
 
     /// The commits git keeps for a stash that are not the stash itself.
@@ -396,6 +412,12 @@ impl CommitStream for GixCommitStream {
             let mut reference = repo.find_reference(tracking.as_ref()).ok()?;
             reference.peel_to_id().ok().map(gix::Id::detach)
         });
-        Some(Trunk { head, upstream })
+        let detached = repo.head_name().ok().flatten().is_none();
+        let left_from = detached.then(|| Self::left_from(&repo)).flatten();
+        Some(Trunk {
+            head,
+            upstream,
+            left_from,
+        })
     }
 }
