@@ -247,3 +247,33 @@ fn a_stash_and_a_tag_sit_on_the_lines_they_belong_to() {
     h.at(&["stash", "push", "--quiet", "-m", "notes"]);
     insta::assert_snapshot!(h.picture());
 }
+
+#[test]
+fn the_branch_checked_out_stays_left_of_newer_branches_and_under_its_upstream() {
+    let mut h = History::new();
+    h.commit("main: one");
+    h.branch("wip/old").commit("old: one");
+    h.switch("main").commit("main: two").commit("main: three");
+    // origin/main, two ahead of main, the way a fetch leaves it.
+    h.branch("fetched")
+        .commit("origin: one")
+        .commit("origin: two");
+    h.repo
+        .git(["update-ref", "refs/remotes/origin/main", "fetched"]);
+    h.switch("main");
+    h.repo.git(["branch", "--quiet", "-D", "fetched"]);
+    for (key, value) in [
+        ("remote.origin.url", "/nowhere"),
+        ("remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"),
+        ("branch.main.remote", "origin"),
+        ("branch.main.merge", "refs/heads/main"),
+    ] {
+        h.repo.git(["config", key, value]);
+    }
+    // A local branch built on main, newer than origin's commits.
+    h.branch("feature").commit("feature: one");
+    // The newest commit of all is on a branch left long ago.
+    h.switch("wip/old").commit("old: two");
+    h.switch("main");
+    insta::assert_snapshot!(h.picture());
+}

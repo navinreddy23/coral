@@ -1,5 +1,6 @@
 use coral_core::graph::{
-    GixCommitStream, NO_ROW, Order, StreamOpts, SubprocessCommitStream, build, flags,
+    CommitNode, CommitStream, GixCommitStream, NO_ROW, Order, RowStoreBuilder, StreamOpts,
+    SubprocessCommitStream, Trunk, build, flags,
 };
 use coral_core::process::GitRunner;
 use coral_core::testutil::TestRepo;
@@ -181,4 +182,101 @@ async fn commit_time_and_topological_builds_hold_the_same_commits() {
             "{oid} missing from the commit-time store"
         );
     }
+}
+
+/// An object id made from a number, for histories written out by hand.
+fn id(n: u32) -> gix::ObjectId {
+    let mut bytes = [0_u8; 20];
+    bytes[..4].copy_from_slice(&n.to_be_bytes());
+    bytes[19] = 1;
+    gix::ObjectId::from_bytes_or_panic(&bytes)
+}
+
+fn node(n: u32, parents: &[u32]) -> CommitNode {
+    CommitNode {
+        id: id(n),
+        parents: parents.iter().map(|&p| id(p)).collect(),
+        commit_time: 0,
+    }
+}
+
+/// A first screen and the full walk lay the first screen's rows out alike, whether HEAD is on
+/// it or further down. Otherwise every line on screen would move when the full walk landed.
+#[test]
+fn a_first_screen_lays_out_its_rows_as_the_full_walk_does() {
+    let screen = u32::try_from(StreamOpts::FIRST_PAINT_ROWS).unwrap();
+    for head_row in [10, screen + 10] {
+        // A newer branch tip first, then one long line with HEAD somewhere down it.
+        let rows = screen + 40;
+        let root = rows - 1;
+        let mut nodes = vec![node(0, &[root])];
+        nodes.extend((1..root).map(|n| node(n, &[n + 1])));
+        nodes.push(node(root, &[]));
+        let trunk = Trunk {
+            head: id(head_row),
+            upstream: None,
+        };
+
+        let lay_out = |count: usize| {
+            let mut builder = RowStoreBuilder::new(false);
+            builder.keep_left(Some(trunk));
+            for n in &nodes[..count] {
+                builder.push(n);
+            }
+            builder.finish()
+        };
+        let full = lay_out(nodes.len());
+        let first = lay_out(screen as usize);
+
+        for row in 0..screen {
+            assert_eq!(
+                (first.lane(row), first.joins(row), first.open(row)),
+                (full.lane(row), full.joins(row), full.open(row)),
+                "HEAD on row {head_row}: row {row} is laid out differently by the first screen"
+            );
+        }
+        let kept = head_row < screen;
+        assert_eq!(
+            full.lane(head_row) == Some(0),
+            kept,
+            "HEAD on row {head_row} is kept in lane 0 only when the first screen reaches it"
+        );
+    }
+}
+
+/// HEAD's line is kept in lane 0 by both walks, so they must agree on what it is.
+#[tokio::test(flavor = "multi_thread")]
+async fn both_streams_name_the_same_trunk() {
+    let repo = fixture();
+    let gix_stream = GixCommitStream::open(repo.path()).unwrap();
+    let runner = GitRunner::discover().await.unwrap();
+    let sub = SubprocessCommitStream::new(runner, repo.path());
+    let head = gix::ObjectId::from_hex(repo.git(["rev-parse", "HEAD"]).as_bytes()).unwrap();
+
+    let alone = Trunk {
+        head,
+        upstream: None,
+    };
+    assert_eq!(gix_stream.trunk(), Some(alone));
+    assert_eq!(sub.trunk(), Some(alone));
+
+    // With main tracking a remote branch that is one ahead of it.
+    repo.git(["update-ref", "refs/remotes/origin/main", "side"]);
+    for (key, value) in [
+        ("remote.origin.url", "/nowhere"),
+        ("remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"),
+        ("branch.main.remote", "origin"),
+        ("branch.main.merge", "refs/heads/main"),
+    ] {
+        repo.git(["config", key, value]);
+    }
+    let side = gix::ObjectId::from_hex(repo.git(["rev-parse", "side"]).as_bytes()).unwrap();
+    let tracking = Trunk {
+        head,
+        upstream: Some(side),
+    };
+    // Reopened, as the window opens one for every walk: gix reads the config when it opens.
+    let gix_stream = GixCommitStream::open(repo.path()).unwrap();
+    assert_eq!(gix_stream.trunk(), Some(tracking));
+    assert_eq!(sub.trunk(), Some(tracking));
 }

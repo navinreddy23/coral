@@ -4,7 +4,9 @@ use gix::ObjectId;
 use smallvec::SmallVec;
 
 use super::shallow::{Grafted, boundary};
-use super::stream::{CommitNode, CommitStream, Order, StreamOpts, Tips, WalkControl, WalkStats};
+use super::stream::{
+    CommitNode, CommitStream, Order, StreamOpts, Tips, Trunk, WalkControl, WalkStats,
+};
 use crate::error::CoralError;
 
 /// Reads the DAG in-process through gix, using the commit-graph file when one is present.
@@ -380,5 +382,18 @@ impl CommitStream for GixCommitStream {
             Order::Topological => Self::walk_topological(&repo, tips, opts, &plumbing, sink),
             Order::CommitTime => Self::walk_by_commit_time(&repo, tips, opts, &plumbing, sink),
         }
+    }
+
+    fn trunk(&self) -> Option<Trunk> {
+        let repo = self.repo.to_thread_local();
+        let head = repo.head_id().ok()?.detach();
+        let upstream = repo.head_name().ok().flatten().and_then(|branch| {
+            let tracking = repo
+                .branch_remote_tracking_ref_name(branch.as_ref(), gix::remote::Direction::Fetch)?
+                .ok()?;
+            let mut reference = repo.find_reference(tracking.as_ref()).ok()?;
+            reference.peel_to_id().ok().map(gix::Id::detach)
+        });
+        Some(Trunk { head, upstream })
     }
 }

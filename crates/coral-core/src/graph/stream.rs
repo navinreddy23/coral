@@ -102,4 +102,17 @@ pub trait CommitStream: Send + Sync {
         opts: &StreamOpts,
         sink: &mut dyn FnMut(CommitNode) -> WalkControl,
     ) -> Result<WalkStats, CoralError>;
+
+    /// The line the graph keeps in its first lane; `None` for an unborn or unreadable HEAD.
+    fn trunk(&self) -> Option<Trunk>;
+}
+
+/// The line the user is on, which the graph keeps straight down its first lane.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Trunk {
+    /// The commit HEAD is on.
+    pub head: ObjectId,
+    /// Where the upstream of HEAD's branch is, when it has one. Ahead of HEAD after a fetch,
+    /// and then the same line goes on up to it; a local branch built on HEAD is not.
+    pub upstream: Option<ObjectId>,
 }

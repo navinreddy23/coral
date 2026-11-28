@@ -149,6 +149,45 @@ fn a_branch_newer_than_main_keeps_the_left_lane() {
 }
 
 #[test]
+fn the_line_kept_left_stays_in_lane_0_however_new_the_other_tips_are() {
+    // The same history as above, with main's tip kept left: the newer branch takes lane 1,
+    // and turns into the fork from the right.
+    let dag: &[&[usize]] = &[&[3], &[2], &[3], &[]];
+    let mut assigner = LaneAssigner::<usize>::new();
+    assigner.keep_left(1);
+    let rows: Vec<RowTopology> = dag
+        .iter()
+        .enumerate()
+        .map(|(i, p)| assigner.push(&i, p))
+        .collect();
+    assert_drawable(dag, &rows, true);
+    let drawn: Vec<art::Row<'_>> = rows.iter().map(art::Row::from).collect();
+    insta::assert_snapshot!(common::labelled(
+        &art::draw(&drawn),
+        ["feature", "main (kept left)", "main-1", "base"].into_iter()
+    ));
+}
+
+#[test]
+fn a_line_kept_left_takes_lane_0_even_with_lines_already_waiting_for_it() {
+    // A merge above the kept commit already holds a line for it in lane 1.
+    let dag: &[&[usize]] = &[&[2, 1], &[3], &[3], &[]];
+    let mut assigner = LaneAssigner::<usize>::new();
+    assigner.keep_left(1);
+    let rows: Vec<RowTopology> = dag
+        .iter()
+        .enumerate()
+        .map(|(i, p)| assigner.push(&i, p))
+        .collect();
+    assert_drawable(dag, &rows, true);
+    assert_eq!(rows[1].lane, 0);
+    assert_ne!(
+        rows[0].lane, 0,
+        "nothing else is placed in lane 0 before it"
+    );
+}
+
+#[test]
 fn width_never_exceeds_the_number_of_live_branches() {
     let dag: &[&[usize]] = &[&[1, 2], &[3], &[3], &[]];
     let (_, assigner) = lay_out(dag);
@@ -240,9 +279,26 @@ fn every_line_ends_at_the_commit_it_was_drawn_for() {
         let commits = 2 + dice.roll(150);
         let branches = 1 + dice.roll(12);
         let dag = history(&mut dice, commits, branches);
-        let (rows, assigner) = lay_out(&dag);
+        // Every other history keeps some commit's line left, as the window keeps HEAD's.
+        let kept = (seed % 2 == 0).then(|| dice.roll(commits));
+        let mut assigner = LaneAssigner::<usize>::new();
+        if let Some(k) = kept {
+            assigner.keep_left(k);
+        }
+        let rows: Vec<RowTopology> = dag
+            .iter()
+            .enumerate()
+            .map(|(i, p)| assigner.push(&i, p))
+            .collect();
         *widths.entry(assigner.max_width()).or_insert(0) += 1;
         assert_drawable(&dag, &rows, assigner.max_width() < SPILL);
+        if let Some(k) = kept {
+            assert_eq!(rows[k].lane, 0, "seed {seed}: the kept commit left lane 0");
+            assert!(
+                rows[..k].iter().all(|r| r.lane != 0),
+                "seed {seed}: a commit above the kept one took lane 0"
+            );
+        }
     }
     eprintln!("widths: {widths:?}");
 }

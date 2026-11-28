@@ -101,6 +101,8 @@ pub struct LaneAssigner<K> {
     /// edge on down that lane, which draws as the one line touching the node on its way past —
     /// `GitKraken`'s shape for a branch merged a second time, and a lane narrower.
     freed_this_row: SmallVec<[u16; 4]>,
+    /// The commit lane 0 is kept for until it is placed; see [`Self::keep_left`].
+    trunk: Option<K>,
     max_width: u16,
 }
 
@@ -119,8 +121,19 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
             next_sweep: u64::MAX,
             reserved: std::collections::HashMap::new(),
             freed_this_row: SmallVec::new(),
+            trunk: None,
             max_width: 0,
         }
+    }
+
+    /// Keeps lane 0 for `key`: no other commit is placed there before it, and it is placed
+    /// there whatever lines are waiting for it, which then turn into it from the right.
+    ///
+    /// For the line the user is on. Left to the order of the walk, lane 0 goes to whichever
+    /// tip is newest, and an unmerged branch forked from far down holds it all the way to its
+    /// fork, with the checked-out branch beside it for the whole of that span.
+    pub fn keep_left(&mut self, key: K) {
+        self.trunk = Some(key);
     }
 
     /// Widest the graph has been so far.
@@ -194,7 +207,18 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
     /// tip, with nothing waiting, takes the leftmost free lane. Every waiting lane is cleared.
     fn place(&mut self, key: &K) -> (u16, u32) {
         let waiting = self.reserved.remove(key).unwrap_or_default();
-        let Some(&lane) = waiting.iter().min() else {
+        let kept = self.trunk.as_ref() == Some(key);
+        if kept {
+            self.trunk = None;
+            if self.lanes.is_empty() {
+                self.lanes.push(None);
+            }
+        }
+        let Some(lane) = (if kept {
+            Some(0)
+        } else {
+            waiting.iter().min().copied()
+        }) else {
             return (self.alloc().unwrap_or(SPILL), 0);
         };
         let mut joins = 0_u32;
@@ -239,12 +263,13 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
         mask
     }
 
-    /// Leftmost free lane, skipping any freed on this row and the spill lane.
+    /// Leftmost free lane, skipping any freed on this row, the spill lane, and lane 0 while it
+    /// is kept for the trunk.
     ///
     /// When every lane is taken, the one claimed longest ago is taken back. `None` only when
     /// even that is impossible, which is a row that has just claimed every lane itself.
     fn alloc(&mut self) -> Option<u16> {
-        self.alloc_from(0)
+        self.alloc_from(0, true)
     }
 
     /// Leftmost free lane to the right of `lane`, falling back to anywhere.
@@ -253,11 +278,18 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
     /// full the left is still better than nothing: a line bending the wrong way beats a
     /// commit with no lane at all.
     fn alloc_after(&mut self, lane: u16) -> Option<u16> {
-        self.alloc_from(lane.saturating_add(1))
-            .or_else(|| self.alloc_from(0))
+        self.alloc_from(lane.saturating_add(1), false)
+            .or_else(|| self.alloc_from(0, true))
     }
 
-    fn alloc_from(&mut self, first: u16) -> Option<u16> {
+    /// Only the leftward pass may take a lane back; the rightward one gives way instead, so a
+    /// preference does not cost somebody else their line.
+    fn alloc_from(&mut self, first: u16, may_evict: bool) -> Option<u16> {
+        let first = if self.trunk.is_some() {
+            first.max(1)
+        } else {
+            first
+        };
         for (i, slot) in self.lanes.iter().enumerate().skip(first as usize) {
             let lane = u16::try_from(i).unwrap_or(u16::MAX);
             if lane >= SPILL {
@@ -267,13 +299,14 @@ impl<K: Eq + std::hash::Hash + Clone> LaneAssigner<K> {
                 return Some(lane);
             }
         }
-        if u16::try_from(self.lanes.len()).unwrap_or(u16::MAX) < SPILL {
+        while u16::try_from(self.lanes.len()).unwrap_or(u16::MAX) < SPILL {
             self.lanes.push(None);
-            return u16::try_from(self.lanes.len() - 1).ok();
+            let lane = u16::try_from(self.lanes.len() - 1).ok()?;
+            if lane >= first {
+                return Some(lane);
+            }
         }
-        // Only the leftward pass may take a lane back; the rightward one gives way instead,
-        // so a preference does not cost somebody else their line.
-        if first == 0 { self.evict() } else { None }
+        if may_evict { self.evict() } else { None }
     }
 
     /// Gives back every lane held longer than a line is worth drawing.

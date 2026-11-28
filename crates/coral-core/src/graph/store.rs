@@ -1,7 +1,7 @@
 use gix::ObjectId;
 
 use super::lanes::LaneAssigner;
-use super::stream::{CommitNode, CommitStream, StreamOpts, WalkControl};
+use super::stream::{CommitNode, CommitStream, StreamOpts, Trunk, WalkControl};
 use crate::error::CoralError;
 
 /// A parent that is not in the loaded set: a boundary of the walk, or a shallow graft.
@@ -182,7 +182,20 @@ pub struct RowStoreBuilder {
     parent_lane: Vec<u16>,
     assigner: LaneAssigner<ObjectId>,
     provisional: bool,
+    /// The line to keep left, while the walk has not yet reached HEAD; see
+    /// [`RowStoreBuilder::keep_left`].
+    trunk: Option<Trunk>,
+    /// Rows held back until HEAD is reached, so the line it is on is known before any of them
+    /// is given a lane.
+    held: Vec<CommitNode>,
 }
+
+/// The most rows held back looking for HEAD.
+///
+/// A first screen's walk, so a first screen and the full walk agree: both keep HEAD's line in
+/// lane 0, or neither does. A store whose lanes changed when the full walk landed would move
+/// every line on screen.
+const HEAD_WITHIN: u64 = StreamOpts::FIRST_PAINT_ROWS;
 
 impl RowStoreBuilder {
     #[must_use]
@@ -200,7 +213,18 @@ impl RowStoreBuilder {
             parent_lane: Vec::new(),
             assigner: LaneAssigner::new(),
             provisional,
+            trunk: None,
+            held: Vec::new(),
         }
+    }
+
+    /// Keeps the line the user is on in lane 0: HEAD and its first parents, and its branch's
+    /// upstream above it when that is ahead.
+    ///
+    /// When HEAD is not among the first [`HEAD_WITHIN`] rows — hidden, or checked out far
+    /// down — lanes are given as the walk comes.
+    pub fn keep_left(&mut self, trunk: Option<Trunk>) {
+        self.trunk = trunk;
     }
 
     /// Reserves space for a known row count, avoiding repeated reallocation of nine arrays.
@@ -214,6 +238,32 @@ impl RowStoreBuilder {
     }
 
     pub fn push(&mut self, node: &CommitNode) {
+        let Some(trunk) = self.trunk else {
+            self.place(node);
+            return;
+        };
+        self.held.push(node.clone());
+        if node.id == trunk.head {
+            let top = trunk
+                .upstream
+                .filter(|&up| leads_to(&self.held, up, trunk.head))
+                .unwrap_or(trunk.head);
+            self.assigner.keep_left(top);
+            self.release();
+        } else if u64::try_from(self.held.len()).is_ok_and(|n| n >= HEAD_WITHIN) {
+            self.release();
+        }
+    }
+
+    /// Lays out the rows held back, and every row after them as it comes.
+    fn release(&mut self) {
+        self.trunk = None;
+        for node in std::mem::take(&mut self.held) {
+            self.place(&node);
+        }
+    }
+
+    fn place(&mut self, node: &CommitNode) {
         if self.hash_len == 0 {
             self.hash_len = node.id.as_bytes().len();
         }
@@ -247,7 +297,8 @@ impl RowStoreBuilder {
 
     /// Resolves parent ids to rows and builds the lookup index.
     #[must_use]
-    pub fn finish(self) -> RowStore {
+    pub fn finish(mut self) -> RowStore {
+        self.release();
         let hash_len = if self.hash_len == 0 {
             20
         } else {
@@ -308,6 +359,7 @@ impl RowStoreBuilder {
 /// Propagates walk failures.
 pub fn build(stream: &dyn CommitStream, opts: &StreamOpts) -> Result<RowStore, CoralError> {
     let mut builder = RowStoreBuilder::new(opts.order == super::Order::CommitTime);
+    builder.keep_left(stream.trunk());
     if let Some(n) = opts.max_count {
         builder.reserve(usize::try_from(n).unwrap_or(0));
     }
@@ -316,4 +368,26 @@ pub fn build(stream: &dyn CommitStream, opts: &StreamOpts) -> Result<RowStore, C
         WalkControl::Continue
     })?;
     Ok(builder.finish())
+}
+
+/// Whether `from`'s first parents lead down to `to` through the rows held back.
+///
+/// The rows held are everything the walk emitted above HEAD, so a line that leaves them
+/// before it reaches HEAD went past it: a branch that is not ahead of it but beside it.
+fn leads_to(held: &[CommitNode], from: ObjectId, to: ObjectId) -> bool {
+    let first_parent: std::collections::HashMap<ObjectId, Option<ObjectId>> = held
+        .iter()
+        .map(|node| (node.id, node.parents.first().copied()))
+        .collect();
+    let mut at = from;
+    for _ in 0..held.len() {
+        if at == to {
+            return true;
+        }
+        match first_parent.get(&at) {
+            Some(Some(parent)) => at = *parent,
+            _ => return false,
+        }
+    }
+    at == to
 }

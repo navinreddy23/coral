@@ -3,7 +3,9 @@ use std::path::{Path, PathBuf};
 use gix::ObjectId;
 use smallvec::SmallVec;
 
-use super::stream::{CommitNode, CommitStream, Order, StreamOpts, Tips, WalkControl, WalkStats};
+use super::stream::{
+    CommitNode, CommitStream, Order, StreamOpts, Tips, Trunk, WalkControl, WalkStats,
+};
 use crate::error::CoralError;
 use crate::process::{GitCommand, GitRunner, Sink};
 
@@ -49,6 +51,22 @@ impl SubprocessCommitStream {
             Ok(Sink::Stop)
         });
         read.is_ok() && detached
+    }
+
+    /// The commit `rev` names, or `None` when it names none: an unborn HEAD, or a branch with
+    /// no upstream.
+    fn commit_at(&self, rev: &str) -> Option<ObjectId> {
+        let cmd = GitCommand::read("rev-parse", &self.workdir)
+            .arg("rev-parse")
+            .arg("--verify")
+            .arg("--quiet")
+            .arg(format!("{rev}^{{commit}}"));
+        let mut id = None;
+        let read = self.runner.stream_blocking(&cmd, b'\n', |line| {
+            id = ObjectId::from_hex(line).ok();
+            Ok(Sink::Stop)
+        });
+        read.ok().and(id)
     }
 
     fn command(&self, opts: &StreamOpts) -> GitCommand {
@@ -165,6 +183,13 @@ impl CommitStream for SubprocessCommitStream {
             })
         })?;
         Ok(stats)
+    }
+
+    fn trunk(&self) -> Option<Trunk> {
+        Some(Trunk {
+            head: self.commit_at("HEAD")?,
+            upstream: self.commit_at("@{upstream}"),
+        })
     }
 }
 
