@@ -503,8 +503,8 @@ fn a_detached_head_keeps_the_branch_it_was_left_from_in_lane_0() {
     );
 }
 
-/// Both walks name the branch a detached HEAD was left from alike: the one a bisect started
-/// from, else main.
+/// Both walks name a detached HEAD's line alike: main's above it, and during a bisect the
+/// branch it started from, wherever the bisect has moved HEAD.
 #[tokio::test(flavor = "multi_thread")]
 async fn both_streams_name_the_branch_a_detached_head_was_left_from() {
     let repo = fixture();
@@ -525,7 +525,7 @@ async fn both_streams_name_the_branch_a_detached_head_was_left_from() {
     assert_eq!(gix_stream.trunk(), Some(detached));
     assert_eq!(sub.trunk(), Some(detached));
 
-    // A bisect started from a topic branch names it, whatever main is.
+    // A bisect started from a topic branch keeps that branch's line, whatever main is.
     repo.git(["checkout", "--quiet", "-b", "topic", "main"]);
     for n in 0..4 {
         repo.git([
@@ -542,9 +542,9 @@ async fn both_streams_name_the_branch_a_detached_head_was_left_from() {
     assert_ne!(head, topic, "the bisect left HEAD where it was");
     let gix_stream = GixCommitStream::open(repo.path()).unwrap();
     let bisecting = Trunk {
-        head,
+        head: topic,
         upstream: None,
-        left_from: Some(topic),
+        left_from: None,
     };
     assert_eq!(gix_stream.trunk(), Some(bisecting));
     assert_eq!(sub.trunk(), Some(bisecting));

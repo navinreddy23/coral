@@ -65,19 +65,23 @@ impl GixCommitStream {
     }
 
     /// See [`Trunk::left_from`].
-    fn left_from(repo: &gix::Repository) -> Option<ObjectId> {
-        let bisected = std::fs::read_to_string(repo.git_dir().join("BISECT_START"))
-            .ok()
-            .map(|text| text.trim().to_owned())
-            .filter(|branch| !branch.is_empty())
-            .map(|branch| format!("refs/heads/{branch}"));
-        bisected
-            .into_iter()
-            .chain(MAIN_LINES.iter().map(|name| (*name).to_owned()))
-            .find_map(|name| {
-                let mut reference = repo.find_reference(name.as_str()).ok()?;
-                reference.peel_to_id().ok().map(gix::Id::detach)
-            })
+    fn main_line(repo: &gix::Repository) -> Option<ObjectId> {
+        MAIN_LINES.iter().find_map(|name| Self::tip(repo, name))
+    }
+
+    /// The tip of the branch a bisect in progress started from, which git keeps in
+    /// `BISECT_START`; `None` when it started from a detached HEAD.
+    fn bisected_from(repo: &gix::Repository) -> Option<ObjectId> {
+        let text = std::fs::read_to_string(repo.git_dir().join("BISECT_START")).ok()?;
+        let branch = text.trim();
+        (!branch.is_empty())
+            .then(|| Self::tip(repo, &format!("refs/heads/{branch}")))
+            .flatten()
+    }
+
+    fn tip(repo: &gix::Repository, name: &str) -> Option<ObjectId> {
+        let mut reference = repo.find_reference(name).ok()?;
+        reference.peel_to_id().ok().map(gix::Id::detach)
     }
 
     /// The commits git keeps for a stash that are not the stash itself.
@@ -404,6 +408,14 @@ impl CommitStream for GixCommitStream {
 
     fn trunk(&self) -> Option<Trunk> {
         let repo = self.repo.to_thread_local();
+        let detached = repo.head_name().ok().flatten().is_none();
+        if detached && let Some(tip) = Self::bisected_from(&repo) {
+            return Some(Trunk {
+                head: tip,
+                upstream: None,
+                left_from: None,
+            });
+        }
         let head = repo.head_id().ok()?.detach();
         let upstream = repo.head_name().ok().flatten().and_then(|branch| {
             let tracking = repo
@@ -412,8 +424,7 @@ impl CommitStream for GixCommitStream {
             let mut reference = repo.find_reference(tracking.as_ref()).ok()?;
             reference.peel_to_id().ok().map(gix::Id::detach)
         });
-        let detached = repo.head_name().ok().flatten().is_none();
-        let left_from = detached.then(|| Self::left_from(&repo)).flatten();
+        let left_from = detached.then(|| Self::main_line(&repo)).flatten();
         Some(Trunk {
             head,
             upstream,

@@ -54,17 +54,14 @@ impl SubprocessCommitStream {
     }
 
     /// See [`Trunk::left_from`].
-    fn left_from(&self) -> Option<ObjectId> {
-        if !self.head_detached() {
-            return None;
-        }
-        let bisected = self
-            .bisect_start()
-            .map(|branch| format!("refs/heads/{branch}"));
-        bisected
-            .into_iter()
-            .chain(MAIN_LINES.iter().map(|name| (*name).to_owned()))
-            .find_map(|name| self.commit_at(&name))
+    fn main_line(&self) -> Option<ObjectId> {
+        MAIN_LINES.iter().find_map(|name| self.commit_at(name))
+    }
+
+    /// See [`Trunk::head`]: the tip of the branch a bisect in progress started from.
+    fn bisected_from(&self) -> Option<ObjectId> {
+        let branch = self.bisect_start()?;
+        self.commit_at(&format!("refs/heads/{branch}"))
     }
 
     /// What a bisect in progress started from, as git wrote it to `BISECT_START`.
@@ -219,10 +216,18 @@ impl CommitStream for SubprocessCommitStream {
     }
 
     fn trunk(&self) -> Option<Trunk> {
+        let detached = self.head_detached();
+        if detached && let Some(tip) = self.bisected_from() {
+            return Some(Trunk {
+                head: tip,
+                upstream: None,
+                left_from: None,
+            });
+        }
         Some(Trunk {
             head: self.commit_at("HEAD")?,
             upstream: self.commit_at("@{upstream}"),
-            left_from: self.left_from(),
+            left_from: detached.then(|| self.main_line()).flatten(),
         })
     }
 }

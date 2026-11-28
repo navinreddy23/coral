@@ -113,19 +113,20 @@ pub trait CommitStream: Send + Sync {
 /// The line the user is on, which the graph keeps straight down its first lane.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Trunk {
-    /// The commit HEAD is on.
+    /// The commit the kept line runs down from: HEAD's, or during a bisect the tip of the
+    /// branch it started from, which stays put while the bisect moves HEAD about its history.
     pub head: ObjectId,
     /// Where the upstream of HEAD's branch is, when it has one. Ahead of HEAD after a fetch,
     /// and then the same line goes on up to it; a local branch built on HEAD is not.
     pub upstream: Option<ObjectId>,
-    /// For a detached HEAD, where the branch it was most likely left from is: the one a bisect
-    /// started from, else main or master. Where the history above HEAD forks, it says which
+    /// For a detached HEAD outside a bisect, where the main line it most likely sits on is:
+    /// main, master or the remote's default. Where the history above HEAD forks, it says which
     /// way HEAD's line goes on up.
     pub left_from: Option<ObjectId>,
 }
 
-/// The branches a detached HEAD is looked for on, in order, after the one a bisect started
-/// from: the names a repository's main line goes by.
+/// The branches a detached HEAD is looked for on, in order: the names a repository's main line
+/// goes by.
 pub(crate) const MAIN_LINES: [&str; 3] = [
     "refs/heads/main",
     "refs/heads/master",
