@@ -283,13 +283,14 @@ function drawThroughLanes(
     const nodeY = rowY(row, first, metrics);
     const rowTop = nodeY - half;
 
-    // A line given back for running too long is no longer in the mask: it stops at the top of
-    // this row with a gap under it, rather than running on into whatever takes the lane next.
+    // A line given back is no longer in the mask: a branch's tail towards a fork far below, a
+    // line held too long, or one a full column took back. It stops at the top of this row,
+    // fading out, rather than running on into whatever takes the lane next.
     if (local < frame.open.length) {
       const mask = frame.open[local] ?? 0;
       for (const [lane, from] of open) {
         if (lane < 32 && (mask & (1 << lane)) === 0) {
-          strokeVertical(ctx, lane, from, rowTop, metrics, colours);
+          strokeFading(ctx, lane, from, rowTop, metrics, colours);
           open.delete(lane);
         }
       }
@@ -325,6 +326,42 @@ function drawThroughLanes(
   for (const [lane, from] of open) {
     strokeVertical(ctx, lane, from, bottomY, metrics, colours);
   }
+}
+
+/** Steps a fading line end is drawn in: few enough to be cheap, enough not to show as bands. */
+const FADE_STEPS = 8;
+
+/**
+ * A line that stops short of its commit, fading out over the row above where it stops.
+ *
+ * Cut off square, a branch's eight-row tail read as a broken line wherever a later branch
+ * took up the lane below it, drawn in the same lane colour: in git's own history that was
+ * most of the screen. Faded, it reads as going on out of view, and the next line in the lane
+ * plainly starts at its own corner.
+ */
+function strokeFading(
+  ctx: CanvasRenderingContext2D,
+  lane: number,
+  fromY: number,
+  toY: number,
+  metrics: Metrics,
+  colours: string[],
+): void {
+  const fade = Math.min(metrics.rowHeight, toY - fromY);
+  if (fade <= 0) return;
+  strokeVertical(ctx, lane, fromY, toY - fade, metrics, colours);
+  const alpha = ctx.globalAlpha;
+  const cap = ctx.lineCap;
+  // Round caps would overlap from one step to the next and leave a darker dot at each join.
+  ctx.lineCap = 'butt';
+  const step = fade / FADE_STEPS;
+  for (let i = 0; i < FADE_STEPS; i++) {
+    ctx.globalAlpha = alpha * (1 - (i + 1) / (FADE_STEPS + 1));
+    const y = toY - fade + i * step;
+    strokeVertical(ctx, lane, y, y + step, metrics, colours);
+  }
+  ctx.globalAlpha = alpha;
+  ctx.lineCap = cap;
 }
 
 function strokeVertical(

@@ -226,11 +226,13 @@ same three numbers reach the stylesheet and the canvas metrics, which cannot rea
   HEAD, its first parents, and above it its branch's upstream when that is ahead, or else the
   commits its line runs straight on into, the main line's merges included — is kept in lane 0
   whatever is newer. During a bisect it is the branch the bisect started from, so the lanes keep
-  still while HEAD moves about. A branch whose fork is more than 100 rows down runs eight rows on
-  down its own lane and stops: on the kernel, lines held to forks thousands of rows below
-  filled every lane, and joining the line to the fork across the branch's own row turned a
-  corner either way, the right-hand ones looking like merges. A merge into a line already running joins it where it is, which is the
-  one corner that can turn left. Lanes take a stable colour from the eight-colour palette in
+  still while HEAD moves about. A branch whose fork is more than 100 rows down runs eight rows
+  on down its own lane and fades out, as every line stopping short of its commit does: on the
+  kernel, lines held to forks thousands of rows below filled every lane, and joining the line to
+  the fork across the branch's own row turned a corner either way, the right-hand ones looking
+  like merges. Cut off square, a tail read as a broken line wherever a later branch took up its
+  lane in the same colour. A merge into a line already running joins it where it is, which is
+  the one corner that can turn left. Lanes take a stable colour from the eight-colour palette in
   `tokens.css`. Every commit, merges included, is a disc in its author's colour ringed in its
   lane's, with the author's initials on it set in the interface face. Nothing is fetched to
   draw a node. The commit HEAD is on carries a second ring in the brand colour, clear of its

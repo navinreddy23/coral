@@ -9,6 +9,7 @@ interface Segment {
   y0: number;
   x1: number;
   y1: number;
+  alpha: number;
 }
 
 interface Corner {
@@ -62,6 +63,7 @@ function recorder(): {
   const ctx = {
     lineWidth: 0,
     lineCap: '',
+    globalAlpha: 1,
     strokeStyle: '',
     fillStyle: '',
     clearRect() {},
@@ -72,7 +74,7 @@ function recorder(): {
       at = { x, y };
     },
     lineTo(x: number, y: number) {
-      pending = { x0: at.x, y0: at.y, x1: x, y1: y };
+      pending = { x0: at.x, y0: at.y, x1: x, y1: y, alpha: 1 };
       at = { x, y };
     },
     bezierCurveTo() {
@@ -120,7 +122,7 @@ function recorder(): {
         pendingArc = null;
         return;
       }
-      if (pending) segments.push(pending);
+      if (pending) segments.push({ ...pending, alpha: ctx.globalAlpha });
       pending = null;
     },
   };
@@ -505,6 +507,42 @@ describe('a line given back for running too long', () => {
     const run = verticalsIn(3, segments);
     const half = DEFAULT_METRICS.rowHeight / 2;
     expect(Math.max(...run.map((s) => s.y1))).toBe(rowY(20, 10, DEFAULT_METRICS) - half);
+  });
+
+  it('fades out over the row above where it stops, so it reads as going on out of view', () => {
+    const frame = longRunFrame(40, 3);
+    for (let row = 20; row < 40; row++) frame.open[row] = (frame.open[row] ?? 0) & ~(1 << 3);
+    frame.lanes[30] = 3;
+    const { ctx, segments } = recorder();
+    drawLanes(ctx, frame, { first: 10, last: 35 }, DEFAULT_METRICS, 200, 2000, {
+      colours: Array(4).fill('#000'),
+      fills: ['#fill'],
+    });
+
+    // A later commit in the lane draws its own line; only the run that stops is read here.
+    const stop = rowY(20, 10, DEFAULT_METRICS) - DEFAULT_METRICS.rowHeight / 2;
+    const run = verticalsIn(3, segments).filter((s) => s.y1 <= stop);
+    const fadeFrom = stop - DEFAULT_METRICS.rowHeight;
+    const solid = run.filter((s) => s.y1 <= fadeFrom);
+    const fading = run.filter((s) => s.y0 >= fadeFrom).sort((a, b) => a.y0 - b.y0);
+    expect(solid.length).toBeGreaterThan(0);
+    expect(solid.every((s) => s.alpha === 1)).toBe(true);
+    expect(fading.length).toBeGreaterThan(2);
+    for (let i = 1; i < fading.length; i++) {
+      expect(fading[i]?.alpha ?? 1).toBeLessThan(fading[i - 1]?.alpha ?? 0);
+    }
+    expect(fading.at(-1)?.alpha ?? 1).toBeLessThan(0.25);
+    expect(ctx.globalAlpha).toBe(1);
+  });
+
+  it('does not fade a line that reaches its commit', () => {
+    const frame = longRunFrame(40, 3);
+    const { ctx, segments } = recorder();
+    drawLanes(ctx, frame, { first: 0, last: 39 }, DEFAULT_METRICS, 200, 2000, {
+      colours: Array(4).fill('#000'),
+      fills: ['#fill'],
+    });
+    expect(verticalsIn(3, segments).every((s) => s.alpha === 1)).toBe(true);
   });
 });
 
