@@ -255,7 +255,7 @@ impl RepoLocation {
             )
             .await?;
         let vars = match parse_vars(&vars.stdout) {
-            Ok(vars) if vars.all > 0 && self.good_below_bad(runner, state, bad).await => vars,
+            Ok(vars) if vars.all > 0 && self.no_good_above_bad(runner, state, bad).await => vars,
             _ => {
                 state.mistaken = true;
                 return Ok(());
@@ -288,22 +288,26 @@ impl RepoLocation {
         Ok(())
     }
 
-    /// Whether every good commit is an ancestor of the bad one, as a bisection needs.
+    /// Whether no good commit descends from the bad one, the one way round a bisection cannot
+    /// run.
     ///
     /// rev-list alone does not say: a good commit that descends from the bad one excludes it
-    /// and everything under it, which can leave a count that looks like an answer.
-    async fn good_below_bad(&self, runner: &GitRunner, state: &Bisection, bad: &str) -> bool {
+    /// and everything under it, which can leave a count that looks like an answer. A good
+    /// commit beside the bad one is no mistake — the other merge of a criss-cross, say — and
+    /// git clears what it has and goes on; asking for every good commit to be under the bad
+    /// one called that swapped, over git's own answer.
+    async fn no_good_above_bad(&self, runner: &GitRunner, state: &Bisection, bad: &str) -> bool {
         for good in &state.good {
             let out = runner
                 .output_allowing(
                     GitCommand::read("merge-base", self.display_path())
                         .args(["merge-base", "--is-ancestor"])
-                        .arg(good)
-                        .arg(bad),
+                        .arg(bad)
+                        .arg(good),
                     &[1],
                 )
                 .await;
-            if !matches!(out, Ok(o) if o.code == 0) {
+            if !matches!(out, Ok(o) if o.code == 1) {
                 return false;
             }
         }
