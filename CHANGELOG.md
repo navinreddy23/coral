@@ -1,5 +1,44 @@
 # Changelog
 
+## 1.9.0
+
+### Changed
+
+- **Branches turn one way.** A branch's line runs straight down its own lane to the commit it
+  left from and turns into that commit on that commit's row, as GitKraken draws it, so a branch
+  is seen to start where it did. A merge still leaves its commit sideways and turns down into
+  the branch it brings in. A branch's oldest commit used to hook left into the main line between
+  two of its commits, so corners turned both ways and a branch seemed to grow out of the middle
+  of the line.
+- **A commit several lines lead to sits in the leftmost of them**, so every branch turns into it
+  from the right and the line it is on keeps its lane.
+- **The line you are on keeps lane 0**: HEAD and its first parents, and above HEAD its branch's
+  upstream when a fetch has left that ahead, or else the commits HEAD's line runs straight on
+  into, a team's main line of merges included. The newest tip used to take lane 0, so an old
+  unmerged branch could push `main` into lane 1 for the whole graph. A detached HEAD, from a
+  checked-out tag or an old commit, keeps `main` straight above it, and during a bisect lane 0
+  stays with the branch the bisect started from, so the lanes keep still as HEAD moves.
+- **A branch that left its line far below** — more than 100 rows down, as every subsystem
+  branch in the kernel does — runs eight rows on down its own lane and stops, rather than
+  turning sideways into the line to its fork. Held all the way down, such lines filled every
+  lane of the kernel's column; as eight-row tails the graph is no wider than before.
+- **`coral graph` draws the graph** in box characters with the same corners, and `--json` gives
+  each row the lanes entering it and the lanes turning into it.
+
+### Fixed
+
+- **In a crowded graph a line could stop short of its commit or run on into another one.** A
+  line a merge had joined was given up as though nothing had used it since it was first drawn,
+  so a merge's line could stop with its parent right under it; a lane taken back from a full
+  column carried its old line on into the new one's commit; and the kernel's 66-parent octopus
+  handed seven lanes it had joined to seven more of its parents. Every row of the kernel's
+  graph, 1.5 million of them, now has each line ending at its own commit or stopping above it.
+- **The first screen of a large repository is laid out as the full walk lays it out.** Below row
+  76 it filled every lane, and every line there moved when the full walk landed.
+- **A bisect no longer says good and bad were swapped when they were not.** A good commit beside
+  the bad one rather than under it, like the other merge of a criss-cross, is a verdict git
+  takes, and git had found the first bad commit while the window refused it.
+
 ## 1.8.0
 
 ### Changed

@@ -833,7 +833,7 @@ dependencies = [
 
 [[package]]
 name = "coral-app"
-version = "1.8.0"
+version = "1.9.0"
 dependencies = [
  "coral-assist",
  "coral-core",
@@ -857,7 +857,7 @@ dependencies = [
 
 [[package]]
 name = "coral-assist"
-version = "1.8.0"
+version = "1.9.0"
 dependencies = [
  "keyring",
  "reqwest",
@@ -870,7 +870,7 @@ dependencies = [
 
 [[package]]
 name = "coral-cli"
-version = "1.8.0"
+version = "1.9.0"
 dependencies = [
  "clap",
  "coral-assist",
@@ -889,7 +889,7 @@ dependencies = [
 
 [[package]]
 name = "coral-core"
-version = "1.8.0"
+version = "1.9.0"
 dependencies = [
  "bstr",
  "dirs",
@@ -913,7 +913,7 @@ dependencies = [
 
 [[package]]
 name = "coral-hosting"
-version = "1.8.0"
+version = "1.9.0"
 dependencies = [
  "dirs",
  "keyring",
