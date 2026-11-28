@@ -56,20 +56,27 @@ including reclaimable file-backed mappings.
 ## Graph pipeline
 
 `CommitStream` (gix, or `git rev-list` as oracle and fallback) emits `CommitNode`s in
-topological or commit-time order. `RowStoreBuilder` assigns each to a lane and accumulates a
-struct of arrays; `RowStore` is the frozen result the UI scrolls through.
+topological or commit-time order. `RowStoreBuilder` accumulates them as a struct of arrays;
+`RowStore` is the frozen result the UI scrolls through.
 
 Parent *rows* cannot be known during the walk — topological order puts a parent after its
 child, so the child is written first. Parent object ids are buffered and resolved in one pass
-at the end, against a sorted lookup index built at the same time.
+at the end, against a sorted lookup index built at the same time, and lanes are laid out after
+that (`graph/lanes.rs`), because a branch keeps its own lane down to its fork only when the fork
+is near enough to see (otherwise its line runs eight rows and stops), and HEAD's line is kept in lane 0 only when HEAD is within the first
+screen's walk, so a first screen and the full walk agree.
 
-Measured on the kernel: 1,481,528 rows and 1,601,455 edges build in 2.2 s into 93.8 MB, at
-66.4 bytes per row and a maximum width of 214 lanes.
+Measured on the kernel: 1,508,459 rows and 1,630,422 edges build in 2.2 s into 95.5 MB, at
+66.4 bytes per row, in the 31 lanes the column is capped at. The lane rules fail in crowds the
+generated histories in the tests are too small for, so `examples/check_graph.rs` lays out a
+real repository as the window does and checks every row and edge against them.
 
-Every row also carries a 32-bit mask of the lanes entering it. The renderer only ever holds a
-window, so it cannot see the commit that opened a lane running to a parent half a million rows
-below; without the mask the lane went undrawn for its whole span and the graph broke into
-fragments between merges. Lanes past 31 are omitted — the column cannot show them.
+Every row also carries a 32-bit mask of the lanes entering it, and a second of the lanes that
+end on it by turning into its node — a branch arriving at the commit it left from. The renderer
+only ever holds a window, so it cannot see the commit that opened a lane running to a parent
+half a million rows below; without the mask the lane went undrawn for its whole span and the
+graph broke into fragments between merges. Lanes past 31 are omitted — the column cannot show
+them.
 
 First paint is two walks, but with a commit-graph the first is already in final order.
 git's incremental topological walk (and gix's port) counts children down to the *lowest* tip's

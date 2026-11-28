@@ -16,7 +16,10 @@ const REPO = '/home/dev/projects/coral';
 
 interface Row {
   lane: number;
+  /** The lane each parent's line runs down from this row. */
   parents: number[];
+  /** Lanes whose line turns into this row's node: the branches that left from it. */
+  joins: number;
   merge: boolean;
   summary: string;
   author: string;
@@ -60,12 +63,16 @@ function rows(): Row[] {
   ];
   return lanes.map((lane, i) => {
     const next = lanes[i + 1] ?? 0;
+    const previous = lanes[i - 1] ?? 0;
     // A mainline commit whose parent is on a side branch is where that branch was merged in.
     const merge = lane === 0 && next !== 0;
     const author = AUTHORS[i % AUTHORS.length] ?? AUTHORS[0]!;
     return {
       lane,
-      parents: merge ? [0, next] : [next === lane ? lane : next],
+      // A branch's oldest commit runs on down its own lane, as the engine lays it out, and
+      // turns into the mainline commit under it: that commit is the one the branch left from.
+      parents: merge ? [0, next] : [lane],
+      joins: lane === 0 && previous !== 0 ? 1 << previous : 0,
       merge,
       summary: SUMMARIES[i % SUMMARIES.length] ?? 'a commit',
       author: author[0],
@@ -84,6 +91,21 @@ function oidOf(row: number): string {
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
   return hash.toString(16).padStart(8, '0').repeat(5);
+}
+
+/** Per row, the lanes with a line entering it from above. */
+function enteringMasks(): number[] {
+  const masks = ROWS.map(() => 0);
+  ROWS.forEach((row, i) => {
+    for (const lane of row.parents) {
+      for (let r = i + 1; r < ROWS.length; r++) {
+        masks[r] = (masks[r] ?? 0) | (1 << lane);
+        const below = ROWS[r];
+        if (below === undefined || below.lane === lane || (below.joins & (1 << lane)) !== 0) break;
+      }
+    }
+  });
+  return masks;
 }
 
 /** Mirrors `graph::wire::encode`, checked by the decoder the window already uses. */
@@ -105,6 +127,9 @@ function frame(startRow: number): ArrayBuffer {
   const startView = new DataView(parentStart.buffer);
   const oids = new Uint8Array(count * hashLen);
 
+  const entering = enteringMasks();
+  const join = new Uint8Array(count * 4);
+  const joinView = new DataView(join.buffer);
   const now = Math.floor(Date.now() / 1000);
   let edges = 0;
   startView.setUint32(0, 0, true);
@@ -115,16 +140,13 @@ function frame(startRow: number): ArrayBuffer {
     flags[i] = row.merge ? 1 : 0;
     timeView.setFloat64(i * 8, now - i * 5400, true);
 
-    // A lane is open entering this row when it has a commit above and another at or below:
-    // that is what the engine's own mask means, and what keeps a run drawn end to end without
-    // extending past either of its ends.
-    let mask = 0;
-    for (let l = 0; l <= 2; l++) {
-      const above = ROWS.slice(0, i).some((r) => r.lane === l);
-      const below = ROWS.slice(i).some((r) => r.lane === l);
-      if (above && below) mask |= 1 << l;
-    }
+    // The lanes with a line entering this row, found the way a renderer would follow them:
+    // each line runs down from the row that opened it to the first row drawn in its lane or
+    // turning it in. That is what the engine's own mask means, and what keeps a run drawn end
+    // to end without extending past either of its ends.
+    const mask = entering[i] ?? 0;
     openView.setUint32(i * 4, mask, true);
+    joinView.setUint32(i * 4, row.joins, true);
 
     for (const p of row.parents) {
       parentLanes.push(p);
@@ -150,6 +172,7 @@ function frame(startRow: number): ArrayBuffer {
     [Section.ParentLane, parentLane, parentLanes.length],
     [Section.Oid, oids, count],
     [Section.Open, open, count],
+    [Section.Join, join, count],
   ];
 
   const align8 = (n: number) => (n + 7) & ~7;

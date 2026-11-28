@@ -1,0 +1,13 @@
+---
+source: crates/coral-core/tests/lanes.rs
+expression: "picture(dag, &[\"merge-x\", \"merge-y\", \"a\", \"b\", \"r (root)\"])"
+---
+●─╮    merge-x
+│ │
+│ ├─●  merge-y
+│ │ │
+●─┼─╯  a
+│ │
+│ ●    b
+│ │
+●─╯    r (root)

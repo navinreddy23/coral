@@ -2,7 +2,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use coral_core::CoralError;
-use coral_core::graph::{GixCommitStream, NO_ROW, Order, StreamOpts, Tips, build, flags};
+use coral_core::graph::{GixCommitStream, NO_ROW, Order, StreamOpts, Tips, art, build, flags};
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -13,6 +13,10 @@ pub struct Row {
     /// `null` for a parent outside the loaded rows, rather than a sentinel integer.
     pub parents: Vec<Option<u32>>,
     pub parent_lanes: Vec<u16>,
+    /// Lanes whose line turns into this commit on its row: the branches that left from it.
+    pub joins: Vec<u16>,
+    /// Lanes with a line entering the row from above.
+    pub open: Vec<u16>,
     pub time: i64,
     pub merge: bool,
     pub root: bool,
@@ -73,6 +77,8 @@ pub async fn run(
                 .map(|p| (*p != NO_ROW).then_some(*p))
                 .collect(),
             parent_lanes: store.parent_lanes(row).to_vec(),
+            joins: lanes_in(store.joins(row)),
+            open: lanes_in(store.open(row)),
             time: store.time(row).unwrap_or_default(),
             merge: store.flags(row) & flags::MERGE != 0,
             root: store.flags(row) & flags::ROOT != 0,
@@ -86,6 +92,10 @@ pub async fn run(
         lanes: store.max_lane().saturating_add(1),
         provisional: !store.is_empty() && store.flags(0) & flags::PROVISIONAL != 0,
     })
+}
+
+fn lanes_in(mask: u32) -> Vec<u16> {
+    (0..32).filter(|lane| mask & (1 << lane) != 0).collect()
 }
 
 /// Where the walk starts, from the two flags.
@@ -112,20 +122,33 @@ impl crate::output::Human for Graph {
                 ""
             }
         );
-        for r in &self.rows {
-            let mark = if r.merge {
-                "M"
-            } else if r.root {
-                "R"
-            } else {
-                " "
-            };
-            let _ = write!(
-                out,
-                "\n  {:>7} {mark} lane {:<4} {:.8}",
-                r.row, r.lane, r.oid
-            );
+        let masks: Vec<(u32, u32)> = self
+            .rows
+            .iter()
+            .map(|r| (mask_of(&r.open), mask_of(&r.joins)))
+            .collect();
+        let rows: Vec<art::Row<'_>> = self
+            .rows
+            .iter()
+            .zip(&masks)
+            .map(|(r, &(open, joins))| art::Row {
+                lane: r.lane,
+                parent_lanes: &r.parent_lanes,
+                open,
+                joins,
+            })
+            .collect();
+        for (r, drawn) in self.rows.iter().zip(art::draw(&rows)) {
+            let _ = write!(out, "\n  {:>7} {}  {:.8}", r.row, drawn.node, r.oid);
+            let _ = write!(out, "\n  {:>7} {}", "", drawn.below.trim_end());
         }
         out
     }
+}
+
+fn mask_of(lanes: &[u16]) -> u32 {
+    lanes
+        .iter()
+        .filter(|&&lane| lane < 32)
+        .fold(0, |mask, &lane| mask | 1 << lane)
 }

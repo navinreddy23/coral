@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+
 use gix::ObjectId;
 
 use super::lanes::LaneAssigner;
-use super::stream::{CommitNode, CommitStream, StreamOpts, WalkControl};
+use super::stream::{CommitNode, CommitStream, StreamOpts, Trunk, WalkControl};
 use crate::error::CoralError;
 
 /// A parent that is not in the loaded set: a boundary of the walk, or a shallow graft.
@@ -34,6 +36,7 @@ pub struct RowStore {
     hash_len: usize,
     lane: Vec<u16>,
     open: Vec<u32>,
+    join: Vec<u32>,
     flags: Vec<u8>,
     time: Vec<i64>,
     /// CSR offsets into `parent_row`; length is `len + 1`.
@@ -94,6 +97,12 @@ impl RowStore {
         self.open.get(row as usize).copied().unwrap_or_default()
     }
 
+    /// Lanes whose line ends on `row` by turning into its node, as a bitmask over lanes 0..32.
+    #[must_use]
+    pub fn joins(&self, row: u32) -> u32 {
+        self.join.get(row as usize).copied().unwrap_or_default()
+    }
+
     #[must_use]
     pub fn time(&self, row: u32) -> Option<i64> {
         self.time.get(row as usize).copied()
@@ -147,6 +156,7 @@ impl RowStore {
         self.oids.capacity()
             + self.lane.capacity() * 2
             + self.open.capacity() * 4
+            + self.join.capacity() * 4
             + self.flags.capacity()
             + self.time.capacity() * 8
             + self.parent_start.capacity() * 4
@@ -160,20 +170,38 @@ impl RowStore {
 ///
 /// Parent *rows* cannot be known while walking: topological order guarantees a parent comes
 /// after its child, so the child is written before the parent has a row number. Parent object
-/// ids are therefore buffered and resolved in one pass at the end.
+/// ids are therefore buffered and resolved in one pass at the end — and lanes are laid out
+/// after that, because where a branch's line goes depends on how far below it its fork is.
 pub struct RowStoreBuilder {
     oids: Vec<u8>,
     hash_len: usize,
-    lane: Vec<u16>,
-    open: Vec<u32>,
     flags: Vec<u8>,
     time: Vec<i64>,
     parent_start: Vec<u32>,
     parent_oids: Vec<u8>,
-    parent_lane: Vec<u16>,
-    assigner: LaneAssigner<ObjectId>,
     provisional: bool,
+    /// The line to keep left; see [`RowStoreBuilder::keep_left`].
+    trunk: Option<Trunk>,
+    /// Rows that are stashes, in order, which never carry HEAD's line on.
+    stashes: Vec<u32>,
 }
+
+/// How far down HEAD may be for its line to be kept in lane 0.
+///
+/// A first screen's walk, so a first screen and the full walk agree: both keep HEAD's line in
+/// lane 0, or neither does. A store whose lanes changed when the full walk landed would move
+/// every line on screen.
+const HEAD_WITHIN: u64 = StreamOpts::FIRST_PAINT_ROWS;
+
+/// How far below a branch the commit it left from may be for the branch to keep its own lane
+/// down to it.
+///
+/// A few screens, which is every branch in the histories measured but the kernel's: Coral's
+/// own longest is 37 rows and a busy team's fixture 49. The kernel's subsystem branches fork
+/// from a release candidate hundreds or thousands of rows down, and held lines for all of them
+/// filled every lane of the column with lines nobody could follow to either end. Further than
+/// this, a branch's line runs a few rows on under its oldest commit and stops.
+const HOLD_ROWS: u32 = 100;
 
 impl RowStoreBuilder {
     #[must_use]
@@ -181,22 +209,27 @@ impl RowStoreBuilder {
         Self {
             oids: Vec::new(),
             hash_len: 0,
-            lane: Vec::new(),
-            open: Vec::new(),
             flags: Vec::new(),
             time: Vec::new(),
             parent_start: vec![0],
             parent_oids: Vec::new(),
-            parent_lane: Vec::new(),
-            assigner: LaneAssigner::new(),
             provisional,
+            trunk: None,
+            stashes: Vec::new(),
         }
     }
 
-    /// Reserves space for a known row count, avoiding repeated reallocation of eight arrays.
+    /// Keeps the line the user is on in lane 0: HEAD and its first parents, and its branch's
+    /// upstream above it when that is ahead.
+    ///
+    /// Only when HEAD is among the first [`HEAD_WITHIN`] rows; hidden, or checked out further
+    /// down, lanes are given in the order of the walk.
+    pub fn keep_left(&mut self, trunk: Option<Trunk>) {
+        self.trunk = trunk;
+    }
+
+    /// Reserves space for a known row count, avoiding repeated reallocation.
     pub fn reserve(&mut self, rows: usize) {
-        self.lane.reserve(rows);
-        self.open.reserve(rows);
         self.flags.reserve(rows);
         self.time.reserve(rows);
         self.parent_start.reserve(rows + 1);
@@ -206,11 +239,11 @@ impl RowStoreBuilder {
         if self.hash_len == 0 {
             self.hash_len = node.id.as_bytes().len();
         }
-        let topo = self.assigner.push(&node.id, &node.parents);
-
+        if node.stash {
+            self.stashes
+                .push(u32::try_from(self.time.len()).unwrap_or(u32::MAX));
+        }
         self.oids.extend_from_slice(node.id.as_bytes());
-        self.lane.push(topo.lane);
-        self.open.push(topo.open);
         self.time.push(node.commit_time);
 
         let mut f = 0_u8;
@@ -228,12 +261,12 @@ impl RowStoreBuilder {
         for p in &node.parents {
             self.parent_oids.extend_from_slice(p.as_bytes());
         }
-        self.parent_lane.extend_from_slice(&topo.parent_lanes);
-        let edges = u32::try_from(self.parent_lane.len()).unwrap_or(u32::MAX);
+        let edges = self.parent_start.last().copied().unwrap_or(0)
+            + u32::try_from(node.parents.len()).unwrap_or(0);
         self.parent_start.push(edges);
     }
 
-    /// Resolves parent ids to rows and builds the lookup index.
+    /// Resolves parent ids to rows, builds the lookup index, and lays out the lanes.
     #[must_use]
     pub fn finish(self) -> RowStore {
         let hash_len = if self.hash_len == 0 {
@@ -241,7 +274,7 @@ impl RowStoreBuilder {
         } else {
             self.hash_len
         };
-        let rows = self.lane.len();
+        let rows = self.time.len();
 
         let mut by_oid: Vec<u32> = (0..u32::try_from(rows).unwrap_or(u32::MAX)).collect();
         by_oid.sort_unstable_by(|a, b| {
@@ -260,32 +293,214 @@ impl RowStoreBuilder {
 
         let mut parent_row = vec![NO_ROW; self.parent_oids.len() / hash_len];
         let mut flags = self.flags;
+        let mut first_edge_to: HashMap<&[u8], u32> = HashMap::new();
+        let mut missing = HashMap::new();
         // Walk rows rather than edges, so the owning row of each edge is known outright.
         for (row, window) in self.parent_start.windows(2).enumerate() {
             let (start, end) = (window[0] as usize, window[1] as usize);
             for (k, slot) in parent_row[start..end].iter_mut().enumerate() {
                 let at = (start + k) * hash_len;
-                *slot = lookup(&self.parent_oids[at..at + hash_len]);
+                let parent = &self.parent_oids[at..at + hash_len];
+                *slot = lookup(parent);
                 if *slot == NO_ROW {
                     flags[row] |= flags::BOUNDARY;
+                    let edge = u32::try_from(start + k).unwrap_or(u32::MAX);
+                    missing.insert(edge, *first_edge_to.entry(parent).or_insert(edge));
                 }
             }
         }
 
+        let graph = Edges {
+            start: &self.parent_start,
+            row: &parent_row,
+            missing: &missing,
+            stashes: &self.stashes,
+        };
+        let top = self.trunk.and_then(|trunk| {
+            let row = |id: Option<ObjectId>| id.map(|id| lookup(id.as_bytes()));
+            graph.trunk_top(
+                lookup(trunk.head.as_bytes()),
+                [row(trunk.upstream), row(trunk.left_from)],
+            )
+        });
+        let lanes = graph.lay_out(top);
+
         RowStore {
             oids: self.oids,
             hash_len,
-            lane: self.lane,
-            open: self.open,
+            lane: lanes.lane,
+            open: lanes.open,
+            join: lanes.join,
             flags,
             time: self.time,
             parent_start: self.parent_start,
             parent_row,
-            parent_lane: self.parent_lane,
+            parent_lane: lanes.parent_lane,
             by_oid,
-            max_lane: self.assigner.max_width().saturating_sub(1),
+            max_lane: lanes.max_width.saturating_sub(1),
             total: u32::try_from(rows).unwrap_or(u32::MAX),
         }
+    }
+}
+
+/// Each row's parents as rows, in the store's CSR shape.
+struct Edges<'a> {
+    start: &'a [u32],
+    row: &'a [u32],
+    /// Each edge to a parent outside the walk -> the first edge to the same parent, which
+    /// stands for that parent in the layout.
+    ///
+    /// The parent never arrives, but its children still share one line to it, as they would
+    /// had the walk reached it. Keyed apart, every edge out of a walk cut short opened a lane
+    /// of its own: the kernel's first paint filled the column from row 76 down, then every
+    /// line there moved when the full walk landed.
+    missing: &'a HashMap<u32, u32>,
+    /// Rows that are stashes, in order.
+    stashes: &'a [u32],
+}
+
+/// What [`Edges::lay_out`] gives every row.
+struct Lanes {
+    lane: Vec<u16>,
+    open: Vec<u32>,
+    join: Vec<u32>,
+    parent_lane: Vec<u16>,
+    max_width: u16,
+}
+
+impl Edges<'_> {
+    fn parents(&self, row: u32) -> &[u32] {
+        let (Some(&s), Some(&e)) = (
+            self.start.get(row as usize),
+            self.start.get(row as usize + 1),
+        ) else {
+            return &[];
+        };
+        self.row.get(s as usize..e as usize).unwrap_or(&[])
+    }
+
+    /// The row whose line is kept in lane 0: the first of `above` whose first parents lead
+    /// down to HEAD — the upstream a fetch leaves ahead, or the branch a detached HEAD was left
+    /// from — and otherwise the newest commit HEAD's line runs straight on into. `None` when
+    /// HEAD is not within [`HEAD_WITHIN`] rows.
+    fn trunk_top(&self, head: u32, above: [Option<u32>; 2]) -> Option<u32> {
+        if head == NO_ROW || u64::from(head) >= HEAD_WITHIN {
+            return None;
+        }
+        let on_the_line = above
+            .into_iter()
+            .flatten()
+            .find(|&tip| tip != NO_ROW && self.leads_to(tip, head));
+        Some(on_the_line.unwrap_or_else(|| self.straight_on_from(head)))
+    }
+
+    /// The newest commit HEAD's line runs straight on into above `row`: each step is to the
+    /// commit above that has it for a first parent, or where branches leave it too, to the one
+    /// merge among those, the main line merging a branch back.
+    ///
+    /// A HEAD left behind the tip by a bisect or an old tag is on the line above it, and
+    /// keeping lane 0 for HEAD alone put the commits above in lane 1 turning into it: a fork
+    /// drawn where the history has none, and a team's main line of merges drawn as a branch.
+    /// A commit merging HEAD's in as a later parent is a branch taking it, not where the line
+    /// goes, and a stash, its index parent dropped by the walk, is beside the line. Where the
+    /// way on is not plain, the line stops at HEAD and both ways turn into it.
+    fn straight_on_from(&self, row: u32) -> u32 {
+        const NONE: u32 = u32::MAX;
+        const MANY: u32 = u32::MAX - 1;
+        let note = |slot: &mut u32, child: u32| {
+            *slot = if *slot == NONE { child } else { MANY };
+        };
+        // Children are above their parents, so only the rows above `row` can be one.
+        let mut child = vec![NONE; row as usize + 1];
+        let mut merge = vec![NONE; row as usize + 1];
+        for above in 0..row {
+            if self.stashes.binary_search(&above).is_ok() {
+                continue;
+            }
+            let parents = self.parents(above);
+            let Some(&first) = parents.first() else {
+                continue;
+            };
+            if let Some(slot) = child.get_mut(first as usize) {
+                note(slot, above);
+            }
+            if parents.len() > 1
+                && let Some(slot) = merge.get_mut(first as usize)
+            {
+                note(slot, above);
+            }
+        }
+        let mut top = row;
+        loop {
+            let next = match child[top as usize] {
+                MANY => merge[top as usize],
+                one => one,
+            };
+            if next == NONE || next == MANY {
+                return top;
+            }
+            top = next;
+        }
+    }
+
+    /// Whether `from`'s first parents lead down to `to`.
+    fn leads_to(&self, from: u32, to: u32) -> bool {
+        let mut at = from;
+        // A parent always comes after its child here, so the walk only goes down; the bound
+        // is for a commit-time order that put a parent first.
+        for _ in 0..self.start.len() {
+            if at == to {
+                return true;
+            }
+            match self.parents(at).first() {
+                Some(&parent) if parent != NO_ROW && parent > at && parent <= to => at = parent,
+                _ => return false,
+            }
+        }
+        false
+    }
+
+    fn lay_out(&self, top: Option<u32>) -> Lanes {
+        let rows = self.start.len().saturating_sub(1);
+        let mut assigner: LaneAssigner<u64> = LaneAssigner::new();
+        if let Some(top) = top {
+            assigner.keep_left(u64::from(top));
+        }
+        let mut lanes = Lanes {
+            lane: Vec::with_capacity(rows),
+            open: Vec::with_capacity(rows),
+            join: Vec::with_capacity(rows),
+            parent_lane: Vec::with_capacity(self.row.len()),
+            max_width: 0,
+        };
+        let mut keys: Vec<u64> = Vec::new();
+        for row in 0..u32::try_from(rows).unwrap_or(u32::MAX) {
+            keys.clear();
+            let first = self.start[row as usize];
+            for (k, &parent) in (first..).zip(self.parents(row)) {
+                // Above every row, so a parent outside the walk is never taken for one in it.
+                keys.push(if parent == NO_ROW {
+                    u64::from(u32::MAX) + 1 + u64::from(self.missing.get(&k).copied().unwrap_or(k))
+                } else {
+                    u64::from(parent)
+                });
+            }
+            let near = self
+                .parents(row)
+                .first()
+                .is_some_and(|&p| p != NO_ROW && p > row && p - row <= HOLD_ROWS);
+            let topo = if near {
+                assigner.push(&u64::from(row), &keys)
+            } else {
+                assigner.push_far(&u64::from(row), &keys)
+            };
+            lanes.lane.push(topo.lane);
+            lanes.open.push(topo.open);
+            lanes.join.push(topo.joins);
+            lanes.parent_lane.extend_from_slice(&topo.parent_lanes);
+        }
+        lanes.max_width = assigner.max_width();
+        lanes
     }
 }
 
@@ -295,6 +510,7 @@ impl RowStoreBuilder {
 /// Propagates walk failures.
 pub fn build(stream: &dyn CommitStream, opts: &StreamOpts) -> Result<RowStore, CoralError> {
     let mut builder = RowStoreBuilder::new(opts.order == super::Order::CommitTime);
+    builder.keep_left(stream.trunk());
     if let Some(n) = opts.max_count {
         builder.reserve(usize::try_from(n).unwrap_or(0));
     }

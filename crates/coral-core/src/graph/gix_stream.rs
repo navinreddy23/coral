@@ -4,7 +4,9 @@ use gix::ObjectId;
 use smallvec::SmallVec;
 
 use super::shallow::{Grafted, boundary};
-use super::stream::{CommitNode, CommitStream, Order, StreamOpts, Tips, WalkControl, WalkStats};
+use super::stream::{
+    CommitNode, CommitStream, MAIN_LINES, Order, StreamOpts, Tips, Trunk, WalkControl, WalkStats,
+};
 use crate::error::CoralError;
 
 /// Reads the DAG in-process through gix, using the commit-graph file when one is present.
@@ -60,6 +62,26 @@ impl GixCommitStream {
         let tips = Self::tips_for(&repo, &opts.tips)?;
         let (_, hidden) = Self::stash_plumbing(&repo);
         super::topo::count(&repo, &graph, &tips, opts.first_parent, &hidden).map(Some)
+    }
+
+    /// See [`Trunk::left_from`].
+    fn main_line(repo: &gix::Repository) -> Option<ObjectId> {
+        MAIN_LINES.iter().find_map(|name| Self::tip(repo, name))
+    }
+
+    /// The tip of the branch a bisect in progress started from, which git keeps in
+    /// `BISECT_START`; `None` when it started from a detached HEAD.
+    fn bisected_from(repo: &gix::Repository) -> Option<ObjectId> {
+        let text = std::fs::read_to_string(repo.git_dir().join("BISECT_START")).ok()?;
+        let branch = text.trim();
+        (!branch.is_empty())
+            .then(|| Self::tip(repo, &format!("refs/heads/{branch}")))
+            .flatten()
+    }
+
+    fn tip(repo: &gix::Repository, name: &str) -> Option<ObjectId> {
+        let mut reference = repo.find_reference(name).ok()?;
+        reference.peel_to_id().ok().map(gix::Id::detach)
     }
 
     /// The commits git keeps for a stash that are not the stash itself.
@@ -334,7 +356,8 @@ fn emit(
     }
     // Both gix and git report every parent even when only the first is traversed; keeping the
     // rest would leave edges pointing at rows the walk never emits.
-    let first_only = opts.first_parent || stashes.contains(&id);
+    let stash = stashes.contains(&id);
+    let first_only = opts.first_parent || stash;
     let parents: SmallVec<[ObjectId; 2]> = if first_only {
         SmallVec::from_slice(&parents[..parents.len().min(1)])
     } else {
@@ -346,6 +369,7 @@ fn emit(
         id,
         parents,
         commit_time,
+        stash,
     };
     if sink(node) == WalkControl::Stop {
         return false;
@@ -380,5 +404,31 @@ impl CommitStream for GixCommitStream {
             Order::Topological => Self::walk_topological(&repo, tips, opts, &plumbing, sink),
             Order::CommitTime => Self::walk_by_commit_time(&repo, tips, opts, &plumbing, sink),
         }
+    }
+
+    fn trunk(&self) -> Option<Trunk> {
+        let repo = self.repo.to_thread_local();
+        let detached = repo.head_name().ok().flatten().is_none();
+        if detached && let Some(tip) = Self::bisected_from(&repo) {
+            return Some(Trunk {
+                head: tip,
+                upstream: None,
+                left_from: None,
+            });
+        }
+        let head = repo.head_id().ok()?.detach();
+        let upstream = repo.head_name().ok().flatten().and_then(|branch| {
+            let tracking = repo
+                .branch_remote_tracking_ref_name(branch.as_ref(), gix::remote::Direction::Fetch)?
+                .ok()?;
+            let mut reference = repo.find_reference(tracking.as_ref()).ok()?;
+            reference.peel_to_id().ok().map(gix::Id::detach)
+        });
+        let left_from = detached.then(|| Self::main_line(&repo)).flatten();
+        Some(Trunk {
+            head,
+            upstream,
+            left_from,
+        })
     }
 }

@@ -1,0 +1,13 @@
+---
+source: crates/coral-core/tests/lanes.rs
+expression: "picture(dag, &[\"merge\", \"feature-2\", \"feature-1\", \"main\", \"base\"])"
+---
+●─╮  merge
+│ │
+│ ●  feature-2
+│ │
+│ ●  feature-1
+│ │
+● │  main
+│ │
+●─╯  base

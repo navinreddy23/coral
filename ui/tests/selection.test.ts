@@ -33,6 +33,7 @@ function frameOf(startRow: number, oids: string[]): Frame {
     parentLanes: new Uint16Array(0),
     oids: bytes,
     open: new Uint32Array(rowCount),
+    joins: new Uint32Array(rowCount),
   };
 }
 

@@ -1,0 +1,11 @@
+---
+source: crates/coral-core/tests/lanes.rs
+expression: "picture(dag, &[\"a\", \"root-1\", \"b (orphan)\", \"root-2\"])"
+---
+●  a
+│
+●  root-1
+
+●  b (orphan)
+│
+●  root-2

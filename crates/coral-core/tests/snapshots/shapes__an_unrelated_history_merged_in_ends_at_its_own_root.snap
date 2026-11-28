@@ -1,0 +1,15 @@
+---
+source: crates/coral-core/tests/shapes.rs
+expression: h.picture()
+---
+●─╮  merge imported
+│ │
+│ ●  imported: two
+│ │
+│ ●  imported: root
+│
+●    main: two
+│
+●    main: one
+│
+●    base

@@ -6,7 +6,8 @@
  */
 
 export const MAGIC = 0x474c5243; // "CRLG"
-export const VERSION = 1;
+/** 2 added the join section; see `graph::wire::VERSION`. */
+export const VERSION = 2;
 
 export const Section = {
   Lane: 1,
@@ -16,6 +17,7 @@ export const Section = {
   ParentLane: 5,
   Oid: 6,
   Open: 7,
+  Join: 8,
 } as const;
 
 /** Per-row flags, matching `graph::store::flags` in Rust. */
@@ -52,6 +54,14 @@ export interface Frame {
    * appears to break apart between merges.
    */
   open: Uint32Array;
+  /**
+   * Per row, a bitmask of the lanes whose line ends on the row by turning into its node.
+   *
+   * A branch runs straight down its own lane to the commit it left from and turns in on that
+   * commit's row, as GitKraken draws it. The child that opened the line is usually off screen,
+   * so the turn has to be known from the parent's row alone.
+   */
+  joins: Uint32Array;
 }
 
 /** magic(4) version(2) sections(2) start(4) rows(4) total(4) flags(1) hashLen(1) + 2 pad. */
@@ -87,6 +97,7 @@ export function decodeFrame(buffer: ArrayBuffer): Frame {
     parentLanes: new Uint16Array(0),
     oids: new Uint8Array(0),
     open: new Uint32Array(0),
+    joins: new Uint32Array(0),
   };
 
   for (let i = 0; i < sectionCount; i++) {
@@ -126,6 +137,9 @@ export function decodeFrame(buffer: ArrayBuffer): Frame {
         break;
       case Section.Open:
         frame.open = new Uint32Array(buffer, offset, elements);
+        break;
+      case Section.Join:
+        frame.joins = new Uint32Array(buffer, offset, elements);
         break;
       default:
         throw new FrameError(`unknown section ${kind}`);

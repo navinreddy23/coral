@@ -3,7 +3,9 @@ use std::path::{Path, PathBuf};
 use gix::ObjectId;
 use smallvec::SmallVec;
 
-use super::stream::{CommitNode, CommitStream, Order, StreamOpts, Tips, WalkControl, WalkStats};
+use super::stream::{
+    CommitNode, CommitStream, MAIN_LINES, Order, StreamOpts, Tips, Trunk, WalkControl, WalkStats,
+};
 use crate::error::CoralError;
 use crate::process::{GitCommand, GitRunner, Sink};
 
@@ -49,6 +51,50 @@ impl SubprocessCommitStream {
             Ok(Sink::Stop)
         });
         read.is_ok() && detached
+    }
+
+    /// See [`Trunk::left_from`].
+    fn main_line(&self) -> Option<ObjectId> {
+        MAIN_LINES.iter().find_map(|name| self.commit_at(name))
+    }
+
+    /// See [`Trunk::head`]: the tip of the branch a bisect in progress started from.
+    fn bisected_from(&self) -> Option<ObjectId> {
+        let branch = self.bisect_start()?;
+        self.commit_at(&format!("refs/heads/{branch}"))
+    }
+
+    /// What a bisect in progress started from, as git wrote it to `BISECT_START`.
+    fn bisect_start(&self) -> Option<String> {
+        let cmd = GitCommand::read("rev-parse", &self.workdir)
+            .arg("rev-parse")
+            .arg("--path-format=absolute")
+            .arg("--git-path")
+            .arg("BISECT_START");
+        let mut path = None;
+        let read = self.runner.stream_blocking(&cmd, b'\n', |line| {
+            path = Some(String::from_utf8_lossy(line).into_owned());
+            Ok(Sink::Stop)
+        });
+        read.ok()?;
+        let text = std::fs::read_to_string(path?).ok()?;
+        Some(text.trim().to_owned()).filter(|name| !name.is_empty())
+    }
+
+    /// The commit `rev` names, or `None` when it names none: an unborn HEAD, or a branch with
+    /// no upstream.
+    fn commit_at(&self, rev: &str) -> Option<ObjectId> {
+        let cmd = GitCommand::read("rev-parse", &self.workdir)
+            .arg("rev-parse")
+            .arg("--verify")
+            .arg("--quiet")
+            .arg(format!("{rev}^{{commit}}"));
+        let mut id = None;
+        let read = self.runner.stream_blocking(&cmd, b'\n', |line| {
+            id = ObjectId::from_hex(line).ok();
+            Ok(Sink::Stop)
+        });
+        read.ok().and(id)
     }
 
     fn command(&self, opts: &StreamOpts) -> GitCommand {
@@ -114,10 +160,12 @@ fn parse_line(line: &[u8]) -> Result<CommitNode, CoralError> {
         parents
             .push(ObjectId::from_hex(f.as_bytes()).map_err(|_| protocol("malformed parent id"))?);
     }
+    // rev-list keeps a stash's parents and walks its index commit as a row of its own.
     Ok(CommitNode {
         id,
         parents,
         commit_time,
+        stash: false,
     })
 }
 
@@ -165,6 +213,22 @@ impl CommitStream for SubprocessCommitStream {
             })
         })?;
         Ok(stats)
+    }
+
+    fn trunk(&self) -> Option<Trunk> {
+        let detached = self.head_detached();
+        if detached && let Some(tip) = self.bisected_from() {
+            return Some(Trunk {
+                head: tip,
+                upstream: None,
+                left_from: None,
+            });
+        }
+        Some(Trunk {
+            head: self.commit_at("HEAD")?,
+            upstream: self.commit_at("@{upstream}"),
+            left_from: detached.then(|| self.main_line()).flatten(),
+        })
     }
 }
 

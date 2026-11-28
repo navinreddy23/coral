@@ -2,7 +2,7 @@
 
     tour.py <display> <shots-dir> <wm-log>
 
-The window is opened by run.sh on the `work`, `merging` and `shallow` fixtures at its default 1440 by 900,
+The window is opened by run.sh on the `work`, `merging`, `shallow` and `branches` fixtures at its default 1440 by 900,
 in the light theme at the default density, so the positions below are the shipped layout's. A
 stop that cannot find what it expects fails the tour, rather than photographing the wrong
 screen.
@@ -147,8 +147,12 @@ check(all(colour(600, y + d) == WHITE for y in feet for d in (-1, 0, 1, 2)),
       "every commit row is parted from the next by a gap")
 check(all(colour(600, y - 2) != WHITE and colour(600, y + 3) != WHITE for y in feet),
       "with the bands right up to it on either side")
-check(all(colour(525, y) != WHITE and colour(525, y + 1) != WHITE for y in feet),
-      "and the first lane runs through every one")
+# The stash sits beside main and turns into it from the right, so the gap under the stash's row
+# is crossed by the stash's lane and every one from main down by main's.
+check(colour(545, feet[0]) != WHITE and colour(545, feet[0] + 1) != WHITE,
+      "the stash's lane runs through the gap under its row")
+check(all(colour(525, y) != WHITE and colour(525, y + 1) != WHITE for y in feet[1:]),
+      "and main's lane runs through every one below")
 
 # The commit box: signed off, and a co-author added as a chip from who has written here.
 SIGN_OFF, CO_AUTHOR, CHIP_CROSS = (1347, 636), (1250, 790), (1191, 790)
@@ -356,6 +360,21 @@ check(region(*MENU_AREA) != plain, "a shallow clone offers to fetch more of its 
 shot("shallow")
 keys("Escape")
 settle()
+
+# The fourth tab is a team's history: branches merged one after another, a branch off a branch,
+# an octopus, a criss-cross and orphans. Every branch runs down its own lane and turns into the
+# commit it left from; main keeps lane 0.
+keys("Control_L", "Tab")
+settle(quiet=2.0)
+GRAPH_AREA = (520, 90, 160, 700)
+top = region(*GRAPH_AREA)
+shot("branches")
+move(800, 500)
+for _ in range(8):
+    click(800, 500, button=5)
+settle()
+check(region(*GRAPH_AREA) != top, "the branches graph scrolls on to more of its lanes")
+shot("branches-scrolled")
 
 if failures:
     print("%d failed" % len(failures))

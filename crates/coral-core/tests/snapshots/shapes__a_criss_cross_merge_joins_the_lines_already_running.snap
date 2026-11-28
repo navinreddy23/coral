@@ -1,0 +1,17 @@
+---
+source: crates/coral-core/tests/shapes.rs
+expression: h.picture()
+---
+●─╮      main takes y
+│ │
+│ ●─╮    y takes x
+│ │ │
+●─┼─┼─╮  main takes x
+│ │ │ │
+│ ├─┼─●  x takes y
+│ │ │ │
+│ ● │ │  y: one
+│ │ │ │
+│ │ ●─╯  x: one
+│ │ │
+●─┴─╯    base

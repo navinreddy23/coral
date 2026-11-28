@@ -9,6 +9,7 @@ interface Segment {
   y0: number;
   x1: number;
   y1: number;
+  alpha: number;
 }
 
 interface Corner {
@@ -62,6 +63,7 @@ function recorder(): {
   const ctx = {
     lineWidth: 0,
     lineCap: '',
+    globalAlpha: 1,
     strokeStyle: '',
     fillStyle: '',
     clearRect() {},
@@ -72,7 +74,7 @@ function recorder(): {
       at = { x, y };
     },
     lineTo(x: number, y: number) {
-      pending = { x0: at.x, y0: at.y, x1: x, y1: y };
+      pending = { x0: at.x, y0: at.y, x1: x, y1: y, alpha: 1 };
       at = { x, y };
     },
     bezierCurveTo() {
@@ -120,7 +122,7 @@ function recorder(): {
         pendingArc = null;
         return;
       }
-      if (pending) segments.push(pending);
+      if (pending) segments.push({ ...pending, alpha: ctx.globalAlpha });
       pending = null;
     },
   };
@@ -170,6 +172,55 @@ function longRunFrame(rows: number, lane: number): Frame {
     parentLanes: Uint16Array.from(parentLanes),
     oids: new Uint8Array(rows * 20),
     open,
+    joins: new Uint32Array(rows),
+  };
+}
+
+interface Shape {
+  lane: number;
+  /** The lane each parent's line runs down from this row. */
+  parents: number[];
+  /** Lanes turning into this row's node. */
+  joins?: number[];
+}
+
+/**
+ * A frame for a hand-written layout, with the open mask a renderer would derive by following
+ * each line down to the first row drawn in its lane or turning it in.
+ */
+function frameOf(shape: Shape[]): Frame {
+  const rows = shape.length;
+  const joinMask = (s: Shape) => (s.joins ?? []).reduce((m, l) => m | (1 << l), 0);
+  const open = new Uint32Array(rows);
+  shape.forEach((row, i) => {
+    for (const lane of row.parents) {
+      for (let r = i + 1; r < rows; r++) {
+        open[r] = (open[r] ?? 0) | (1 << lane);
+        const below = shape[r];
+        if (below === undefined || below.lane === lane || (joinMask(below) & (1 << lane)) !== 0) break;
+      }
+    }
+  });
+  const parentStart = new Uint32Array(rows + 1);
+  const parentLanes: number[] = [];
+  shape.forEach((row, i) => {
+    parentLanes.push(...row.parents);
+    parentStart[i + 1] = parentLanes.length;
+  });
+  return {
+    startRow: 0,
+    rowCount: rows,
+    totalRows: rows,
+    flags: 0,
+    hashLen: 20,
+    lanes: Uint16Array.from(shape.map((r) => r.lane)),
+    rowFlags: new Uint8Array(rows),
+    times: new Float64Array(rows),
+    parentStart,
+    parentLanes: Uint16Array.from(parentLanes),
+    oids: new Uint8Array(rows * 20),
+    open,
+    joins: Uint32Array.from(shape.map(joinMask)),
   };
 }
 
@@ -358,6 +409,140 @@ describe('an edge that changes lane', () => {
       fills: ['#fill'],
     });
     expect(corners).toHaveLength(0);
+  });
+});
+
+describe('a branch', () => {
+  // main, a branch tip beside it, main again, then the commit the branch left from.
+  const forked: Shape[] = [
+    { lane: 0, parents: [0] },
+    { lane: 1, parents: [1] },
+    { lane: 0, parents: [0] },
+    { lane: 0, parents: [0], joins: [1] },
+    { lane: 0, parents: [] },
+  ];
+  const half = DEFAULT_METRICS.rowHeight / 2;
+
+  it('runs down its own lane and turns into the commit it left from on that commit’s row', () => {
+    const { ctx, corners, segments } = recorder();
+    drawLanes(ctx, frameOf(forked), { first: 0, last: 4 }, DEFAULT_METRICS, 200, 200, {
+      colours: ['#main', '#branch'],
+      fills: ['#fill'],
+    });
+
+    expect(corners).toHaveLength(1);
+    const corner = corners[0];
+    // The corner is in the branch's lane on the parent's row, and the arc heads for its node.
+    expect(corner?.cx).toBe(laneX(1, DEFAULT_METRICS));
+    expect(corner?.cy).toBe(rowY(3, 0, DEFAULT_METRICS));
+    expect(corner?.x).toBe(laneX(0, DEFAULT_METRICS));
+    expect(corner?.y).toBe(rowY(3, 0, DEFAULT_METRICS));
+    // Straight down the branch's lane from its tip to the top of that row, and no further.
+    const run = verticalsIn(1, segments);
+    expect(Math.min(...run.map((s) => s.y0))).toBe(rowY(1, 0, DEFAULT_METRICS));
+    expect(Math.max(...run.map((s) => s.y1))).toBe(rowY(3, 0, DEFAULT_METRICS) - half);
+  });
+
+  it('turns in from the top of the row when the commit it left from is the next one down', () => {
+    const { ctx, segments } = recorder();
+    const adjacent: Shape[] = [
+      { lane: 0, parents: [0] },
+      { lane: 1, parents: [1] },
+      { lane: 0, parents: [], joins: [1] },
+    ];
+    drawLanes(ctx, frameOf(adjacent), { first: 0, last: 2 }, DEFAULT_METRICS, 200, 200, {
+      colours: ['#main', '#branch'],
+      fills: ['#fill'],
+    });
+    // Nothing of the branch's lane reaches past the top of the row it turns into: a straight
+    // line run on to the node's centre would poke out under the corner.
+    const lowest = Math.max(...verticalsIn(1, segments).map((s) => s.y1));
+    expect(lowest).toBeLessThanOrEqual(rowY(2, 0, DEFAULT_METRICS) - half);
+  });
+
+  it('is drawn in its own colour as it turns in', () => {
+    const strokes: string[] = [];
+    const { ctx } = recorder();
+    const arcTo = ctx.arcTo.bind(ctx);
+    ctx.arcTo = (...args: Parameters<CanvasRenderingContext2D['arcTo']>) => {
+      strokes.push(String(ctx.strokeStyle));
+      arcTo(...args);
+    };
+    drawLanes(ctx, frameOf(forked), { first: 0, last: 4 }, DEFAULT_METRICS, 200, 200, {
+      colours: ['#main', '#branch'],
+      fills: ['#fill'],
+    });
+    expect(strokes).toEqual(['#branch']);
+  });
+
+  it('turns several in from the right, the nearest drawn last', () => {
+    const fan: Shape[] = [
+      { lane: 0, parents: [0] },
+      { lane: 1, parents: [1] },
+      { lane: 2, parents: [2] },
+      { lane: 0, parents: [], joins: [1, 2] },
+    ];
+    const { ctx, corners } = recorder();
+    drawLanes(ctx, frameOf(fan), { first: 0, last: 3 }, DEFAULT_METRICS, 200, 200, {
+      colours: ['#a', '#b', '#c'],
+      fills: ['#fill'],
+    });
+    expect(corners.map((c) => c.cx)).toEqual([laneX(2, DEFAULT_METRICS), laneX(1, DEFAULT_METRICS)]);
+    expect(corners.every((c) => c.cx > laneX(0, DEFAULT_METRICS))).toBe(true);
+  });
+});
+
+describe('a line given back for running too long', () => {
+  it('stops at the row the mask closes it on, and does not run into the next commit in its lane', () => {
+    const frame = longRunFrame(40, 3);
+    // Lane 3 is given back at row 20, and a new tip takes it at row 30.
+    for (let row = 20; row < 40; row++) frame.open[row] = (frame.open[row] ?? 0) & ~(1 << 3);
+    frame.lanes[30] = 3;
+    const { ctx, segments } = recorder();
+    drawLanes(ctx, frame, { first: 10, last: 35 }, DEFAULT_METRICS, 200, 2000, {
+      colours: Array(4).fill('#000'),
+      fills: ['#fill'],
+    });
+
+    const run = verticalsIn(3, segments);
+    const half = DEFAULT_METRICS.rowHeight / 2;
+    expect(Math.max(...run.map((s) => s.y1))).toBe(rowY(20, 10, DEFAULT_METRICS) - half);
+  });
+
+  it('fades out over the row above where it stops, so it reads as going on out of view', () => {
+    const frame = longRunFrame(40, 3);
+    for (let row = 20; row < 40; row++) frame.open[row] = (frame.open[row] ?? 0) & ~(1 << 3);
+    frame.lanes[30] = 3;
+    const { ctx, segments } = recorder();
+    drawLanes(ctx, frame, { first: 10, last: 35 }, DEFAULT_METRICS, 200, 2000, {
+      colours: Array(4).fill('#000'),
+      fills: ['#fill'],
+    });
+
+    // A later commit in the lane draws its own line; only the run that stops is read here.
+    const stop = rowY(20, 10, DEFAULT_METRICS) - DEFAULT_METRICS.rowHeight / 2;
+    const run = verticalsIn(3, segments).filter((s) => s.y1 <= stop);
+    const fadeFrom = stop - DEFAULT_METRICS.rowHeight;
+    const solid = run.filter((s) => s.y1 <= fadeFrom);
+    const fading = run.filter((s) => s.y0 >= fadeFrom).sort((a, b) => a.y0 - b.y0);
+    expect(solid.length).toBeGreaterThan(0);
+    expect(solid.every((s) => s.alpha === 1)).toBe(true);
+    expect(fading.length).toBeGreaterThan(2);
+    for (let i = 1; i < fading.length; i++) {
+      expect(fading[i]?.alpha ?? 1).toBeLessThan(fading[i - 1]?.alpha ?? 0);
+    }
+    expect(fading.at(-1)?.alpha ?? 1).toBeLessThan(0.25);
+    expect(ctx.globalAlpha).toBe(1);
+  });
+
+  it('does not fade a line that reaches its commit', () => {
+    const frame = longRunFrame(40, 3);
+    const { ctx, segments } = recorder();
+    drawLanes(ctx, frame, { first: 0, last: 39 }, DEFAULT_METRICS, 200, 2000, {
+      colours: Array(4).fill('#000'),
+      fills: ['#fill'],
+    });
+    expect(verticalsIn(3, segments).every((s) => s.alpha === 1)).toBe(true);
   });
 });
 

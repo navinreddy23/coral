@@ -212,3 +212,47 @@ async fn good_and_bad_swapped_is_said_and_can_still_be_ended() {
     loc.bisect_reset(&runner).await.unwrap();
     assert_eq!(loc.bisection(&runner).await.unwrap(), None);
 }
+
+/// A good commit beside the bad one rather than under it — the other merge of a criss-cross —
+/// is a verdict git takes: it clears everything the good one has, which here leaves the bad
+/// merge itself. It was said to be good and bad swapped, over git's own answer.
+#[tokio::test]
+async fn a_good_commit_beside_the_bad_one_is_no_mistake() {
+    let repo = TestRepo::new().write("base.txt", "b\n").commit("base");
+    repo.git(["checkout", "--quiet", "-b", "left"]);
+    let repo = repo.write("left.txt", "l\n").commit("left");
+    repo.git(["checkout", "--quiet", "-b", "right", "main"]);
+    let repo = repo.write("right.txt", "r\n").commit("right");
+    repo.git(["checkout", "--quiet", "left"]);
+    repo.git([
+        "merge",
+        "--quiet",
+        "--no-ff",
+        "-m",
+        "right into left",
+        "right",
+    ]);
+    let bad = repo.git(["rev-parse", "HEAD"]);
+    repo.git(["checkout", "--quiet", "right"]);
+    repo.git([
+        "merge",
+        "--quiet",
+        "--no-ff",
+        "-m",
+        "left into right",
+        "left~1",
+    ]);
+    let good = repo.git(["rev-parse", "HEAD"]);
+
+    let (runner, loc) = open(&repo).await;
+    loc.bisect_mark(&runner, Verdict::Bad, Some(&bad))
+        .await
+        .unwrap();
+    let state = loc
+        .bisect_mark(&runner, Verdict::Good, Some(&good))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!state.mistaken, "{state:?}");
+    assert_eq!(state.found.as_deref(), Some(bad.as_str()));
+}

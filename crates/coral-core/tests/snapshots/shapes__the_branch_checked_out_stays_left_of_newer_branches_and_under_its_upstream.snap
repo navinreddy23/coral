@@ -1,0 +1,21 @@
+---
+source: crates/coral-core/tests/shapes.rs
+expression: h.picture()
+---
+  ●    old: two
+  │
+  ●    old: one
+  │
+  │ ●  feature: one
+  │ │
+● │ │  origin: two
+│ │ │
+● │ │  origin: one
+│ │ │
+●─┼─╯  main: three
+│ │
+● │    main: two
+│ │
+●─╯    main: one
+│
+●      base

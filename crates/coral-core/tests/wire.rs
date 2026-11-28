@@ -50,9 +50,15 @@ fn a_frame_round_trips_through_its_own_decoder() {
     assert_eq!(f.times.len(), store.len() as usize);
     assert_eq!(f.parent_start.len(), store.len() as usize + 1);
     assert_eq!(f.oids.len(), store.len() as usize * 20);
+    assert!(
+        (0..store.len()).any(|row| store.joins(row) != 0),
+        "the fixture's side branch turns into the commit it left from, so some row joins"
+    );
 
     for row in 0..store.len() {
         assert_eq!(f.lanes[row as usize], store.lane(row).unwrap());
+        assert_eq!(f.open[row as usize], store.open(row));
+        assert_eq!(f.joins[row as usize], store.joins(row));
         assert_eq!(f.row_flags[row as usize], store.flags(row));
         let start = f.parent_start[row as usize] as usize;
         let end = f.parent_start[row as usize + 1] as usize;
@@ -87,8 +93,8 @@ fn the_header_identifies_itself() {
     assert_eq!(u16::from_le_bytes(bytes[4..6].try_into().unwrap()), VERSION);
     assert_eq!(
         u16::from_le_bytes(bytes[6..8].try_into().unwrap()),
-        7,
-        "seven sections"
+        8,
+        "eight sections"
     );
 }
 

@@ -1,0 +1,11 @@
+---
+source: crates/coral-core/tests/lanes.rs
+expression: "common::labelled(&art::draw(&drawn),\n[\"feature\", \"main (kept left)\", \"main-1\", \"base\"].into_iter())"
+---
+  ●  feature
+  │
+● │  main (kept left)
+│ │
+● │  main-1
+│ │
+●─╯  base

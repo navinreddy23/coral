@@ -20,6 +20,7 @@ function frameOf(lanes: number[]): Frame {
     parentLanes: new Uint16Array(0),
     oids: new Uint8Array(rows * 20),
     open: new Uint32Array(rows),
+    joins: new Uint32Array(rows),
   };
 }
 

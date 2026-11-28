@@ -1,0 +1,13 @@
+---
+source: crates/coral-core/tests/shapes.rs
+expression: h.picture()
+---
+  ●  On main: notes
+  │
+●─╯  main: two
+│
+│ ●  feature: one
+│ │
+●─╯  main: one
+│
+●    base

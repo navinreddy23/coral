@@ -1,0 +1,9 @@
+---
+source: crates/coral-core/tests/lanes.rs
+expression: "picture(dag, &[\"child-1\", \"child-2\", \"shared parent\"])"
+---
+●    child-1
+│
+│ ●  child-2
+│ │
+●─╯  shared parent

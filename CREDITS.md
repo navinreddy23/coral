@@ -23,6 +23,12 @@ paper, it is added here in the same commit with a link and its license.
   graph — a ring for a commit, filled for a merge, dotted for the working tree. The visual
   design is Coral's own; see `docs/ui-spec.md`. <https://www.gitkraken.com/>
 - **gitk** and `git log --graph` — prior art for commit graph lane assignment.
+- **Pierre Vigier**, "Commit graph drawing algorithms" (2019) — the split of a commit's children
+  into branch children and merge children, and with it where an edge changes lane: a merge's
+  edge on the merge's row, a branch's on the row of the commit it left from, which is how the
+  article finds GitKraken drawing straight branches. Written from the article's description;
+  no code was taken, and the page states no licence.
+  <https://pvigier.github.io/2019/05/06/commit-graph-drawing-algorithms.html>
 - **lazygit** and **gitui** — prior art for driving the git binary from a client.
 - **Git Credential Manager** — the pattern of a binary acting as its own credential helper.
 - **WAI-ARIA Authoring Practices**, W3C — the tree view keyboard pattern the file lists and the

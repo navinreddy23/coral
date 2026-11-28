@@ -63,8 +63,8 @@ pids+=($!)
 bash "$here/fixtures.sh" "$work" >/dev/null 2>&1
 
 # A session naming the repositories, written where the window adopts it on first launch: the
-# three fixtures, or whatever `--hold` was given after its seconds.
-repos=("$work/work" "$work/merging" "$work/shallow")
+# four fixtures, or whatever `--hold` was given after its seconds.
+repos=("$work/work" "$work/merging" "$work/shallow" "$work/branches")
 [ "${1:-}" = "--hold" ] && [ $# -gt 2 ] && repos=("${@:3}")
 home="$work/home"
 mkdir -p "$home/.config/dev.coral.app" "$work/bin"
